@@ -104,4 +104,4 @@ def test_init_generates_importable_python_project(
     assert "1 passed" in completed.stdout
     assert "freeze-run" not in readme
     assert "viper.execution.run()" in readme
-    assert "execution.run(root, draft)" in runner
+    assert "execution.run(draft, repository_root=root)" in runner

@@ -395,9 +395,8 @@ class RunPlanDraft(BaseModel):
     source: GitSource
     env: EnvSpec
     reproducibility: ReproducibilitySpec
-    execution_policy: ExecutionPolicyRef | None = Field(
-        default=None,
-        description="Policy selected during authoring; absent in legacy drafts.",
+    execution_policy: ExecutionPolicyRef = Field(
+        description="Policy selected during authoring",
     )
 
 
@@ -1373,6 +1372,7 @@ def _compile_plan(
         source=draft.source,
         env=draft.env,
         reproducibility=draft.reproducibility,
+        execution_policy=draft.execution_policy,
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id=estimator_stage,

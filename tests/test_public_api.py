@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from importlib import resources
+from importlib.util import resolve_name
 from pathlib import Path
 
 import viper
@@ -44,15 +45,16 @@ import viper.storage as storage
 import viper.verification as verification
 import viper.worker as worker
 import viper.workspace as workspace
+from viper import evidence
 from viper.execution.errors import BenchmarkExecutionError, RunError
 from viper.execution.results import BenchmarkExecutionResult, RunResult
 from viper.stages import eval
-from viper.verification import models as verification_models
 
 PUBLIC_MODULES = (
     api,
     artifacts,
     benchmark,
+    evidence,
     execution,
     experiments,
     http,
@@ -80,6 +82,7 @@ PUBLIC_MODULES_BY_NAME = {
         catalog,
         cli,
         config,
+        evidence,
         execution,
         execution_errors,
         execution_results,
@@ -107,7 +110,6 @@ PUBLIC_MODULES_BY_NAME = {
         stages,
         storage,
         verification,
-        verification_models,
         worker,
         workspace,
     )
@@ -225,8 +227,8 @@ def test_api_operations_are_locally_defined() -> None:
     assert not package.joinpath("_api", "handlers.py").exists()
 
 
-def test_verification_namespace_separates_operations_and_models() -> None:
-    """Keep verification operations and types in their defining modules."""
+def test_verification_operations_depend_on_independent_evidence() -> None:
+    """Keep verification operations separate from independent evidence records."""
     operations = (
         verification.verify_run_result,
         verification.verify_promoted_artifact,
@@ -237,40 +239,41 @@ def test_verification_namespace_separates_operations_and_models() -> None:
         verification.verify_benchmark_result,
     )
     models = (
-        verification_models.VerificationError,
-        verification_models.VerificationPolicy,
-        verification_models.VerifiedArtifact,
-        verification_models.VerifiedBenchmarkResult,
-        verification_models.VerifiedInput,
-        verification_models.VerifiedRunPlan,
-        verification_models.VerifiedRunResult,
-        verification_models.VerifiedSnapshotFile,
+        evidence.VerificationError,
+        evidence.VerificationPolicy,
+        evidence.VerifiedArtifact,
+        evidence.VerifiedBenchmarkResult,
+        evidence.VerifiedInput,
+        evidence.VerifiedRunPlan,
+        evidence.VerifiedRunResult,
+        evidence.VerifiedSnapshotFile,
     )
     assert all(value.__module__ == "viper.verification" for value in operations)
-    assert all(value.__module__ == "viper.verification.models" for value in models)
-    assert verification.__all__ == [
+    assert all(value.__module__ == "viper.evidence" for value in models)
+    assert set(verification.__all__) == {
+        "verify_promoted_artifact",
+        "verify_stored_input_selections",
         "verify_attempt_future_inputs",
         "verify_benchmark_result",
-        "verify_promoted_artifact",
-        "verify_run_result",
         "verify_stage_reuse",
-        "verify_stored_input_selections",
+        "verify_run_result",
         "verify_stored_inputs",
-    ]
-    assert verification_models.__all__ == [
-        "StageSnapshot",
-        "StorageFetcher",
+    }
+    assert set(evidence.__all__) == {
         "VerificationError",
-        "VerificationPolicy",
-        "VerifiedArtifact",
-        "VerifiedBenchmarkResult",
         "VerifiedInput",
+        "VerifiedBenchmarkResult",
         "VerifiedRunPlan",
-        "VerifiedRunResult",
+        "StorageFetcher",
+        "VerificationPolicy",
         "VerifiedSnapshotFile",
-    ]
+        "StageSnapshot",
+        "VerifiedRunResult",
+        "VerifiedArtifact",
+    }
     package = Path(viper.__file__).parent
-    assert not package.joinpath("verification.py").exists()
+    assert package.joinpath("verification.py").is_file()
+    assert not package.joinpath("verification").exists()
 
 
 def test_config_categories_form_the_public_extension_namespace() -> None:
@@ -315,3 +318,45 @@ def test_env_vocabulary_is_complete() -> None:
     assert callable(runtime.observe_python_env)
     assert not hasattr(runtime, "PythonEnvironmentSpec")
     assert not hasattr(runtime, "EnvironmentSpec")
+
+
+def test_verification_dependencies_are_acyclic() -> None:
+    """Reject direct or transitive imports back into the public verifier."""
+    package = Path(viper.__file__).parent
+    modules: dict[str, Path] = {}
+    for path in package.rglob("*.py"):
+        parts = path.relative_to(package.parent).with_suffix("").parts
+        name = ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+        modules[name] = path
+
+    imports: dict[str, set[str]] = {}
+    for name, path in modules.items():
+        owner = name if path.name == "__init__.py" else name.rpartition(".")[0]
+        dependencies: set[str] = set()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                dependencies.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                target = "." * node.level + (node.module or "")
+                base = resolve_name(target, owner) if node.level else target
+                dependencies.add(base)
+                dependencies.update(f"{base}.{alias.name}" for alias in node.names)
+        imports[name] = dependencies & modules.keys()
+
+    def reachable(start: str) -> set[str]:
+        """Follow module imports without executing package code."""
+        seen: set[str] = set()
+        pending = list(imports[start])
+        while pending:
+            current = pending.pop()
+            if current not in seen:
+                seen.add(current)
+                pending.extend(imports[current] - seen)
+        return seen
+
+    assert "viper.verification" not in reachable("viper.verification")
+    evidence_dependencies = reachable("viper.evidence")
+    assert "viper.verification" not in evidence_dependencies
+    assert not any(
+        name.startswith("viper._verification") for name in evidence_dependencies
+    )

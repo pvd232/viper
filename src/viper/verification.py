@@ -7,35 +7,59 @@ from collections.abc import Mapping, Sequence
 import yaml
 from pydantic import BaseModel
 
-from .. import keys
-from .._schema import DataRole, RepoRelPath
-from .._verification import attempt as _attempt
-from .._verification import metrics as _metrics
-from .._verification import paths as _paths
-from .._verification import plan as _plan
-from .._verification import storage as _storage
-from ..artifacts import (
+from . import keys
+from ._schema import DataRole, RepoRelPath
+from ._verification.attempt import (
+    verify_attempt_files,
+    verify_attempt_journal,
+    verify_attempt_stages,
+    verify_external_inputs,
+    verify_measurement_stage_times,
+)
+from ._verification.metrics import verify_recomputed_metrics
+from ._verification.paths import run_root
+from ._verification.plan import verify_run_plan
+from ._verification.storage import (
+    artifact_revision_identity,
+    load_verified_artifact,
+    read_attempt_reference,
+    read_resolved_file,
+    snapshot_identity,
+    verify_run_attempt_references,
+    verify_snapshot_artifact,
+)
+from .artifacts import (
     ArtifactPointer,
     ResolvedBundleArtifact,
     ResolvedSingleFileArtifact,
     StageArtifactRef,
 )
-from ..benchmark import BenchmarkResult, BenchmarkSpec
-from ..ids import InputName, MetricId, StageId
-from ..inputs import (
+from .benchmark import BenchmarkResult, BenchmarkSpec
+from .evidence import (
+    StorageFetcher,
+    VerificationError,
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedBenchmarkResult,
+    VerifiedInput,
+    VerifiedRunPlan,
+    VerifiedRunResult,
+)
+from .ids import InputName, MetricId, StageId
+from .inputs import (
     FutureInputRef,
     ResolvedFutureInputRef,
     ResolvedStoredInputRef,
     StoredInputRef,
     pointer_location_matches,
 )
-from ..metrics import (
+from .metrics import (
     Measurement,
     MetricVerificationReceipt,
     compare_metric_values,
     is_recomputed_metric,
 )
-from ..references import (
+from .references import (
     GitFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
@@ -47,7 +71,7 @@ from ..references import (
     ViperCloudStageResultSnapshotRef,
     storage_file,
 )
-from ..reuse import (
+from .reuse import (
     ReusedStageCompletion,
     ReuseInputIdentity,
     StageReuseKey,
@@ -55,25 +79,15 @@ from ..reuse import (
     build_stage_reuse_key,
     verified_input_identity,
 )
-from ..runs import ResolvedRun, RunAttempt, RunSpec
-from ..serialization import document_digest, parse_yaml_bytes
-from ..stages import (
+from .runs import ResolvedRun, RunAttempt, RunSpec
+from .serialization import document_digest, parse_yaml_bytes
+from .stages import (
     EvalSpec,
     InternalSpec,
     ResolvedBaseSpec,
     ResolvedInternalSpec,
     ResolvedParameterizedSpec,
     TrainSpec,
-)
-from .models import (
-    StorageFetcher,
-    VerificationError,
-    VerificationPolicy,
-    VerifiedArtifact,
-    VerifiedBenchmarkResult,
-    VerifiedInput,
-    VerifiedRunPlan,
-    VerifiedRunResult,
 )
 
 __all__ = [
@@ -200,7 +214,7 @@ def verify_stage_reuse(
         raise VerificationError("reuse receipt selects a different source run")
     if source.result.status != "succeeded":
         raise VerificationError("reused source run did not succeed")
-    expected_source_path = f"{_paths.run_root(source.plan.run)}/resolved.yaml"
+    expected_source_path = f"{run_root(source.plan.run)}/resolved.yaml"
     if source_reference.stored_at.path != expected_source_path:
         raise VerificationError("reuse receipt source run path differs")
 
@@ -337,7 +351,7 @@ def _verify_reused_stages(
             target.completion, ReusedStageCompletion
         ):
             continue
-        raw = _storage.read_resolved_file(target.completion.receipt, fetcher=fetcher)
+        raw = read_resolved_file(target.completion.receipt, fetcher=fetcher)
         try:
             receipt = StageReuseReceipt.model_validate(parse_yaml_bytes(raw))
         except (yaml.YAMLError, ValueError) as exc:
@@ -345,7 +359,7 @@ def _verify_reused_stages(
         source_id = receipt.source_run.sha256
         if source_id in ancestors:
             raise VerificationError("stage reuse sources form a cycle")
-        source_raw = _storage.read_resolved_file(receipt.source_run, fetcher=fetcher)
+        source_raw = read_resolved_file(receipt.source_run, fetcher=fetcher)
         try:
             source_run = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
         except (yaml.YAMLError, ValueError) as exc:
@@ -396,7 +410,7 @@ def verify_promoted_artifact(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedArtifact:
     """Follow a promoted artifact pointer through its completed producer run."""
-    resolved_run_raw = _storage.read_resolved_file(pointer.run, fetcher=fetcher)
+    resolved_run_raw = read_resolved_file(pointer.run, fetcher=fetcher)
     try:
         resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(resolved_run_raw))
     except (yaml.YAMLError, ValueError) as exc:
@@ -405,7 +419,7 @@ def verify_promoted_artifact(
         ) from exc
 
     verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
-    expected_run_path = f"{_paths.run_root(verified_run.plan.run)}/resolved.yaml"
+    expected_run_path = f"{run_root(verified_run.plan.run)}/resolved.yaml"
     if pointer.run.stored_at.path != expected_run_path:
         raise VerificationError(
             "artifact pointer run reference is outside the canonical run path"
@@ -430,7 +444,7 @@ def verify_promoted_artifact(
     declaration = producer_spec.spec.outputs[pointer.artifact.artifact_name]
 
     if pointer.benchmark_result is not None:
-        benchmark_result_raw = _storage.read_resolved_file(
+        benchmark_result_raw = read_resolved_file(
             pointer.benchmark_result,
             fetcher=fetcher,
         )
@@ -449,7 +463,7 @@ def verify_promoted_artifact(
             fetcher=fetcher,
         )
         expected_result_path = (
-            f"{_paths.run_root(verified_run.plan.run)}/benchmark.result.yaml"
+            f"{run_root(verified_run.plan.run)}/benchmark.result.yaml"
         )
         if pointer.benchmark_result.stored_at.path != expected_result_path:
             raise VerificationError(
@@ -476,7 +490,7 @@ def verify_promoted_artifact(
         for stage in successful_attempt.resolved_stages
         if stage.stage_id == pointer.artifact.stage_id
     )
-    verified_artifact = _storage.verify_snapshot_artifact(
+    verified_artifact = verify_snapshot_artifact(
         producer_stage,
         artifact,
         data_role=declaration.data_role,
@@ -491,7 +505,7 @@ def verify_promoted_artifact(
             f"match stored input data_role {expected_data_role!r}"
         )
     if materialization_path is not None:
-        _storage.load_verified_artifact(
+        load_verified_artifact(
             verified_run.plan.run,
             declaration,
             pointer.artifact.artifact_name,
@@ -585,7 +599,7 @@ def verify_stored_inputs(
                     "a different pointer location than the stage spec"
                 )
 
-            pointer_raw = _storage.read_resolved_file(
+            pointer_raw = read_resolved_file(
                 resolved_input.pointer,
                 fetcher=fetcher,
             )
@@ -718,7 +732,7 @@ def verify_attempt_future_inputs(
                     f"artifact {artifact_name!r}"
                 )
 
-            verified_artifact = _storage.verify_snapshot_artifact(
+            verified_artifact = verify_snapshot_artifact(
                 producer_stage_reference,
                 artifact,
                 data_role=declared_artifact.data_role,
@@ -745,7 +759,7 @@ def verify_benchmark_result(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedBenchmarkResult:
     """Verify benchmark parity and metric criteria across two executions."""
-    benchmark_raw = _storage.read_resolved_file(result.benchmark, fetcher=fetcher)
+    benchmark_raw = read_resolved_file(result.benchmark, fetcher=fetcher)
     try:
         benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
     except (yaml.YAMLError, ValueError) as exc:
@@ -753,7 +767,7 @@ def verify_benchmark_result(
             "benchmark result does not reference a valid BenchmarkSpec"
         ) from exc
 
-    run_raw = _storage.read_resolved_file(result.run, fetcher=fetcher)
+    run_raw = read_resolved_file(result.run, fetcher=fetcher)
     try:
         resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(run_raw))
     except (yaml.YAMLError, ValueError) as exc:
@@ -768,7 +782,7 @@ def verify_benchmark_result(
             "benchmark result cannot precede the selected run completion"
         )
 
-    expected_run_location = f"{_paths.run_root(verified_run.plan.run)}/resolved.yaml"
+    expected_run_location = f"{run_root(verified_run.plan.run)}/resolved.yaml"
     if result.run.stored_at.path != expected_run_location:
         raise VerificationError(
             "benchmark result run reference is outside the canonical run path"
@@ -788,7 +802,7 @@ def verify_benchmark_result(
             "benchmark result and run plan select different benchmark specs"
         )
 
-    confirmation = _storage.read_attempt_reference(
+    confirmation = read_attempt_reference(
         result.confirmation,
         verified_run.plan.run,
         fetcher=fetcher,
@@ -816,13 +830,12 @@ def verify_benchmark_result(
         )
 
     original_snapshots = {
-        _storage.snapshot_identity(stage.snapshot)
+        snapshot_identity(stage.snapshot)
         for attempt in verified_run.attempts
         for stage in attempt.resolved_stages
     }
     confirmation_snapshots = {
-        _storage.snapshot_identity(stage.snapshot)
-        for stage in confirmation.resolved_stages
+        snapshot_identity(stage.snapshot) for stage in confirmation.resolved_stages
     }
     if original_snapshots & confirmation_snapshots:
         raise VerificationError(
@@ -838,8 +851,7 @@ def verify_benchmark_result(
             *attempt.metric_verification_files,
             *attempt.log_files,
         )
-        if (identity := _storage.artifact_revision_identity(reference.stored_at))
-        is not None
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
     }
     confirmation_attempt_file_snapshots = {
         identity
@@ -849,8 +861,7 @@ def verify_benchmark_result(
             *confirmation.metric_verification_files,
             *confirmation.log_files,
         )
-        if (identity := _storage.artifact_revision_identity(reference.stored_at))
-        is not None
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
     }
     if original_attempt_file_snapshots & confirmation_attempt_file_snapshots:
         raise VerificationError(
@@ -862,7 +873,7 @@ def verify_benchmark_result(
             "must be distinct"
         )
 
-    confirmation_stages = _attempt.verify_attempt_stages(
+    confirmation_stages = verify_attempt_stages(
         confirmation,
         verified_run.plan.run,
         verified_run.plan.stages,
@@ -881,19 +892,19 @@ def verify_benchmark_result(
         confirmation_stages,
         fetcher=fetcher,
     )
-    confirmation_measurements = _attempt.verify_attempt_files(
+    confirmation_measurements = verify_attempt_files(
         confirmation,
         verified_run.plan.run,
         verified_run.plan.experiment,
         verified_run.plan.stages,
         fetcher=fetcher,
     )
-    _attempt.verify_measurement_stage_times(
+    verify_measurement_stage_times(
         confirmation_stages,
         confirmation_measurements,
         verified_run.plan.experiment,
     )
-    _metrics.verify_recomputed_metrics(
+    verify_recomputed_metrics(
         confirmation,
         verified_run.plan,
         confirmation_stages,
@@ -1001,7 +1012,7 @@ def verify_benchmark_result(
         """Load the eval metric receipts owned by one attempt."""
         receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
         for reference in attempt.metric_verification_files:
-            raw = _storage.read_resolved_file(reference, fetcher=fetcher)
+            raw = read_resolved_file(reference, fetcher=fetcher)
             try:
                 receipt = MetricVerificationReceipt.model_validate(
                     parse_yaml_bytes(raw)
@@ -1162,8 +1173,8 @@ def _verify_run_result(
 ) -> VerifiedRunResult:
     """Verify one run while retaining the reuse chain already visited."""
     _verify_cloud_graph(resolved_run)
-    plan = _plan.verify_run_plan(resolved_run, fetcher=fetcher)
-    attempts = _storage.verify_run_attempt_references(
+    plan = verify_run_plan(resolved_run, fetcher=fetcher)
+    attempts = verify_run_attempt_references(
         resolved_run,
         plan.run,
         fetcher=fetcher,
@@ -1176,8 +1187,7 @@ def _verify_run_result(
 
     for attempt in attempts:
         current_stage_result_snapshots = {
-            _storage.snapshot_identity(stage.snapshot)
-            for stage in attempt.resolved_stages
+            snapshot_identity(stage.snapshot) for stage in attempt.resolved_stages
         }
         if stage_result_snapshots & current_stage_result_snapshots:
             raise VerificationError(
@@ -1193,8 +1203,7 @@ def _verify_run_result(
                 *attempt.metric_verification_files,
                 *attempt.log_files,
             )
-            if (identity := _storage.artifact_revision_identity(reference.stored_at))
-            is not None
+            if (identity := artifact_revision_identity(reference.stored_at)) is not None
         }
         if attempt_file_snapshots & current_attempt_file_snapshots:
             raise VerificationError(
@@ -1209,8 +1218,8 @@ def _verify_run_result(
 
     for attempt in attempts:
         complete = attempt.status == "succeeded"
-        _attempt.verify_attempt_journal(attempt, plan.run, fetcher=fetcher)
-        verified_stages = _attempt.verify_attempt_stages(
+        verify_attempt_journal(attempt, plan.run, fetcher=fetcher)
+        verified_stages = verify_attempt_stages(
             attempt,
             plan.run,
             plan.stages,
@@ -1234,7 +1243,7 @@ def _verify_run_result(
         for stage_id, resolved_stage in verified_stages.items():
             if not isinstance(resolved_stage, ResolvedInternalSpec):
                 continue
-            verified_external = _attempt.verify_external_inputs(
+            verified_external = verify_external_inputs(
                 attempt,
                 plan.run,
                 stage_id,
@@ -1249,19 +1258,19 @@ def _verify_run_result(
             future_inputs,
             external_inputs,
         )
-        attempt_measurements = _attempt.verify_attempt_files(
+        attempt_measurements = verify_attempt_files(
             attempt,
             plan.run,
             plan.experiment,
             plan.stages,
             fetcher=fetcher,
         )
-        _attempt.verify_measurement_stage_times(
+        verify_measurement_stage_times(
             verified_stages,
             attempt_measurements,
             plan.experiment,
         )
-        _metrics.verify_recomputed_metrics(
+        verify_recomputed_metrics(
             attempt,
             plan,
             verified_stages,

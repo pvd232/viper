@@ -11,6 +11,7 @@ from pathlib import Path
 
 from tests.fixtures import python_environment
 from viper.catalog import Catalog, CatalogRunSource, RunQuery
+from viper.evidence import VerifiedRunPlan, VerifiedRunResult
 from viper.experiments import (
     ExperimentSpec,
     VariantSpec,
@@ -70,7 +71,6 @@ from viper.serialization import (
     serialize_document,
 )
 from viper.stages import DownloadSpec
-from viper.verification.models import VerifiedRunPlan, VerifiedRunResult
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"
@@ -103,6 +103,7 @@ def _run(stage_raw: bytes, *, seed: int) -> RunSpec:
                     "path": "environment.yml",
                 },
             },
+            "execution_policy": {"mode": "custom"},
             "reproducibility": {
                 "determinism": {
                     "deterministic_algorithms": True,

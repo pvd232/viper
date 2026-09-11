@@ -46,10 +46,16 @@ def test_run_compiles_plan_before_first_attempt(
         assert kwargs["plan"] is reference
         return result
 
+    def resolve_root(selected: Path | None) -> Path:
+        """Keep this ordering test independent of workspace discovery."""
+        assert selected == tmp_path
+        return tmp_path
+
+    monkeypatch.setattr(execution, "resolve_root", resolve_root)
     monkeypatch.setattr(execution, "freeze_run_plan", freeze)
     monkeypatch.setattr(execution, "_run", run)
 
-    assert execution.run(tmp_path, draft) is result
+    assert execution.run(draft, repository_root=tmp_path) is result
     assert calls == ["freeze", "run"]
 
 

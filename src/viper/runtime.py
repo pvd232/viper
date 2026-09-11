@@ -156,6 +156,33 @@ class ExecutionPolicyRef(ProtocolModel):
     )
 
 
+def _preset_settings(
+    mode: Literal["reproducible", "relaxed"], parallelism: ParallelismSpec
+) -> ReproducibilitySpec:
+    """Build default numerical settings ."""
+    deterministic = mode == "reproducible"
+    return ReproducibilitySpec(
+        determinism=TorchDeterminismSpec(
+            deterministic_algorithms=deterministic,
+            deterministic_warn_only=False,
+            cudnn_deterministic=deterministic,
+            cudnn_benchmark=not deterministic,
+            cublas_workspace_config=":4096:8" if deterministic else None,
+        ),
+        precision=TorchPrecisionSpec(
+            float32_matmul_precision="highest",
+            cudnn_allow_tf32=False,
+            autocast_enabled=False,
+            autocast_dtype=None,
+        ),
+        parallelism=parallelism,
+        numpy_randomness=NumPyRandomnessSpec(
+            generators={},
+            capture_legacy_global=True,
+        ),
+    )
+
+
 def resolve_execution_policy(
     selection: Literal["reproducible", "relaxed"] | ReproducibilitySpec = (
         "reproducible"
@@ -190,27 +217,20 @@ def resolve_execution_policy(
             dataloader=DataLoaderConfiguration(workers=0),
         )
     parallelism = ParallelismSpec.model_validate(parallelism.model_dump())
-    settings = ReproducibilitySpec(
-        determinism=TorchDeterminismSpec(
-            deterministic_algorithms=deterministic,
-            deterministic_warn_only=False,
-            cudnn_deterministic=deterministic,
-            cudnn_benchmark=not deterministic,
-            cublas_workspace_config=":4096:8" if deterministic else None,
-        ),
-        precision=TorchPrecisionSpec(
-            float32_matmul_precision="highest",
-            cudnn_allow_tf32=False,
-            autocast_enabled=False,
-            autocast_dtype=None,
-        ),
-        parallelism=parallelism,
-        numpy_randomness=NumPyRandomnessSpec(
-            generators={},
-            capture_legacy_global=True,
-        ),
-    )
-    return ExecutionPolicyRef(mode=selection), settings
+    return ExecutionPolicyRef(mode=selection), _preset_settings(selection, parallelism)
+
+
+def validate_execution_policy(
+    policy: ExecutionPolicyRef, settings: ReproducibilitySpec
+) -> None:
+    """Reject a preset label whose saved numerical settings differ from that preset."""
+    if policy.mode == "custom":
+        return
+    expected = _preset_settings(policy.mode, settings.parallelism)
+    if settings.model_dump(exclude={"parallelism"}) != expected.model_dump(
+        exclude={"parallelism"}
+    ):
+        raise ValueError("execution policy differs from saved numerical settings")
 
 
 GeneratorFamily = Literal[
@@ -318,12 +338,91 @@ ResolvedEnv = Annotated[
 ]
 
 
+class RuntimeControlsReceipt(ProtocolModel):
+    """Record PyTorch controls read before a worker invokes user code."""
+
+    backend: Literal["cpu", "cuda"] = Field(
+        description="Device type used for autocast queries and backend-specific checks."
+    )
+    deterministic_algorithms: bool = Field(
+        description="Whether PyTorch required deterministic algorithms at invocation."
+    )
+    deterministic_warn_only: bool = Field(
+        description="Whether unsupported deterministic operations warn at invocation."
+    )
+    cudnn_deterministic: bool = Field(
+        description="Observed cuDNN determinism setting, checked for CUDA workers."
+    )
+    cudnn_benchmark: bool = Field(
+        description="Observed cuDNN benchmarking setting, checked for CUDA workers."
+    )
+    cudnn_allow_tf32: bool = Field(
+        description="Observed cuDNN TF32 permission, checked for CUDA workers."
+    )
+    float32_matmul_precision: Literal["highest", "high", "medium"] = Field(
+        description="Observed internal precision for float32 matrix multiplication."
+    )
+    torch_intraop_threads: int = Field(
+        ge=1, description="Observed CPU thread count used within a PyTorch operation."
+    )
+    torch_interop_threads: int = Field(
+        ge=1, description="Observed CPU thread count used across PyTorch operations."
+    )
+    autocast_enabled: bool = Field(
+        description="Whether autocast was enabled in the user call context."
+    )
+    autocast_dtype: Literal["float16", "bfloat16"] | None = Field(
+        description="Autocast dtype at invocation; None when autocast was disabled."
+    )
+
+
+def observe_runtime_controls(
+    backend: Literal["cpu", "cuda"],
+) -> RuntimeControlsReceipt:
+    """Read controls inside the autocast context used for the invocation."""
+    enabled = torch.is_autocast_enabled(backend)
+    dtype: Literal["float16", "bfloat16"] | None = None
+    if enabled:
+        active_dtype = torch.get_autocast_dtype(backend)
+        if active_dtype == torch.float16:
+            dtype = "float16"
+        elif active_dtype == torch.bfloat16:
+            dtype = "bfloat16"
+        else:
+            raise ValueError("startup.controls: unsupported autocast dtype")
+    precision = torch.get_float32_matmul_precision()
+    if precision not in ("highest", "high", "medium"):
+        raise ValueError("startup.controls: unsupported matmul precision")
+    return RuntimeControlsReceipt(
+        backend=backend,
+        deterministic_algorithms=torch.are_deterministic_algorithms_enabled(),
+        deterministic_warn_only=torch.is_deterministic_algorithms_warn_only_enabled(),
+        cudnn_deterministic=torch.backends.cudnn.deterministic,
+        cudnn_benchmark=torch.backends.cudnn.benchmark,
+        cudnn_allow_tf32=torch.backends.cudnn.allow_tf32,
+        float32_matmul_precision=precision,
+        torch_intraop_threads=torch.get_num_threads(),
+        torch_interop_threads=torch.get_num_interop_threads(),
+        autocast_enabled=enabled,
+        autocast_dtype=dtype,
+    )
+
+
 class ProcessStartupReceipt(ProtocolModel):
     """Record the startup env, applied controls, and seeded generators."""
 
-    env: dict[StartupVariable, str]
-    reproducibility: ReproducibilitySpec
-    generators: tuple[GeneratorInitializationReceipt, ...]
+    env: dict[StartupVariable, str] = Field(
+        description="Allowlisted process environment read before the user call."
+    )
+    observed_controls: RuntimeControlsReceipt = Field(
+        description="PyTorch settings read inside the context used for the user call."
+    )
+    reproducibility: ReproducibilitySpec = Field(
+        description="Requested run settings, retained alongside independent readings."
+    )
+    generators: tuple[GeneratorInitializationReceipt, ...] = Field(
+        description="Seeds and initial-state identities recorded at initialization."
+    )
 
 
 class GCEHostContext(ProtocolModel):
@@ -462,7 +561,7 @@ class RuntimeInitialization:
     """Return the live named generators and the startup evidence for one child."""
 
     numpy_generators: dict[str, np.random.Generator]
-    receipt: ProcessStartupReceipt
+    generators: tuple[GeneratorInitializationReceipt, ...]
 
 
 def _gce_metadata(path: str) -> str:
@@ -692,14 +791,22 @@ def apply_reproducibility(
     parallelism = reproducibility.parallelism
     torch.set_num_threads(parallelism.torch_intraop_threads)
     torch.set_num_interop_threads(parallelism.torch_interop_threads)
-
     return RuntimeInitialization(
-        numpy_generators=named_generators,
-        receipt=ProcessStartupReceipt(
-            env=_startup_environment(),
-            reproducibility=reproducibility,
-            generators=tuple(receipts),
-        ),
+        numpy_generators=named_generators, generators=tuple(receipts)
+    )
+
+
+def observe_process_startup(
+    initialization: RuntimeInitialization,
+    reproducibility: ReproducibilitySpec,
+    backend: Literal["cpu", "cuda"],
+) -> ProcessStartupReceipt:
+    """Construct startup evidence inside the context used to invoke user code ."""
+    return ProcessStartupReceipt(
+        env=_startup_environment(),
+        reproducibility=reproducibility,
+        generators=initialization.generators,
+        observed_controls=observe_runtime_controls(backend),
     )
 
 
@@ -880,11 +987,15 @@ def observe_execution(env: EnvSpec) -> ExecutionContext:
     return observe_local_execution(env.compute)
 
 
-def autocast_context(reproducibility: ReproducibilitySpec) -> Any:
-    """Construct the run-wide autocast context for the active backend."""
+def autocast_context(
+    reproducibility: ReproducibilitySpec,
+    *,
+    backend: Literal["cpu", "cuda"] | None = None,
+) -> Any:
+    """Construct the autocast context for the selected worker backend."""
     precision = reproducibility.precision
-    if not precision.autocast_enabled:
-        return torch.autocast(device_type="cpu", enabled=False)
+    device_type = backend or ("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.float16 if precision.autocast_dtype == "float16" else torch.bfloat16
-    device_type = "cuda" if torch.cuda.is_available() else "cpu"
-    return torch.autocast(device_type=device_type, dtype=dtype, enabled=True)
+    return torch.autocast(
+        device_type=device_type, dtype=dtype, enabled=precision.autocast_enabled
+    )

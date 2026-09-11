@@ -42,7 +42,7 @@ The example prints a successful terminal status and the verified result it wrote
 ```text
 status: succeeded
 model: {"weight": 1.999...}
-result: experiments/cpu_quickstart/runs/baseline/<run-id>/resolved.yaml
+result: /path/to/viper/experiments/cpu_quickstart/runs/baseline/<run-id>/resolved.yaml
 ```
 
 The [acceptance test](tests/test_readme_workflow.py) runs this file in a clean Git
@@ -50,20 +50,27 @@ repository and checks its status and output.
 
 ## Follow the execution
 
-The complete [CPU quickstart](examples/cpu_quickstart.py) is one ordinary Python file.
-The three Python blocks below form a complete program in order. Save them as
-`examples/cpu_quickstart.py`, commit the file, and run it with the command above.
+The following blocks form the complete [CPU quickstart](examples/cpu_quickstart.py).
+Save them together as `examples/cpu_quickstart.py`, commit the file, and run it.
 
-### Define a stage
+### Define the metric and training stage
 
 ```python
+"""Run one complete VIPER training plan on the local CPU."""
+
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
+from viper import execution
+from viper.authoring import experiment, input, plan, replicate, stage, variant
 from viper.config import MetricConfig, TrainConfig
-from viper.metrics import MetricContext, metric
+from viper.metrics import MetricContext, measure, metric, min
 from viper.outputs import TrainOutputs, output
 from viper.randomness import capture_main_process_rng
+from viper.references import GitFileRef
+from viper.repository import read_source
 from viper.resume import (
     DataLoaderConfiguration,
     DataLoaderResumeState,
@@ -71,14 +78,17 @@ from viper.resume import (
     load_resume_state,
     save_resume_state,
 )
+from viper.runtime import LocalEnvSpec, observe_python_env
 from viper.stages import Context, train
 
 
 def load_json(path: Path) -> dict[str, float | int]:
+    """Load one model or checkpoint written by the training stage."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_state(path: Path) -> ResumeState:
+    """Load and validate the terminal training state."""
     return load_resume_state(path)
 
 
@@ -88,6 +98,7 @@ def mean_squared_error(
     predictions: tuple[float, ...],
     targets: tuple[float, ...],
 ) -> float:
+    """Compute mean squared error over matching predictions and targets."""
     if not targets:
         raise ValueError("mean_squared_error requires at least one target")
     return sum(
@@ -95,15 +106,19 @@ def mean_squared_error(
         for prediction, target in zip(predictions, targets, strict=True)
     ) / len(targets)
 
-
 @train(config=TrainConfig)
 def fit(context: Context[TrainConfig]) -> None:
+    """Fit ``y = weight * x`` with gradient descent on the local CPU."""
     rows = [
         tuple(float(value) for value in line.split(","))
-        for line in context.inputs["dataset"].read_text(encoding="utf-8").splitlines()[1:]
+        for line in context.inputs["dataset"]
+        .read_text(encoding="utf-8")
+        .splitlines()[1:]
     ]
     targets = tuple(y for _, y in rows)
     weight = 0.0
+    loss = 0.0
+    epoch = 0
     for epoch in range(1, 21):
         predictions = tuple(weight * x for x, _ in rows)
         measurement = context.metrics["mean_squared_error"].record(
@@ -135,38 +150,18 @@ def fit(context: Context[TrainConfig]) -> None:
     )
 ```
 
-The metric is mean squared error; minimizing it makes it the training objective.
-`mean_squared_error()` computes that quantity from the predictions and targets
-passed to `record()`. The call saves that value and returns a measurement; `.value`
-gives the training loop the computed loss. `mode="stateless"` means each call
-computes a fresh value. A stateful metric is a `StatefulMetric` class that
-accumulates observations with `update()` and returns its current value from `compute()`.
-
-The stage reads its config and input paths from `Context`, then writes to the supplied
-output paths. Metric handles record measurements during the computation. VIPER manages
-the run directory and records the produced files.
-`TrainConfig` and `MetricConfig` are VIPER's built-in config records; this small example
-uses their default settings. Training stages require both `model` and `resume_state`
-outputs; the checkpoint stores the optimizer, random-generator, and data-loader state
-needed for resumption.
-
-### Connect the experiment
-
-The same file connects the stage to one experiment variant and replicate:
+### Declare the experiment
 
 ```python
-from viper.config import MetricConfig, TrainConfig
-from viper.outputs import TrainOutputs, output
-from viper.authoring import experiment, input, replicate, stage, variant
-from viper.metrics import measure, min
-
-
 mse = measure(mean_squared_error, config=MetricConfig())
 training = stage(
     fit,
     config=TrainConfig(),
     inputs={
-        "dataset": input("examples/data/tiny.csv", data_role="training")
+        "dataset": input(
+            "examples/data/tiny.csv",
+            data_role="training",
+        )
     },
     outputs=TrainOutputs(
         model=output(
@@ -183,7 +178,6 @@ training = stage(
     metrics=(mse,),
     objective=min(mse),
 )
-
 study = experiment(
     experiment_id="cpu_quickstart",
     variants={
@@ -197,100 +191,43 @@ study = experiment(
 )
 ```
 
-Finally, `plan()` identifies the selected source commit and runtime. `execution.run()`
-compiles that draft, runs the stage, and returns the verified terminal record:
+### Run the experiment
+
+`read_source()` identifies the checked-out commit and repository URL.
+`plan()` uses the reproducible policy by default.
 
 ```python
-import subprocess
-
-from pydantic import HttpUrl, TypeAdapter
-
-from viper import execution
-from viper.authoring import plan
-from viper.references import GitFileRef, GitSource
-from viper.repository import resolve_root
-from viper.runtime import LocalEnvSpec, ReproducibilitySpec, observe_python_env
-
-
-def _git(root: Path, *arguments: str) -> str:
-    """Return one Git value required to identify the checked-out source."""
-    completed = subprocess.run(
-        ("git", "-C", str(root), *arguments),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return completed.stdout.strip()
-
-
-def _reproducibility() -> ReproducibilitySpec:
-    """Use deterministic, single-process CPU settings for the example."""
-    return ReproducibilitySpec.model_validate(
-        {
-            "determinism": {
-                "deterministic_algorithms": True,
-                "deterministic_warn_only": False,
-                "cudnn_deterministic": True,
-                "cudnn_benchmark": False,
-                "cublas_workspace_config": ":4096:8",
-            },
-            "precision": {
-                "float32_matmul_precision": "highest",
-                "cudnn_allow_tf32": False,
-                "autocast_enabled": False,
-                "autocast_dtype": None,
-            },
-            "parallelism": {
-                "process_count": 1,
-                "torch_intraop_threads": 1,
-                "torch_interop_threads": 1,
-                "dataloader": {
-                    "workers": 0,
-                    "prefetch_factor": None,
-                    "persistent_workers": False,
-                    "in_order": True,
-                },
-            },
-            "numpy_randomness": {
-                "generators": {"training": "PCG64"},
-                "capture_legacy_global": True,
-            },
-        }
-    )
-
-
-if __name__ == "__main__":
-    root = resolve_root(Path(__file__).parent)
-    commit = _git(root, "rev-parse", "HEAD")
-    repository = TypeAdapter(HttpUrl).validate_python(
-        _git(root, "remote", "get-url", "origin")
-    )
-    source = GitSource(repository=repository, commit=commit)
+def main() -> None:
+    """Run the training experiment with the default reproducible policy."""
+    source = read_source()
     environment = LocalEnvSpec(
-        lockfile=GitFileRef(repository=repository, commit=commit, path="pyproject.toml"),
+        lockfile=GitFileRef(
+            repository=source.repository, commit=source.commit, path="pyproject.toml"
+        ),
         python_env=observe_python_env(),
     )
-    reproducibility = _reproducibility()
-
     draft = plan(
         experiment=study,
         variant="baseline",
         replicate="seed_7",
         source=source,
         env=environment,
-        reproducibility=reproducibility,
     )
-
-    resolved_run = execution.run(root, draft)
+    resolved_run = execution.run(draft)
     model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
     print(f"status: {resolved_run.status}")
     print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
-    print(f"result: {resolved_run.path.relative_to(root)}")
+    print(f"result: {resolved_run.path}")
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-The Git commit identifies the source used by this run. Commit code or data changes
-before executing another run. The [tutorial](docs/tutorials/getting-started.md)
-explains each part of the program.
+The complete [policy example](examples/execution_policies.py) runs the same
+experiment with `reproducible`, `relaxed`, or `custom` settings. Relaxed permits
+nondeterministic algorithms. Verification checks each run against its own plan;
+comparing artifacts from two runs is a separate operation.
 
 ## What the run preserves
 

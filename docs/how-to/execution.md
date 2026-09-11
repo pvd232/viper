@@ -11,7 +11,7 @@ After declaring the experiment and selecting a variant and replicate with
 ```python
 from viper import execution
 
-resolved_run = execution.run(root, draft)
+resolved_run = execution.run(draft, repository_root=root)
 print(resolved_run.status)
 print(resolved_run.path)
 ```
@@ -27,7 +27,7 @@ from viper.authoring import freeze_run_plan
 
 frozen = freeze_run_plan(root, draft)
 plan_path = root / frozen.reference.stored_at.path
-resolved_run = execution.run(root, plan_path)
+resolved_run = execution.run(plan_path, repository_root=root)
 ```
 
 `frozen.files` lists the local files written during freezing. Its `reference`

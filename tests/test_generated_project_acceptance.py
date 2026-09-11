@@ -67,6 +67,7 @@ from viper.repository import init_workspace
 from viper.runs import ResolvedRun, RunSpec, RunStageRef
 from viper.runtime import (
     CPUComputeSpec,
+    ExecutionPolicyRef,
     GCEEnvSpec,
     LocalEnvSpec,
     observe_gce_provisioning,
@@ -204,6 +205,7 @@ def _freeze(
         source=_source(source_commit),
         env=_environment(source_commit),
         reproducibility=reproducibility(),
+        execution_policy=ExecutionPolicyRef(mode="custom"),
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id="train",

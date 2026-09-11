@@ -328,6 +328,7 @@ def run_payload() -> dict:
         },
         "env": environment(),
         "reproducibility": reproducibility(),
+        "execution_policy": {"mode": "custom", "version": 1},
         "stages": [
             {
                 "stage_id": "train",

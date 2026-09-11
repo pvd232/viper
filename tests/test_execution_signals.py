@@ -39,6 +39,7 @@ from viper.authoring import (
     stage,
     variant,
 )
+from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution import run as execute_run
 from viper.execution._source import RunFetcher
 from viper.journal import DurableJournal
@@ -59,6 +60,7 @@ from viper.runtime import (
     CPUComputeSpec,
     CUDABackendContext,
     CUDAComputeSpec,
+    ExecutionPolicyRef,
     LocalEnvSpec,
 )
 from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
@@ -69,7 +71,6 @@ from viper.stages import (
 )
 from viper.storage import LocalArtifactStore
 from viper.verification import verify_run_result
-from viper.verification.models import VerificationError, VerificationPolicy
 
 REPOSITORY = "https://github.com/example/viper-signal-project"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -284,6 +285,7 @@ def _freeze_signal_plan(
                 source=source,
                 env=environment,
                 reproducibility=reproducibility(),
+                execution_policy=ExecutionPolicyRef(mode="custom"),
             ),
         )
 
@@ -341,7 +343,7 @@ def test_live_l4_stage_records_requested_backend(
         compute=compute,
     )
 
-    result = execute_run(root, run_path)
+    result = execute_run(run_path, repository_root=root)
     store = LocalArtifactStore(root)
     fetcher = RunFetcher(root, store, REPOSITORY)
     verified = verify_run_result(

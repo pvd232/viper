@@ -55,6 +55,7 @@ from viper.benchmark import (
     MetricCriterionResult,
 )
 from viper.config import ConfigTypeRef as CurrentConfigTypeRef
+from viper.evidence import VerificationError, VerifiedRunPlan, VerifiedRunResult
 from viper.experiments import (
     BuildVariantStageConfig,
     EvalVariantStageConfig,
@@ -127,12 +128,15 @@ from viper.references import (
 from viper.resume import DataLoaderConfiguration
 from viper.reuse import (
     ExecutedStageCompletion,
+    ResolvedStageReuseRef,
     ReusedMetricEvidence,
+    ReusedStageCompletion,
     ReusedStageFile,
     ReuseFileIdentity,
     ReuseInputIdentity,
     StageReuseReceipt,
     build_stage_reuse_key,
+    verified_input_identity,
 )
 from viper.runs import (
     AttemptFailure,
@@ -148,6 +152,7 @@ from viper.runtime import (
     CPUComputeSpec,
     CPUContext,
     ExecutionContext,
+    ExecutionPolicyRef,
     GCEBootImageRef,
     GCEHostContext,
     GeneratorInitializationReceipt,
@@ -158,6 +163,7 @@ from viper.runtime import (
     ParallelismSpec,
     ProcessStartupReceipt,
     ReproducibilitySpec,
+    RuntimeControlsReceipt,
     TorchDeterminismSpec,
     TorchPrecisionSpec,
     process_environment,
@@ -185,11 +191,6 @@ from viper.verification import (
     verify_promoted_artifact,
     verify_run_result,
     verify_stage_reuse,
-)
-from viper.verification.models import (
-    VerificationError,
-    VerifiedRunPlan,
-    VerifiedRunResult,
 )
 from viper.workspace import captured_input_path
 
@@ -443,6 +444,7 @@ def execution_context() -> ExecutionContext:
 
 def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
     """Build valid CPU startup evidence for one acceptance-stage execution."""
+    settings = run.reproducibility
     generators = [
         GeneratorInitializationReceipt(
             family="python",
@@ -462,9 +464,9 @@ def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
             name=name,
             state_sha256="3" * 64,
         )
-        for name in sorted(run.reproducibility.numpy_randomness.generators)
+        for name in sorted(settings.numpy_randomness.generators)
     )
-    if run.reproducibility.numpy_randomness.capture_legacy_global:
+    if settings.numpy_randomness.capture_legacy_global:
         generators.append(
             GeneratorInitializationReceipt(
                 family="numpy_legacy",
@@ -477,6 +479,19 @@ def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
             run.seed,
             run.reproducibility,
             CPUComputeSpec(),
+        ),
+        observed_controls=RuntimeControlsReceipt(
+            backend="cpu",
+            deterministic_algorithms=settings.determinism.deterministic_algorithms,
+            deterministic_warn_only=settings.determinism.deterministic_warn_only,
+            cudnn_deterministic=settings.determinism.cudnn_deterministic,
+            cudnn_benchmark=settings.determinism.cudnn_benchmark,
+            cudnn_allow_tf32=settings.precision.cudnn_allow_tf32,
+            float32_matmul_precision=settings.precision.float32_matmul_precision,
+            torch_intraop_threads=settings.parallelism.torch_intraop_threads,
+            torch_interop_threads=settings.parallelism.torch_interop_threads,
+            autocast_enabled=settings.precision.autocast_enabled,
+            autocast_dtype=settings.precision.autocast_dtype,
         ),
         reproducibility=run.reproducibility,
         generators=tuple(generators),
@@ -841,6 +856,7 @@ def make_run(
         ),
         env=environment(source_commit),
         reproducibility=reproducibility(),
+        execution_policy=ExecutionPolicyRef(mode="custom"),
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id=estimator_stage_id,
@@ -3122,3 +3138,195 @@ def test_knowledge_records_preserve_immutable_evidence(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="kind differs"):
         KnowledgeRecordEnvelope(record_kind="impact", value=ontology)
+
+
+def _policy_stage_reading_changed(
+    store: DocumentStore, result: ResolvedRun
+) -> ResolvedRun:
+    """Change the saved evaluation reading and rebuild its containing references."""
+    attempt = fetch_attempt(store, result.attempts[-1])
+    stage = attempt.resolved_stages[-1]
+    assert stage.stage_id == "evaluate"
+    location = hf_file(snapshot_revision(stage.snapshot), str(stage.resolved_spec.path))
+    resolved = ResolvedEvaluateSpec.model_validate(
+        yaml.safe_load(store.fetch(location))
+    )
+    assert isinstance(resolved.completion, ExecutedStageCompletion)
+    startup = resolved.completion.startup
+    deterministic = startup.observed_controls.deterministic_algorithms
+    changed_controls = startup.observed_controls.model_copy(
+        update={"deterministic_algorithms": not deterministic}
+    )
+    changed_startup = startup.model_copy(update={"observed_controls": changed_controls})
+    completion = resolved.completion.model_copy(update={"startup": changed_startup})
+    changed = resolved.model_copy(update={"completion": completion})
+    assert completion.startup.reproducibility == startup.reproducibility
+    # Rebuild enclosing digests so verification reaches the changed reading.
+    changed_stage = publish_resolved_stage(
+        store,
+        run_root_path=str(result.spec.stored_at.path).removesuffix("/spec.yaml"),
+        stage_id="evaluate",
+        snapshot_commit=snapshot_revision(stage.snapshot),
+        resolved_spec=changed,
+    )
+    changed_attempt = attempt.model_copy(
+        update={"resolved_stages": (*attempt.resolved_stages[:-1], changed_stage)}
+    )
+    return replace_run_attempts(store, result, (changed_attempt,))
+
+
+def test_policy_rejects_saved_stage_reading() -> None:
+    """Reject an altered stage reading with valid settings and hashes."""
+    result, store, _ = build_complete_fixture()
+    verify_run_result(result, policy=POLICY, fetcher=store.fetch)
+    changed = _policy_stage_reading_changed(store, result)
+    with pytest.raises(
+        VerificationError, match="startup.controls: deterministic_algorithms"
+    ):
+        verify_run_result(changed, policy=POLICY, fetcher=store.fetch)
+
+
+@pytest.mark.parametrize("execution", ["production", "recomputation"])
+def test_policy_rejects_saved_metric_reading(execution: str) -> None:
+    """Reject changed controls in either saved metric invocation."""
+    result, store, _ = build_complete_fixture()
+    verify_run_result(result, policy=POLICY, fetcher=store.fetch)
+    attempt = fetch_attempt(store, result.attempts[-1])
+    reference = attempt.metric_verification_files[0]
+    receipt = MetricVerificationReceipt.model_validate(
+        yaml.safe_load(store.fetch(reference.stored_at))
+    )
+    invocation = (
+        receipt.production if execution == "production" else receipt.recomputation
+    )
+    controls = invocation.startup.observed_controls
+    changed_controls = controls.model_copy(
+        update={"deterministic_algorithms": not controls.deterministic_algorithms}
+    )
+    changed_startup = invocation.startup.model_copy(
+        update={"observed_controls": changed_controls}
+    )
+    changed = invocation.model_copy(update={"startup": changed_startup})
+    assert changed.startup.reproducibility == invocation.startup.reproducibility
+    raw = yaml_bytes(receipt.model_copy(update={execution: changed}))
+    store.put(reference.stored_at, raw)
+    # The receipt and attempt hashes remain valid after changing the reading.
+    changed_reference = reference.model_copy(
+        update={"sha256": sha256(raw), "bytes": len(raw)}
+    )
+    changed_attempt = attempt.model_copy(
+        update={"metric_verification_files": (changed_reference,)}
+    )
+    changed_result = replace_run_attempts(store, result, (changed_attempt,))
+    with pytest.raises(
+        VerificationError, match="startup.controls: deterministic_algorithms"
+    ):
+        verify_run_result(changed_result, policy=POLICY, fetcher=store.fetch)
+
+
+def _policy_reused_evaluation(
+    store: DocumentStore, source: ResolvedRun, verified: VerifiedRunResult
+) -> ResolvedRun:
+    """Reuse one saved evaluation, retaining references to its producing run."""
+    source_attempt = fetch_attempt(store, source.attempts[-1])
+    source_stage = source_attempt.resolved_stages[-1]
+    source_location = hf_file(
+        snapshot_revision(source_stage.snapshot), str(source_stage.resolved_spec.path)
+    )
+    source_result = ResolvedEvaluateSpec.model_validate(
+        yaml.safe_load(store.fetch(source_location))
+    )
+    run = verified.plan.run
+    run_root = str(source.spec.stored_at.path).removesuffix("/spec.yaml")
+    source_raw = yaml_bytes(source)
+    source_run_location = hf_file("d" * 40, f"{run_root}/resolved.yaml")
+    store.put(source_run_location, source_raw)
+    source_run = ResolvedRunRef(
+        stored_at=source_run_location, sha256=sha256(source_raw), bytes=len(source_raw)
+    )
+    inputs = tuple(
+        verified_input_identity(name, value)
+        for name, value in sorted(verified.inputs["evaluate"].items())
+    )
+    artifact = source_result.artifacts["predictions"]
+    assert isinstance(artifact, ResolvedSingleFileArtifact)
+    reuse = StageReuseReceipt(
+        stage_id="evaluate",
+        key=build_stage_reuse_key(
+            stage_id="evaluate",
+            stage=source_result.spec,
+            inputs=inputs,
+            seed=run.seed,
+            env=source_result.spec.env or run.env,
+            reproducibility=run.reproducibility,
+            metrics={
+                metric.metric_id: metric for metric in verified.plan.experiment.metrics
+            },
+        ),
+        source_run=source_run,
+        source_attempt=source.attempts[-1],
+        source_stage=source_stage,
+        files=(
+            ReusedStageFile(
+                artifact_name="predictions", source=artifact.file, target=artifact.file
+            ),
+        ),
+        metrics=(
+            ReusedMetricEvidence(
+                metric_id="pearson_correlation",
+                measurement=source_attempt.measurement_files[0],
+                verification=source_attempt.metric_verification_files[0],
+            ),
+        ),
+        completed_at=source_result.completed_at,
+    )
+    raw = yaml_bytes(reuse)
+    location = hf_file("e" * 40, f"{run_root}/stages/evaluate/reuse.yaml")
+    store.put(location, raw)
+    target = source_result.model_copy(
+        update={
+            "completion": ReusedStageCompletion(
+                receipt=ResolvedStageReuseRef(
+                    stored_at=location, sha256=sha256(raw), bytes=len(raw)
+                )
+            )
+        }
+    )
+    # Preserve the original snapshot: the target refers back to its source.
+    copy_snapshot_files(store, snapshot_revision(source_stage.snapshot), "e" * 40)
+    target_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="evaluate",
+        snapshot_commit="e" * 40,
+        resolved_spec=target,
+    )
+    target_attempt = source_attempt.model_copy(
+        update={
+            "resolved_stages": (*source_attempt.resolved_stages[:-1], target_stage),
+            "invocations": source_attempt.invocations[:-1],
+            "metric_verification_files": (),
+        }
+    )
+    target_reference = publish_attempt(
+        store, run_root_path=run_root, attempt=target_attempt, commit="f" * 40
+    )
+    return source.model_copy(update={"attempts": (target_reference,)})
+
+
+def test_policy_rejects_reused_producer_reading() -> None:
+    """Follow reuse to its producer and reject the producer's changed controls."""
+    result, store, _ = build_complete_fixture()
+    verified = verify_run_result(result, policy=POLICY, fetcher=store.fetch)
+    target = _policy_reused_evaluation(store, result, verified)
+    verify_run_result(target, policy=POLICY, fetcher=store.fetch)
+
+    # A separate store preserves the accepted case and its immutable references.
+    result, store, _ = build_complete_fixture()
+    verified = verify_run_result(result, policy=POLICY, fetcher=store.fetch)
+    changed_source = _policy_stage_reading_changed(store, result)
+    changed_target = _policy_reused_evaluation(store, changed_source, verified)
+    with pytest.raises(
+        VerificationError, match="startup.controls: deterministic_algorithms"
+    ):
+        verify_run_result(changed_target, policy=POLICY, fetcher=store.fetch)

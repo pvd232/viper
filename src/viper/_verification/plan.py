@@ -19,6 +19,7 @@ from .._config.validation import (
 from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
 from ..benchmark import BenchmarkSpec
 from ..config import Config
+from ..evidence import StorageFetcher, VerificationError, VerifiedRunPlan
 from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import InputName, StageId
 from ..inputs import (
@@ -50,14 +51,8 @@ from ..stages import (
     TrainSpec,
     verify_stage_implementation_bytes,
 )
-from ..verification.models import VerificationError, VerifiedRunPlan
+from . import storage
 from .paths import run_root, stage_spec_path
-from .storage import (
-    StorageFetcher,
-    fetch_storage_bytes,
-    read_resolved_file,
-    verify_resolved_file_bytes,
-)
 
 SPEC_ADAPTER = TypeAdapter(Spec)
 
@@ -181,7 +176,7 @@ def verify_run_spec(
     fetcher: StorageFetcher | None = None,
 ) -> RunSpec:
     """Retrieve and verify the RunSpec governing a resolved run."""
-    raw = read_resolved_file(resolved_run.spec, fetcher=fetcher)
+    raw = storage.read_resolved_file(resolved_run.spec, fetcher=fetcher)
 
     try:
         file_run = RunSpec.model_validate(parse_yaml_bytes(raw))
@@ -211,7 +206,7 @@ def verify_experiment_and_variant(
     fetcher: StorageFetcher | None = None,
 ) -> tuple[ExperimentSpec, VariantSpec]:
     """Load and verify the experiment and variant selected by a run."""
-    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
 
     experiment_path = f"experiments/{run.experiment_id}/spec.yaml"
     variant_path = (
@@ -324,7 +319,7 @@ def verify_benchmark_spec(
     if run.benchmark_id is None:
         return None
 
-    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     path = f"benchmarks/{run.benchmark_id}.spec.yaml"
     location: StorageModel
     if plan is None:
@@ -507,7 +502,7 @@ def verify_config_type_references(
     fetcher: StorageFetcher | None = None,
 ) -> None:
     """Verify each parameterized stage's class against frozen source bytes."""
-    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     for stage_id, stage in stages.items():
         if not isinstance(stage, ParameterizedSpec):
             continue
@@ -543,7 +538,7 @@ def verify_stage_plan(
     fetcher: StorageFetcher | None = None,
 ) -> dict[StageId, BaseSpec]:
     """Load and verify stage specs from the run-plan snapshot."""
-    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     loaded_stages: dict[StageId, BaseSpec] = {}
 
     for stage in run.stages:
@@ -559,7 +554,7 @@ def verify_stage_plan(
             bytes=stage.bytes,
             stored_at=location,
         )
-        raw = verify_resolved_file_bytes(stage_reference, retrieve(location))
+        raw = storage.verify_resolved_file_bytes(stage_reference, retrieve(location))
 
         try:
             spec = SPEC_ADAPTER.validate_python(parse_yaml_bytes(raw))

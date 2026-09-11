@@ -17,6 +17,7 @@ from ..artifacts import (
     ResolvedSingleFileArtifact,
 )
 from ..catalog import Catalog
+from ..evidence import StorageFetcher, VerificationPolicy
 from ..ids import InputName, MetricId, StageId
 from ..inputs import ResolvedInputRef
 from ..metrics import Measurement, MetricSpec, is_recomputed_metric
@@ -56,7 +57,6 @@ from ..storage import (
     snapshot_file,
 )
 from ..verification import verify_run_result
-from ..verification.models import StorageFetcher, VerificationPolicy
 
 
 @dataclass(frozen=True)

@@ -21,6 +21,7 @@ from ..runtime import (
     apply_reproducibility,
     autocast_context,
     observe_execution,
+    observe_process_startup,
     observe_python_env,
 )
 
@@ -117,6 +118,11 @@ def main(argv: list[str] | None = None) -> int:
             if _path_identities(path) != recorded_identities:
                 raise ValueError("metric dependency bytes differ from their receipt")
         with autocast_context(context.run.reproducibility):
+            startup = observe_process_startup(
+                initialization=initialization,
+                reproducibility=context.run.reproducibility,
+                backend=effective_environment.compute.kind,
+            )
             value = float(
                 callable_metric(
                     MetricContext(
@@ -137,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             config_type=context.metric.config_type,
             config=context.metric.config,
             dependencies=context.dependencies,
-            startup=initialization.receipt,
+            startup=startup,
             execution_context=execution_context,
             python_env=python_env,
             value=value,

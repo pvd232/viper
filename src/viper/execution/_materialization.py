@@ -14,6 +14,7 @@ from ..artifacts import (
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
 )
+from ..evidence import VerificationPolicy, VerifiedArtifact
 from ..http import (
     HttpRequestSpec,
     HttpResult,
@@ -46,7 +47,6 @@ from ..stages import (
 )
 from ..storage import snapshot_file
 from ..verification import verify_promoted_artifact
-from ..verification.models import VerificationPolicy, VerifiedArtifact
 from ..workspace import AttemptWorkspace, captured_input_path
 from ._downloads import publish_download_body
 from ._source import RunFetcher

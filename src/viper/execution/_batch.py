@@ -1,9 +1,9 @@
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 
+from ..evidence import VerificationError
 from ..runs import RunSpec
 from ..serialization import parse_yaml_bytes
-from ..verification.models import VerificationError
 from ._run import run as execute_run
 from ._stage import StageExecutionError
 from .errors import RunError

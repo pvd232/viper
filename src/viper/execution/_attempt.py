@@ -10,6 +10,7 @@ from typing import Literal
 
 from .._verification.storage import read_attempt_reference
 from ..catalog import Catalog
+from ..evidence import VerificationError, VerificationPolicy
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
@@ -55,7 +56,6 @@ from ..storage import (
     snapshot_file,
 )
 from ..verification import verify_run_result
-from ..verification.models import VerificationError, VerificationPolicy
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
 from ._materialization import (
     resolve_inputs,

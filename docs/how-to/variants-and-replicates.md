@@ -56,7 +56,7 @@ draft = plan(
     env=environment,
     reproducibility=reproducibility,
 )
-result = execution.run(root, draft)
+result = execution.run(draft, repository_root=root)
 ```
 
 ## Expand the experiment

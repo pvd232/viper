@@ -44,6 +44,7 @@ from .catalog import (
     RunQuery,
     catalog,
 )
+from .evidence import StorageFetcher, VerificationError, VerificationPolicy
 from .execution._batch import run_many as execute_many
 from .execution._benchmark import benchmark as execute_benchmark_run
 from .execution._restore import restore as restore_run_artifacts
@@ -125,11 +126,6 @@ from .verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
     verify_run_result,
-)
-from .verification.models import (
-    StorageFetcher,
-    VerificationError,
-    VerificationPolicy,
 )
 
 OperationName = Literal[

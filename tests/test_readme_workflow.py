@@ -17,6 +17,7 @@ from viper.artifacts import StageArtifactRef
 from viper.authoring import run_artifact
 from viper.metrics import MetricContext
 from viper.references import LocalFileRef, ResolvedRunRef
+from viper.repository import RootError, read_source
 from viper.resume import load_resume_state
 from viper.stages import Context
 
@@ -199,3 +200,165 @@ def test_documented_evaluation_writes_predictions_and_computes_rmse(
         config=namespace["MetricConfig"](), artifacts={"predictions": predictions}
     )
     assert namespace["rmse"].implementation(metric_context) == 1.0
+
+
+_POLICY_VERIFY_PROGRAM = """
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+from viper.execution._source import RunFetcher
+from viper.runs import ResolvedRun, RunSpec
+from viper.serialization import parse_yaml_bytes
+from viper.storage import LocalArtifactStore
+from viper.verification import verify_run_result
+from viper.evidence import VerificationPolicy
+
+root = Path(sys.argv[1])
+result = ResolvedRun.model_validate(parse_yaml_bytes(Path(sys.argv[2]).read_bytes()))
+store = LocalArtifactStore(root)
+run = RunSpec.model_validate(parse_yaml_bytes(store.fetch(result.spec.stored_at)))
+fetcher = RunFetcher(root, store, str(run.source.repository))
+policy = VerificationPolicy(
+    trusted_source_repositories=frozenset({str(run.source.repository)})
+)
+verified = verify_run_result(result, policy=policy, fetcher=fetcher)
+stage = verified.resolved_stages["train"]
+reference = verified.attempts[-1].resolved_stages[0]
+model = stage.artifacts["model"].file
+model_path = root / reference.snapshot.store / reference.snapshot.commit / model.path
+print(json.dumps({
+    "run_id": run.run_id,
+    "policy": run.execution_policy.mode,
+    "controls": stage.completion.startup.observed_controls.model_dump(),
+    "model_sha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
+    "model_path": str(model_path),
+}))
+"""
+
+
+@pytest.fixture
+def policy_workspace(tmp_path: Path) -> Path:
+    """Create a committed workspace containing both complete policy examples."""
+    root = tmp_path / "policy"
+    (root / "examples/data").mkdir(parents=True)
+    for name in ("cpu_quickstart.py", "execution_policies.py"):
+        shutil.copy(Path("examples") / name, root / "examples" / name)
+    shutil.copy("examples/data/tiny.csv", root / "examples/data/tiny.csv")
+    shutil.copy("pyproject.toml", root / "pyproject.toml")
+    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    _run(root, "git", "init", "--quiet")
+    _run(root, "git", "config", "user.email", "viper@example.com")
+    _run(root, "git", "config", "user.name", "VIPER Policy Test")
+    _run(root, "git", "remote", "add", "origin", "https://github.com/example/viper")
+    _run(root, "git", "add", ".")
+    _run(root, "git", "commit", "--quiet", "-m", "policy source")
+    return root
+
+
+def test_read_source_identifies_commit_and_selected_remote(
+    policy_workspace: Path,
+) -> None:
+    """Return HEAD and the requested remote through the public repository API."""
+    source = read_source(policy_workspace)
+    assert (
+        source.commit
+        == _run(policy_workspace, "git", "rev-parse", "HEAD").stdout.strip()
+    )
+    assert str(source.repository) == "https://github.com/example/viper"
+    _run(
+        policy_workspace,
+        "git",
+        "remote",
+        "add",
+        "mirror",
+        "https://github.com/example/mirror",
+    )
+    mirror = read_source(policy_workspace, remote="mirror")
+    assert mirror.commit == source.commit
+    assert str(mirror.repository) == "https://github.com/example/mirror"
+
+
+def test_read_source_rejects_missing_remote(policy_workspace: Path) -> None:
+    """Report an unavailable source remote at the repository API boundary."""
+    with pytest.raises(RootError, match="selected Git remote"):
+        read_source(policy_workspace, remote="absent")
+
+
+@pytest.mark.parametrize("mode", ["reproducible", "relaxed", "custom"])
+def test_policy_example_verifies_after_exit(policy_workspace: Path, mode: str) -> None:
+    """Verify each saved policy run and reject changed artifact bytes."""
+    root = policy_workspace
+    environment = {**os.environ, "PYTHONPATH": str(Path.cwd() / "src")}
+    # A relaxed child must discard an inherited strict cuBLAS setting.
+    environment["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    records = []
+    result_paths: list[Path] = []
+    for _ in range(2 if mode == "reproducible" else 1):
+        completed = subprocess.run(
+            (sys.executable, "examples/execution_policies.py", mode),
+            cwd=root,
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        result_line = next(
+            line
+            for line in completed.stdout.splitlines()
+            if line.startswith("result: ")
+        )
+        result_path = root / result_line.removeprefix("result: ")
+        result_paths.append(result_path)
+        # The producer has exited; this independent interpreter reads its saved run.
+        verification = subprocess.run(
+            (sys.executable, "-c", _POLICY_VERIFY_PROGRAM, str(root), str(result_path)),
+            cwd=root,
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        record = json.loads(verification.stdout)
+        assert record["policy"] == mode
+        assert record["controls"]["deterministic_algorithms"] == (
+            mode == "reproducible"
+        )
+        assert record["controls"]["autocast_enabled"] is False
+        records.append(record)
+    if mode == "reproducible":
+        assert records[0]["run_id"] != records[1]["run_id"]
+        assert records[0]["model_sha256"] == records[1]["model_sha256"]
+    if mode == "custom":
+        assert records[-1]["controls"]["torch_intraop_threads"] == 2
+    # Corrupt the stored artifact, rather than the mutable workspace copy.
+    Path(records[-1]["model_path"]).write_bytes(b"changed model\n")
+    rejected = subprocess.run(
+        (
+            sys.executable,
+            "-c",
+            _POLICY_VERIFY_PROGRAM,
+            str(root),
+            str(result_paths[-1]),
+        ),
+        cwd=root,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert rejected.returncode != 0
+    assert "VerificationError" in rejected.stderr
+
+
+def test_read_source_discovers_from_nested_directory(
+    policy_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Find the containing workspace without a caller-supplied root."""
+    expected = read_source(policy_workspace)
+    monkeypatch.chdir(policy_workspace / "examples")
+    assert read_source() == expected

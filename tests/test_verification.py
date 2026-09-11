@@ -51,6 +51,12 @@ from viper.benchmark import (
     BenchmarkSpec,
     MetricCriterion,
 )
+from viper.evidence import (
+    VerificationError,
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedSnapshotFile,
+)
 from viper.experiments import (
     BuildVariantStageConfig,
     EvalVariantStageConfig,
@@ -101,6 +107,7 @@ from viper.runtime import (
     CPUComputeSpec,
     CPUContext,
     ExecutionContext,
+    ExecutionPolicyRef,
     GCEBootImageRef,
     GCEEnvSpec,
     GCEHostContext,
@@ -113,6 +120,7 @@ from viper.runtime import (
     ProcessStartupReceipt,
     ReproducibilitySpec,
     ResolvedGCEEnv,
+    RuntimeControlsReceipt,
     TorchDeterminismSpec,
     TorchPrecisionSpec,
     process_environment,
@@ -130,12 +138,6 @@ from viper.stages import (
 from viper.verification import (
     verify_attempt_future_inputs,
     verify_stored_input_selections,
-)
-from viper.verification.models import (
-    VerificationError,
-    VerificationPolicy,
-    VerifiedArtifact,
-    VerifiedSnapshotFile,
 )
 
 GIT_COMMIT = "a" * 40
@@ -382,6 +384,7 @@ def run_spec(stage_specs: list[tuple[str, object]]) -> tuple[RunSpec, dict[str, 
         source=GitSource(repository=REPOSITORY, commit=GIT_COMMIT),
         env=environment(),
         reproducibility=reproducibility(),
+        execution_policy=ExecutionPolicyRef(mode="custom"),
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id="train",
@@ -525,6 +528,19 @@ def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
         ),
         reproducibility=run.reproducibility,
         generators=tuple(generators),
+        observed_controls=RuntimeControlsReceipt(
+            backend="cpu",
+            deterministic_algorithms=run.reproducibility.determinism.deterministic_algorithms,
+            deterministic_warn_only=run.reproducibility.determinism.deterministic_warn_only,
+            cudnn_deterministic=run.reproducibility.determinism.cudnn_deterministic,
+            cudnn_benchmark=run.reproducibility.determinism.cudnn_benchmark,
+            cudnn_allow_tf32=run.reproducibility.precision.cudnn_allow_tf32,
+            float32_matmul_precision=run.reproducibility.precision.float32_matmul_precision,
+            torch_interop_threads=run.reproducibility.parallelism.torch_interop_threads,
+            torch_intraop_threads=run.reproducibility.parallelism.torch_intraop_threads,
+            autocast_enabled=run.reproducibility.precision.autocast_enabled,
+            autocast_dtype=run.reproducibility.precision.autocast_dtype,
+        ),
     )
 
 

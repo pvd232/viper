@@ -270,6 +270,8 @@ def execute_stage_process(
     )
     command = ("python", "-m", "viper._workers.stages")
     env = os.environ.copy()
+    env.pop("CUBLAS_WORKSPACE_CONFIG", None)
+
     effective_environment = stage_spec.env or run.env
     compute = effective_environment.compute
     cuda_ordinal = select_cuda_device(compute.model) if compute.kind == "cuda" else None

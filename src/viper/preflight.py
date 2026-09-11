@@ -23,6 +23,7 @@ from ._verification.plan import (
     verify_run_plan_relationships,
 )
 from ._verification.storage import fetch_storage_bytes
+from .evidence import VerificationError
 from .http import (
     HttpRetrievalError,
     WorkspaceHttpImplementationSpec,
@@ -57,7 +58,6 @@ from .stages import (
     verify_stage_implementation_bytes,
 )
 from .storage import LocalArtifactStore
-from .verification.models import VerificationError
 
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[

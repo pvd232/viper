@@ -8,6 +8,14 @@ from typing import cast
 
 import yaml
 
+from ..evidence import (
+    StorageFetcher,
+    VerificationError,
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedInput,
+    VerifiedRunPlan,
+)
 from ..ids import InputName, MetricId, StageId
 from ..metrics import (
     FloatComparator,
@@ -29,15 +37,9 @@ from ..runtime import (
 )
 from ..serialization import parse_yaml_bytes
 from ..stages import BaseSpec, ResolvedBaseSpec
-from ..verification.models import (
-    VerificationError,
-    VerificationPolicy,
-    VerifiedArtifact,
-    VerifiedInput,
-    VerifiedRunPlan,
-)
+from . import storage
 from .paths import run_root
-from .storage import StorageFetcher, read_resolved_file, verify_snapshot_artifact
+from .runtime import verify_runtime_controls
 
 
 def _verify_metric_worker_runtime(
@@ -50,6 +52,15 @@ def _verify_metric_worker_runtime(
     if startup.reproducibility != run.reproducibility:
         raise VerificationError("metric worker reproducibility controls differ")
     compute = (stage.env or run.env).compute
+
+    try:
+        verify_runtime_controls(
+            observed=startup.observed_controls,
+            reproducibility=run.reproducibility,
+            backend=compute.kind,
+        )
+    except ValueError as exc:
+        raise VerificationError(str(exc)) from exc
     recorded_cuda = startup.env.get("CUDA_VISIBLE_DEVICES")
     if compute.kind == "cuda":
         if recorded_cuda is None or not recorded_cuda.isdigit():
@@ -150,7 +161,7 @@ def verify_recomputed_metrics(
             raise VerificationError(
                 "metric verification files must use immutable artifact storage"
             )
-        raw = read_resolved_file(reference, fetcher=fetcher)
+        raw = storage.read_resolved_file(reference, fetcher=fetcher)
         try:
             receipt = MetricVerificationReceipt.model_validate(parse_yaml_bytes(raw))
         except (yaml.YAMLError, ValueError) as exc:
@@ -215,7 +226,7 @@ def verify_recomputed_metrics(
             resolved_stage = resolved_stages[stage_id]
             stage_ref = stage_refs[stage_id]
             verified_artifacts = {
-                name: verify_snapshot_artifact(
+                name: storage.verify_snapshot_artifact(
                     stage_ref,
                     resolved_artifact,
                     data_role=stage.outputs[name].data_role,
@@ -285,7 +296,7 @@ def verify_recomputed_metrics(
                         f"metric {metric_id!r} dependency file identities differ"
                     )
                 for reference in received.files:
-                    read_resolved_file(reference, fetcher=fetcher)
+                    storage.read_resolved_file(reference, fetcher=fetcher)
             for worker in (receipt.production, receipt.recomputation):
                 _verify_metric_worker_runtime(plan.run, stage, worker)
             if not (

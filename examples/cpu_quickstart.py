@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
-
-from pydantic import HttpUrl, TypeAdapter
 
 from viper import execution
 from viper.authoring import experiment, input, plan, replicate, stage, variant
@@ -14,8 +11,8 @@ from viper.config import MetricConfig, TrainConfig
 from viper.metrics import MetricContext, measure, metric, min
 from viper.outputs import TrainOutputs, output
 from viper.randomness import capture_main_process_rng
-from viper.references import GitFileRef, GitSource
-from viper.repository import resolve_root
+from viper.references import GitFileRef
+from viper.repository import read_source
 from viper.resume import (
     DataLoaderConfiguration,
     DataLoaderResumeState,
@@ -23,7 +20,7 @@ from viper.resume import (
     load_resume_state,
     save_resume_state,
 )
-from viper.runtime import LocalEnvSpec, ReproducibilitySpec, observe_python_env
+from viper.runtime import LocalEnvSpec, observe_python_env
 from viper.stages import Context, train
 
 
@@ -96,105 +93,52 @@ def fit(context: Context[TrainConfig]) -> None:
     )
 
 
-def _git(root: Path, *arguments: str) -> str:
-    """Return one Git value required to identify the checked-out source."""
-    completed = subprocess.run(
-        ("git", "-C", str(root), *arguments),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return completed.stdout.strip()
-
-
-def _reproducibility() -> ReproducibilitySpec:
-    """Use deterministic, single-process CPU settings for the example."""
-    return ReproducibilitySpec.model_validate(
-        {
-            "determinism": {
-                "deterministic_algorithms": True,
-                "deterministic_warn_only": False,
-                "cudnn_deterministic": True,
-                "cudnn_benchmark": False,
-                "cublas_workspace_config": ":4096:8",
-            },
-            "precision": {
-                "float32_matmul_precision": "highest",
-                "cudnn_allow_tf32": False,
-                "autocast_enabled": False,
-                "autocast_dtype": None,
-            },
-            "parallelism": {
-                "process_count": 1,
-                "torch_intraop_threads": 1,
-                "torch_interop_threads": 1,
-                "dataloader": {
-                    "workers": 0,
-                    "prefetch_factor": None,
-                    "persistent_workers": False,
-                    "in_order": True,
-                },
-            },
-            "numpy_randomness": {
-                "generators": {"training": "PCG64"},
-                "capture_legacy_global": True,
-            },
-        }
-    )
+mse = measure(mean_squared_error, config=MetricConfig())
+training = stage(
+    fit,
+    config=TrainConfig(),
+    inputs={
+        "dataset": input(
+            "examples/data/tiny.csv",
+            data_role="training",
+        )
+    },
+    outputs=TrainOutputs(
+        model=output(
+            path="model.json",
+            loader=load_json,
+            data_role="training",
+        ),
+        resume_state=output(
+            path="resume_state.pt",
+            loader=load_state,
+            data_role="training",
+        ),
+    ),
+    metrics=(mse,),
+    objective=min(mse),
+)
+study = experiment(
+    experiment_id="cpu_quickstart",
+    variants={
+        "baseline": variant(
+            levels={},
+            stages={"train": training},
+            estimator=training.outputs["model"],
+        )
+    },
+    replicates={"seed_7": replicate(seed=7)},
+)
 
 
 def main() -> None:
-    """Author, execute, and report one locally verified run."""
-    root = resolve_root(Path(__file__).parent)
-    commit = _git(root, "rev-parse", "HEAD")
-    repository = TypeAdapter(HttpUrl).validate_python(
-        _git(root, "remote", "get-url", "origin")
-    )
-    source = GitSource(repository=repository, commit=commit)
+    """Run the training experiment with the default reproducible policy."""
+    source = read_source()
     environment = LocalEnvSpec(
         lockfile=GitFileRef(
-            repository=repository,
-            commit=commit,
-            path="pyproject.toml",
+            repository=source.repository, commit=source.commit, path="pyproject.toml"
         ),
         python_env=observe_python_env(),
-    )
-
-    mse = measure(mean_squared_error, config=MetricConfig())
-    training = stage(
-        fit,
-        config=TrainConfig(),
-        inputs={
-            "dataset": input(
-                "examples/data/tiny.csv",
-                data_role="training",
-            )
-        },
-        outputs=TrainOutputs(
-            model=output(
-                path="model.json",
-                loader=load_json,
-                data_role="training",
-            ),
-            resume_state=output(
-                path="resume_state.pt",
-                loader=load_state,
-                data_role="training",
-            ),
-        ),
-        metrics=(mse,),
-        objective=min(mse),
-    )
-    study = experiment(
-        experiment_id="cpu_quickstart",
-        variants={
-            "baseline": variant(
-                levels={},
-                stages={"train": training},
-                estimator=training.outputs["model"],
-            )
-        },
-        replicates={"seed_7": replicate(seed=7)},
     )
     draft = plan(
         experiment=study,
@@ -202,14 +146,12 @@ def main() -> None:
         replicate="seed_7",
         source=source,
         env=environment,
-        reproducibility=_reproducibility(),
     )
-
-    resolved_run = execution.run(root, draft)
+    resolved_run = execution.run(draft)
     model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
     print(f"status: {resolved_run.status}")
     print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
-    print(f"result: {resolved_run.path.relative_to(root)}")
+    print(f"result: {resolved_run.path}")
 
 
 if __name__ == "__main__":

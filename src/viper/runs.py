@@ -25,7 +25,12 @@ from .references import (
     ResolvedStageRef,
     StageResultSnapshot,
 )
-from .runtime import EnvSpec, ReproducibilitySpec
+from .runtime import (
+    EnvSpec,
+    ExecutionPolicyRef,
+    ReproducibilitySpec,
+    validate_execution_policy,
+)
 
 AttemptStatus = Literal[
     "succeeded",
@@ -203,13 +208,16 @@ class RunSpec(ProtocolModel):
     source: GitSource
     env: EnvSpec
     reproducibility: ReproducibilitySpec
-
+    execution_policy: ExecutionPolicyRef = Field(
+        description="Selected execution policy for the run",
+    )
     stages: tuple[RunStageRef, ...] = Field(min_length=1)
     estimator: StageArtifactRef
 
     @model_validator(mode="after")
     def validate_common_invariants(self) -> RunSpec:
         """Enforce ordered-stage identity and estimator selection invariants."""
+        validate_execution_policy(self.execution_policy, self.reproducibility)
         stage_ids = tuple(stage.stage_id for stage in self.stages)
         if len(set(stage_ids)) != len(stage_ids):
             raise ValueError("stage IDs must be unique")

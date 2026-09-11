@@ -25,9 +25,11 @@ from ..metrics import (
 )
 from ..runs import RunSpec
 from ..runtime import (
+    ProcessStartupReceipt,
     apply_reproducibility,
     autocast_context,
     observe_execution,
+    observe_process_startup,
     observe_python_env,
 )
 from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
@@ -181,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     stage = load_stage_spec(worker_context.stage_spec_path)
     binding = worker_context.binding
     started_at = datetime.now(UTC)
+    startup: ProcessStartupReceipt | None = None
     initialization = None
     execution_context = None
     python_env = None
@@ -268,7 +271,12 @@ def main(argv: list[str] | None = None) -> int:
             metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )
-        with autocast_context(run.reproducibility):
+        with autocast_context(
+            run.reproducibility, backend=effective_environment.compute.kind
+        ):
+            startup = observe_process_startup(
+                initialization, run.reproducibility, effective_environment.compute.kind
+            )
             function(context)
     except Exception as exc:
         completed_at = datetime.now(UTC)
@@ -285,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
             StageWorkerResult(
                 execution_context=execution_context,
                 python_env=python_env,
-                startup=None if initialization is None else initialization.receipt,
+                startup=startup,
                 invocation=invocation,
                 error=f"{type(exc).__name__}: {exc}",
             ),
@@ -302,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         outcome="succeeded",
     )
     assert initialization is not None
+    assert startup is not None
     assert execution_context is not None
     assert python_env is not None
     _write_result(
@@ -309,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         StageWorkerResult(
             execution_context=execution_context,
             python_env=python_env,
-            startup=initialization.receipt,
+            startup=startup,
             invocation=invocation,
         ),
     )

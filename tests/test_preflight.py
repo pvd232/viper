@@ -132,6 +132,7 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
                     "capture_legacy_global": True,
                 },
             },
+            "execution_policy": {"mode": "custom", "version": 1},
             "stages": [
                 RunStageRef(
                     stage_id="train",

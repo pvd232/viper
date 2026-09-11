@@ -20,6 +20,13 @@ from .._config.validation import (
 )
 from .._schema import RepoRelPath, repo_file_paths_overlap
 from ..artifacts import ResolvedSingleFileArtifact
+from ..evidence import (
+    StorageFetcher,
+    VerificationError,
+    VerificationPolicy,
+    VerifiedInput,
+    VerifiedSnapshotFile,
+)
 from ..experiments import ExperimentSpec
 from ..http import (
     HttpRetrievalError,
@@ -68,26 +75,13 @@ from ..stages import (
     StageContextBinding,
     StageInvocationReceipt,
 )
-from ..verification.models import (
-    VerificationError,
-    VerificationPolicy,
-    VerifiedInput,
-    VerifiedSnapshotFile,
-)
+from . import storage
 from .paths import (
     resolved_stage_spec_path,
     run_root,
     stage_invocation_path,
 )
-from .storage import (
-    StorageFetcher,
-    artifact_revision_identity,
-    fetch_storage_bytes,
-    load_verified_artifact,
-    read_resolved_file,
-    read_snapshot_file,
-    verify_snapshot_artifact,
-)
+from .runtime import verify_runtime_controls
 
 RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
 
@@ -213,7 +207,7 @@ def _verify_stage_invocation(
         raise VerificationError(
             f"stage {stage_id!r} invocation receipt is outside its canonical path"
         )
-    raw = read_resolved_file(reference, fetcher=fetcher)
+    raw = storage.read_resolved_file(reference, fetcher=fetcher)
     try:
         receipt = StageInvocationReceipt.model_validate(parse_yaml_bytes(raw))
     except (yaml.YAMLError, ValueError) as exc:
@@ -271,6 +265,16 @@ def _verify_stage_invocation(
             f"stage {stage_id!r} startup controls differ from the run plan"
         )
     compute = (stage.env or run.env).compute
+    try:
+        verify_runtime_controls(
+            observed=startup.observed_controls,
+            reproducibility=run.reproducibility,
+            backend=compute.kind,
+        )
+
+    except ValueError as exc:
+        raise VerificationError(str(exc)) from exc
+
     recorded_cuda = startup.env.get("CUDA_VISIBLE_DEVICES")
     if compute.kind == "cuda":
         if recorded_cuda is None or not recorded_cuda.isdigit():
@@ -384,7 +388,7 @@ def _verify_unresolved_stage_invocation(
     fetcher: StorageFetcher | None,
 ) -> None:
     """Verify the terminal receipt for a started stage that did not resolve."""
-    raw = read_resolved_file(reference, fetcher=fetcher)
+    raw = storage.read_resolved_file(reference, fetcher=fetcher)
     try:
         receipt = StageInvocationReceipt.model_validate(parse_yaml_bytes(raw))
     except (yaml.YAMLError, ValueError) as exc:
@@ -444,7 +448,7 @@ def _verify_download_retrievals(
     fetcher: StorageFetcher | None,
 ) -> None:
     """Verify each HTTP request, response, implementation, and artifact body."""
-    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     for input_name, retrieval in resolved.retrievals.items():
         try:
             validate_request_policy(retrieval.request, resolved.spec.policy)
@@ -465,7 +469,7 @@ def _verify_download_retrievals(
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} body uses another path"
             )
-        body_raw = read_snapshot_file(
+        body_raw = storage.read_snapshot_file(
             snapshot,
             retrieval.body,
             fetcher=fetcher,
@@ -585,7 +589,7 @@ def verify_attempt_stages(
                 "its canonical run path"
             )
 
-        raw = read_snapshot_file(
+        raw = storage.read_snapshot_file(
             stage_reference.snapshot,
             stage_reference.resolved_spec,
             fetcher=fetcher,
@@ -703,7 +707,7 @@ def verify_attempt_stages(
                 execution_context = None
             else:
                 completion = _executed_completion(resolved_spec)
-                read_resolved_file(completion.source, fetcher=fetcher)
+                storage.read_resolved_file(completion.source, fetcher=fetcher)
                 resolved_environment = completion.env
                 execution_context = completion.execution_context
         else:
@@ -711,7 +715,7 @@ def verify_attempt_stages(
             execution_context = None
 
         if resolved_environment is not None and execution_context is not None:
-            read_resolved_file(resolved_environment.lockfile, fetcher=fetcher)
+            storage.read_resolved_file(resolved_environment.lockfile, fetcher=fetcher)
             _verify_effective_env(
                 stage_reference.stage_id,
                 stage_spec.env or run.env,
@@ -736,13 +740,13 @@ def verify_attempt_stages(
 
         for artifact_name, artifact in resolved_spec.artifacts.items():
             declaration = stage_spec.outputs[artifact_name]
-            verified_artifact = verify_snapshot_artifact(
+            verified_artifact = storage.verify_snapshot_artifact(
                 stage_reference,
                 artifact,
                 data_role=declaration.data_role,
                 fetcher=fetcher,
             )
-            load_verified_artifact(
+            storage.load_verified_artifact(
                 run,
                 declaration,
                 artifact_name,
@@ -788,7 +792,7 @@ def verify_attempt_journal(
         raise VerificationError("attempt journal path is not canonical")
     try:
         entries = parse_journal_bytes(
-            read_resolved_file(attempt.journal, fetcher=fetcher)
+            storage.read_resolved_file(attempt.journal, fetcher=fetcher)
         )
     except ValueError as exc:
         raise VerificationError("attempt journal is invalid") from exc
@@ -812,7 +816,8 @@ def verify_attempt_files(
             *attempt.metric_verification_files,
             *attempt.log_files,
         )
-        if (identity := artifact_revision_identity(reference.stored_at)) is not None
+        if (identity := storage.artifact_revision_identity(reference.stored_at))
+        is not None
     }
     if len(attempt_file_snapshots) > 1:
         raise VerificationError(
@@ -840,7 +845,7 @@ def verify_attempt_files(
                 "measurement file is outside the canonical run path"
             )
 
-        raw = read_resolved_file(reference, fetcher=fetcher)
+        raw = storage.read_resolved_file(reference, fetcher=fetcher)
         try:
             lines = raw.decode("utf-8").splitlines()
         except UnicodeDecodeError as exc:
@@ -927,7 +932,7 @@ def verify_attempt_files(
             raise VerificationError(
                 "log file path does not match its attempt and stage"
             )
-        read_resolved_file(reference, fetcher=fetcher)
+        storage.read_resolved_file(reference, fetcher=fetcher)
 
     return tuple(measurements)
 
@@ -996,7 +1001,9 @@ def verify_external_inputs(
         if resolved_input.file.path != expected_path:
             raise VerificationError("input.local.identity: path differs")
         try:
-            content = read_snapshot_file(snapshot, resolved_input.file, fetcher=fetcher)
+            content = storage.read_snapshot_file(
+                snapshot, resolved_input.file, fetcher=fetcher
+            )
         except VerificationError as exc:
             raise VerificationError(
                 f"input.local.identity: captured input {input_name!r} differs"

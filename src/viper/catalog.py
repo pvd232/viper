@@ -24,6 +24,7 @@ from ._schema import (
     GitCommit,
 )
 from .benchmark import BenchmarkMetricResult
+from .evidence import VerifiedBenchmarkResult, VerifiedRunResult
 from .ids import ExperimentId, MetricId, ReplicateId, RunId, StageId, VariantId
 from .inspection import RunLineage, lineage
 from .knowledge import (
@@ -71,7 +72,6 @@ from .runs import RunAttempt
 from .serialization import document_digest, parse_yaml_bytes, serialize_document
 from .stages import DownloadSpec, InternalSpec
 from .storage import LocalArtifactStore
-from .verification.models import VerifiedBenchmarkResult, VerifiedRunResult
 
 CatalogRunStatus = Literal["succeeded", "failed", "cancelled"]
 

@@ -47,6 +47,7 @@ from viper.authoring import (
 from viper.authoring import input as external_input
 from viper.catalog import Catalog, CatalogRunSource
 from viper.config import ConfigTypeRef
+from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution import _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
@@ -106,6 +107,7 @@ from viper.runs import (
 )
 from viper.runtime import (
     CUDAComputeSpec,
+    ExecutionPolicyRef,
     LocalEnvSpec,
     observe_gce_provisioning,
 )
@@ -121,7 +123,6 @@ from viper.stages import (
 )
 from viper.storage import LocalArtifactStore
 from viper.verification import verify_run_result
-from viper.verification.models import VerificationError, VerificationPolicy
 from viper.workspace import AttemptWorkspace, captured_input_path
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -159,6 +160,7 @@ def freeze_protocol_plan(
         source=source,
         env=env,
         reproducibility=reproducibility(),
+        execution_policy=ExecutionPolicyRef(mode="custom"),
         stages=tuple(references),
         estimator=StageArtifactRef(stage_id="train", artifact_name=TrainKeys.MODEL),
     )
@@ -556,7 +558,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
 
     with pytest.raises(RunError, match="attempt 2 failed"):
-        execute_run(root, frozen.files[-1])
+        execute_run(frozen.files[-1], repository_root=root)
 
     failed_run = ResolvedRun.model_validate(
         parse_yaml_bytes((root / RUN_ROOT / "resolved.yaml").read_bytes())
@@ -901,7 +903,7 @@ def test_train_stage_captures_local_external_input(
     run_git(root, "add", "experiments/example/runs")
     run_git(root, "commit", "--quiet", "-m", "plan")
 
-    result = execute_run(root, frozen.files[-1])
+    result = execute_run(frozen.files[-1], repository_root=root)
 
     assert result.status == result.record.status == "succeeded"
     store = LocalArtifactStore(root)

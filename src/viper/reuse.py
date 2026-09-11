@@ -291,10 +291,14 @@ def verified_input_identity(
     for file in value.files:
         path = Path(file.reference.path)
         root = Path(value.path)
-        try:
-            relative = path.relative_to(root).as_posix()
-        except ValueError:
+        # A single-file input uses its filename; relative_to would produce ".".
+        if path == root:
             relative = path.name
+        else:
+            try:
+                relative = path.relative_to(root).as_posix()
+            except ValueError:
+                relative = path.name
         files.append(
             ReuseFileIdentity(
                 relative_path=relative,

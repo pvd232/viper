@@ -23,6 +23,7 @@ from tests.test_verification_acceptance import (
     yaml_bytes,
 )
 from viper import config
+from viper.evidence import VerificationError
 from viper.metrics import (
     MeasurementSink,
     MetricContext,
@@ -31,7 +32,6 @@ from viper.metrics import (
     invoke_metric,
 )
 from viper.verification import verify_run_result
-from viper.verification.models import VerificationError
 
 
 def test_recomputed_metric_requires_one_verification_receipt() -> None:

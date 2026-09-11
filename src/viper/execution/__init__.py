@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..authoring import RunPlanDraft, freeze_run_plan
+from ..repository import resolve_root
 from ..storage import ViperCloudClient
 from ._batch import run_many as _run_many
 from ._benchmark import benchmark as _benchmark
@@ -15,19 +16,21 @@ from .results import BenchmarkExecutionResult, ExperimentExecutionResult, RunRes
 
 
 def run(
-    repository_root: Path,
     plan: RunPlanDraft | Path,
     *,
+    repository_root: Path | None = None,
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
 ) -> RunResult:
     """Execute a Python draft or a saved run specification.
 
+    Discover the workspace from the current directory unless a root is supplied.
     A draft is frozen before execution; a Path selects an existing RunSpec.
     Return a verified RunResult with direct status and path attributes.
     Execution and verification failures raise and leave attempt evidence for
     inspection. timeout_seconds bounds each stage or metric worker invocation.
     """
+    repository_root = resolve_root(repository_root)
     if isinstance(plan, Path):
         return _run(
             repository_root,

@@ -27,6 +27,14 @@ from ..artifacts import (
     ResolvedBundleArtifact,
     ResolvedSingleFileArtifact,
 )
+from ..evidence import (
+    StageSnapshot,
+    StorageFetcher,
+    VerificationError,
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedSnapshotFile,
+)
 from ..outputs import OutputSpec
 from ..references import (
     GitFileRef,
@@ -44,14 +52,6 @@ from ..references import (
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
-from ..verification.models import (
-    StageSnapshot,
-    StorageFetcher,
-    VerificationError,
-    VerificationPolicy,
-    VerifiedArtifact,
-    VerifiedSnapshotFile,
-)
 from .paths import run_root
 
 _ARTIFACT_VALIDATION_CACHE: dict[

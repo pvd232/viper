@@ -14,6 +14,7 @@ from pydantic import Field, ValidationError
 import viper._subprocess as subprocess
 
 from ._schema import ProtocolModel, RepoRelPath
+from .references import GitSource
 
 PACKAGE_PATTERN = re.compile(r"[a-z][a-z0-9_]*\Z")
 ROOT_FILES: dict[str, str] = {
@@ -83,6 +84,33 @@ def resolve_root(root: Path | None = None) -> Path:
 
     _require_git_work_tree(resolved)
     return resolved
+
+
+def read_source(root: Path | None = None, *, remote: str = "origin") -> GitSource:
+    """Read the checked-out commit and HTTP(S) URL of the selected Git remote.
+
+    Return the committed source identity used by plans. Raise RootError when
+    the workspace, HEAD, or remote is unavailable. GitSource validates the URL.
+    """
+    repository_root = resolve_root(root)
+    try:
+        commit = subprocess.run(
+            ("git", "-C", str(repository_root), "rev-parse", "HEAD"),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        repository = subprocess.run(
+            ("git", "-C", str(repository_root), "remote", "get-url", remote),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RootError(
+            "cannot read the committed source and selected Git remote"
+        ) from exc
+    return GitSource.model_validate({"repository": repository, "commit": commit})
 
 
 def resolve_path(
@@ -322,7 +350,7 @@ from viper.authoring import RunPlanDraft
 
 def execute(root: Path, draft: RunPlanDraft):
     """Compile and execute one authored plan."""
-    return execution.run(root, draft)
+    return execution.run(draft, repository_root=root)
 ''',
         f"src/{package}/declarations.py": (
             f'''"""Connect workspace stages to typed output declarations."""

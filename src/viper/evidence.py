@@ -1,25 +1,25 @@
-"""Define the public records consumed and returned by verification operations."""
+"""Define verified evidence and the policy used to accept source execution."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from .._schema import DataRole, RepoRelPath
-from ..artifacts import ResolvedArtifact
-from ..benchmark import BenchmarkResult, BenchmarkSpec
-from ..experiments import ExperimentSpec, VariantSpec
-from ..ids import InputName, StageId
-from ..metrics import Measurement
-from ..references import (
+from ._schema import DataRole, RepoRelPath
+from .artifacts import ResolvedArtifact
+from .benchmark import BenchmarkResult, BenchmarkSpec
+from .experiments import ExperimentSpec, VariantSpec
+from .ids import InputName, StageId
+from .metrics import Measurement
+from .references import (
     ResolvedFileRef,
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
 )
-from ..reuse import StageReuseReceipt
-from ..runs import ResolvedRun, RunAttempt, RunSpec
-from ..stages import BaseSpec, ResolvedBaseSpec
+from .reuse import StageReuseReceipt
+from .runs import ResolvedRun, RunAttempt, RunSpec
+from .stages import BaseSpec, ResolvedBaseSpec
 
 
 class VerificationError(ValueError):
@@ -105,8 +105,9 @@ class VerifiedBenchmarkResult:
 
 
 StorageFetcher = Callable[[StorageModel], bytes]
-StageSnapshot = StageResultSnapshot
 
+
+StageSnapshot = StageResultSnapshot
 
 __all__ = [
     "StageSnapshot",

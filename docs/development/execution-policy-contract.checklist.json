@@ -8,7 +8,7 @@
       "contract_id": "execution-policy",
       "path": "docs/development/execution-policy-contract.md",
       "revision": "working-tree",
-      "sha256": "4e2170c681990179158f8313b2bf916495433c3c8dcf86df3245b9964fbcd810",
+      "sha256": "396b111dcb713ae229560fa16dcd9c4659be0672e6dbbe8db5e98488dea59445",
       "requirement_ids": [
         "EP-00",
         "EP-01",
@@ -69,12 +69,18 @@
       "depends_on": [
         "EP-01"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "pytest -q tests/test_authoring.py -k policy_persistence"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_runtime_boundary.py tests/test_authoring.py tests/test_benchmark_execution.py tests/test_plan_execution.py tests/test_project_init.py: 53 passed",
+          "revision": "working-tree"
+        }
+      ]
     },
     {
       "requirement_id": "EP-03",
@@ -84,12 +90,18 @@
       "depends_on": [
         "EP-02"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
-        "target": "pytest -q tests/test_process_startup.py tests/test_runtime_boundary.py tests/test_benchmark_execution.py -k execution_policy"
+        "target": "pytest -q tests/test_execution_policy_controls.py tests/test_process_startup.py"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_execution_policy_controls.py tests/test_execution_policy_acceptance.py tests/test_process_startup.py: 32 passed, 3 CUDA cases skipped",
+          "revision": "working-tree"
+        }
+      ]
     },
     {
       "requirement_id": "EP-04",
@@ -99,12 +111,18 @@
       "depends_on": [
         "EP-02"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
-        "target": "pytest -q tests/test_process_startup.py tests/test_runtime_boundary.py tests/test_benchmark_execution.py -k execution_policy"
+        "target": "pytest -q tests/test_verification.py tests/test_verification_acceptance.py tests/test_execution_policy_controls.py tests/test_benchmark_execution.py"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_verification.py tests/test_verification_acceptance.py tests/test_benchmark_execution.py: 69 passed, 2 subtests passed",
+          "revision": "working-tree"
+        }
+      ]
     },
     {
       "requirement_id": "EP-05",
@@ -112,15 +130,20 @@
       "phase": 4,
       "order": 1,
       "depends_on": [
-        "EP-03",
         "EP-04"
       ],
-      "state": "planned",
+      "state": "in_progress",
       "gate": {
-        "kind": "command",
-        "target": "pytest -q tests/test_documentation.py tests/test_live_process_startup.py -k execution_policy"
+        "kind": "test",
+        "target": "pytest -q tests/test_readme_workflow.py tests/test_documentation.py tests/test_live_process_startup.py"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "README, tutorial, default example and all three policy workflows passed; CUDA acceptance awaits the designated host",
+          "revision": "working-tree"
+        }
+      ]
     }
   ],
   "pair_blocks": [
@@ -165,47 +188,244 @@
       ]
     },
     {
-      "pair_block_id": "EP-B2",
+      "pair_block_id": "EP-B2a",
       "contract_id": "execution-policy",
       "section": "11. Master checklist",
       "requirement_ids": [
         "EP-02"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "pytest -q tests/test_authoring.py -k policy_persistence"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_runtime_boundary.py tests/test_authoring.py tests/test_benchmark_execution.py tests/test_plan_execution.py tests/test_project_init.py: 53 passed",
+          "revision": "working-tree"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-B2b",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-02"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py::test_policy_persistence_consistency tests/test_authoring.py::test_policy_persistence_replay"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_runtime_boundary.py tests/test_authoring.py tests/test_benchmark_execution.py tests/test_plan_execution.py tests/test_project_init.py: 53 passed",
+          "revision": "working-tree"
+        }
+      ]
     },
     {
       "pair_block_id": "EP-B3",
       "contract_id": "execution-policy",
       "section": "11. Master checklist",
       "requirement_ids": [
-        "EP-03",
-        "EP-04"
+        "EP-03"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
-        "target": "pytest -q tests/test_process_startup.py tests/test_runtime_boundary.py tests/test_benchmark_execution.py -k execution_policy"
+        "target": "pytest -q tests/test_execution_policy_controls.py tests/test_process_startup.py"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_execution_policy_controls.py tests/test_execution_policy_acceptance.py tests/test_process_startup.py: 32 passed, 3 CUDA cases skipped",
+          "revision": "working-tree"
+        }
+      ]
     },
     {
       "pair_block_id": "EP-B4",
       "contract_id": "execution-policy",
       "section": "11. Master checklist",
       "requirement_ids": [
+        "EP-04"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_verification.py tests/test_verification_acceptance.py tests/test_execution_policy_controls.py tests/test_benchmark_execution.py"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_verification.py tests/test_verification_acceptance.py tests/test_benchmark_execution.py: 69 passed, 2 subtests passed",
+          "revision": "working-tree"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-B5",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
         "EP-05"
       ],
-      "state": "planned",
+      "state": "in_progress",
       "gate": {
-        "kind": "command",
-        "target": "pytest -q tests/test_documentation.py tests/test_live_process_startup.py -k execution_policy"
+        "kind": "test",
+        "target": "pytest -q tests/test_readme_workflow.py tests/test_documentation.py tests/test_live_process_startup.py"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "README, tutorial, default example and all three policy workflows passed; CUDA acceptance awaits the designated host",
+          "revision": "working-tree"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-VB0",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-00"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_runtime_boundary.py -k execution_policy"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_runtime_boundary.py: 16 passed",
+          "revision": "debff65e516176d04c481c9e248cf5906740b554"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-VB1",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-01"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py -k execution_policy"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_authoring.py: 20 passed",
+          "revision": "50ac550287ba76af13181f53fc2c201e8406b7c4"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-VB2a",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-02"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py -k policy_persistence"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_runtime_boundary.py tests/test_authoring.py tests/test_benchmark_execution.py tests/test_plan_execution.py tests/test_project_init.py: 53 passed",
+          "revision": "working-tree"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-VB2b",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-02"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py::test_policy_persistence_consistency tests/test_authoring.py::test_policy_persistence_replay"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_runtime_boundary.py tests/test_authoring.py tests/test_benchmark_execution.py tests/test_plan_execution.py tests/test_project_init.py: 53 passed",
+          "revision": "working-tree"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-VB3",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-03"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_execution_policy_controls.py tests/test_process_startup.py"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_execution_policy_controls.py tests/test_execution_policy_acceptance.py tests/test_process_startup.py: 32 passed, 3 CUDA cases skipped",
+          "revision": "working-tree"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-VB4",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-04"
+      ],
+      "state": "complete",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_verification.py tests/test_verification_acceptance.py tests/test_execution_policy_controls.py tests/test_benchmark_execution.py"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "python -m pytest -q tests/test_verification.py tests/test_verification_acceptance.py tests/test_benchmark_execution.py: 69 passed, 2 subtests passed",
+          "revision": "working-tree"
+        }
+      ]
+    },
+    {
+      "pair_block_id": "EP-VB5",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-05"
+      ],
+      "state": "in_progress",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_readme_workflow.py tests/test_documentation.py tests/test_live_process_startup.py"
+      },
+      "completion_evidence": [
+        {
+          "kind": "test",
+          "target": "README, tutorial, default example and all three policy workflows passed; CUDA acceptance awaits the designated host",
+          "revision": "working-tree"
+        }
+      ]
     }
   ]
 }

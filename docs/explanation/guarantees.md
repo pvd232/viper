@@ -7,7 +7,7 @@ experimental design you selected.
 
 ## Checks on a successful run
 
-The [run verifier](../../src/viper/verification/__init__.py) follows the terminal result
+The [run verifier](../../src/viper/verification.py) follows the terminal result
 to its plan, successful attempt, stages, artifacts, and measurements. It checks that:
 
 - the attempt belongs to the selected run and follows the allowed state changes;

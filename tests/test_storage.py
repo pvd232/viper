@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from viper._schema import SHA256, RepoRelPath
+from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution._restore import (
     _PlannedFile,
     _restore_files,
@@ -42,7 +43,6 @@ from viper.storage import (
     publish_resolved_files,
 )
 from viper.verification import verify_run_result
-from viper.verification.models import VerificationError, VerificationPolicy
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 

@@ -6,6 +6,7 @@ from viper import config
 from viper._schema import DataRole
 from viper.artifacts import ArtifactLoaderRef
 from viper.config import ConfigTypeRef
+from viper.evidence import VerificationPolicy
 from viper.http import (
     BuiltinHttpImplementationSpec,
     HttpRequestSpec,
@@ -39,7 +40,6 @@ from viper.runtime import (
     observe_python_env as observe_python_environment,
 )
 from viper.stages import StageImplementationRef
-from viper.verification.models import VerificationPolicy
 
 DEFAULT_ARTIFACT_LOADER_SOURCE = b"def load(path):\n    return path.read_bytes()\n"
 

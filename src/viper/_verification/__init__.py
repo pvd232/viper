@@ -1,1 +1,1 @@
-"""Private implementation units for provenance verification."""
+"""Private implementation units for provenance evidence."""

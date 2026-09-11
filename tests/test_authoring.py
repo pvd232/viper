@@ -72,7 +72,12 @@ from viper.preflight import preflight_plan
 from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 from viper.resume import DataLoaderConfiguration
 from viper.runs import RunSpec
-from viper.runtime import EnvSpec, ParallelismSpec, ReproducibilitySpec
+from viper.runtime import (
+    EnvSpec,
+    ParallelismSpec,
+    ReproducibilitySpec,
+    resolve_execution_policy,
+)
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     Context,
@@ -1032,3 +1037,68 @@ def test_execution_policy_expand_resolves_once() -> None:
     assert selected[0].execution_policy.mode == "relaxed"
     assert selected[0].reproducibility == selected[1].reproducibility
     assert selected[0].reproducibility is not selected[1].reproducibility
+
+
+def test_policy_persistence_writer_roundtrip(tmp_path: Path) -> None:
+    """Save the selected mode and settings and read both back unchanged."""
+    compiled, draft = _compiled_plan(tmp_path)
+    raw = compiled.files[compiled.run_path]
+    restored = RunSpec.model_validate(parse_yaml_bytes(raw))
+    assert restored.execution_policy == draft.execution_policy
+    assert restored.reproducibility == draft.reproducibility
+    assert serialize_document(restored) == raw
+    assert RunSpec.model_json_schema()["required"].count("execution_policy") == 1
+
+
+def test_policy_persistence_requires_policy_identity(tmp_path: Path) -> None:
+    """Reject missing policy identity instead of inferring a historical mode."""
+    compiled, _ = _compiled_plan(tmp_path)
+    payload = compiled.run.model_dump(mode="json")
+    del payload["execution_policy"]
+    with pytest.raises(ValidationError, match="execution_policy"):
+        RunSpec.model_validate(payload)
+
+
+def test_policy_persistence_consistency(tmp_path: Path) -> None:
+    """Accept matching presets and reject a relabelled relaxed run."""
+    compiled, _ = _compiled_plan(tmp_path)
+    payload = compiled.run.model_dump(mode="json")
+    for mode in ("reproducible", "relaxed"):
+        policy, settings = resolve_execution_policy(mode)
+        payload.update(
+            execution_policy=policy.model_dump(mode="json"),
+            reproducibility=settings.model_dump(mode="json"),
+        )
+        restored = RunSpec.model_validate(payload)
+        assert restored.execution_policy.mode == mode
+        assert restored.reproducibility == settings
+
+    payload["execution_policy"] = {"mode": "reproducible", "version": 1}
+    with pytest.raises(ValidationError, match="saved numerical settings"):
+        RunSpec.model_validate(payload)
+
+
+def test_policy_persistence_replay(tmp_path: Path) -> None:
+    """Read the saved controls without consulting current thread defaults."""
+    compiled, _ = _compiled_plan(tmp_path)
+    policy, settings = resolve_execution_policy("relaxed")
+    payload = compiled.run.model_dump(mode="json")
+    payload.update(
+        execution_policy=policy.model_dump(mode="json"),
+        reproducibility=settings.model_dump(mode="json"),
+    )
+    saved = serialize_document(RunSpec.model_validate(payload))
+    with (
+        patch(
+            "viper.runtime.torch.get_num_threads",
+            side_effect=AssertionError("saved runs must not consult thread defaults"),
+        ),
+        patch(
+            "viper.runtime.torch.get_num_interop_threads",
+            side_effect=AssertionError("saved runs must not consult thread defaults"),
+        ),
+    ):
+        restored = RunSpec.model_validate(parse_yaml_bytes(saved))
+    assert restored.execution_policy == policy
+    assert restored.reproducibility == settings
+    assert serialize_document(restored) == saved

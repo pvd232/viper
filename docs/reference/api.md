@@ -14,6 +14,9 @@ The primary workflow is:
 ```python
 from viper import execution
 from viper.authoring import plan
+from viper.repository import read_source
+
+source = read_source()
 
 draft = plan(
     experiment=study,
@@ -23,7 +26,7 @@ draft = plan(
     env=environment,
     reproducibility=reproducibility,
 )
-resolved_run = execution.run(repository_root, draft)
+resolved_run = execution.run(draft)
 print(resolved_run.status)
 print(resolved_run.path)
 ```
@@ -33,6 +36,18 @@ compiles a draft into protocol files, executes the selected stages, verifies the
 terminal evidence, and returns `RunResult`. Read `.status` and `.path` directly;
 `.record` contains the stored terminal record and `.reference` identifies its
 immutable bytes. See [execution results](../how-to/execution.md).
+
+`read_source()` finds the workspace from the current directory and returns its
+checked-out commit and the HTTP(S) URL of `origin`. Select another remote with
+`read_source(remote="mirror")` or another workspace with `read_source(root)`.
+`execution.run(draft)` uses the same discovery; supply `repository_root=root`
+to execute elsewhere. Missing workspace, commit, or remote information raises
+`RootError`. Invalid source URLs fail `GitSource` validation.
+
+The [policy example](../../examples/execution_policies.py) runs the training
+experiment with reproducible, relaxed, or custom settings. Saved plans retain the
+selection and its complete settings. Verification compares the workers' recorded
+controls with those settings. Comparing output bytes between runs is separate.
 
 The execution namespace also provides:
 
@@ -157,7 +172,7 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 | `viper.outputs` | Typed output declarations and required output names |
 | `viper.inputs` | Local, same-run, and stored input references |
 | `viper.ids` | Validated run IDs and user-assigned names |
-| `viper.repository` | Workspace initialization, root discovery, and path resolution |
+| `viper.repository` | Workspace initialization, source identification, and path resolution |
 | `viper.stages` | Stage specifications, decorators, contexts, and invocation evidence |
 | `viper.experiments` | Frozen experiments, variants, factors, levels, and replicates |
 | `viper.runs` | Run plans, attempts, and terminal run records |
@@ -176,6 +191,7 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 | `viper.catalog` | Verified-run indexing and exact evidence queries |
 | `viper.knowledge` | Typed scientific knowledge publication and models |
 | `viper.inspection` | Plan diff, run comparison, status, and lineage models |
+| `viper.evidence` | Verified files, artifacts, runs, and source acceptance policy |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval |

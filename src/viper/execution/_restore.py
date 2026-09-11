@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .._schema import repo_file_paths_overlap
 from ..artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
+from ..evidence import StorageFetcher
 from ..references import (
     LocalFileRef,
     ResolvedFileRef,
@@ -30,7 +31,6 @@ from ..runs import ResolvedRun, RunAttempt
 from ..serialization import parse_yaml_bytes
 from ..stages import ResolvedSpec
 from ..storage import LocalArtifactStore, ViperCloudClient, content_revision
-from ..verification.models import StorageFetcher
 from ._source import RunFetcher
 from .errors import RestoreError
 

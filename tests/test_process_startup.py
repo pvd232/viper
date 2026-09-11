@@ -13,6 +13,7 @@ import pytest
 import viper.runtime as runtime
 from viper import _subprocess
 from viper._verification.attempt import _verify_startup_backend
+from viper.evidence import VerificationError
 from viper.preflight import _git_bytes
 from viper.resume import DataLoaderConfiguration
 from viper.runtime import (
@@ -29,7 +30,6 @@ from viper.runtime import (
     apply_reproducibility,
     process_environment,
 )
-from viper.verification.models import VerificationError
 
 
 def _run_git(root: Path, *arguments: str) -> None:
@@ -234,9 +234,7 @@ def test_named_numpy_receipt_identifies_the_delivered_generator() -> None:
     initialized = apply_reproducibility(7, _controls())
     generator = initialized.numpy_generators["augmentation"]
     receipt = next(
-        value
-        for value in initialized.receipt.generators
-        if value.family == "numpy_generator"
+        value for value in initialized.generators if value.family == "numpy_generator"
     )
     initial_raw = json.dumps(
         generator.bit_generator.state,

@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from viper._verification.attempt import _verify_effective_env
+from viper.evidence import VerificationError
 from viper.references import (
     GitFileRef,
     ResolvedGitFileRef,
@@ -25,7 +26,6 @@ from viper.runtime import (
     observe_gce_provisioning,
     observe_python_env,
 )
-from viper.verification.models import VerificationError
 
 REPOSITORY = "https://github.com/example/viper-project"
 

@@ -20,6 +20,7 @@ from ..benchmark import (
     BenchmarkSpec,
     MetricCriterionResult,
 )
+from ..evidence import VerificationPolicy
 from ..metrics import MetricVerificationReceipt, compare_metric_values
 from ..references import (
     GitFileRef,
@@ -41,7 +42,6 @@ from ..storage import (
     publish_resolved_files,
 )
 from ..verification import verify_benchmark_result, verify_run_result
-from ..verification.models import VerificationPolicy
 from ._run import execute_benchmark_confirmation
 from ._source import RunFetcher
 from .errors import BenchmarkExecutionError

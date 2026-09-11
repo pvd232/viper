@@ -120,6 +120,7 @@ def execute_metric_process(
     compute = effective_environment.compute
     cuda_ordinal = select_cuda_device(compute.model) if compute.kind == "cuda" else None
     env = os.environ.copy()
+    env.pop("CUBLAS_WORKSPACE_CONFIG", None)
     env.update(
         {
             str(key): value
