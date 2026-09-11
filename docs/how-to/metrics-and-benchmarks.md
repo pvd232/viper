@@ -100,26 +100,41 @@ including scores that lack the mathematical properties of a distance metric.
 
 ## Recompute a stateless metric
 
-A stateless metric can also be recomputed from declared artifacts. Configure it with
-`dependencies` and a `comparator` in `measure()`. VIPER then loads the named files and
-compares the recomputed value with the recorded value. The two arguments are paired:
-supplying only dependencies or only a comparator is invalid. During recomputation, the
-function reads paths from `MetricContext.inputs` or `MetricContext.artifacts`. It must
-be callable with that context alone. Live positional arguments are available only while
-the stage is running.
+Save the inputs to a calculation when you want VIPER to repeat it during
+verification. In this example, the evaluation stage uses the trained model to
+make predictions. RMSE measures the differences between those predictions and
+the known targets.
 
-The [evaluation example](../../examples/evaluation.py) writes a JSON file of
-`[prediction, target]` pairs. Its metric reads that file and computes root mean
-squared error:
+The [`predict` function and its stage declaration](stages.md#evaluate-against-saved-test-data)
+show the producer of the metric's input. `predict` reads the model's `weight`,
+the test CSV, and the selected row indices. It writes a JSON array to
+`context.outputs["predictions"]`, with one `[prediction, target]` pair per
+selected row. For example, a weight of `2.0` and selected test rows `(1, 3)`
+and `(3, 7)` produce:
+
+```json
+[[2.0, 3.0], [6.0, 7.0]]
+```
+
+The linked stage declaration names the output `predictions` in `EvalOutputs`
+and assigns it the filename `predictions.json`.
+The dependency below selects that output by its name, `predictions`.
+VIPER supplies its local file path as `context.artifacts["predictions"]` when
+calling the metric. The metric opens the file and computes RMSE from its pairs;
+the model weights are used by `predict` earlier in the evaluation.
 
 ```python
 import json
 
-from viper.metrics import FloatComparator, MetricDependency
+from viper.config import MetricConfig
+from viper.metrics import (
+    FloatComparator, MetricContext, MetricDependency, measure, metric,
+)
 
 
 @metric(metric_id="root_mean_squared_error", mode="stateless")
 def root_mean_squared_error(context: MetricContext[MetricConfig]) -> float:
+    """Read predict's saved [prediction, target] pairs and return their RMSE."""
     pairs = json.loads(context.artifacts["predictions"].read_text(encoding="utf-8"))
     if not pairs:
         raise ValueError("root_mean_squared_error requires at least one prediction")
@@ -140,8 +155,16 @@ rmse = measure(
 )
 ```
 
-Attach `rmse` to the evaluation stage with `metrics=(rmse,)`. VIPER computes it
-after the stage writes `predictions`, then computes it again during verification.
+Attach `rmse` to the evaluation stage with `metrics=(rmse,)`. VIPER calls it
+after `predict` returns, then calls it again during verification using the
+saved prediction file. Both calls receive a `MetricContext` containing the
+prediction file's path. For the pairs above, the
+squared errors are both `1.0`, so RMSE is `1.0`.
+
+`dependencies` selects the files needed to repeat the calculation, and
+`comparator` defines how to compare the repeated value with the saved measurement.
+Supply both arguments together. A recomputable metric must accept its context
+alone. Save any inputs needed for recomputation as declared file dependencies.
 A difference of at most `1e-12` passes this comparator. Use `mode="exact"` for
 exact equality or `mode="relative"` with a positive tolerance for relative error.
 The required data role must match the selected artifact.

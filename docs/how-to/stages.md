@@ -177,8 +177,17 @@ CPU quickstart. The complete file includes these dependencies together. It uses 
 data roles because the run includes benchmark criteria. The excerpt below
 uses those same roles.
 
-This evaluation selects those rows, predicts their targets, writes the paired
-predictions and targets, and computes root mean squared error from that file:
+The functions below have separate jobs. `predict` reads the model's `weight`
+and applies it to each selected test row's `x` value. It writes
+`[prediction, target]` pairs to the declared `predictions` output. With weight
+`2.0` and selected rows `(1, 3)` and `(3, 7)`, that file contains
+`[[2.0, 3.0], [6.0, 7.0]]`.
+
+`root_mean_squared_error` reads those saved pairs and returns `1.0` for this
+example. Its `MetricDependency` selects the evaluation output named
+`predictions`. VIPER passes that file's path through the metric's
+`context.artifacts`; the evaluation function writes it through the stage's
+`context.outputs`. These are two contexts supplied to two different functions.
 
 ```python
 import json
@@ -210,6 +219,7 @@ def predict(context: Context[EvalConfig]) -> None:
 
 @metric(metric_id="root_mean_squared_error", mode="stateless")
 def root_mean_squared_error(context: MetricContext[MetricConfig]) -> float:
+    """Read predict's saved [prediction, target] pairs and return their RMSE."""
     pairs = json.loads(load_text(context.artifacts["predictions"]))
     if not pairs:
         raise ValueError("root_mean_squared_error requires at least one prediction")

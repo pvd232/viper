@@ -341,6 +341,21 @@ def test_documented_evaluation_writes_predictions_and_computes_rmse(
     )
     assert namespace["rmse"].implementation(metric_context) == 1.0
 
+    # The metric guide must consume the evaluation output without relying on
+    # imports or objects from another snippet.
+    metric_blocks = python_blocks(
+        Path("docs/how-to/metrics-and-benchmarks.md").read_text()
+    )
+    metric_namespace = {}
+    rmse_block = next(
+        block for block in metric_blocks if "def root_mean_squared_error(" in block
+    )
+    exec(rmse_block, metric_namespace)
+    assert metric_namespace["rmse"].implementation(metric_context) == 1.0
+    predictions.write_text("[]")
+    with pytest.raises(ValueError, match="at least one prediction"):
+        metric_namespace["rmse"].implementation(metric_context)
+
 
 _POLICY_VERIFY_PROGRAM = """
 import hashlib

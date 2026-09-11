@@ -54,7 +54,7 @@ def predict(context: Context[EvalConfig]) -> None:
 
 @metric(metric_id="root_mean_squared_error", mode="stateless")
 def root_mean_squared_error(context: MetricContext[MetricConfig]) -> float:
-    """Compute RMSE from the saved prediction and target pairs."""
+    """Read predict's saved [prediction, target] pairs and return their RMSE."""
     pairs = json.loads(load_text(context.artifacts["predictions"]))
     if not pairs:
         raise ValueError("root_mean_squared_error requires at least one prediction")
