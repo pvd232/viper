@@ -4,10 +4,27 @@ VIPER executes Python functions according to a saved experiment plan.
 The code below comes from the complete [CPU quickstart](../../examples/cpu_quickstart.py).
 For installation and the full program, see the [tutorial](../tutorials/getting-started.md).
 
+## The argument supplied to your function
+
+The quickstart's training function is `fit(context: Context[TrainConfig])`.
+VIPER creates this `Context` for the running stage and passes it to `fit`.
+Its `config` contains the stage's validated training settings. Its `inputs`
+and `outputs` map the names you declare to local file paths. Its `metrics`
+maps the IDs of attached stage-recorded metrics to objects that compute and
+save measurements. The [stage context reference](../how-to/stages.md#use-the-stage-context)
+describes every attribute.
+
+The declarations below select a `dataset` input, `model` and `resume_state`
+outputs, and the `mean_squared_error` metric. Those names become the keys
+used inside `fit`: `context.inputs["dataset"]`, `context.outputs["model"]`,
+`context.outputs["resume_state"]`, and `context.metrics["mean_squared_error"]`.
+
 ## Define a metric
 
-A metric function computes a measured quantity. This function computes mean
-squared error from predictions and targets:
+A metric function computes a measured quantity. VIPER supplies its first
+argument, `MetricContext`, with the metric's config and file paths. This
+function uses only the predictions and targets passed by the training code,
+so `_context` marks the unused argument:
 
 ```python
 @metric(metric_id="mean_squared_error", mode="stateless")
@@ -35,7 +52,10 @@ Create a configured metric with `measure()`:
 mse = measure(mean_squared_error, config=MetricConfig())
 ```
 
-Inside `fit()`, the following call computes and saves the measurement:
+Attaching `mse` through `stage(metrics=(mse,))`, as shown below, makes a
+`MetricHandle` available as `context.metrics["mean_squared_error"]` inside
+`fit()`. The key comes from `metric_id` in the decorator. Its `record()` method
+computes and saves the measurement:
 
 ```python
 measurement = context.metrics["mean_squared_error"].record(
@@ -44,7 +64,8 @@ measurement = context.metrics["mean_squared_error"].record(
 loss = measurement.value
 ```
 
-`record()` calls `mean_squared_error` with the predictions and targets. It
+`record()` supplies the metric context and calls `mean_squared_error` with
+the predictions and targets. It
 returns a `Measurement` containing the computed value and records its epoch
 and step. See [metrics and benchmarks](../how-to/metrics-and-benchmarks.md) for
 stateful metrics and recomputation from saved files.
@@ -81,7 +102,7 @@ training = stage(
 ```
 
 `fit` is the training function declared with `@train(config=TrainConfig)` in
-the quickstart. VIPER passes the `TrainConfig()` instance through
+the quickstart. VIPER reconstructs the validated training settings as
 `context.config` when it calls that function.
 
 - `inputs["dataset"]` selects the CSV file. The worker supplies its local path

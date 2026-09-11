@@ -52,6 +52,16 @@ Save them together as `examples/cpu_quickstart.py`, commit the file, and run it.
 
 ### Define the metric and training stage
 
+VIPER calls the training function with a `Context`. It supplies the declared
+input and output paths through `context.inputs` and `context.outputs`.
+Attaching a metric to the stage makes it available by its `metric_id` through
+`context.metrics`; calling `.record()` computes and saves a measurement.
+See [the context attributes](docs/how-to/stages.md#use-the-stage-context).
+
+The metric function receives a separate `MetricContext` containing its own
+config and file paths. Mean squared error uses the supplied predictions and
+targets, so it leaves that argument unused as `_context`.
+
 ```python
 """Run one complete VIPER training plan on the local CPU."""
 

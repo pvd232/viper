@@ -134,8 +134,9 @@ The complete [`@train(config=TrainConfig)` implementation](../tutorials/getting-
 reads `context.inputs`, computes predictions and gradients, records mean squared
 error, and writes both files through `context.outputs`.
 
-`Context` provides validated config, materialized input paths, writable output paths,
-metric handles, run identity, and named NumPy generators.
+VIPER constructs `Context` and passes it to the stage function. The
+[context attribute reference](../how-to/stages.md#use-the-stage-context)
+lists each field, its value, and the declaration that supplies it.
 
 ## Metrics and benchmarks
 

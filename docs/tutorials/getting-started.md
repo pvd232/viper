@@ -41,6 +41,11 @@ and targets.
 
 ### 1. Define the metric and output loaders
 
+VIPER passes a `MetricContext` to the metric function with its config and file
+paths. Here the calculation uses only predictions and targets, so `_context`
+marks that argument as unused. The output loaders read the files the training
+function will write.
+
 ```python
 """Run one complete VIPER training plan on the local CPU."""
 
@@ -94,6 +99,23 @@ def mean_squared_error(
 ```
 
 ### 2. Train the model and write its outputs
+
+VIPER constructs a `Context[TrainConfig]` and passes it to `fit` when the
+stage runs. The declaration in step 3 supplies the names used here:
+
+- `context.inputs["dataset"]` is the local path to the declared CSV input.
+- `context.outputs["model"]` and `context.outputs["resume_state"]` are the
+  destinations for the two output files.
+- `context.metrics["mean_squared_error"]` is the handle for the attached
+  metric. Its `record()` method calls the metric with predictions and targets,
+  saves the measurement, and returns a `Measurement` object. Its `.value`
+  contains the computed mean squared error.
+- `context.numpy_generators` contains the initialized generators whose state
+  the checkpoint saves for resuming training.
+
+`context.config` contains the validated training settings. See
+[the stage context reference](../how-to/stages.md#use-the-stage-context) for
+all attributes and their declaration sources.
 
 ```python
 @train(config=TrainConfig)

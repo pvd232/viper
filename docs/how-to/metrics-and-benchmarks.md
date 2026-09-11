@@ -5,10 +5,31 @@ classification accuracy. An objective selects a metric and the direction to
 optimize. A measurement records its value in a particular stage and run.
 Benchmarks independently evaluate artifacts from a completed run.
 
+## Use the metric context
+
+VIPER passes a `MetricContext` as the first argument to a stateless metric
+function, or to a stateful metric's constructor. `context.config` holds the
+metric settings selected by `measure(config=...)`.
+
+For a metric recorded during a stage, `context.inputs` contains the stage's
+input paths and `context.artifacts` contains its output paths. For a recomputed
+metric, these mappings contain the files selected by `MetricDependency`.
+Their values are local `Path` objects, keyed by the declared names.
+
+The stage itself receives a different object, [`Context`](stages.md#use-the-stage-context).
+Its `metrics` mapping contains `MetricHandle` objects for the stage-recorded
+metrics attached with `stage(metrics=...)`. The decorator's `metric_id`
+supplies each key. Calling a handle's `record()` method computes the value
+and saves a measurement associated with the current run, attempt, and stage.
+For stateless metrics it calls the function with the metric context and your
+arguments; for stateful metrics it calls the instance's `compute()` method.
+
 ## Record a stateless metric
 
 Use a stateless metric to calculate one measurement from the current inputs.
-This function computes mean squared error from predictions and targets:
+This function computes mean squared error from predictions and targets.
+It names its first argument `_context` because it uses only the supplied
+numbers:
 
 ```python
 from viper.config import MetricConfig
@@ -32,7 +53,10 @@ def mean_squared_error(
 mse = measure(mean_squared_error, config=MetricConfig())
 ```
 
-Attach `mse` to the stage, then pass the metric's inputs from the stage function:
+Set `metrics=(mse,)` in the stage declaration, as in the
+[complete training example](../../examples/cpu_quickstart.py). Inside that
+stage's function, `context` is the stage argument. Pass predictions and targets
+to the attached metric's handle:
 
 ```python
 measurement = context.metrics["mean_squared_error"].record(
