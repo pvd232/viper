@@ -144,6 +144,75 @@ class ReproducibilitySpec(ProtocolModel):
     numpy_randomness: NumPyRandomnessSpec
 
 
+class ExecutionPolicyRef(ProtocolModel):
+    """Identify the mode and version used to select execution settings."""
+
+    mode: Literal["reproducible", "relaxed", "custom"] = Field(
+        description="Preset used to select settings, or custom for caller settings."
+    )
+    version: Literal[1] = Field(
+        default=1,
+        description="Version of the preset definitions and custom selection rules.",
+    )
+
+
+def resolve_execution_policy(
+    selection: Literal["reproducible", "relaxed"] | ReproducibilitySpec = (
+        "reproducible"
+    ),
+    *,
+    parallelism: ParallelismSpec | None = None,
+) -> tuple[ExecutionPolicyRef, ReproducibilitySpec]:
+    """Return policy identity and validated settings without changing the runtime.
+
+    Explicit settings select custom, even when their values equal a preset.
+    Revalidate and copy those settings so caller-owned mappings remain separate.
+    Presets accept parallelism independently of numerical controls. Relaxed
+    defaults retain the authoring process's configured Torch thread counts;
+    callers supply DataLoader worker settings for their workload.
+    """
+    if isinstance(selection, ReproducibilitySpec):
+        if parallelism is not None:
+            raise ValueError("custom settings already include parallelism")
+        settings = ReproducibilitySpec.model_validate(selection.model_dump())
+        return ExecutionPolicyRef(mode="custom"), settings
+    if selection not in {"reproducible", "relaxed"}:
+        raise ValueError("execution policy must be reproducible, relaxed, or a spec")
+
+    deterministic = selection == "reproducible"
+    if parallelism is None:
+        parallelism = ParallelismSpec(
+            process_count=1,
+            torch_intraop_threads=1 if deterministic else torch.get_num_threads(),
+            torch_interop_threads=(
+                1 if deterministic else torch.get_num_interop_threads()
+            ),
+            dataloader=DataLoaderConfiguration(workers=0),
+        )
+    parallelism = ParallelismSpec.model_validate(parallelism.model_dump())
+    settings = ReproducibilitySpec(
+        determinism=TorchDeterminismSpec(
+            deterministic_algorithms=deterministic,
+            deterministic_warn_only=False,
+            cudnn_deterministic=deterministic,
+            cudnn_benchmark=not deterministic,
+            cublas_workspace_config=":4096:8" if deterministic else None,
+        ),
+        precision=TorchPrecisionSpec(
+            float32_matmul_precision="highest",
+            cudnn_allow_tf32=False,
+            autocast_enabled=False,
+            autocast_dtype=None,
+        ),
+        parallelism=parallelism,
+        numpy_randomness=NumPyRandomnessSpec(
+            generators={},
+            capture_legacy_global=True,
+        ),
+    )
+    return ExecutionPolicyRef(mode=selection), settings
+
+
 GeneratorFamily = Literal[
     "python",
     "numpy_generator",

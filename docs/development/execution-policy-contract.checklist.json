@@ -1,0 +1,187 @@
+{
+  "schema_version": 2,
+  "checklist_id": "execution-policy",
+  "project": "VIPER",
+  "revision": "working-tree",
+  "contracts": [
+    {
+      "contract_id": "execution-policy",
+      "path": "docs/development/execution-policy-contract.md",
+      "revision": "working-tree",
+      "sha256": "060916ede3401321e6536da8a96689bf83fda6d9da2b6d1aba8cc46c50262a96",
+      "requirement_ids": [
+        "EP-00",
+        "EP-01",
+        "EP-02",
+        "EP-03",
+        "EP-04",
+        "EP-05"
+      ],
+      "state": "planned"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement_id": "EP-00",
+      "contract_id": "execution-policy",
+      "phase": 0,
+      "order": 1,
+      "depends_on": [],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_runtime_boundary.py -k execution_policy"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "EP-01",
+      "contract_id": "execution-policy",
+      "phase": 1,
+      "order": 1,
+      "depends_on": [
+        "EP-00"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py -k execution_policy"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "EP-02",
+      "contract_id": "execution-policy",
+      "phase": 2,
+      "order": 1,
+      "depends_on": [
+        "EP-01"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py -k policy_persistence"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "EP-03",
+      "contract_id": "execution-policy",
+      "phase": 3,
+      "order": 1,
+      "depends_on": [
+        "EP-02"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_process_startup.py tests/test_runtime_boundary.py tests/test_benchmark_execution.py -k execution_policy"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "EP-04",
+      "contract_id": "execution-policy",
+      "phase": 3,
+      "order": 2,
+      "depends_on": [
+        "EP-02"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_process_startup.py tests/test_runtime_boundary.py tests/test_benchmark_execution.py -k execution_policy"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "EP-05",
+      "contract_id": "execution-policy",
+      "phase": 4,
+      "order": 1,
+      "depends_on": [
+        "EP-03",
+        "EP-04"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "command",
+        "target": "pytest -q tests/test_documentation.py tests/test_live_process_startup.py -k execution_policy"
+      },
+      "completion_evidence": []
+    }
+  ],
+  "pair_blocks": [
+    {
+      "pair_block_id": "EP-B0",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-00"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_runtime_boundary.py -k execution_policy"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "EP-B1",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-01"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py -k execution_policy"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "EP-B2",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-02"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_authoring.py -k policy_persistence"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "EP-B3",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-03",
+        "EP-04"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "pytest -q tests/test_process_startup.py tests/test_runtime_boundary.py tests/test_benchmark_execution.py -k execution_policy"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "EP-B4",
+      "contract_id": "execution-policy",
+      "section": "11. Master checklist",
+      "requirement_ids": [
+        "EP-05"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "command",
+        "target": "pytest -q tests/test_documentation.py tests/test_live_process_startup.py -k execution_policy"
+      },
+      "completion_evidence": []
+    }
+  ]
+}
