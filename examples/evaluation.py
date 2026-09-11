@@ -10,6 +10,7 @@ from examples.workflow_functions import (
 from viper import execution
 from viper.artifacts import StageArtifactRef
 from viper.authoring import (
+    StageDraft,
     experiment,
     input,
     plan,
@@ -18,7 +19,7 @@ from viper.authoring import (
     stage,
     variant,
 )
-from viper.benchmark import at_most, benchmark
+from viper.benchmark import RunArtifactDraft, at_most, benchmark
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
@@ -67,6 +68,30 @@ rmse = measure(
 )
 
 
+def evaluation_stage(
+    test_data: RunArtifactDraft, test_split: RunArtifactDraft
+) -> StageDraft:
+    """Evaluate the trained model against saved test rows and split indices."""
+    return stage(
+        predict,
+        stage_id="eval",
+        eval_id="holdout",
+        inputs=(
+            training.outputs["model"],
+            input("test", source=test_data),
+            input("holdout", source=test_split),
+        ),
+        split_inputs=("holdout",),
+        outputs=EvalOutputs(
+            predictions=output(
+                path="predictions.json", loader=load_text, data_role="benchmark"
+            )
+        ),
+        metrics=(rmse,),
+        objective=min(rmse),
+    )
+
+
 def main() -> None:
     """Run data preparation, evaluation, and an independent benchmark confirmation."""
     root = resolve_root()
@@ -96,24 +121,7 @@ def main() -> None:
         path="inputs/holdout.json",
         data_role="benchmark",
     )
-    evaluation = stage(
-        predict,
-        stage_id="eval",
-        eval_id="holdout",
-        inputs=(
-            training.outputs["model"],
-            input("test", source=test_data),
-            input("holdout", source=test_split),
-        ),
-        split_inputs=("holdout",),
-        outputs=EvalOutputs(
-            predictions=output(
-                path="predictions.json", loader=load_text, data_role="benchmark"
-            )
-        ),
-        metrics=(rmse,),
-        objective=min(rmse),
-    )
+    evaluation = evaluation_stage(test_data, test_split)
     study = experiment(
         experiment_id="held_out_evaluation",
         variants=(

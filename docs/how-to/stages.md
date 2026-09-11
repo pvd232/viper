@@ -27,7 +27,7 @@ validated `BuildConfig` as `context.config`.
 | `stage_id` | Name assigned to this stage in the variant's `stages` tuple. |
 
 The dictionary keys come from your declarations. In the build example below,
-An input named `source` supplies `context.inputs["source"]`, and
+an input named `source` supplies `context.inputs["source"]`, and
 `StageOutputs(dataset=...)` supplies `context.outputs["dataset"]`.
 A lookup using an undeclared name raises `KeyError`.
 
@@ -92,15 +92,19 @@ read the resulting artifact; the stage itself writes the file.
 
 ## Connect an embedding stage
 
-An embedding stage uses the same input and output interfaces and may have a metric objective.
-This example creates two numeric features from the first CSV column. A model
-embedding function can use the same input and output interfaces.
+This example imports the CSV preparation stage as `prepared` from the
+[pipeline example](../../examples/stages.py). It turns each selected value into
+two features: the value and its square.
 
 ```python
 import json
 
+from examples.stages import prepared
+from examples.workflow_functions import load_text
+from viper.authoring import stage
 from viper.config import EmbedConfig
-from viper.stages import embed
+from viper.outputs import StageOutputs, output
+from viper.stages import Context, embed
 
 
 @embed(config=EmbedConfig)
@@ -116,7 +120,6 @@ def polynomial_features(context: Context[EmbedConfig]) -> None:
 embedded = stage(
     polynomial_features,
     stage_id="embed",
-
     inputs=(prepared.outputs["dataset"],),
     outputs=StageOutputs(
         features=output(path="features.json", loader=load_text, data_role="training")
@@ -141,10 +144,8 @@ using a trained model for prediction and resuming its training require different
 state. See [resume training](retry-restore-compare.md#resume-training-from-a-checkpoint)
 for the restoration order.
 
-To consume the sorted CSV above, use
-`inputs=(prepared.outputs["dataset"],)` in that training stage.
-To consume the polynomial features instead, adapt the training function to read
-JSON and select `embedded.outputs["features"]`.
+The [pipeline's training declaration](../../examples/stages.py) imports the
+quickstart's training function and connects it to the sorted CSV output.
 
 ## Evaluate against saved test data
 
@@ -164,20 +165,13 @@ It first trains a baseline and publishes test data and split indices in a separa
 and evaluates the model, and finally executes the benchmark confirmation.
 The printed `data`, `result`, and `benchmark` paths identify each saved result.
 
-For the declarations below, select the test and split using `run_artifact()` as shown in
-[stored inputs](inputs.md#use-an-artifact-from-a-completed-run). The `test_data`
-artifact must contain a CSV with an `x,y` header; `test_split` must contain a
-JSON list of zero-based row indices, such as `[0, 2]`. Use the tutorial's
-`training` stage, which writes a JSON model containing `weight`.
+`evaluation_stage(test_data, test_split)` below accepts two artifacts from a
+completed run: a CSV with an `x,y` header and a JSON list of row indices such
+as `[0, 2]`. It imports `training` from the CPU quickstart. The complete
+[evaluation example](../../examples/evaluation.py) creates the test artifacts
+and calls this function.
 
-The `Context`, `stage`, `output`, and `load_text` imports and definitions come
-from [the build example above](#build-an-input-artifact). `test_data` and
-`test_split` come from the stored-input calls, and `training` comes from the
-CPU quickstart. The complete file includes these dependencies together. It uses `benchmark`
-data roles because the run includes benchmark criteria. The excerpt below
-uses those same roles.
-
-The `evaluation` declaration connects the model to its metric:
+The returned stage connects the model to its metric:
 
 | Declaration | Connection |
 | --- | --- |
@@ -193,12 +187,16 @@ that produced the files.
 ```python
 import json
 
+from examples.cpu_quickstart import training
+from examples.workflow_functions import load_text
+from viper.authoring import StageDraft, input, stage
+from viper.benchmark import RunArtifactDraft
 from viper.config import EvalConfig, MetricConfig
 from viper.metrics import (
     FloatComparator, MetricContext, MetricDependency, measure, metric, min,
 )
-from viper.outputs import EvalOutputs
-from viper.stages import eval
+from viper.outputs import EvalOutputs, output
+from viper.stages import Context, eval
 
 
 @eval(config=EvalConfig)
@@ -238,30 +236,35 @@ rmse = measure(
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
 )
 
-evaluation = stage(
-    predict,
-    stage_id="eval",
+def evaluation_stage(
+    test_data: RunArtifactDraft, test_split: RunArtifactDraft
+) -> StageDraft:
+    """Evaluate the trained model against saved test rows and split indices."""
+    return stage(
+        predict,
+        stage_id="eval",
 
-    eval_id="holdout",
-    inputs=(
-        training.outputs["model"],
-        input("test", source=test_data),
-        input("holdout", source=test_split),
-    ),
-    split_inputs=("holdout",),
-    outputs=EvalOutputs(
-        predictions=output(
-            path="predictions.json",
-            loader=load_text,
-            data_role="benchmark",
-        )
-    ),
-    metrics=(rmse,),
-    objective=min(rmse),
-)
+        eval_id="holdout",
+        inputs=(
+            training.outputs["model"],
+            input("test", source=test_data),
+            input("holdout", source=test_split),
+        ),
+        split_inputs=("holdout",),
+        outputs=EvalOutputs(
+            predictions=output(
+                path="predictions.json",
+                loader=load_text,
+                data_role="benchmark",
+            )
+        ),
+        metrics=(rmse,),
+        objective=min(rmse),
+    )
 ```
 
-Add `evaluation` after `training` in the variant's stages. VIPER computes `rmse`
+Call `evaluation_stage(test_data, test_split)` and place its result after
+`training` in the variant's stages, as the complete example does. VIPER computes `rmse`
 after `predict` has written the predictions file. The metric reads that saved
 file again during verification.
 The split's data role must match the test dataset's role. Use a predictions
@@ -279,8 +282,12 @@ Its outputs are terminal: downstream stages and the variant's estimator
 must select outputs from other stage kinds.
 
 ```python
+from examples.stages import prepared
+from examples.workflow_functions import load_text
+from viper.authoring import stage
 from viper.config import DiagnosticConfig
-from viper.stages import diagnostic
+from viper.outputs import StageOutputs, output
+from viper.stages import Context, diagnostic
 
 
 @diagnostic(config=DiagnosticConfig)

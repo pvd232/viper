@@ -173,6 +173,35 @@ def test_extended_examples_execute_complete_workflows(
             2, abs=1e-5
         )
 
+        # Each how-to block must run with only its displayed imports and paths.
+        blocks = python_blocks(Path("docs/how-to/retry-restore-compare.md").read_text())
+        runs = sorted(
+            root.glob("experiments/cpu_quickstart/runs/baseline/*/resolved.yaml")
+        )
+        assert len(runs) == 2
+        model = runs[0].parent / "artifacts/train/model/model.json"
+        expected_model = model.read_bytes()
+        model.unlink()
+        journals = list(
+            root.glob(
+                f".viper/store/*/experiments/cpu_quickstart/runs/baseline/"
+                f"{runs[0].parent.name}/attempts/1/journal.jsonl"
+            )
+        )
+        assert len(journals) == 1
+        for index in (1, 2, 3):
+            program = (
+                blocks[index]
+                .replace("<YOUR_RUN_ID>", runs[0].parent.name)
+                .replace("<FIRST_RUN_ID>", runs[0].parent.name)
+                .replace("<SECOND_RUN_ID>", runs[1].parent.name)
+                .replace("<JOURNAL_PATH>", str(journals[0]))
+            )
+            observed = _run(root, sys.executable, "-c", program)
+            if index == 1:
+                assert "restored" in observed.stdout
+                assert model.read_bytes() == expected_model
+
 
 @pytest.mark.parametrize(
     "document", (None, "README.md", "docs/tutorials/getting-started.md")
@@ -298,24 +327,26 @@ def test_documented_evaluation_writes_predictions_and_computes_rmse(
 ) -> None:
     """Execute the printed evaluation and recompute its metric from the output."""
     namespace = {}
-    for block in python_blocks(Path("README.md").read_text())[:2]:
-        exec(block, namespace)
     blocks = python_blocks(Path("docs/how-to/stages.md").read_text())
-    exec(blocks[0], namespace)
+    exec(blocks[2], namespace)
     # Constructor inputs stand in for the earlier run; this check executes evaluation.
     reference = ResolvedRunRef(
         sha256="a" * 64,
         bytes=1,
         stored_at=LocalFileRef(commit="b" * 64, path="runs/data/resolved.yaml"),
     )
+    saved_inputs = {}
     for name in ("test_data", "test_split"):
-        namespace[name] = run_artifact(
+        saved_inputs[name] = run_artifact(
             reference,
             StageArtifactRef(stage_id="build", artifact_name=name),
             path=f"inputs/{name}.json",
-            data_role="eval",
+            data_role="benchmark",
         )
-    exec(blocks[2], namespace)
+    evaluation = namespace["evaluation_stage"](
+        saved_inputs["test_data"], saved_inputs["test_split"]
+    )
+    assert set(evaluation.spec.inputs) == {"model", "test", "holdout"}
     model = tmp_path / "model.json"
     data = tmp_path / "test.csv"
     split = tmp_path / "split.json"
@@ -355,6 +386,19 @@ def test_documented_evaluation_writes_predictions_and_computes_rmse(
     predictions.write_text("[]")
     with pytest.raises(ValueError, match="at least one prediction"):
         metric_namespace["rmse"].implementation(metric_context)
+
+
+@pytest.mark.parametrize(
+    "block_index, declared", ((0, "prepared"), (1, "embedded"), (3, "report"))
+)
+def test_documented_stage_declarations_define_their_own_dependencies(
+    block_index: int, declared: str
+) -> None:
+    """Each stage snippet declares successfully without another snippet's variables."""
+    block = python_blocks(Path("docs/how-to/stages.md").read_text())[block_index]
+    namespace = {}
+    exec(block, namespace)
+    assert namespace[declared].spec.inputs
 
 
 _POLICY_VERIFY_PROGRAM = """
