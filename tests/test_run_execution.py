@@ -294,7 +294,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             MetricDependency(
                 source="artifact",
                 name=TrainKeys.MODEL,
-                required_data_role="training",
+                data_role="training",
             ),
         ),
         comparator=FloatComparator(),
@@ -736,7 +736,7 @@ def test_train_stage_captures_local_external_input(
             MetricDependency(
                 source="artifact",
                 name=TrainKeys.MODEL,
-                required_data_role="training",
+                data_role="training",
             ),
         ),
         comparator=FloatComparator(),
@@ -1212,6 +1212,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         config=current_config.TrainConfig(),
         inputs={
             "dataset": external_input(
+                "dataset",
                 path="inputs/raw/dataset.bin",
                 data_role="training",
             )

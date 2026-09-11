@@ -193,6 +193,7 @@ class ExternalInputDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    name: InputName = Field(description="Key used to read this file in context.inputs.")
     path: RepoRelPath
     data_role: DataRole
 
@@ -1042,9 +1043,11 @@ def _freeze_stage(
     )
 
 
-def input(path: RepoRelPath, *, data_role: DataRole) -> ExternalInputDraft:
-    """Select one repository file as a stage input."""
-    return ExternalInputDraft(path=path, data_role=data_role)
+def input(
+    name: InputName, *, path: RepoRelPath, data_role: DataRole
+) -> ExternalInputDraft:
+    """Name a repository file for access through context.inputs[name]."""
+    return ExternalInputDraft(name=name, path=path, data_role=data_role)
 
 
 def run_artifact(
@@ -1096,7 +1099,7 @@ def stage(
     *,
     stage_id: StageId | None = None,
     config: Config | None = None,
-    inputs: dict[InputName, StageInputDraft | StageDraftOutputRef],
+    inputs: tuple[ExternalInputDraft, ...] | dict[InputName, StageInputDraft],
     outputs: StageOutputs[OutputDraft],
     metrics: tuple[MetricDraft[Any], ...] = (),
     objective: MetricObjectiveDraft | None = None,
@@ -1109,6 +1112,8 @@ def stage(
 
     The decorator selects the stage kind and config class. Omit config to
     instantiate that class with its defaults; required fields still need values.
+    Pass named local inputs as a tuple. A mapping names upstream output handles
+    for this function. Duplicate or conflicting input names are rejected.
     Training and evaluation require an objective; evaluation also requires eval_id and
     named split_inputs. An embedding objective is optional. Diagnostic outputs
     are terminal and must be omitted from downstream input selections.
@@ -1116,7 +1121,18 @@ def stage(
     Returned output handles connect this stage to later stages. env overrides
     the run environment; reuse="verified" permits a verified catalog candidate.
     """
-    for input_name, value in inputs.items():
+    selected_inputs: dict[InputName, StageInputDraft] = {}
+    entries = (
+        inputs.items()
+        if isinstance(inputs, dict)
+        else ((value.name, value) for value in inputs)
+    )
+    for input_name, value in entries:
+        if isinstance(value, ExternalInputDraft) and value.name != input_name:
+            raise ValueError("input name conflicts with its mapping key")
+        if input_name in selected_inputs:
+            raise ValueError(f"duplicate input name: {input_name!r}")
+        selected_inputs[input_name] = value
         if (
             isinstance(value, StageDraftOutputRef)
             and value.producer.spec.kind == "diagnostic"
@@ -1129,7 +1145,7 @@ def stage(
     values = {
         "implementation": implementation,
         "config": definition.config_type() if config is None else config,
-        "inputs": inputs,
+        "inputs": selected_inputs,
         "outputs": outputs,
         "metrics": metrics,
         "env": env,

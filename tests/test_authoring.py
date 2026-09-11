@@ -461,6 +461,7 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         data_role="training",
     )
     dataset = external_input(
+        "dataset",
         path="inputs/raw/dataset.csv",
         data_role="training",
     )
@@ -503,6 +504,7 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
         config=config.TrainConfig(),
         inputs={
             "dataset": external_input(
+                "dataset",
                 path="inputs/raw/dataset.csv",
                 data_role="training",
             )
@@ -622,6 +624,7 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
         config=config.TrainConfig(),
         inputs={
             "dataset": external_input(
+                "dataset",
                 path="inputs/raw/dataset.csv",
                 data_role="training",
             )
@@ -730,7 +733,7 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
             MetricDependency(
                 source="artifact",
                 name="predictions",
-                required_data_role="benchmark",
+                data_role="benchmark",
             ),
         ),
         comparator=FloatComparator(),
@@ -1221,6 +1224,38 @@ def test_plan_requires_an_explicit_choice_when_ambiguous(selection: str) -> None
         study.replicates["another"] = replicate("another", seed=43)
     with pytest.raises(ValueError, match=f"{selection} is required"):
         plan(experiment=study, source=single.source, env=single.env)
+
+
+def test_named_inputs_preserve_paths_roles_and_reject_name_conflicts() -> None:
+    """Preserve input values and reject duplicate or conflicting names."""
+    assert isinstance(example_training.spec, TrainSpecDraft)
+    dataset = external_input(
+        "dataset", path="examples/data/tiny.csv", data_role="training"
+    )
+    arguments = {
+        "outputs": example_training.spec.outputs,
+        "metrics": example_training.spec.metrics,
+        "objective": example_training.spec.objective,
+    }
+    selected = stage(
+        example_training.spec.implementation, inputs=(dataset,), **arguments
+    )
+    mapped = stage(
+        example_training.spec.implementation, inputs={"dataset": dataset}, **arguments
+    )
+    assert selected.spec == mapped.spec
+    assert isinstance(selected.spec, TrainSpecDraft)
+    assert selected.spec.inputs["dataset"] == dataset
+    assert dataset.path == "examples/data/tiny.csv"
+    assert dataset.data_role == "training"
+    with pytest.raises(ValueError, match="duplicate input name"):
+        stage(
+            example_training.spec.implementation, inputs=(dataset, dataset), **arguments
+        )
+    with pytest.raises(ValueError, match="input name conflicts"):
+        stage(
+            example_training.spec.implementation, inputs={"other": dataset}, **arguments
+        )
 
 
 def test_stage_uses_the_decorators_config_defaults() -> None:

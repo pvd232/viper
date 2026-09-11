@@ -438,7 +438,7 @@ def verify_run_plan_relationships(
                         f"metric {metric_id!r} selects absent {dependency.source} "
                         f"dependency {dependency.name!r}"
                     )
-                if role != dependency.required_data_role:
+                if role != dependency.data_role:
                     raise VerificationError(
                         f"metric {metric_id!r} dependency {dependency.name!r} "
                         "data role differs from its stage declaration"

@@ -24,7 +24,7 @@ def fit_after_failure(context: Context[TrainConfig]) -> None:
 training = stage(
     fit_after_failure,
     stage_id="train",
-    inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
+    inputs=(input("dataset", path="examples/data/tiny.csv", data_role="training"),),
     outputs=TrainOutputs(
         model=output(path="model.json", loader=load_json, data_role="training"),
         resume_state=output(

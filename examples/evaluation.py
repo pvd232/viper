@@ -33,7 +33,7 @@ from viper.runtime import LocalEnvSpec, observe_python_env
 data_stage = stage(
     prepare_test_data,
     stage_id="build",
-    inputs={"source": input("examples/data/held_out.csv", data_role="benchmark")},
+    inputs=(input("source", path="examples/data/held_out.csv", data_role="benchmark"),),
     outputs=StageOutputs.model_validate(
         {
             "test_data": output(
@@ -61,9 +61,7 @@ data_study = experiment(
 rmse = measure(
     root_mean_squared_error,
     dependencies=(
-        MetricDependency(
-            source="artifact", name="predictions", required_data_role="benchmark"
-        ),
+        MetricDependency(source="artifact", name="predictions", data_role="benchmark"),
     ),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
 )

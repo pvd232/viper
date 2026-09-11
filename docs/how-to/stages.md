@@ -80,7 +80,7 @@ prepared = stage(
     sort_rows,
     stage_id="prepare",
 
-    inputs={"source": input("examples/data/tiny.csv", data_role="training")},
+    inputs=(input("source", path="examples/data/tiny.csv", data_role="training"),),
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
     ),
@@ -232,7 +232,7 @@ rmse = measure(
     root_mean_squared_error,
     dependencies=(
         MetricDependency(
-            source="artifact", name="predictions", required_data_role="benchmark"
+            source="artifact", name="predictions", data_role="benchmark"
         ),
     ),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),

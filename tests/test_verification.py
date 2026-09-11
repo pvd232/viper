@@ -1842,7 +1842,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 metric_spec(
                     "pearson_correlation",
                     "evaluation",
-                    required_data_role="benchmark",
+                    data_role="benchmark",
                 ),
             ),
         )
@@ -1901,6 +1901,26 @@ class RunPlanRelationshipTests(unittest.TestCase):
             }
         )
         with self.assertRaisesRegex(VerificationError, "selects absent artifact"):
+            verify_run_plan_relationships(
+                run,
+                invalid_experiment,
+                variant,
+                benchmark,
+                {"train": train, "evaluate": evaluation},
+            )
+
+        wrong_role = selected_metric.dependencies[0].model_copy(
+            update={"data_role": "training"}
+        )
+        invalid_experiment = experiment.model_copy(
+            update={
+                "metrics": (
+                    experiment.metrics[0],
+                    selected_metric.model_copy(update={"dependencies": (wrong_role,)}),
+                )
+            }
+        )
+        with self.assertRaisesRegex(VerificationError, "data role differs"):
             verify_run_plan_relationships(
                 run,
                 invalid_experiment,
@@ -2264,7 +2284,7 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
             MetricDependency(
                 source="artifact",
                 name="model",
-                required_data_role="training",
+                data_role="training",
             ),
         ),
     )

@@ -10,12 +10,12 @@ to the training stage. The sections below explain each declaration.
 
 ## Select a local file
 
-Pass the repository-relative path and its role to `input()`:
+Give `input()` a name, repository-relative path, and data role:
 
 ```python
 from viper.authoring import input
 
-dataset = input("examples/data/tiny.csv", data_role="training")
+dataset = input("dataset", path="examples/data/tiny.csv", data_role="training")
 ```
 
 In the [CPU tutorial](../tutorials/getting-started.md#3-declare-the-experiment),
@@ -37,7 +37,7 @@ training_outputs = TrainOutputs(
 training = stage(
     fit,
     stage_id="train",
-    inputs={"dataset": dataset},
+    inputs=(dataset,),
     outputs=training_outputs,
     metrics=(mse,),
     objective=min(mse),
@@ -46,6 +46,10 @@ training = stage(
 
 Inside `fit()`, `context.inputs["dataset"]` is the local input path. The authoring name
 and the context lookup must match.
+
+Duplicate input names are rejected. Use a mapping when connecting an earlier
+stage's output, such as `inputs={"dataset": prepared.outputs["dataset"]}`;
+the key names that output for the receiving function.
 
 ## Declare an HTTP download
 

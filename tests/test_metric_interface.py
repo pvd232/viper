@@ -52,6 +52,21 @@ class RunningMean(StatefulMetric):
         return self.total / self.count
 
 
+def test_metric_dependency_uses_data_role_in_schema_and_serialization() -> None:
+    """Expose the same role field in Python, stored declarations, and JSON Schema."""
+    dependency = MetricDependency(
+        source="artifact", name="predictions", data_role="eval"
+    )
+    payload = {"source": "artifact", "name": "predictions", "data_role": "eval"}
+    assert dependency.model_dump() == payload
+    assert (
+        MetricDependency.model_validate_json(dependency.model_dump_json()) == dependency
+    )
+    schema = MetricDependency.model_json_schema()
+    assert set(schema["properties"]) == set(payload)
+    assert "data_role" in schema["required"]
+
+
 def test_decorators_define_stateless_and_stateful_metrics() -> None:
     """Match each declared mode to its function or accumulator shape."""
     assert mean_value.__viper_metric__.mode == "stateless"  # type: ignore[attr-defined]
@@ -124,7 +139,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
             MetricDependency(
                 source="artifact",
                 name="predictions",
-                required_data_role="eval",
+                data_role="eval",
             ),
         ),
         comparator=FloatComparator(),
@@ -178,7 +193,7 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
             MetricDependency(
                 source="artifact",
                 name="predictions",
-                required_data_role="eval",
+                data_role="eval",
             ),
         ),
         comparator=FloatComparator(),

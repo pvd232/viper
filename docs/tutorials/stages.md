@@ -46,7 +46,7 @@ def sort_rows(context: Context[BuildConfig]) -> None:
 prepared = stage(
     sort_rows,
     stage_id="prepare",
-    inputs={"source": input("examples/data/tiny.csv", data_role="training")},
+    inputs=(input("source", path="examples/data/tiny.csv", data_role="training"),),
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
     ),

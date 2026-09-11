@@ -499,7 +499,7 @@ class ConfigContractTests(unittest.TestCase):
                 MetricDependency(
                     source="artifact",
                     name="predictions",
-                    required_data_role="eval",
+                    data_role="eval",
                 ),
             ),
             comparator=FloatComparator(mode="exact", tolerance=0),
@@ -525,7 +525,7 @@ class ConfigContractTests(unittest.TestCase):
                     MetricDependency(
                         source="artifact",
                         name="predictions",
-                        required_data_role="eval",
+                        data_role="eval",
                     ),
                 ),
                 comparator=FloatComparator(mode="exact", tolerance=0),

@@ -26,7 +26,7 @@ def training_variant(name: str, rows: int, level: str) -> VariantDraft:
         limit_rows,
         stage_id="prepare",
         config=RowLimit(rows=rows),
-        inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
+        inputs=(input("dataset", path="examples/data/tiny.csv", data_role="training"),),
         outputs=StageOutputs(
             dataset=output(path="selected.csv", loader=load_text, data_role="training")
         ),

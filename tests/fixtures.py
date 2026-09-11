@@ -206,7 +206,7 @@ def verification_policy(*repositories: object) -> VerificationPolicy:
 def metric_spec(
     metric_id: str,
     kind: MetricKind,
-    required_data_role: DataRole = "eval",
+    data_role: DataRole = "eval",
 ) -> MetricSpec:
     """Build one metric bound to an exact user-repository implementation path."""
     source = metric_source(metric_id, kind)
@@ -227,7 +227,7 @@ def metric_spec(
                 MetricDependency(
                     source="artifact",
                     name="predictions",
-                    required_data_role=required_data_role,
+                    data_role=data_role,
                 ),
             ),
             comparator=FloatComparator(),

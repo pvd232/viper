@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Name local inputs with `input("dataset", path=..., data_role=...)` and pass
+  them to `stage(inputs=(dataset,))`. Duplicate or conflicting names are rejected.
+- Rename `MetricDependency.required_data_role` to `data_role` in Python and
+  serialized metric declarations. Selected files must still match that role.
 - Add agent discovery documentation and a stdio MCP acceptance test for both access modes.
 - Bind MCP paths to the startup workspace, expose operation-specific knowledge
   query schemas, and return structured request failures with matching output schemas.

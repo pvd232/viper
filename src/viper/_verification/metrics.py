@@ -247,7 +247,7 @@ def verify_recomputed_metrics(
                         raise VerificationError(
                             f"metric dependency {dependency.name!r} is absent"
                         )
-                    if selected_input.data_role != dependency.required_data_role:
+                    if selected_input.data_role != dependency.data_role:
                         raise VerificationError(
                             f"metric dependency {dependency.name!r} data role differs"
                         )
@@ -258,7 +258,7 @@ def verify_recomputed_metrics(
                         raise VerificationError(
                             f"metric dependency {dependency.name!r} is absent"
                         )
-                    if selected_artifact.data_role != dependency.required_data_role:
+                    if selected_artifact.data_role != dependency.data_role:
                         raise VerificationError(
                             f"metric dependency {dependency.name!r} data role differs"
                         )

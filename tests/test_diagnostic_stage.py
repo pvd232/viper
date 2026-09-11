@@ -98,7 +98,9 @@ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
     diagnostic_stage = authoring.stage(
         inspect_model,
         config=DiagnosticConfig(),
-        inputs={"model": authoring.input("model.json", data_role="training")},
+        inputs={
+            "model": authoring.input("model", path="model.json", data_role="training")
+        },
         outputs=DiagnosticOutputs[outputs.OutputDraft](
             report=outputs.output(
                 path="report.json", loader=load_bytes, data_role="eval"

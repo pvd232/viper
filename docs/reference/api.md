@@ -69,7 +69,7 @@ For saved plans, retries, batch outcomes, and benchmark execution, see
 
 | Constructor | Returns | Purpose |
 | --- | --- | --- |
-| `input()` | `ExternalInputDraft` | Select one repository file as a stage input. |
+| `input()` | `ExternalInputDraft` | Name a repository file for access through `context.inputs`. |
 | `download()` | `StageDraft` | Declare a runner-owned HTTP retrieval stage. |
 | `run_artifact()` | `RunArtifactDraft` | Select an artifact from a verified prior run. |
 | `stage()` | `StageDraft` | Connect a decorated function to config, inputs, outputs, metrics, and an objective. |

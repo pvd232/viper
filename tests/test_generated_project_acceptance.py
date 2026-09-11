@@ -467,7 +467,7 @@ def test_generated_project_uses_runner_owned_downloads(
             MetricDependency(
                 source="artifact",
                 name=EvalKeys.PREDICTIONS,
-                required_data_role="benchmark",
+                data_role="benchmark",
             ),
         ),
         comparator=FloatComparator(),

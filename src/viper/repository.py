@@ -371,7 +371,7 @@ def declare_training():
     return stage(
         train,
         config=TrainConfig(),
-        inputs={{"dataset": input("inputs/train.csv", data_role="training")}},
+        inputs=(input("dataset", path="inputs/train.csv", data_role="training"),),
         outputs=TrainOutputs(
             model=output(
                 path="model.bin",

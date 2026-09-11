@@ -55,7 +55,7 @@ limited = stage(
     limit_rows,
     stage_id="prepare",
     config=RowLimit(rows=2),
-    inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
+    inputs=(input("dataset", path="examples/data/tiny.csv", data_role="training"),),
     outputs=StageOutputs(
         dataset=output(path="limited.csv", loader=load_text, data_role="training")
     ),

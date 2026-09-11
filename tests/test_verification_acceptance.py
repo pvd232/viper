@@ -1442,7 +1442,7 @@ def build_complete_fixture(
             metric_spec(
                 "pearson_correlation",
                 "evaluation",
-                required_data_role=evaluation_role,
+                data_role=evaluation_role,
             ),
         ),
     )
@@ -2865,7 +2865,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
             MetricDependency(
                 source="artifact",
                 name="predictions",
-                required_data_role="eval",
+                data_role="eval",
             ),
         ),
         comparator=FloatComparator(),

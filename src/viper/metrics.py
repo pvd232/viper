@@ -65,7 +65,9 @@ class MetricDependency(ProtocolModel):
 
     source: Literal["input", "artifact"]
     name: HumanId
-    required_data_role: DataRole
+    data_role: DataRole = Field(
+        description="Data role that the selected input or artifact must have."
+    )
 
 
 class MetricSpec(ProtocolModel):

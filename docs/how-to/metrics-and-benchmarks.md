@@ -133,7 +133,7 @@ rmse = measure(
         MetricDependency(
             source="artifact",
             name="predictions",
-            required_data_role="eval",
+            data_role="eval",
         ),
     ),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
@@ -154,8 +154,8 @@ allows an absolute difference of `1e-12`; `exact` requires equality, and
 `execution.benchmark()` runs it. Continue inside `main()` in the complete
 [evaluation example](../../examples/evaluation.py), which defines
 `test_data`, `test_split`, `evaluation`, and the recomputed `rmse` metric.
-That example assigns `data_role="benchmark"` to the test data, split, and
-predictions, and `required_data_role="benchmark"` to the metric dependency.
+That example uses `data_role="benchmark"` for the test data, split, predictions,
+and metric dependency.
 Use `eval` for a standalone evaluation; use `benchmark` consistently
 when the plan includes benchmark criteria.
 

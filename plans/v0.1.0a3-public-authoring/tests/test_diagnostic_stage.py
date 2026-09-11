@@ -100,7 +100,7 @@ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
         inspect_model,
         config=DiagnosticConfig(),
         inputs={
-            "model": authoring.input("model.json", data_role="training"),
+            "model": authoring.input("model", path="model.json", data_role="training"),
         },
         outputs=DiagnosticOutputs[outputs.OutputDraft](
             report=outputs.output(

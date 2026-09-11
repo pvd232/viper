@@ -80,12 +80,7 @@ training = stage(
     fit,
     stage_id="train",
 
-    inputs={
-        "dataset": input(
-            "examples/data/tiny.csv",
-            data_role="training",
-        )
-    },
+    inputs=(input("dataset", path="examples/data/tiny.csv", data_role="training"),),
     outputs=TrainOutputs(
         model=output(
             path="model.json",
@@ -162,7 +157,6 @@ def main() -> None:
     )
     draft = plan(
         experiment=study,
-
         source=source,
         env=environment,
     )
