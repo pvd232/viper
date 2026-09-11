@@ -71,6 +71,19 @@ These constructors are defined in [`viper.authoring`](../../src/viper/authoring.
 `plan()` assigns a new run ID. `expand()` requires a `run_ids` mapping for the selected
 pairs; see [batch execution](../how-to/variants-and-replicates.md).
 
+`plan()` and `expand()` default to `reproducibility="reproducible"`. Pass
+`reproducibility="relaxed"` to permit nondeterministic algorithms while preserving
+precision, or pass a `ReproducibilitySpec` for custom settings. Either preset
+accepts a separate `parallelism=ParallelismSpec(...)`; custom settings already
+contain their parallelism. Both types are defined in
+[`viper.runtime`](../../src/viper/runtime.py).
+
+The returned draft stores the selected mode in `execution_policy` and concrete
+settings in `reproducibility`. Expansion resolves defaults once for the batch.
+Current saved version-2 run specifications retain the concrete settings; policy
+mode/version persistence is pending in the
+[execution-policy contract](../development/execution-policy-contract.md).
+
 ## Naming conventions
 
 | Name | Meaning | Example |

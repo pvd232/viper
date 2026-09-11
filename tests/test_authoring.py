@@ -5,11 +5,13 @@ import importlib.util
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pytest
 import yaml
 from pydantic import TypeAdapter, ValidationError
 
+import viper.authoring as authoring
 import viper.config as config
 from viper import _subprocess as subprocess
 from viper.artifacts import (
@@ -68,8 +70,9 @@ from viper.metrics import (
 from viper.outputs import EvalOutputs, output
 from viper.preflight import preflight_plan
 from viper.references import GitSource, LocalFileRef, ResolvedRunRef
+from viper.resume import DataLoaderConfiguration
 from viper.runs import RunSpec
-from viper.runtime import EnvSpec, ReproducibilitySpec
+from viper.runtime import EnvSpec, ParallelismSpec, ReproducibilitySpec
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     Context,
@@ -931,3 +934,101 @@ def test_experiment_expansion_rejects_invalid_selection() -> None:
                 }
             },
         )
+
+
+def test_execution_policy_plan_defaults_to_reproducible() -> None:
+    """Freeze the default policy identity with its resolved numerical controls."""
+    baseline, _ = _immutable_plan()
+    selected = plan(
+        experiment=baseline.experiment,
+        variant=baseline.variant,
+        replicate=baseline.replicate,
+        source=baseline.source,
+        env=baseline.env,
+    )
+    assert selected.execution_policy is not None
+    assert selected.execution_policy.mode == "reproducible"
+    assert selected.execution_policy.version == 1
+    assert selected.reproducibility.determinism.deterministic_algorithms is True
+    with pytest.raises(ValidationError):
+        selected.reproducibility.parallelism.torch_intraop_threads = 8
+
+
+def test_execution_policy_plan_relaxed_with_parallelism() -> None:
+    """Freeze relaxed numerical controls and explicit resource settings together."""
+    baseline, _ = _immutable_plan()
+    resources = ParallelismSpec(
+        process_count=1,
+        torch_intraop_threads=4,
+        torch_interop_threads=2,
+        dataloader=DataLoaderConfiguration(workers=2, prefetch_factor=2),
+    )
+    selected = plan(
+        experiment=baseline.experiment,
+        variant=baseline.variant,
+        replicate=baseline.replicate,
+        source=baseline.source,
+        env=baseline.env,
+        reproducibility="relaxed",
+        parallelism=resources,
+    )
+    assert selected.execution_policy is not None
+    assert selected.execution_policy.mode == "relaxed"
+    assert selected.reproducibility.determinism.deterministic_algorithms is False
+    assert selected.reproducibility.parallelism == resources
+    assert selected.reproducibility.parallelism is not resources
+
+
+def test_execution_policy_plan_custom_is_detached() -> None:
+    """Retain custom values without retaining caller-owned generator mappings."""
+    baseline, _ = _immutable_plan()
+    settings = ReproducibilitySpec.model_validate(baseline.reproducibility.model_dump())
+    settings.numpy_randomness.generators["sampling"] = "PCG64"
+    expected_generators = dict(settings.numpy_randomness.generators)
+    selected = plan(
+        experiment=baseline.experiment,
+        variant=baseline.variant,
+        replicate=baseline.replicate,
+        source=baseline.source,
+        env=baseline.env,
+        reproducibility=settings,
+    )
+    settings.numpy_randomness.generators.clear()
+    assert selected.execution_policy is not None
+    assert selected.execution_policy.mode == "custom"
+    assert selected.reproducibility.numpy_randomness.generators == expected_generators
+
+
+def test_execution_policy_expand_resolves_once() -> None:
+    """Use one policy resolution for all selected variant-replicate pairs."""
+    baseline, _ = _immutable_plan()
+    declaration = baseline.experiment.model_copy(
+        update={
+            "replicates": {
+                "replicate_01": replicate(seed=42),
+                "replicate_02": replicate(seed=43),
+            }
+        }
+    )
+    with patch.object(
+        authoring, "resolve_execution_policy", wraps=authoring.resolve_execution_policy
+    ) as resolver:
+        selected = expand(
+            declaration,
+            run_ids={
+                "baseline": {
+                    "replicate_01": RUN_ID,
+                    "replicate_02": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+                }
+            },
+            source=baseline.source,
+            env=baseline.env,
+            reproducibility="relaxed",
+        )
+        resolver.assert_called_once_with("relaxed", parallelism=None)
+    assert len(selected) == 2
+    assert selected[0].execution_policy == selected[1].execution_policy
+    assert selected[0].execution_policy is not None
+    assert selected[0].execution_policy.mode == "relaxed"
+    assert selected[0].reproducibility == selected[1].reproducibility
+    assert selected[0].reproducibility is not selected[1].reproducibility

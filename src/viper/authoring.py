@@ -104,7 +104,13 @@ from .runs import (
     RunSpec,
     RunStageRef,
 )
-from .runtime import EnvSpec, ReproducibilitySpec
+from .runtime import (
+    EnvSpec,
+    ExecutionPolicyRef,
+    ParallelismSpec,
+    ReproducibilitySpec,
+    resolve_execution_policy,
+)
 from .serialization import parse_yaml_bytes, serialize_document
 from .stages import (
     BuildSpec,
@@ -389,6 +395,10 @@ class RunPlanDraft(BaseModel):
     source: GitSource
     env: EnvSpec
     reproducibility: ReproducibilitySpec
+    execution_policy: ExecutionPolicyRef | None = Field(
+        default=None,
+        description="Policy selected during authoring; absent in legacy drafts.",
+    )
 
 
 class _FrozenDict(dict[Any, Any]):
@@ -546,6 +556,7 @@ def _plan_with_run_id(
     source: GitSource,
     env: EnvSpec,
     reproducibility: ReproducibilitySpec,
+    execution_policy: ExecutionPolicyRef,
 ) -> RunPlanDraft:
     """Create one plan with an already assigned run ID."""
     if variant not in experiment.variants:
@@ -561,6 +572,7 @@ def _plan_with_run_id(
         source=source,
         env=env,
         reproducibility=reproducibility,
+        execution_policy=execution_policy,
     )
     return _deep_freeze(draft)
 
@@ -573,15 +585,22 @@ def plan(
     benchmark: BenchmarkDraft | None = None,
     source: GitSource,
     env: EnvSpec,
-    reproducibility: ReproducibilitySpec,
+    reproducibility: Literal["reproducible", "relaxed"] | ReproducibilitySpec = (
+        "reproducible"
+    ),
+    parallelism: ParallelismSpec | None = None,
 ) -> RunPlanDraft:
     """Select a variant and replicate and assign a new run ID.
 
     Copy and freeze the declarations so later caller edits leave this plan
     unchanged. Compilation and file writes occur when freeze_run_plan() or
     execution.run() consumes the draft. Both selected names must exist in
-    the experiment.
+    the experiment. Resolve the numerical policy and resource settings once;
+    later execution consumes the frozen settings without consulting defaults.
     """
+    execution_policy, settings = resolve_execution_policy(
+        reproducibility, parallelism=parallelism
+    )
     return _plan_with_run_id(
         experiment=experiment,
         variant=variant,
@@ -590,7 +609,8 @@ def plan(
         benchmark=benchmark,
         source=source,
         env=env,
-        reproducibility=reproducibility,
+        reproducibility=settings,
+        execution_policy=execution_policy,
     )
 
 
@@ -1408,7 +1428,10 @@ def expand(
     benchmark: BenchmarkDraft | None = None,
     source: GitSource,
     env: EnvSpec,
-    reproducibility: ReproducibilitySpec,
+    reproducibility: Literal["reproducible", "relaxed"] | ReproducibilitySpec = (
+        "reproducible"
+    ),
+    parallelism: ParallelismSpec | None = None,
     variants: tuple[VariantId, ...] | None = None,
     replicates: tuple[ReplicateId, ...] | None = None,
 ) -> tuple[RunPlanDraft, ...]:
@@ -1418,6 +1441,7 @@ def expand(
     run ID. Omitted filters select all declared names. The returned tuple is
     ordered by variant, then replicate, regardless of filter order. Each plan
     is copied and frozen as in plan(); file writes occur during freezing.
+    Resolve policy and resource defaults once for the entire selected set.
     """
     if variants is not None and len(variants) != len(set(variants)):
         raise ValueError("variant filter contains duplicates")
@@ -1457,6 +1481,9 @@ def expand(
     if len(assigned) != len(set(assigned)):
         raise ValueError("run IDs must be unique")
 
+    execution_policy, settings = resolve_execution_policy(
+        reproducibility, parallelism=parallelism
+    )
     return tuple(
         _plan_with_run_id(
             experiment=experiment,
@@ -1466,7 +1493,8 @@ def expand(
             benchmark=benchmark,
             source=source,
             env=env,
-            reproducibility=reproducibility,
+            reproducibility=settings,
+            execution_policy=execution_policy,
         )
         for variant_id in selected_variants
         for replicate_id in selected_replicates
