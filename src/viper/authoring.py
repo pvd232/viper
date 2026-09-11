@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, Never, TypeVar, cast
+from typing import Annotated, Any, Literal, Never, TypeVar, cast, overload
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
@@ -201,6 +201,19 @@ class ExternalInputDraft(BaseModel):
 StageInputDraft = ExternalInputDraft | RunArtifactDraft | StageDraftOutputRef
 
 
+class InputBinding(BaseModel):
+    """Give an upstream artifact a name in the receiving stage."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    name: InputName = Field(
+        description="Key used to read this input in context.inputs."
+    )
+    source: RunArtifactDraft | StageDraftOutputRef = Field(
+        description="Artifact selected from an earlier stage or completed run."
+    )
+
+
 class BaseSpecDraft(BaseModel):
     """Hold fields shared by every Python-authored stage."""
 
@@ -325,12 +338,29 @@ class StageDraft(BaseModel):
         )
 
 
+class FactorLevel(BaseModel):
+    """Select one named level of an experimental factor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    factor_id: FactorId = Field(
+        description="Factor to which the selected level belongs."
+    )
+    level_id: LevelId = Field(
+        description="Level selected for this factor in a variant."
+    )
+
+
 class FactorDraft(BaseModel):
     """Hold the levels available for one experimental factor."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     levels: tuple[LevelId, ...] = Field(min_length=2)
+    factor_id: FactorId | None = Field(
+        default=None,
+        description="Name used to select this factor's levels in variants.",
+    )
 
     @model_validator(mode="after")
     def validate_levels(self) -> FactorDraft:
@@ -338,6 +368,16 @@ class FactorDraft(BaseModel):
         if len(set(self.levels)) != len(self.levels):
             raise ValueError("factor levels must be unique")
         return self
+
+    def level(self, level_id: LevelId) -> FactorLevel:
+        """Select a declared level, retaining the factor's identity."""
+        if self.factor_id is None:
+            raise ValueError("name the factor before selecting a level")
+        if level_id not in self.levels:
+            raise ValueError(
+                f"unknown level {level_id!r} for factor {self.factor_id!r}"
+            )
+        return FactorLevel(factor_id=self.factor_id, level_id=level_id)
 
 
 class VariantDraft(BaseModel):
@@ -513,15 +553,17 @@ def _deep_freeze(
     return result
 
 
-def factor(*, levels: tuple[LevelId, ...]) -> FactorDraft:
+def factor(
+    factor_id: FactorId | None = None, *, levels: tuple[LevelId, ...]
+) -> FactorDraft:
     """Declare one experimental factor."""
-    return FactorDraft(levels=levels)
+    return FactorDraft(factor_id=factor_id, levels=levels)
 
 
 def variant(
     variant_id: VariantId | None = None,
     *,
-    levels: dict[FactorId, LevelId] | None = None,
+    levels: tuple[FactorLevel, ...] | dict[FactorId, LevelId] | None = None,
     stages: tuple[StageDraft, ...] | dict[StageId, StageDraft],
     estimator: StageDraftOutputRef,
 ) -> VariantDraft:
@@ -532,9 +574,17 @@ def variant(
     A tuple contains stages with stage_id set. A mapping assigns names to
     unnamed stages. Duplicate or conflicting names are rejected.
     """
+    selected_levels: dict[FactorId, LevelId] = {}
+    if isinstance(levels, dict):
+        selected_levels = levels
+    elif levels is not None:
+        for selection in levels:
+            if selection.factor_id in selected_levels:
+                raise ValueError(f"duplicate factor selection: {selection.factor_id!r}")
+            selected_levels[selection.factor_id] = selection.level_id
     return VariantDraft(
         variant_id=variant_id,
-        levels={} if levels is None else levels,
+        levels=selected_levels,
         stages=_named_drafts(stages, "stage_id"),
         estimator=estimator,
     )
@@ -551,7 +601,7 @@ def replicate(
     )
 
 
-_DraftT = TypeVar("_DraftT", StageDraft, VariantDraft, ReplicateDraft)
+_DraftT = TypeVar("_DraftT", StageDraft, VariantDraft, ReplicateDraft, FactorDraft)
 
 
 def _named_drafts(
@@ -581,12 +631,12 @@ def experiment(
     experiment_id: ExperimentId,
     variants: tuple[VariantDraft, ...] | dict[VariantId, VariantDraft],
     replicates: tuple[ReplicateDraft, ...] | dict[ReplicateId, ReplicateDraft],
-    factors: dict[FactorId, FactorDraft] | None = None,
+    factors: tuple[FactorDraft, ...] | dict[FactorId, FactorDraft] | None = None,
 ) -> ExperimentDraft:
     """Declare one experiment over reusable variants and replicates."""
     return ExperimentDraft(
         experiment_id=experiment_id,
-        factors={} if factors is None else factors,
+        factors={} if factors is None else _named_drafts(factors, "factor_id"),
         variants=_named_drafts(variants, "variant_id"),
         replicates=_named_drafts(replicates, "replicate_id"),
     )
@@ -1043,11 +1093,65 @@ def _freeze_stage(
     )
 
 
+@overload
 def input(
     name: InputName, *, path: RepoRelPath, data_role: DataRole
-) -> ExternalInputDraft:
-    """Name a repository file for access through context.inputs[name]."""
+) -> ExternalInputDraft: ...
+
+
+@overload
+def input(
+    name: InputName, *, source: RunArtifactDraft | StageDraftOutputRef
+) -> InputBinding: ...
+
+
+def input(
+    name: InputName,
+    *,
+    path: RepoRelPath | None = None,
+    data_role: DataRole | None = None,
+    source: RunArtifactDraft | StageDraftOutputRef | None = None,
+) -> ExternalInputDraft | InputBinding:
+    """Name a local file or upstream artifact for access through context.inputs.
+
+    Local files require path and data_role. Upstream artifacts use source and
+    retain their producer's data role.
+    """
+    if source is not None:
+        if path is not None or data_role is not None:
+            raise ValueError("source inputs retain their existing path and data role")
+        return InputBinding(name=name, source=source)
+    if path is None or data_role is None:
+        raise ValueError("local inputs require path and data_role")
     return ExternalInputDraft(name=name, path=path, data_role=data_role)
+
+
+def _stage_inputs(
+    inputs: tuple[StageInputDraft | InputBinding, ...]
+    | Mapping[InputName, StageInputDraft],
+) -> dict[InputName, StageInputDraft]:
+    """Resolve input names while preserving each selected artifact's producer."""
+    selected: dict[InputName, StageInputDraft] = {}
+    if isinstance(inputs, Mapping):
+        entries = tuple(inputs.items())
+    else:
+        entries = []
+        for value in inputs:
+            if isinstance(value, InputBinding):
+                entries.append((value.name, value.source))
+            elif isinstance(value, ExternalInputDraft):
+                entries.append((value.name, value))
+            elif isinstance(value, StageDraftOutputRef):
+                entries.append((value.output_name, value))
+            else:
+                entries.append((value.artifact.artifact_name, value))
+    for name, value in entries:
+        if isinstance(value, ExternalInputDraft) and value.name != name:
+            raise ValueError("input name conflicts with its mapping key")
+        if name in selected:
+            raise ValueError(f"duplicate input name: {name!r}")
+        selected[name] = value
+    return selected
 
 
 def run_artifact(
@@ -1099,7 +1203,8 @@ def stage(
     *,
     stage_id: StageId | None = None,
     config: Config | None = None,
-    inputs: tuple[ExternalInputDraft, ...] | dict[InputName, StageInputDraft],
+    inputs: tuple[StageInputDraft | InputBinding, ...]
+    | Mapping[InputName, StageInputDraft],
     outputs: StageOutputs[OutputDraft],
     metrics: tuple[MetricDraft[Any], ...] = (),
     objective: MetricObjectiveDraft | None = None,
@@ -1112,8 +1217,8 @@ def stage(
 
     The decorator selects the stage kind and config class. Omit config to
     instantiate that class with its defaults; required fields still need values.
-    Pass named local inputs as a tuple. A mapping names upstream output handles
-    for this function. Duplicate or conflicting input names are rejected.
+    Tuple inputs use each file or artifact's name. input(name, source=artifact)
+    assigns a different name for this function. Duplicate names are rejected.
     Training and evaluation require an objective; evaluation also requires eval_id and
     named split_inputs. An embedding objective is optional. Diagnostic outputs
     are terminal and must be omitted from downstream input selections.
@@ -1121,18 +1226,8 @@ def stage(
     Returned output handles connect this stage to later stages. env overrides
     the run environment; reuse="verified" permits a verified catalog candidate.
     """
-    selected_inputs: dict[InputName, StageInputDraft] = {}
-    entries = (
-        inputs.items()
-        if isinstance(inputs, dict)
-        else ((value.name, value) for value in inputs)
-    )
-    for input_name, value in entries:
-        if isinstance(value, ExternalInputDraft) and value.name != input_name:
-            raise ValueError("input name conflicts with its mapping key")
-        if input_name in selected_inputs:
-            raise ValueError(f"duplicate input name: {input_name!r}")
-        selected_inputs[input_name] = value
+    selected_inputs = _stage_inputs(inputs)
+    for input_name, value in selected_inputs.items():
         if (
             isinstance(value, StageDraftOutputRef)
             and value.producer.spec.kind == "diagnostic"

@@ -108,17 +108,23 @@ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
         ),
     )
 
-    with pytest.raises(ValueError, match=r"diagnostic.+report.+terminal"):
-        authoring.stage(
-            consume_report,
-            config=BuildConfig(),
-            inputs={"report": diagnostic_stage.outputs["report"]},
-            outputs=BuildOutputs[outputs.OutputDraft](
-                result=outputs.output(
-                    path="result.json", loader=load_bytes, data_role="eval"
-                )
-            ),
-        )
+    report = diagnostic_stage.outputs["report"]
+    for selected in (
+        {"report": report},
+        (report,),
+        (authoring.input("summary", source=report),),
+    ):
+        with pytest.raises(ValueError, match=r"diagnostic.+report.+terminal"):
+            authoring.stage(
+                consume_report,
+                config=BuildConfig(),
+                inputs=selected,
+                outputs=BuildOutputs[outputs.OutputDraft](
+                    result=outputs.output(
+                        path="result.json", loader=load_bytes, data_role="eval"
+                    )
+                ),
+            )
 
 
 def test_diagnostic_accepts_descriptive_metrics() -> None:

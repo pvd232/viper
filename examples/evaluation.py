@@ -100,11 +100,11 @@ def main() -> None:
         predict,
         stage_id="eval",
         eval_id="holdout",
-        inputs={
-            "model": training.outputs["model"],
-            "test": test_data,
-            "holdout": test_split,
-        },
+        inputs=(
+            training.outputs["model"],
+            input("test", source=test_data),
+            input("holdout", source=test_split),
+        ),
         split_inputs=("holdout",),
         outputs=EvalOutputs(
             predictions=output(

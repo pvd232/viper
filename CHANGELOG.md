@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Accept upstream artifacts directly in stage input tuples; use
+  `input(name, source=artifact)` to rename one for the receiving function.
+- Accept named factors and factor-level selections as tuples. Reject duplicate
+  factor names, repeated selections, and levels absent from their factor.
 - Name local inputs with `input("dataset", path=..., data_role=...)` and pass
   them to `stage(inputs=(dataset,))`. Duplicate or conflicting names are rejected.
 - Rename `MetricDependency.required_data_role` to `data_role` in Python and

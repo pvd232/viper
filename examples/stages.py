@@ -48,7 +48,7 @@ def polynomial_features(context: Context[EmbedConfig]) -> None:
 embedded = stage(
     polynomial_features,
     stage_id="embed",
-    inputs={"dataset": prepared.outputs["dataset"]},
+    inputs=(prepared.outputs["dataset"],),
     outputs=StageOutputs(
         features=output(path="features.json", loader=load_text, data_role="training")
     ),
@@ -67,7 +67,7 @@ def count_rows(context: Context[DiagnosticConfig]) -> None:
 report = stage(
     count_rows,
     stage_id="report",
-    inputs={"dataset": prepared.outputs["dataset"]},
+    inputs=(prepared.outputs["dataset"],),
     outputs=StageOutputs(
         report=output(path="rows.txt", loader=load_text, data_role="training")
     ),
@@ -75,7 +75,7 @@ report = stage(
 training = stage(
     fit,
     stage_id="train",
-    inputs={"dataset": prepared.outputs["dataset"]},
+    inputs=(prepared.outputs["dataset"],),
     outputs=TrainOutputs(
         model=output(path="model.json", loader=load_json, data_role="training"),
         resume_state=output(

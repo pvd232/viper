@@ -27,7 +27,7 @@ validated `BuildConfig` as `context.config`.
 | `stage_id` | Name assigned to this stage in the variant's `stages` tuple. |
 
 The dictionary keys come from your declarations. In the build example below,
-`inputs={"source": ...}` supplies `context.inputs["source"]`, and
+An input named `source` supplies `context.inputs["source"]`, and
 `StageOutputs(dataset=...)` supplies `context.outputs["dataset"]`.
 A lookup using an undeclared name raises `KeyError`.
 
@@ -117,7 +117,7 @@ embedded = stage(
     polynomial_features,
     stage_id="embed",
 
-    inputs={"dataset": prepared.outputs["dataset"]},
+    inputs=(prepared.outputs["dataset"],),
     outputs=StageOutputs(
         features=output(path="features.json", loader=load_text, data_role="training")
     ),
@@ -142,7 +142,7 @@ state. See [resume training](retry-restore-compare.md#resume-training-from-a-che
 for the restoration order.
 
 To consume the sorted CSV above, use
-`inputs={"dataset": prepared.outputs["dataset"]}` in that training stage.
+`inputs=(prepared.outputs["dataset"],)` in that training stage.
 To consume the polynomial features instead, adapt the training function to read
 JSON and select `embedded.outputs["features"]`.
 
@@ -181,7 +181,7 @@ The `evaluation` declaration connects the model to its metric:
 
 | Declaration | Connection |
 | --- | --- |
-| `"model": training.outputs["model"]` | Supplies the training stage's model to `predict`. |
+| `training.outputs["model"]` in `inputs` | Supplies the training stage's model to `predict`. |
 | `predictions` in `EvalOutputs` | Names the file where `predict` writes `[prediction, target]` pairs. |
 | `metrics=(rmse,)` | Attaches RMSE to this evaluation stage. |
 | `name="predictions"` in `MetricDependency` | Selects this stage's output for the metric's `context.artifacts`. |
@@ -243,11 +243,11 @@ evaluation = stage(
     stage_id="eval",
 
     eval_id="holdout",
-    inputs={
-        "model": training.outputs["model"],
-        "test": test_data,
-        "holdout": test_split,
-    },
+    inputs=(
+        training.outputs["model"],
+        input("test", source=test_data),
+        input("holdout", source=test_split),
+    ),
     split_inputs=("holdout",),
     outputs=EvalOutputs(
         predictions=output(
@@ -295,7 +295,7 @@ report = stage(
     count_rows,
     stage_id="report",
 
-    inputs={"dataset": prepared.outputs["dataset"]},
+    inputs=(prepared.outputs["dataset"],),
     outputs=StageOutputs(
         report=output(path="rows.txt", loader=load_text, data_role="training")
     ),

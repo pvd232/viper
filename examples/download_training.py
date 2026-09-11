@@ -44,7 +44,7 @@ fetch_data = download(
 training = stage(
     fit,
     stage_id="train",
-    inputs={"dataset": fetch_data.outputs["dataset"]},
+    inputs=(fetch_data.outputs["dataset"],),
     outputs=TrainOutputs(
         model=output(path="model.json", loader=load_json, data_role="training"),
         resume_state=output(

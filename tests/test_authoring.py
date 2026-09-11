@@ -1273,6 +1273,74 @@ def test_stage_uses_the_decorators_config_defaults() -> None:
     assert selected.spec.config == example_training.spec.config
 
 
+def test_upstream_input_tuples_preserve_producers_and_allow_aliases() -> None:
+    """Keep upstream identity when inheriting or changing the receiving input name."""
+    assert isinstance(example_training.spec, TrainSpecDraft)
+    model = example_training.outputs["model"]
+    alias = external_input("dataset", source=model)
+    arguments = {
+        "outputs": example_training.spec.outputs,
+        "metrics": example_training.spec.metrics,
+        "objective": example_training.spec.objective,
+    }
+    consumer = stage(
+        example_training.spec.implementation, inputs=(model, alias), **arguments
+    )
+    assert isinstance(consumer.spec, TrainSpecDraft)
+    direct = consumer.spec.inputs["model"]
+    renamed = consumer.spec.inputs["dataset"]
+    assert isinstance(direct, authoring.StageDraftOutputRef)
+    assert isinstance(renamed, authoring.StageDraftOutputRef)
+    assert direct.producer is renamed.producer is example_training
+    assert direct.output_name == renamed.output_name == "model"
+    with pytest.raises(ValueError, match="duplicate input name"):
+        stage(example_training.spec.implementation, inputs=(model, model), **arguments)
+    with pytest.raises(ValueError, match="duplicate input name"):
+        stage(
+            example_training.spec.implementation,
+            inputs=(model, external_input("model", source=model)),
+            **arguments,
+        )
+
+
+def test_named_factor_levels_preserve_identity_and_reject_ambiguous_choices() -> None:
+    """Select known levels once per named factor in each variant."""
+    rows = factor("training_rows", levels=("two", "three"))
+    selected = rows.level("two")
+    baseline = variant(
+        "baseline",
+        levels=(selected,),
+        stages=(example_training,),
+        estimator=example_training.outputs["model"],
+    )
+    study = experiment(
+        experiment_id="named_factors",
+        factors=(rows,),
+        variants=(baseline,),
+        replicates=(replicate(seed=7),),
+    )
+    assert study.factors["training_rows"] is rows
+    assert baseline.levels == {"training_rows": "two"}
+    with pytest.raises(ValueError, match="unknown level"):
+        rows.level("four")
+    with pytest.raises(ValueError, match="name the factor"):
+        factor(levels=("two", "three")).level("two")
+    with pytest.raises(ValueError, match="duplicate factor selection"):
+        variant(
+            "baseline",
+            levels=(selected, rows.level("three")),
+            stages=(example_training,),
+            estimator=example_training.outputs["model"],
+        )
+    with pytest.raises(ValueError, match="duplicate factor_id"):
+        experiment(
+            experiment_id="named_factors",
+            factors=(rows, rows),
+            variants=(baseline,),
+            replicates=(replicate(seed=7),),
+        )
+
+
 def test_stage_requires_values_for_required_custom_config_fields() -> None:
     """A missing custom setting fails during declaration, before execution."""
     assert isinstance(example_training.spec, TrainSpecDraft)

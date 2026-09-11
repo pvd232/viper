@@ -47,9 +47,10 @@ training = stage(
 Inside `fit()`, `context.inputs["dataset"]` is the local input path. The authoring name
 and the context lookup must match.
 
-Duplicate input names are rejected. Use a mapping when connecting an earlier
-stage's output, such as `inputs={"dataset": prepared.outputs["dataset"]}`;
-the key names that output for the receiving function.
+Pass an upstream output directly: `inputs=(prepared.outputs["dataset"],)`.
+It keeps the name `dataset`. To rename it for the receiving function, use
+`input("features", source=prepared.outputs["dataset"])`. Both forms retain the
+producer and its data role. Duplicate input names are rejected.
 
 ## Declare an HTTP download
 
@@ -114,7 +115,7 @@ above. Select the download stage's output in the downstream stage:
 training = stage(
     fit,
     stage_id="train",
-    inputs={"dataset": fetch_data.outputs["dataset"]},
+    inputs=(fetch_data.outputs["dataset"],),
     outputs=training_outputs,
     metrics=(mse,),
     objective=min(mse),

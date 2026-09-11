@@ -19,6 +19,8 @@ from viper.references import GitFileRef
 from viper.repository import read_source, resolve_root
 from viper.runtime import LocalEnvSpec, observe_python_env
 
+training_rows = factor("training_rows", levels=("two", "three"))
+
 
 def training_variant(name: str, rows: int, level: str) -> VariantDraft:
     """Connect row selection to the complete quickstart training function."""
@@ -34,7 +36,7 @@ def training_variant(name: str, rows: int, level: str) -> VariantDraft:
     training = stage(
         fit,
         stage_id="train",
-        inputs={"dataset": prepared.outputs["dataset"]},
+        inputs=(prepared.outputs["dataset"],),
         outputs=TrainOutputs(
             model=output(path="model.json", loader=load_json, data_role="training"),
             resume_state=output(
@@ -46,7 +48,7 @@ def training_variant(name: str, rows: int, level: str) -> VariantDraft:
     )
     return variant(
         name,
-        levels={"training_rows": level},
+        levels=(training_rows.level(level),),
         stages=(
             prepared,
             training,
@@ -57,7 +59,7 @@ def training_variant(name: str, rows: int, level: str) -> VariantDraft:
 
 study = experiment(
     experiment_id="training_rows",
-    factors={"training_rows": factor(levels=("two", "three"))},
+    factors=(training_rows,),
     variants=(
         training_variant("two_rows", 2, "two"),
         training_variant("three_rows", 3, "three"),

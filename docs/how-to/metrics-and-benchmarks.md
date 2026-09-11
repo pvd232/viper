@@ -100,8 +100,8 @@ including scores that lack the mathematical properties of a distance metric.
 
 ## Recompute a stateless metric
 
-The [evaluation stage](stages.md#evaluate-against-saved-test-data) selects its
-model with `"model": training.outputs["model"]`. Its `predict` function writes
+The [evaluation stage](stages.md#evaluate-against-saved-test-data) includes
+`training.outputs["model"]` in its inputs. Its `predict` function writes
 `[prediction, target]` pairs to the stage's `predictions` output.
 
 Attach the metric below to that stage. `MetricDependency` selects its
