@@ -74,7 +74,9 @@ def test_release_downloads_distributions_from_successful_ci() -> None:
     build_job = workflow.split("  publish-testpypi:", 1)[0]
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
 
-    assert '--commit "$RELEASE_COMMIT" --status success' in build_job
+    assert "s/^CI-Run: //p" in build_job
+    assert '--json headSha --jq .headSha)" = "$RELEASE_COMMIT"' in build_job
+    assert '--json conclusion --jq .conclusion)" = "success"' in build_job
     assert 'gh run download "$CI_RUN_ID"' in build_job
     assert "python -m build" not in build_job
     assert "name: python-package-distributions" in ci

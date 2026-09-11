@@ -42,8 +42,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RELEASE_COMMIT="$(git rev-parse HEAD)"
-          CI_RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$RELEASE_COMMIT" --status success --json databaseId --jq '.[0].databaseId')"
-          test -n "$CI_RUN_ID" && test "$CI_RUN_ID" != "null"
+          TAG_OBJECT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq '.object.sha')"
+          CI_RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA" --jq '.message' | sed -n 's/^CI-Run: //p')"
+          [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
+          test "$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" = "$RELEASE_COMMIT"
+          test "$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = "success"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" --jq .path)" = ".github/workflows/ci.yml"
           gh run download "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --name python-package-distributions --dir dist
           VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
           test "$GITHUB_REF_NAME" = "v$VERSION"
