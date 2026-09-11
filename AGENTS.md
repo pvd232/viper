@@ -3,6 +3,9 @@
 Use this file as the repository-wide entry point. Apply the global Codex
 working agreements and load the user-scoped skills relevant to the active task.
 
+For agents using VIPER to run or inspect experiments, start with the
+[agent interface](docs/reference/agents.md). This file governs changes to VIPER itself.
+
 ## Repository orientation
 
 - Read `README.md`, `pyproject.toml`, and the nearest relevant documentation and

@@ -27,6 +27,11 @@ returns after the completed run passes verification. The
 when a run fails; [retry](retry-restore-compare.md#retry-a-failed-run) uses it to
 start another attempt.
 
+To execute an existing plan by path through Python, CLI, or MCP, commit the
+plan and its companion specifications first. Execution reads those records
+from that commit. A Python draft passed directly to `execution.run()` is
+published by the call; retry follows its saved plan reference.
+
 `timeout_seconds` limits each stage or metric worker invocation. A run with
 several stages can take longer than that limit in total. HTTP requests also
 have the timeout declared by their retrieval policy.

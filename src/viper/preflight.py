@@ -173,7 +173,24 @@ def preflight_plan(
     try:
         if plan is None:
             relative_run_path = run_spec_path.resolve().relative_to(root).as_posix()
-            plan_raw = _git_bytes(root, "HEAD", relative_run_path)
+            plan_commit = subprocess.run(
+                ("git", "-C", str(root), "rev-parse", "HEAD"),
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            plan_raw = _git_bytes(root, plan_commit, relative_run_path)
+            # Plan records may be committed after the source they reference.
+            # Read companion records from the plan commit, not the source commit.
+            plan = ResolvedRunSpecRef(
+                sha256=hashlib.sha256(plan_raw).hexdigest(),
+                bytes=len(plan_raw),
+                stored_at=GitFileRef(
+                    repository=run.source.repository,
+                    commit=plan_commit,
+                    path=relative_run_path,
+                ),
+            )
         else:
             plan_raw = fetch(plan.stored_at)
         plan_is_frozen = plan_raw == run_spec_path.read_bytes()

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add agent discovery documentation and a stdio MCP acceptance test for both access modes.
+- Bind MCP paths to the startup workspace, expose operation-specific knowledge
+  query schemas, and return structured request failures with matching output schemas.
+- Replace unresolved resource templates and generic prompts with supported
+  references, an agent guide, and task-specific review instructions.
+- Filter catalog measurements by run ID.
+- Check committed plan records against their plan commit during preflight;
+  source code remains bound to its separately recorded source commit.
+
 - Generate batch run IDs in `expand()` when callers omit `run_ids`.
 - Accept tuples of named stages and variants, derive replicate names from seeds,
   and reject duplicate or conflicting declaration names.

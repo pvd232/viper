@@ -9,9 +9,12 @@ from typing import cast, get_type_hints
 
 import pytest
 from mcp import types
+from pydantic import TypeAdapter
 
 from viper.api import (
     HANDLER_REGISTRY,
+    KNOWLEDGE_PUBLICATION_MODELS,
+    KNOWLEDGE_QUERY_REGISTRY,
     REQUEST_REGISTRY,
     CapabilitiesRequest,
     CatalogRefreshRequest,
@@ -82,15 +85,52 @@ def test_mcp_tool_schemas_match_typed_operations() -> None:
         request = REQUEST_REGISTRY[operation]
         success = get_type_hints(HANDLER_REGISTRY[operation])["return"]
         assert isinstance(success, type) and issubclass(success, SuccessModel)
-        assert tool.input_schema == request.model_json_schema()
-        assert tool.output_schema == success.model_json_schema()
+        schema = request.model_json_schema()
+        roots = {"root", "repository_root", "left_root", "right_root"}
+        for field in roots:
+            schema.get("properties", {}).pop(field, None)
+        if "required" in schema:
+            schema["required"] = [
+                name for name in schema["required"] if name not in roots
+            ]
+        if operation in KNOWLEDGE_QUERY_REGISTRY:
+            query = KNOWLEDGE_QUERY_REGISTRY[operation].model_json_schema()
+            schema.setdefault("$defs", {}).update(query.pop("$defs", {}))
+            schema["properties"]["query"] = query
+            if query.get("required"):
+                schema.setdefault("required", []).append("query")
+        if operation in KNOWLEDGE_PUBLICATION_MODELS:
+            record = schema["$defs"]["KnowledgeRecordEnvelope"]["properties"]
+            record["record_kind"] = {
+                "type": "string",
+                "const": operation.removeprefix("publish_"),
+            }
+            record["value"] = {
+                "anyOf": [
+                    {"$ref": f"#/$defs/{model.__name__}"}
+                    for model in KNOWLEDGE_PUBLICATION_MODELS[operation]
+                ]
+            }
+            if operation == "publish_impact_policy":
+                schema.setdefault("required", []).append("published_at")
+                schema["properties"]["published_at"] = {
+                    "type": "string",
+                    "format": "date-time",
+                }
+        assert tool.input_schema == schema
+        output = TypeAdapter(success | ViperFailure).json_schema()
+        output["type"] = "object"
+        assert tool.output_schema == output
 
     result = call_tool(Path.cwd(), "read", "get_capabilities")
     assert result.is_error is False
     assert result.structured_content["operation"] == "get_capabilities"
 
 
-def test_mcp_resources_are_stateless_inside_startup_root(tmp_path: Path) -> None:
+@pytest.mark.parametrize("kind", ("run", "benchmark", "evidence"))
+def test_mcp_resources_are_stateless_inside_startup_root(
+    tmp_path: Path, kind: str
+) -> None:
     """Resolve catalog resources and prompts from only the fixed startup root."""
     database = tmp_path / ".viper/catalog.sqlite3"
     database.parent.mkdir()
@@ -114,23 +154,48 @@ def test_mcp_resources_are_stateless_inside_startup_root(tmp_path: Path) -> None
                 "INSERT INTO sources VALUES (?, ?, 1, NULL)",
                 (key, reference),
             )
-            connection.execute("INSERT INTO runs VALUES (?)", (key,))
+            if kind == "run":
+                connection.execute("INSERT INTO runs VALUES (?)", (key,))
+            elif kind == "benchmark":
+                connection.execute("INSERT INTO benchmarks VALUES (?)", (key,))
 
     first = resource_registry(tmp_path)
     second = resource_registry(tmp_path)
     assert first == second
-    assert tuple(resource.uri for resource in first) == (
-        "viper://catalog/head",
-        f"viper://run/{key}",
+    assert tuple(resource.uri for resource in first) == tuple(
+        sorted(
+            (
+                "viper://catalog/head",
+                "viper://guide",
+                f"viper://{kind}/{key}",
+            )
+        )
     )
-    loaded = read_resource(tmp_path, f"viper://run/{key}")
+    loaded = read_resource(tmp_path, f"viper://{kind}/{key}")
     assert isinstance(loaded.contents[0], types.TextResourceContents)
     assert json.loads(loaded.contents[0].text) == json.loads(reference)
     assert resource_templates() == resource_templates()
     assert prompt_registry() == prompt_registry()
 
-    with pytest.raises(ValueError, match="escapes the MCP startup root"):
-        call_tool(tmp_path, "read", "status", {"path": "../outside"})
+    rejected = call_tool(tmp_path, "read", "status", {"path": "../outside"})
+    assert rejected.is_error
+    assert rejected.structured_content["code"] == "invalid_request"
+    assert "escapes the MCP startup root" in rejected.structured_content["message"]
+
+
+@pytest.mark.parametrize("operation", tuple(KNOWLEDGE_QUERY_REGISTRY))
+def test_knowledge_query_schemas_are_discoverable_and_enforced(
+    tmp_path: Path, operation: OperationName
+) -> None:
+    """Expose each query's fields and reject invalid fields as request errors."""
+    model = KNOWLEDGE_QUERY_REGISTRY[operation]
+    schema = get_schema(SchemaRequest(name=model.__name__))
+    assert schema.json_schema == model.model_json_schema()
+    tool = next(item for item in tool_registry() if item.name == operation)
+    assert tool.input_schema["properties"]["query"]["properties"]
+    failed = call_tool(tmp_path, "read", operation, {"query": {"unexpected": 1}})
+    assert failed.is_error
+    assert failed.structured_content["code"] == "invalid_request"
 
 
 def test_knowledge_operations_match_python_cli_and_mcp(
@@ -154,6 +219,19 @@ def test_knowledge_operations_match_python_cli_and_mcp(
         ),
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
+    wrong_kind = call_tool(
+        tmp_path,
+        "execute",
+        "publish_assertion",
+        {
+            "record": KnowledgeRecordEnvelope(
+                record_kind="ontology",
+                value=ontology,
+            ).model_dump(mode="json")
+        },
+    )
+    assert wrong_kind.is_error
+    assert wrong_kind.structured_content["code"] == "invalid_request"
     published = publish_ontology(
         PublishKnowledgeRequest(
             root=tmp_path,

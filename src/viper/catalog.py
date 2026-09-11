@@ -202,6 +202,7 @@ class MeasurementQuery(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    run_ids: tuple[RunId, ...] = ()
     experiment_id: ExperimentId | None = None
     variant_ids: tuple[VariantId, ...] = ()
     stage_ids: tuple[StageId, ...] = ()
@@ -964,6 +965,7 @@ class Catalog:
                         or runs[_reference_key(item.run)].variant_id
                         in query.variant_ids
                     )
+                    and (not query.run_ids or item.run_id in query.run_ids)
                     and (not query.stage_ids or item.stage_id in query.stage_ids)
                     and (not query.metric_ids or item.metric_id in query.metric_ids)
                     and (

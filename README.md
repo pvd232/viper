@@ -277,7 +277,7 @@ Continue from a saved plan or run result:
 | Restore verified artifacts | `viper.execution.restore()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Inspect lineage or compare runs | `viper.api.lineage()` and `viper.api.compare_runs()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Search completed measurements | `viper.api.catalog_refresh()` and `catalog().measurements()` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
-| Give an agent typed access | `viper mcp --root .` | [How VIPER works](docs/explanation/how-viper-works.md) |
+| Give an agent typed access | `viper mcp --root .` | [Agent interface](docs/reference/agents.md) |
 
 Place `--json` before a CLI command when another program needs one typed result
 document:
@@ -296,6 +296,7 @@ an explanation, or reference material.
 - Solving a specific task: open the [how-to guides](docs/README.md#how-to-guides).
 - Understanding the evidence model: read [how VIPER works](docs/explanation/how-viper-works.md).
 - Looking up an interface: open the [reference index](docs/reference/README.md).
+- Connecting an agent: read the [agent interface](docs/reference/agents.md) or [navigation index](llms.txt).
 - Changing VIPER itself: read [Contributing](CONTRIBUTING.md).
 
 ## License

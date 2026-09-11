@@ -1,0 +1,21 @@
+# VIPER
+
+> Python experiments with saved execution plans and verifiable run records.
+
+## Agent integration
+
+- [Agent interface](docs/reference/agents.md): MCP setup, discovery, access modes, results, resources, and prompts.
+- [Python API](docs/reference/api.md): Domain constructors and typed requests; installed schemas supply exact fields.
+- [CLI](docs/reference/cli.md): JSON commands and exit status for shell-based clients.
+- [Guarantees](docs/explanation/guarantees.md): What verification establishes and what requires separate comparison.
+
+## Author and inspect experiments
+
+- [First experiment](docs/tutorials/getting-started.md): Complete Python training program and runtime contexts.
+- [Stage pipeline](docs/tutorials/stages.md): Connect named stages through output handles.
+- [Inspection](docs/tutorials/inspect-results.md): Verify, restore, compare, and query completed runs.
+- [Documentation index](docs/README.md): All public workflows and references.
+
+## Contribute to VIPER
+
+- [Contributor instructions](AGENTS.md): Repository rules for coding agents.

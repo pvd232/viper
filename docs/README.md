@@ -21,7 +21,7 @@ provide complete Python programs.
 | Record measurements and acceptance criteria | [Define metrics and benchmarks](how-to/metrics-and-benchmarks.md) |
 | Generate and execute several runs | [Run variants and replicates](how-to/variants-and-replicates.md) |
 | Recover or inspect completed work | [Retry, restore, and compare runs](how-to/retry-restore-compare.md) |
-| Search evidence or expose it to an agent | [Use the catalog, knowledge store, and MCP](how-to/catalog-knowledge-mcp.md) |
+| Search evidence and publish observations | [Search runs and publish observations](how-to/catalog-knowledge-mcp.md) |
 | Diagnose a failed command or run | [Troubleshoot VIPER](how-to/troubleshooting.md) |
 
 ## Explanation
@@ -35,6 +35,12 @@ provide complete Python programs.
 
 The [reference index](reference/README.md) routes to the Python API, CLI,
 configuration, formal protocol, and versioning policy.
+
+## Agent integration
+
+[Connect an agent](reference/agents.md) explains MCP setup, discovery, and
+request handling. The [machine-readable navigation index](../llms.txt) links
+public interfaces and distinguishes contributor instructions.
 
 ## Contributing and internal engineering
 

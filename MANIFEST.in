@@ -1,5 +1,7 @@
 prune src/viper_provenance.egg-info
 prune docs/development
+include llms.txt
+include AGENTS.md
 include docs/README.md
 recursive-include docs/explanation *.md
 recursive-include docs/how-to *.md
@@ -7,4 +9,4 @@ recursive-include docs/reference *.md
 recursive-include docs/releases *.md
 recursive-include docs/tutorials *.md
 recursive-include examples *.md *.py *.csv
-recursive-include tests *.md *.py *.yaml
+recursive-include tests *.md *.py *.yaml *.json

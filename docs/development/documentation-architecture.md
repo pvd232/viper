@@ -19,6 +19,18 @@ Keep exact schema fields in the installed schema registry. The protocol page
 explains record relationships and links to model definitions. Keep historical
 interfaces in release notes or clearly marked archived documents.
 
+## Agent entry points
+
+[The agent reference](../reference/agents.md) owns connection setup, discovery,
+access modes, results, resources, and prompts. [llms.txt](../../llms.txt) is a
+navigation index. MCP server instructions and `viper://guide` explain the live
+connection; tool schemas come from the installed API. Contributor rules remain
+in [AGENTS.md](../../AGENTS.md). The catalog guide owns indexing and queries.
+
+Every documentation page must be reachable from the root README. The
+navigation test follows links through the public and maintainer indexes;
+an unreachable page fails the check.
+
 ## Examples
 
 [`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py) owns the complete

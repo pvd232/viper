@@ -296,3 +296,5 @@ viper --json schema RunSpec
 
 See the [CLI reference](cli.md) for command groups and the [formal
 protocol](protocol.md) for serialized records.
+
+For MCP setup and connection-specific schemas, see [the agent interface](agents.md).

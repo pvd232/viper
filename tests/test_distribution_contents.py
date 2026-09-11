@@ -156,6 +156,8 @@ def test_built_distributions_exclude_experimental_surfaces(tmp_path: Path) -> No
         wheel_members
     )
     assert {
+        "llms.txt",
+        "docs/reference/agents.md",
         "src/viper/catalog.py",
         "src/viper/knowledge.py",
         "src/viper/mcp.py",

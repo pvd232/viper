@@ -18,6 +18,7 @@ from tests._documentation import (
 )
 from viper.api import OPERATIONS
 from viper.cli import build_parser
+from viper.mcp import prompt_registry
 
 PROTOCOL = ROOT / "docs/reference/protocol.md"
 
@@ -439,3 +440,54 @@ def test_complete_documented_programs_match_executed_sources(
     documented = ast.parse("\n\n".join(selected))
     source = ast.parse((ROOT / program).read_text())
     assert ast.dump(documented) == ast.dump(source), document
+
+
+def test_all_documentation_pages_are_reachable_from_the_readme() -> None:
+    """Reject orphan pages and keep the agent navigation index connected."""
+    pending = [ROOT / "README.md"]
+    visited = set()
+    while pending:
+        document = pending.pop().resolve()
+        if document in visited or not document.is_file():
+            continue
+        if document.suffix not in {".md", ".txt"}:
+            continue
+        visited.add(document)
+        for link in local_links(document.read_text()):
+            if "://" in link or link.startswith("mailto:"):
+                continue
+            path, _anchor = decoded_local_link(link)
+            target = (document.parent / path).resolve()
+            if target.is_relative_to(ROOT):
+                pending.append(target)
+    required = {path.resolve() for path in (ROOT / "docs").rglob("*.md")}
+    required.add(ROOT / "llms.txt")
+    assert required <= visited, sorted(str(path) for path in required - visited)
+
+
+def test_agent_reference_matches_prompt_arguments_and_navigation() -> None:
+    """Keep agent entry points and prompt argument names tied to the server."""
+    document = (ROOT / "docs/reference/agents.md").read_text()
+    for prompt in prompt_registry():
+        row = next(
+            line for line in document.splitlines() if f"| `{prompt.name}` |" in line
+        )
+        for argument in prompt.arguments or []:
+            assert f"`{argument.name}`" in row
+    assert "docs/reference/agents.md" in (ROOT / "llms.txt").read_text()
+    assert "docs/reference/agents.md" in (ROOT / "AGENTS.md").read_text()
+
+
+def test_documentation_assets_have_a_referring_page() -> None:
+    """Reject unused documentation graphics left behind by a rewritten guide."""
+    documents = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+    referenced = set()
+    for document in documents:
+        for target in re.findall(r"\]\(([^)]+)\)", document.read_text()):
+            if "://" not in target:
+                path, _anchor = decoded_local_link(target)
+                referenced.add((document.parent / path).resolve())
+    assets = {
+        path.resolve() for path in (ROOT / "docs/assets").rglob("*") if path.is_file()
+    }
+    assert assets <= referenced, sorted(str(path) for path in assets - referenced)

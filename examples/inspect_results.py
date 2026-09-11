@@ -94,6 +94,8 @@ def main() -> None:
             break
         query = query.model_copy(update={"cursor": page.next_cursor})
     print(f"indexed measurements: {count}")
+    selected = index.measurements(MeasurementQuery(run_ids=(checked.run_id,)))
+    print(f"selected run measurements: {len(selected.items)}")
 
     store = knowledge(root=root)
     publication = store.publish_assertion(

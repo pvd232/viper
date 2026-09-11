@@ -7,6 +7,7 @@ workflow.
 | Reference | Contains |
 | --- | --- |
 | [Python API](api.md) | Public constructors, execution operations, typed application operations, and result models. |
+| [Agent interface](agents.md) | MCP connection, discovery, access modes, structured results, resources, and prompts. |
 | [CLI](cli.md) | Command groups, argument conventions, JSON mode, and discovery commands. |
 | [Configuration and schemas](configuration.md) | Workspace root, environment, storage, reproducibility, and schema discovery. |
 | [Formal protocol](protocol.md) | Serialized records, identities, state transitions, and verification relationships. |

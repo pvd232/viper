@@ -733,6 +733,37 @@ class PublishKnowledgeSuccess(SuccessModel):
     publication: KnowledgePublicationResult
 
 
+KNOWLEDGE_PUBLICATION_MODELS: dict[OperationName, tuple[type[BaseModel], ...]] = {
+    "publish_ontology": (OntologySpec,),
+    "publish_assignment": (
+        DeclaredPrimitiveAssignment,
+        InferredPrimitiveAssignment,
+        ReviewedPrimitiveAssignment,
+    ),
+    "publish_modulation": (Modulation,),
+    "publish_effect": (EffectEstimate,),
+    "publish_impact_policy": (ImpactPolicy,),
+    "publish_impact": (ImpactAssessment,),
+    "publish_diagnostic": (DiagnosticSignature,),
+    "publish_assertion": (JournalAssertion,),
+    "publish_vector": (KnowledgeVector,),
+    "publish_retrieval_judgment": (RetrievalJudgment,),
+}
+
+
+KNOWLEDGE_QUERY_REGISTRY: dict[OperationName, type[BaseModel]] = {
+    "search_primitives": PrimitiveQuery,
+    "search_assignments": AssignmentQuery,
+    "search_modulations": ModulationQuery,
+    "search_effects": EffectQuery,
+    "search_impacts": ImpactQuery,
+    "search_diagnostics": DiagnosticQuery,
+    "search_assertions": AssertionQuery,
+    "search_retrieval_judgments": RetrievalJudgmentQuery,
+    "search_similar": SimilarityQuery,
+}
+
+
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
@@ -799,6 +830,10 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "VerifyRunSuccess": VerifyRunSuccess,
     "ViperFailure": ViperFailure,
 }
+
+SCHEMA_REGISTRY.update(
+    {model.__name__: model for model in KNOWLEDGE_QUERY_REGISTRY.values()}
+)
 
 OPERATIONS: tuple[OperationName, ...] = (
     "validate_stage",
@@ -1913,6 +1948,9 @@ def dispatch(
     request_type = REQUEST_REGISTRY[operation]
     try:
         request = request_type.model_validate(payload)
+        if isinstance(request, KnowledgeSearchRequest):
+            # These operations share an envelope but accept distinct query fields.
+            KNOWLEDGE_QUERY_REGISTRY[operation].model_validate(request.query)
     except ValidationError as exc:
         return ViperFailure(
             operation=operation,
@@ -1927,6 +1965,22 @@ def dispatch(
                 )
             },
         )
+    if isinstance(request, PublishKnowledgeRequest):
+        expected = KNOWLEDGE_PUBLICATION_MODELS[operation]
+        if not isinstance(request.record.value, expected):
+            return ViperFailure(
+                operation=operation,
+                origin="request",
+                code="invalid_request",
+                message="knowledge record kind differs from the operation",
+            )
+        if operation == "publish_impact_policy" and request.published_at is None:
+            return ViperFailure(
+                operation=operation,
+                origin="request",
+                code="invalid_request",
+                message="impact policy publication requires published_at",
+            )
     try:
         return HANDLER_REGISTRY[operation](request)
     except ViperError as exc:

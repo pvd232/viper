@@ -120,18 +120,6 @@ view. Assess scientific agreement separately.
 
 ## Give an agent access
 
-Install the MCP extra from the repository root in the environment that will run the
-server:
-
-```bash
-python -m pip install -e '.[mcp]'
-```
-
-```bash
-viper mcp --root . --access read
-```
-
-Read access exposes searches, comparisons, status, and verification. `--access execute`
-also permits running, retrying, benchmarking, restoring, refreshing catalogs, and
-publishing knowledge. The allowed operations are listed in
-[`viper.mcp`](../../src/viper/mcp.py).
+Use [the agent interface reference](../reference/agents.md) to connect an MCP
+client, discover its tools, and select read or execute access. The server queries
+the catalog created above and exposes the same typed operations used by Python.

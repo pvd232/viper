@@ -165,6 +165,7 @@ def test_extended_examples_execute_complete_workflows(
         assert "successful runs: 2" in completed.stdout
         assert "model artifacts: 2" in completed.stdout
         assert "indexed measurements: 40" in completed.stdout
+        assert "selected run measurements: 20" in completed.stdout
         assert "observations: 1" in completed.stdout
         restored = list((root / "restored").glob("*.json"))
         assert len(restored) == 1
