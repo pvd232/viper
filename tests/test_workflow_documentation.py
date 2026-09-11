@@ -66,3 +66,16 @@ def test_wheel_smoke_gates_use_the_public_module_contract() -> None:
 
     assert "viper.__all__" not in workflows
     assert workflows.count("python -I -m pytest tests/test_public_api.py -q") >= 4
+
+
+def test_release_downloads_distributions_from_successful_ci() -> None:
+    """Publish CI's retained files without rebuilding after GPU acceptance."""
+    workflow = RELEASE_WORKFLOW.read_text()
+    build_job = workflow.split("  publish-testpypi:", 1)[0]
+    ci = (ROOT / ".github/workflows/ci.yml").read_text()
+
+    assert '--commit "$RELEASE_COMMIT" --status success' in build_job
+    assert 'gh run download "$CI_RUN_ID"' in build_job
+    assert "python -m build" not in build_job
+    assert "name: python-package-distributions" in ci
+    assert "path: dist/" in ci

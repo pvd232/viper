@@ -3,34 +3,6 @@
 The public documentation teaches experiment construction and execution through
 Python. The CLI reference provides equivalent commands for terminal use.
 
-## Comparison criteria
-
-This review used the following published examples as structural references:
-
-- [Stripe's Python setup guide](https://docs.stripe.com/get-started/development-environment?lang=python)
-  connects installation to a complete request and its output. VIPER's tutorials
-  must likewise include imports, source files, execution, and observable results.
-- [NVIDIA NeMo's Python training guide](https://docs.nvidia.com/nemo-framework/user-guide/25.02/nemo-2.0/index.html)
-  constructs model, data, and trainer objects before calling training. This
-  comparison concerns the structure of that archived guide. VIPER likewise introduces objects before their consumers.
-- [Stripe's error reference](https://docs.stripe.com/api/errors?lang=python)
-  describes returned error fields. VIPER distinguishes raised exceptions,
-  dispatched failure models, and failed entries in a completed batch.
-- [Weights & Biases run identifiers](https://docs.wandb.ai/models/runs/run-identifiers)
-  and [Ray Tune repetition](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.search.Repeater.html)
-  generate identifiers and permit optional labels. VIPER
-  derives `seed_7` from `replicate(seed=7)` and permits an optional override.
-- [Azure ML inputs](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-read-write-data-v2?view=azureml-api-2)
-  use mapping keys, while [SageMaker processing inputs](https://sagemaker.readthedocs.io/en/stable/_modules/sagemaker/core/processing.html)
-  accept names on input objects. VIPER retains input mapping keys because they
-  directly identify the corresponding `context.inputs` entries. Data roles
-  remain explicit so authors identify held-out data independently of stage kind.
-
-VIPER uses these comparisons to remove redundant declarations and introduce
-objects before their first use. Config defaults come from the decorated class;
-a plan selects a sole variant and replicate; batch expansion generates run IDs.
-Ambiguous selections, conflicting names, and invalid settings fail explicitly.
-
 ## Core workflow coverage
 
 The linked tests own the behavior described by each guide. Complete-program

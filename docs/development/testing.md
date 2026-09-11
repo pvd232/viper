@@ -132,11 +132,6 @@ python -m pytest \
 operation names, release metadata, and documentation navigation. The protocol
 reference links to the installed schemas.
 
-The active [0.1.0a3 core release contract](v0.1.0a3-core-release.md) owns the
-cleanup inventory and release acceptance boundary. Git history and its named
-preservation branch retain the retired planning, traceability, source-impact,
-and research documents.
-
 ## macOS child-process launching
 
 Production code imports the private `viper._subprocess` facade. On macOS, the

@@ -14,6 +14,7 @@ ROOT = Path(__file__).parents[1]
 FORBIDDEN_PREFIXES = (
     ".vscode/",
     "docs/development/",
+    "docs/internal/",
     "plans/",
     "src/viper/_system_impact/",
     "src/viper/system_impact/",
@@ -34,6 +35,7 @@ FORBIDDEN_PATHS = {
     "tests/test_contract_target_parity.py",
     "tests/test_contract_traceability.py",
     "tests/test_plan_check.py",
+    "tests/test_public_authoring_test_plan.py",
     "tests/test_system_impact.py",
     "tests/test_system_impact_explain.py",
     "tools/refresh_contract_baselines.py",
@@ -157,6 +159,10 @@ def test_built_distributions_exclude_experimental_surfaces(tmp_path: Path) -> No
     )
     assert {
         "llms.txt",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        ".github/workflows/release.yml",
+        "docs/releases/receipts/v0.1.0a3-mantra-gpu.json",
         "docs/reference/agents.md",
         "src/viper/catalog.py",
         "src/viper/knowledge.py",

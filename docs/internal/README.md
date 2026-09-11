@@ -1,26 +1,13 @@
-# VIPER internal engineering
+# Maintainer documentation
 
-This index links the release contracts, testing guide, and release reports
-used to maintain VIPER.
+Use these guides when changing or releasing VIPER:
 
-## Active release work
+- [Testing](../development/testing.md) defines validation commands and test tiers.
+- [Documentation architecture](../development/documentation-architecture.md) defines page responsibilities and example requirements.
+- [Workflow coverage](../development/documentation-review.md) connects documented workflows to their tests.
 
-| Document | Purpose |
-| --- | --- |
-| [0.1.0a3 core release contract](../development/v0.1.0a3-core-release.md) | Defines the cleanup boundary, release gates, and completion evidence for the next candidate. |
-| [0.1.0a3 public authoring contract](../development/v0.1.0a3-public-authoring-contract.md) | Defines the final config, output, diagnostic-stage, workspace, and release-validation migration. |
-| [Execution policies](../development/execution-policy-contract.md) | Defines reproducible, relaxed, and custom settings; CPU acceptance is recorded and CUDA acceptance remains open. |
-| [Documentation architecture](../development/documentation-architecture.md) | Keeps user learning, reference, and internal engineering routes distinct. |
+## Release reports
 
-## Maintainer guides
-
-- [Testing](../development/testing.md)
-
-## Release evidence
-
-- [0.1.0a3 candidate](../releases/0.1.0a3.md)
+- [0.1.0a3](../releases/0.1.0a3.md)
 - [0.1.0a2](../releases/0.1.0a2.md)
 - [0.1.0a1](../releases/0.1.0a1.md)
-
-The preservation branch named in the active release contract retains the
-removed experimental plans and research records.

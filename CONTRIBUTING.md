@@ -57,7 +57,7 @@ Release changes require the full host-independent gate:
 make check-release
 ```
 
-The [testing guide](docs/development/testing.md) defines each test tier, domain
+The [testing guide](https://github.com/pvd232/viper/blob/main/docs/development/testing.md) defines each test tier, domain
 marker, CI job, and live CUDA gate.
 
 ## Submit the change
@@ -65,4 +65,4 @@ marker, CI job, and live CUDA gate.
 Open a pull request from a focused branch. Describe the contract or behavior
 that changed and include the exact validation results. A release commit must
 pass the built-distribution, clean-installation, generated-project, and live
-hardware gates described in the [testing guide](docs/development/testing.md).
+hardware gates described in the [testing guide](https://github.com/pvd232/viper/blob/main/docs/development/testing.md).

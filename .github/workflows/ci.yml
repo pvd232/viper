@@ -93,6 +93,12 @@ jobs:
           viper status --help
           viper compare-runs --help
 
+      - name: Retain candidate distributions
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: python-package-distributions
+          path: dist/
+
   compatibility:
     needs: fast
     runs-on: ubuntu-latest

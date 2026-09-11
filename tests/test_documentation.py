@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import json
 import re
 import tomllib
 
@@ -44,19 +43,6 @@ PUBLIC_MARKDOWN = (
     *sorted((ROOT / "examples").rglob("*.md")),
     ROOT / "tests/README.md",
 )
-
-
-def test_public_authoring_config_gate_precedes_documentation_migration() -> None:
-    """Keep PAC-01 executable before PAC-07 owns the documentation migration."""
-    checklist = json.loads(
-        (
-            ROOT / "docs/development/v0.1.0a3-public-authoring-contract.checklist.json"
-        ).read_text(encoding="utf-8")
-    )
-    requirements = {item["requirement_id"]: item for item in checklist["requirements"]}
-
-    assert "documentation" not in requirements["PAC-01"]["gate"]["target"]
-    assert "documentation" in requirements["PAC-07"]["gate"]["target"]
 
 
 def test_protocol_uses_live_schemas_instead_of_repeated_source_models() -> None:
@@ -174,13 +160,13 @@ def test_changelog_names_the_package_version_after_unreleased() -> None:
     assert headings[1].startswith(package_version)
 
 
-def test_internal_index_links_the_current_release_report() -> None:
-    """Keep release information in the maintainer index."""
+def test_documentation_home_links_the_current_release_report() -> None:
+    """Keep the current release report reachable from the distributed docs."""
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text())
     package_version = metadata["project"]["version"]
-    index = (ROOT / "docs/internal/README.md").read_text()
+    index = (ROOT / "docs/README.md").read_text()
 
-    assert f"(../releases/{package_version}.md)" in index
+    assert f"(releases/{package_version}.md)" in index
 
 
 def test_public_examples_distinguish_weights_from_the_artifact_key() -> None:
@@ -454,10 +440,14 @@ def test_all_documentation_pages_are_reachable_from_the_readme() -> None:
             continue
         visited.add(document)
         for link in local_links(document.read_text()):
-            if "://" in link or link.startswith("mailto:"):
+            repository_prefix = "https://github.com/pvd232/viper/blob/main/"
+            if link.startswith(repository_prefix):
+                target = (ROOT / link.removeprefix(repository_prefix)).resolve()
+            elif "://" in link or link.startswith("mailto:"):
                 continue
-            path, _anchor = decoded_local_link(link)
-            target = (document.parent / path).resolve()
+            else:
+                path, _anchor = decoded_local_link(link)
+                target = (document.parent / path).resolve()
             if target.is_relative_to(ROOT):
                 pending.append(target)
     required = {path.resolve() for path in (ROOT / "docs").rglob("*.md")}

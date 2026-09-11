@@ -42,17 +42,20 @@ configuration, formal protocol, and versioning policy.
 request handling. The [machine-readable navigation index](../llms.txt) links
 public interfaces and distinguishes contributor instructions.
 
+## Release notes
+
+[0.1.0a3](releases/0.1.0a3.md) describes the candidate and its validation.
+
 ## Contributing and internal engineering
 
 - [Contributing](../CONTRIBUTING.md) covers repository setup and change delivery.
-- [Testing VIPER](development/testing.md) defines the validation tiers and domains.
-- [Internal engineering index](internal/README.md) is the single entry point for
-  the active release contract, maintainer guides, architecture decisions, and
-  release evidence. These documents govern VIPER development.
+- [Testing VIPER](https://github.com/pvd232/viper/blob/main/docs/development/testing.md) defines the validation tiers and domains.
+- [Internal engineering index](https://github.com/pvd232/viper/blob/main/docs/internal/README.md) is the single entry point for
+  maintainer guides and release evidence.
 
 ## Documentation checks
 
-See the [workflow coverage map](development/documentation-review.md).
+See the [workflow coverage map](https://github.com/pvd232/viper/blob/main/docs/development/documentation-review.md).
 From the repository root, with `.venv` active:
 
 ```bash

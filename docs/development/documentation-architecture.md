@@ -3,7 +3,7 @@
 The root README introduces VIPER through the CPU quickstart. The
 [documentation home](../README.md) directs readers to a tutorial, task guide,
 explanation, or reference page. The [internal index](../internal/README.md)
-collects release contracts and maintainer records.
+collects maintainer guides and release reports.
 
 ## Page responsibilities
 
@@ -47,10 +47,8 @@ workflows in a clean workspace to expose missing setup that mocked prerequisites
 would conceal. Keep private imports and plan-publication machinery in
 implementation documentation.
 
-Keep contracts aligned with the current implementation. Replace completed
-insertion instructions and copied declarations with links to their source and
-tests. Git history preserves earlier designs. Record release results against
-the exact commit or distribution tested.
+Keep documentation aligned with the implementation. Keep declarations in source and link to their tests. Git history preserves earlier designs.
+Record release results against the exact commit or distribution tested.
 
 An unused callback parameter may have a leading underscore, as in `_context`.
 This follows the [unused-argument convention](https://docs.astral.sh/ruff/rules/unused-function-argument/)
