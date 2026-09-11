@@ -9,10 +9,10 @@ functions; the tutorial includes all imports, declarations, and the entry point.
 
 ## Use the stage context
 
-When VIPER executes a stage, it constructs a `Context` and passes it as the
+When VIPER executes a stage, it constructs a `StageContext` and passes it as the
 function's first argument. You declare the inputs, outputs, metrics, and config
 with `stage()`; VIPER supplies their runtime values through that argument.
-For example, `sort_rows(context: Context[BuildConfig])` below receives a
+For example, `sort_rows(context: StageContext[BuildConfig])` below receives a
 validated `BuildConfig` as `context.config`.
 
 | Attribute | Value supplied to the stage |
@@ -65,11 +65,11 @@ from examples.workflow_functions import load_text
 from viper.authoring import input, stage
 from viper.config import BuildConfig
 from viper.outputs import StageOutputs, output
-from viper.stages import Context, build
+from viper.stages import StageContext, build
 
 
 @build(config=BuildConfig)
-def sort_rows(context: Context[BuildConfig]) -> None:
+def sort_rows(context: StageContext[BuildConfig]) -> None:
     header, *rows = load_text(context.inputs["source"]).splitlines()
     destination = context.outputs["dataset"]
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -104,11 +104,11 @@ from examples.workflow_functions import load_text
 from viper.authoring import stage
 from viper.config import EmbedConfig
 from viper.outputs import StageOutputs, output
-from viper.stages import Context, embed
+from viper.stages import StageContext, embed
 
 
 @embed(config=EmbedConfig)
-def polynomial_features(context: Context[EmbedConfig]) -> None:
+def polynomial_features(context: StageContext[EmbedConfig]) -> None:
     rows = load_text(context.inputs["dataset"]).splitlines()[1:]
     values = [float(row.split(",")[0]) for row in rows]
     features = [[value, value * value] for value in values]
@@ -196,11 +196,11 @@ from viper.metrics import (
     FloatComparator, MetricContext, MetricDependency, measure, metric, min,
 )
 from viper.outputs import EvalOutputs, output
-from viper.stages import Context, eval
+from viper.stages import StageContext, eval
 
 
 @eval(config=EvalConfig)
-def predict(context: Context[EvalConfig]) -> None:
+def predict(context: StageContext[EvalConfig]) -> None:
     model = json.loads(load_text(context.inputs["model"]))
     rows = [
         tuple(float(value) for value in row.split(","))
@@ -287,11 +287,11 @@ from examples.workflow_functions import load_text
 from viper.authoring import stage
 from viper.config import DiagnosticConfig
 from viper.outputs import StageOutputs, output
-from viper.stages import Context, diagnostic
+from viper.stages import StageContext, diagnostic
 
 
 @diagnostic(config=DiagnosticConfig)
-def count_rows(context: Context[DiagnosticConfig]) -> None:
+def count_rows(context: StageContext[DiagnosticConfig]) -> None:
     rows = load_text(context.inputs["dataset"]).splitlines()[1:]
     destination = context.outputs["report"]
     destination.parent.mkdir(parents=True, exist_ok=True)

@@ -22,12 +22,12 @@ from viper import execution
 from viper.repository import resolve_root
 
 root = resolve_root()
-plan_path = Path("experiments/cpu_quickstart/runs/baseline/YOUR_RUN_ID/spec.yaml")
+plan_path = Path("experiments/cpu_quickstart/runs/baseline/<YOUR_RUN_ID>/spec.yaml")
 retried = execution.retry(root, plan_path)
 print(retried.status)
 ```
 
-Replace `YOUR_RUN_ID` with the failed run's ID. The plan is saved before its
+The plan is saved before its
 stages execute. The [execution guide](execution.md#handle-a-failed-operation)
 explains failure handling.
 

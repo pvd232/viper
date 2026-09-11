@@ -120,7 +120,7 @@ objects. See [the complete declarations](../how-to/variants-and-replicates.md).
 | `Spec` | A serializable declaration of requested work. | `TrainSpec` |
 | `Resolved` | A record containing identities or observations obtained during execution or retrieval. | `ResolvedRun` |
 | `Ref` | A reference to another object or file. | `GitFileRef` |
-| `Context` | Values and paths supplied to a running function. | `MetricContext` |
+| `Context` | Values and paths supplied to a running function. | `StageContext`, `MetricContext` |
 | `Receipt` | A stored record of an operation. | `StageInvocationReceipt` |
 | `Result` | Values returned by an operation. Execution wrappers also expose local paths. | `RunResult` |
 
@@ -146,7 +146,7 @@ The complete [`@train(config=TrainConfig)` implementation](../tutorials/getting-
 reads `context.inputs`, computes predictions and gradients, records mean squared
 error, and writes both files through `context.outputs`.
 
-VIPER constructs `Context` and passes it to the stage function. The
+VIPER constructs `StageContext` and passes it to the stage function. The
 [context attribute reference](../how-to/stages.md#use-the-stage-context)
 lists each field, its value, and the declaration that supplies it.
 

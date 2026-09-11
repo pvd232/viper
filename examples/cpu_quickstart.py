@@ -21,7 +21,7 @@ from viper.resume import (
     save_resume_state,
 )
 from viper.runtime import LocalEnvSpec, observe_python_env
-from viper.stages import Context, train
+from viper.stages import StageContext, train
 
 
 def load_json(path: Path) -> dict[str, float | int]:
@@ -50,7 +50,7 @@ def mean_squared_error(
 
 
 @train(config=TrainConfig)
-def fit(context: Context[TrainConfig]) -> None:
+def fit(context: StageContext[TrainConfig]) -> None:
     """Fit ``y = weight * x`` with gradient descent on the local CPU."""
     rows = [
         tuple(float(value) for value in line.split(","))

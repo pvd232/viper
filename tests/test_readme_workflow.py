@@ -19,7 +19,7 @@ from viper.metrics import MeasurementSink, MetricContext, MetricHandle
 from viper.references import LocalFileRef, ResolvedRunRef
 from viper.repository import RootError, read_source
 from viper.resume import load_resume_state
-from viper.stages import Context
+from viper.stages import StageContext
 
 pytest_plugins = ("tests.test_http_retrieval",)
 
@@ -284,7 +284,7 @@ def test_documented_config_stage_writes_the_selected_rows(tmp_path: Path) -> Non
     destination = tmp_path / "limited.csv"
     for count in (1, 2):
         namespace["limit_rows"](
-            Context(
+            StageContext(
                 run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
                 attempt_id=1,
                 stage_id="build",
@@ -355,7 +355,7 @@ def test_documented_evaluation_writes_predictions_and_computes_rmse(
     data.write_text("x,y\n1,3\n2,4\n3,7\n")
     split.write_text("[0, 2]")
     namespace["predict"](
-        Context(
+        StageContext(
             run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
             attempt_id=1,
             stage_id="eval",

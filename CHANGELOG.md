@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Rename the stage function's `Context` class to `StageContext`. Its fields and
+  behavior are unchanged; import it from `viper.stages`.
 - Accept upstream artifacts directly in stage input tuples; use
   `input(name, source=artifact)` to rename one for the receiving function.
 - Accept named factors and factor-level selections as tuples. Reject duplicate

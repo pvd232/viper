@@ -9,7 +9,7 @@ import pytest
 
 from viper import config
 from viper.stages import (
-    Context,
+    StageContext,
     StageDefinitionError,
     StageImplementationRef,
     load_stage_callable,
@@ -27,7 +27,7 @@ class ExampleTrainConfig(config.TrainConfig):
 
 
 @train_stage(config=ExampleTrainConfig)
-def train(context: Context[ExampleTrainConfig]) -> None:
+def train(context: StageContext[ExampleTrainConfig]) -> None:
     """Consume one typed context in the direct decorator fixture."""
     assert context.config.epochs > 0
 
@@ -43,7 +43,7 @@ def test_train_decorator_exposes_stage_kind_and_config_type() -> None:
 def test_stage_context_keeps_live_values_outside_pydantic() -> None:
     """Carry paths and generator objects through the frozen runtime dataclass."""
     generator = np.random.Generator(np.random.PCG64(7))
-    context = Context(
+    context = StageContext(
         run_id="01JABCDEFGHJKMNPQRSTVWXYZ0",
         attempt_id=1,
         stage_id="train",

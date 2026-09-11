@@ -31,11 +31,11 @@ from viper.outputs import StageOutputs, TrainOutputs, output
 from viper.references import GitFileRef
 from viper.repository import read_source
 from viper.runtime import LocalEnvSpec, observe_python_env
-from viper.stages import Context, build, diagnostic, embed
+from viper.stages import StageContext, build, diagnostic, embed
 
 
 @build(config=BuildConfig)
-def sort_rows(context: Context[BuildConfig]) -> None:
+def sort_rows(context: StageContext[BuildConfig]) -> None:
     """Sort the data rows while preserving the CSV header."""
     header, *rows = load_text(context.inputs["source"]).splitlines()
     destination = context.outputs["dataset"]
@@ -54,7 +54,7 @@ prepared = stage(
 
 
 @embed(config=EmbedConfig)
-def polynomial_features(context: Context[EmbedConfig]) -> None:
+def polynomial_features(context: StageContext[EmbedConfig]) -> None:
     """Write each input value and its square."""
     rows = load_text(context.inputs["dataset"]).splitlines()[1:]
     values = [float(row.split(",")[0]) for row in rows]
@@ -75,7 +75,7 @@ embedded = stage(
 
 
 @diagnostic(config=DiagnosticConfig)
-def count_rows(context: Context[DiagnosticConfig]) -> None:
+def count_rows(context: StageContext[DiagnosticConfig]) -> None:
     """Write the number of prepared training rows."""
     rows = load_text(context.inputs["dataset"]).splitlines()[1:]
     destination = context.outputs["report"]

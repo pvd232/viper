@@ -138,7 +138,7 @@ def test_root_package_rejects_a_forwarding_import(tmp_path: Path) -> None:
     """Reject a package-root import of a name owned by a public module."""
     package_root = tmp_path / "__init__.py"
     package_root.write_text(
-        '"""VIPER package."""\n\nfrom .stages import Context\n',
+        '"""VIPER package."""\n\nfrom .stages import StageContext\n',
         encoding="utf-8",
     )
 
@@ -173,9 +173,10 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert callable(execution.run_many)
 
 
-def test_stage_interface_uses_parsimonious_names() -> None:
-    """Let the stage module supply the category once at each use site."""
-    assert stages.Context.__module__ == "viper.stages"
+def test_stage_interface_names_its_context_and_operations() -> None:
+    """Name the context's role explicitly and keep stage operations as verbs."""
+    assert stages.StageContext.__module__ == "viper.stages"
+    assert not hasattr(stages, "Context")
     assert tuple(
         operation.__name__ for operation in (stages.build, stages.embed, stages.train)
     ) == ("build", "embed", "train")

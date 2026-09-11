@@ -35,9 +35,9 @@ from ..runtime import (
 from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from ..stages import (
     BaseSpec,
-    Context,
     InternalSpec,
     ParameterizedSpec,
+    StageContext,
     StageContextBinding,
     StageInvocationReceipt,
     load_stage_callable,
@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         output_paths = _workspace_paths(root, binding.outputs)
         for output_path in output_paths.values():
             output_path.parent.mkdir(parents=True, exist_ok=True)
-        context = Context(
+        context = StageContext(
             run_id=binding.run_id,
             attempt_id=binding.attempt_id,
             stage_id=binding.stage_id,

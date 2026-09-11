@@ -101,7 +101,7 @@ def test_stage_decorators_accept_config_not_params() -> None:
 
 def test_live_context_exposes_config_not_params() -> None:
     """Carry the validated config into workspace code without renaming it."""
-    fields = stages.Context.__dataclass_fields__
+    fields = stages.StageContext.__dataclass_fields__
     assert "config" in fields
     assert "params" not in fields
 

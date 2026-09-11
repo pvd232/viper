@@ -81,7 +81,7 @@ from viper.runtime import (
 )
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
-    Context,
+    StageContext,
     StageImplementationRef,
     TrainSpec,
     train,
@@ -452,7 +452,7 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         return 1.0
 
     @train(config=config.TrainConfig)
-    def fit(context: Context[config.TrainConfig]) -> None:
+    def fit(context: StageContext[config.TrainConfig]) -> None:
         context.outputs["model"].write_bytes(b"model")
 
     model = output(
@@ -495,7 +495,7 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
         return 1.0
 
     @train(config=config.TrainConfig)
-    def fit(context: Context[config.TrainConfig]) -> None:
+    def fit(context: StageContext[config.TrainConfig]) -> None:
         context.outputs["model"].write_bytes(b"model")
 
     loss = measure(training_loss, config=config.MetricConfig())
@@ -601,12 +601,12 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
     source.write_text(
         "from viper import config\n"
         "from viper.metrics import metric\n"
-        "from viper.stages import Context, train\n\n"
+        "from viper.stages import StageContext, train\n\n"
         "@metric(metric_id='training_loss', mode='stateless')\n"
         "def training_loss(context):\n"
         "    return 1.0\n\n"
         "@train(config=config.TrainConfig)\n"
-        "def fit(context: Context[config.TrainConfig]):\n"
+        "def fit(context: StageContext[config.TrainConfig]):\n"
         "    context.outputs['model'].write_bytes(b'model')\n\n"
         "def load(path):\n"
         "    return path.read_bytes()\n"
@@ -1349,7 +1349,7 @@ def test_stage_requires_values_for_required_custom_config_fields() -> None:
         epochs: int
 
     @train(config=RequiredConfig)
-    def fit(context: Context[RequiredConfig]) -> None:
+    def fit(context: StageContext[RequiredConfig]) -> None:
         """Expose a required setting for this declaration test."""
 
     with pytest.raises(ValidationError, match="epochs"):

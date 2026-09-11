@@ -10,11 +10,11 @@ from viper.outputs import TrainOutputs, output
 from viper.references import GitFileRef
 from viper.repository import read_source, resolve_root
 from viper.runtime import LocalEnvSpec, observe_python_env
-from viper.stages import Context, train
+from viper.stages import StageContext, train
 
 
 @train(config=TrainConfig)
-def fit_after_failure(context: Context[TrainConfig]) -> None:
+def fit_after_failure(context: StageContext[TrainConfig]) -> None:
     """Simulate a transient first-attempt failure, then perform real training."""
     if context.attempt_id == 1:
         raise RuntimeError("Demonstration: first attempt is intentionally unavailable")

@@ -6,8 +6,8 @@ For installation and the full program, see the [tutorial](../tutorials/getting-s
 
 ## The argument supplied to your function
 
-The quickstart's training function is `fit(context: Context[TrainConfig])`.
-VIPER creates this `Context` for the running stage and passes it to `fit`.
+The quickstart's training function is `fit(context: StageContext[TrainConfig])`.
+VIPER creates this `StageContext` for the running stage and passes it to `fit`.
 Its `config` contains the stage's validated training settings. Its `inputs`
 and `outputs` map the names you declare to local file paths. Its `metrics`
 maps the IDs of attached stage-recorded metrics to objects that compute and

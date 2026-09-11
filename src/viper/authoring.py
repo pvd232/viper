@@ -116,12 +116,12 @@ from .runtime import (
 from .serialization import parse_yaml_bytes, serialize_document
 from .stages import (
     BuildSpec,
-    Context,
     DiagnosticSpec,
     DownloadSpec,
     EmbedSpec,
     EvalSpec,
     Spec,
+    StageContext,
     StageImplementationRef,
     TrainSpec,
     stage_definition,
@@ -227,7 +227,7 @@ class BaseSpecDraft(BaseModel):
 class ParameterizedSpecDraft(BaseSpecDraft):
     """Hold one decorated workspace stage and its config values."""
 
-    implementation: Callable[[Context[Any]], None]
+    implementation: Callable[[StageContext[Any]], None]
     config: Config
     metrics: tuple[MetricDraft[Any], ...] = ()
     reuse: StageReuseMode = "never"
@@ -1199,7 +1199,7 @@ def download(
 
 
 def stage(
-    implementation: Callable[[Context[Any]], None],
+    implementation: Callable[[StageContext[Any]], None],
     *,
     stage_id: StageId | None = None,
     config: Config | None = None,

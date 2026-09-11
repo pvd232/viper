@@ -29,7 +29,7 @@ input paths and `context.artifacts` contains its output paths. For a recomputed
 metric, these mappings contain the files selected by `MetricDependency`.
 Their values are local `Path` objects, keyed by the declared names.
 
-The stage itself receives a different object, [`Context`](stages.md#use-the-stage-context).
+The stage itself receives a different object, [`StageContext`](stages.md#use-the-stage-context).
 Its `metrics` mapping contains `MetricHandle` objects for the stage-recorded
 metrics attached with `stage(metrics=...)`. The decorator's `metric_id`
 supplies each key. Calling a handle's `record()` method computes the value

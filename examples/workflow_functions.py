@@ -7,7 +7,7 @@ from pydantic import Field
 
 from viper.config import BuildConfig, EvalConfig, MetricConfig
 from viper.metrics import MetricContext, metric
-from viper.stages import Context, build, eval
+from viper.stages import StageContext, build, eval
 
 
 def load_text(path: Path) -> str:
@@ -22,7 +22,7 @@ class RowLimit(BuildConfig):
 
 
 @build(config=RowLimit)
-def limit_rows(context: Context[RowLimit]) -> None:
+def limit_rows(context: StageContext[RowLimit]) -> None:
     """Write the header and the requested number of training rows."""
     header, *rows = load_text(context.inputs["dataset"]).splitlines()
     context.outputs["dataset"].write_text(
@@ -31,7 +31,7 @@ def limit_rows(context: Context[RowLimit]) -> None:
 
 
 @build(config=BuildConfig)
-def prepare_test_data(context: Context[BuildConfig]) -> None:
+def prepare_test_data(context: StageContext[BuildConfig]) -> None:
     """Write held-out observations and the row indices used for evaluation."""
     context.outputs["test_data"].write_text(
         load_text(context.inputs["source"]), encoding="utf-8"
@@ -40,7 +40,7 @@ def prepare_test_data(context: Context[BuildConfig]) -> None:
 
 
 @eval(config=EvalConfig)
-def predict(context: Context[EvalConfig]) -> None:
+def predict(context: StageContext[EvalConfig]) -> None:
     """Save model predictions paired with targets from the selected test rows."""
     model = json.loads(load_text(context.inputs["model"]))
     rows = [

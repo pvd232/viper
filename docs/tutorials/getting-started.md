@@ -72,7 +72,7 @@ from viper.resume import (
     save_resume_state,
 )
 from viper.runtime import LocalEnvSpec, observe_python_env
-from viper.stages import Context, train
+from viper.stages import StageContext, train
 
 
 def load_json(path: Path) -> dict[str, float | int]:
@@ -102,7 +102,7 @@ def mean_squared_error(
 
 ### 2. Train the model and write its outputs
 
-VIPER constructs a `Context[TrainConfig]` and passes it to `fit` when the
+VIPER constructs a `StageContext[TrainConfig]` and passes it to `fit` when the
 stage runs. The declaration in step 3 supplies the names used here:
 
 - `context.inputs["dataset"]` is the local path to the declared CSV input.
@@ -121,7 +121,7 @@ all attributes and their declaration sources.
 
 ```python
 @train(config=TrainConfig)
-def fit(context: Context[TrainConfig]) -> None:
+def fit(context: StageContext[TrainConfig]) -> None:
     """Fit ``y = weight * x`` with gradient descent on the local CPU."""
     rows = [
         tuple(float(value) for value in line.split(","))

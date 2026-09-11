@@ -23,7 +23,7 @@ REQUIREMENT_ID = "PAC-10"
 
 def test_runtime_contexts_are_frozen_slotted_dataclasses() -> None:
     """Keep live contexts lightweight while preventing reassignment."""
-    for runtime_type in (stages.Context, metrics.MetricContext):
+    for runtime_type in (stages.StageContext, metrics.MetricContext):
         assert dataclasses.is_dataclass(runtime_type)
         assert getattr(runtime_type, "__dataclass_params__").frozen is True
         assert "__slots__" in runtime_type.__dict__
@@ -32,7 +32,7 @@ def test_runtime_contexts_are_frozen_slotted_dataclasses() -> None:
 
 def test_runtime_context_rejects_field_reassignment() -> None:
     """Preserve the logical immutability supplied by frozen dataclasses."""
-    context = stages.Context.__new__(stages.Context)
+    context = stages.StageContext.__new__(stages.StageContext)
     with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
         context.stage_id = "other"  # pyright: ignore[reportAttributeAccessIssue]
 

@@ -73,7 +73,7 @@ _STAGE_IMPORT_LOCK = RLock()
 
 
 @dataclass(frozen=True, slots=True)
-class Context(Generic[ConfigT]):
+class StageContext(Generic[ConfigT]):
     """Give a running stage access to its declared inputs and outputs.
 
     config contains validated stage settings. metrics records measurements;
@@ -716,7 +716,7 @@ def _stage_decorator(
         """Validate the callable interface and attach its immutable definition."""
         parameters = tuple(inspect.signature(function).parameters.values())
         if len(parameters) != 1:
-            raise TypeError("a stage callable must accept one Context argument")
+            raise TypeError("a stage callable must accept one StageContext argument")
         setattr(function, "__viper_stage__", definition)
         return function
 
@@ -770,7 +770,7 @@ def load_stage_callable(
     reference: StageImplementationRef,
     *,
     import_root: Path | None = None,
-) -> Callable[[Context[Any]], None]:
+) -> Callable[[StageContext[Any]], None]:
     """Load and validate the exact decorated top-level callable in one file."""
     with _STAGE_IMPORT_LOCK:
         verify_stage_implementation_bytes(reference, path.read_bytes())
@@ -849,7 +849,7 @@ def load_stage_callable(
                     ):
                         sys.modules.pop(name, None)
                 sys.modules.update(saved_modules)
-        return cast(Callable[[Context[Any]], None], value)
+        return cast(Callable[[StageContext[Any]], None], value)
 
 
 def stage_definition(function: Callable[..., Any]) -> StageDefinition[Any]:

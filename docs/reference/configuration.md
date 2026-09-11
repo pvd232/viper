@@ -17,7 +17,7 @@ Subclass the config class for the operation you are defining. Declare fields wit
 and defaults, then pass an instance to `stage()`.
 
 This build stage keeps a configured number of CSV data rows and preserves the
-header. VIPER supplies the running function's `Context`: `config` contains
+header. VIPER supplies the running function's `StageContext`: `config` contains
 `RowLimit`, `inputs` contains the declared input paths, and `outputs` contains
 the destinations to write. Save the code in an importable workspace module:
 
@@ -29,7 +29,7 @@ from pydantic import Field
 from viper.authoring import input, stage
 from viper.config import BuildConfig
 from viper.outputs import StageOutputs, output
-from viper.stages import Context, build
+from viper.stages import StageContext, build
 
 
 class RowLimit(BuildConfig):
@@ -41,7 +41,7 @@ def load_text(path: Path) -> str:
 
 
 @build(config=RowLimit)
-def limit_rows(context: Context[RowLimit]) -> None:
+def limit_rows(context: StageContext[RowLimit]) -> None:
     header, *rows = load_text(context.inputs["dataset"]).splitlines()
     destination = context.outputs["dataset"]
     destination.parent.mkdir(parents=True, exist_ok=True)
