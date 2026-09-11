@@ -8,7 +8,7 @@
       "contract_id": "execution-policy",
       "path": "docs/development/execution-policy-contract.md",
       "revision": "working-tree",
-      "sha256": "953307973b1b5a4b337e466efb4f6ecee5bed64e77a602e7c3540ce606cddaaa",
+      "sha256": "fd900a9c6241ff0f6f60e9f527e3ca9bc1473287bd17ef66f615b909e607b6f3",
       "requirement_ids": [
         "EP-00",
         "EP-01",

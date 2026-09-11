@@ -8,7 +8,7 @@
       "contract_id": "public-authoring",
       "path": "docs/development/v0.1.0a3-public-authoring-contract.md",
       "revision": "working-tree",
-      "sha256": "8cdb72083b1d51aeed3217ffe8e21160f09a460c8aa90b3d746d9cf911e28b0b",
+      "sha256": "e18577a02d13fbc9c2ed04cb76e043af2456794467a1494d75aa28f4c1dfc5cd",
       "requirement_ids": [
         "PAC-01",
         "PAC-02",
@@ -21,7 +21,7 @@
         "PAC-08",
         "PAC-09"
       ],
-      "state": "planned"
+      "state": "in_progress"
     }
   ],
   "requirements": [
@@ -41,7 +41,8 @@
         "Post-cleanup impacted tests: 71 passed; final HTTP and authoring regression: 50 passed",
         "Contract digest, link, and plan guards: 6 passed",
         "Ruff: all checks passed; Pyright: 0 errors",
-        "Implementation commit: 78d8e66"
+        "Implementation commit: 78d8e66",
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
       ]
     },
     {
@@ -52,12 +53,14 @@
       "depends_on": [
         "PAC-01"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.output.lifecycle and authoring.output.required"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "requirement_id": "PAC-03",
@@ -67,12 +70,14 @@
       "depends_on": [
         "PAC-02"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.category.absent plus path, pointer, promotion, reuse, and restoration tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "requirement_id": "PAC-04",
@@ -82,12 +87,14 @@
       "depends_on": [
         "PAC-03"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.diagnostic.terminal plus schema, execution, reuse, and verifier tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "requirement_id": "PAC-05",
@@ -97,12 +104,14 @@
       "depends_on": [
         "PAC-04"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.workspace.vocabulary plus repository, HTTP, storage, and generated-workspace tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "requirement_id": "PAC-06",
@@ -112,12 +121,14 @@
       "depends_on": [
         "PAC-05"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.dispatch.exhaustive plus complete schema and protocol tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "requirement_id": "PAC-10",
@@ -127,12 +138,14 @@
       "depends_on": [
         "PAC-06"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.runtime.boundary plus focused stage, metric, and resume tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "requirement_id": "PAC-07",
@@ -151,7 +164,8 @@
         "PAC-07 focused authoring and generated-workspace gate: 130 passed and 5 subtests passed",
         "Repository-wide suite: 413 passed, 6 skipped, and 29 subtests passed",
         "Ruff: all checks passed; Pyright: 0 errors",
-        "CPU quickstart: succeeded against committed PAC-07 source"
+        "CPU quickstart: succeeded against committed PAC-07 source",
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
       ]
     },
     {
@@ -203,7 +217,8 @@
         "Post-cleanup impacted tests: 71 passed; final HTTP and authoring regression: 50 passed",
         "Contract digest, link, and plan guards: 6 passed",
         "Ruff: all checks passed; Pyright: 0 errors",
-        "Implementation commit: 78d8e66"
+        "Implementation commit: 78d8e66",
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
       ]
     },
     {
@@ -213,12 +228,14 @@
       "requirement_ids": [
         "PAC-02"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.output.lifecycle and authoring.output.required"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "pair_block_id": "P1-PAC-03",
@@ -227,12 +244,14 @@
       "requirement_ids": [
         "PAC-03"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.category.absent plus path, pointer, promotion, reuse, and restoration tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "pair_block_id": "P2-PAC-04",
@@ -241,12 +260,14 @@
       "requirement_ids": [
         "PAC-04"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.diagnostic.terminal plus schema, execution, reuse, and verifier tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "pair_block_id": "P2-PAC-05",
@@ -255,12 +276,14 @@
       "requirement_ids": [
         "PAC-05"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.workspace.vocabulary plus repository, HTTP, storage, and generated-workspace tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "pair_block_id": "P2-PAC-06",
@@ -269,12 +292,14 @@
       "requirement_ids": [
         "PAC-06"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.dispatch.exhaustive plus complete schema and protocol tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "pair_block_id": "P3-PAC-10",
@@ -283,12 +308,14 @@
       "requirement_ids": [
         "PAC-10"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.runtime.boundary plus focused stage, metric, and resume tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
+      ]
     },
     {
       "pair_block_id": "P3-PAC-07",
@@ -306,7 +333,8 @@
         "PAC-07 focused authoring and generated-workspace gate: 130 passed and 5 subtests passed",
         "Repository-wide suite: 413 passed, 6 skipped, and 29 subtests passed",
         "Ruff: all checks passed; Pyright: 0 errors",
-        "CPU quickstart: succeeded against committed PAC-07 source"
+        "CPU quickstart: succeeded against committed PAC-07 source",
+        "2026-09-11: current authoring, output, diagnostic, dispatch, runtime, public-inventory and documentation acceptance selection passed 95 tests; implementation commit a8ac722."
       ]
     },
     {

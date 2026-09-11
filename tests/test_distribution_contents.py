@@ -159,6 +159,13 @@ def test_built_distributions_exclude_experimental_surfaces(tmp_path: Path) -> No
         "src/viper/catalog.py",
         "src/viper/knowledge.py",
         "src/viper/mcp.py",
+        "docs/how-to/metrics-and-benchmarks.md",
+        "examples/cpu_quickstart.py",
+        "examples/evaluation.py",
+        "examples/variants.py",
+        "examples/workflow_functions.py",
+        "examples/data/tiny.csv",
+        "examples/data/held_out.csv",
     } <= set(source_members)
     for distribution in distributions:
         metadata = _distribution_metadata(distribution)

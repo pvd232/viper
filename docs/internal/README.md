@@ -1,7 +1,7 @@
 # VIPER internal engineering
 
-This index links the release contracts, testing guide, release reports, and
-archived design documents used to maintain VIPER.
+This index links the release contracts, testing guide, and release reports
+used to maintain VIPER.
 
 ## Active release work
 
@@ -15,7 +15,6 @@ archived design documents used to maintain VIPER.
 ## Maintainer guides
 
 - [Testing](../development/testing.md)
-- [Archived foundational reproducibility formalism](foundational-reproducibility-formalism.md)
 
 ## Release evidence
 
