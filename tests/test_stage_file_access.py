@@ -83,6 +83,28 @@ def test_declared_access_observes_torch_checkpoint_load(tmp_path: Path) -> None:
     assert observer.receipt().reads == ("inputs/model.pt",)
 
 
+def test_null_device_is_runtime_plumbing(tmp_path: Path) -> None:
+    """Exclude successful null-device reads and writes from stage evidence."""
+    observer = StageFileAccessObserver(tmp_path, {}, {})
+
+    with observer:
+        with open(os.devnull, "rb") as source:
+            assert source.read() == b""
+        with open(os.devnull, "wb") as sink:
+            assert sink.write(b"discarded") == 9
+
+    assert observer.receipt().reads == ()
+    assert observer.receipt().writes == ()
+
+
+@pytest.mark.skipif(not Path("/dev/zero").exists(), reason="requires /dev/zero")
+def test_undeclared_device_is_rejected(tmp_path: Path) -> None:
+    """Keep device paths other than the operating system null device governed."""
+    with pytest.raises(StageFileAccessError, match="undeclared file read"):
+        with StageFileAccessObserver(tmp_path, {}, {}):
+            Path("/dev/zero").read_bytes()
+
+
 def test_declared_access_rejects_unused_input(tmp_path: Path) -> None:
     """Require each declared input edge to produce a read-open event."""
     root, source, output = _paths(tmp_path)

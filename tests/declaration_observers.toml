@@ -53,6 +53,8 @@ tests = [
   "tests/test_stage_file_access.py::test_declared_access_records_input_read_and_output_write",
   "tests/test_stage_file_access.py::test_declared_access_observes_numpy_archive_load",
   "tests/test_stage_file_access.py::test_declared_access_observes_torch_checkpoint_load",
+  "tests/test_stage_file_access.py::test_null_device_is_runtime_plumbing",
+  "tests/test_stage_file_access.py::test_undeclared_device_is_rejected",
   "tests/test_stage_file_access.py::test_declared_access_rejects_unused_input",
   "tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_workspace_read",
   "tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_write",

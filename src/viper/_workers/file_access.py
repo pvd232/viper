@@ -149,6 +149,7 @@ class StageFileAccessObserver:
                 if value
             )
         )
+        self._null_device = (Path.cwd() / os.devnull).resolve()
         self._reads: set[Path] = set()
         self._writes: set[Path] = set()
 
@@ -199,6 +200,10 @@ class StageFileAccessObserver:
         """Identify interpreter files covered by the recorded runtime environment."""
         return any(_contains(root, path) for root in self._runtime_roots)
 
+    def _is_null_device(self, path: Path) -> bool:
+        """Identify the operating system sink that carries no stage data."""
+        return path == self._null_device
+
     def _location(self, path: Path) -> str:
         """Render a repository-relative location when the path is internal."""
         if _contains(self._root, path):
@@ -210,18 +215,20 @@ class StageFileAccessObserver:
         allowed = (*self._inputs.values(), *self._outputs)
         if any(_contains(root, path) for root in allowed):
             return True
-        if self._is_runtime_path(path):
+        if self._is_runtime_path(path) or self._is_null_device(path):
             return False
         raise StageFileAccessError(
             f"stage.file_access: undeclared file read: {self._location(path)}"
         )
 
-    def _check_write(self, path: Path) -> None:
-        """Accept a declared output or metric write path."""
+    def _check_write(self, path: Path) -> bool:
+        """Accept a write path and identify retained workspace evidence."""
+        if self._is_null_device(path):
+            return False
         if any(
             _contains(root, path) for root in (*self._outputs, *self._managed_writes)
         ):
-            return
+            return True
         raise StageFileAccessError(
             f"stage.file_access: undeclared file write: {self._location(path)}"
         )
@@ -260,8 +267,7 @@ class StageFileAccessObserver:
         reads, writes = _access_modes(mode, flags)
         if reads and self._check_read(path):
             self._reads.add(path)
-        if writes:
-            self._check_write(path)
+        if writes and self._check_write(path):
             self._writes.add(path)
 
     def require_every_input(self) -> None:
