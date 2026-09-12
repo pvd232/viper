@@ -287,8 +287,6 @@ def select_impacted_tests(
             if reachable_tests:
                 selected_tests.update(reachable_tests)
                 continue
-            if node.get("kind") in {"assignment", "import"}:
-                continue
         incomplete_declarations.add(declaration)
 
     for declaration in incomplete_declarations:

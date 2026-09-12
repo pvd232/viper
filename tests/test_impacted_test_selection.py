@@ -167,6 +167,35 @@ def test_unmapped_neighbor_uses_its_graph_linked_observing_test(
     ]
 
 
+@pytest.mark.parametrize("kind", ["assignment", "import"])
+def test_unobserved_carrier_widens_to_its_source_domain(
+    impact_files: tuple[Path, Path, Path],
+    kind: str,
+) -> None:
+    """Widen when an assignment or import reaches no observing test."""
+    graph, observers, source_root = impact_files
+    declaration = f"src/viper/authoring.py:unobserved_{kind}"
+    payload = json.loads(graph.read_text(encoding="utf-8"))
+    payload["nodes"].append(_node(declaration, kind=kind))
+    graph.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = select_impacted_tests(
+        graph_path=graph,
+        source_root=source_root,
+        observer_path=observers,
+        declarations=(declaration,),
+    )
+
+    assert result["mode"] == "domain"
+    assert result["fallback_domains"] == ["domain_authoring"]
+    assert result["incomplete_declarations"] == [declaration]
+    assert result["pytest_args"] == [
+        "tests",
+        "-m",
+        "(domain_authoring) and (unit or contract)",
+    ]
+
+
 def test_absent_target_without_a_declaration_map_runs_the_repository(
     impact_files: tuple[Path, Path, Path],
 ) -> None:
