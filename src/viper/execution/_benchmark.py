@@ -39,6 +39,7 @@ from ..storage import (
     ViperCloudClient,
     bind_run_destination,
     load_storage_settings,
+    local_artifact_store,
     publish_resolved_files,
 )
 from ..verification import verify_benchmark_result, verify_run_result
@@ -181,7 +182,7 @@ def benchmark(
         source_repository = str(run.stored_at.repository)
         run_raw = RunFetcher(root, store, source_repository)(run.stored_at)
     elif isinstance(run.stored_at, LocalFileRef):
-        run_raw = store.fetch(run.stored_at)
+        run_raw = local_artifact_store(run.stored_at).fetch(run.stored_at)
         source_repository = str(
             RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
         )

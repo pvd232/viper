@@ -333,7 +333,12 @@ def test_documented_evaluation_writes_predictions_and_computes_rmse(
     reference = ResolvedRunRef(
         sha256="a" * 64,
         bytes=1,
-        stored_at=LocalFileRef(commit="b" * 64, path="runs/data/resolved.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="b" * 64,
+            path="runs/data/resolved.yaml",
+        ),
     )
     saved_inputs = {}
     for name in ("test_data", "test_split"):

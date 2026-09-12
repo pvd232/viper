@@ -52,6 +52,7 @@ from ..references import (
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
+from ..storage import LocalStoreError, local_artifact_store
 from .paths import run_root
 
 _ARTIFACT_VALIDATION_CACHE: dict[
@@ -143,12 +144,12 @@ def fetch_huggingface_file_bytes(location: HuggingFaceFileRef) -> bytes:
 
 def fetch_local_file_bytes(location: LocalFileRef) -> bytes:
     """Read one file from a repository-local immutable store revision."""
-    repository_root = Path.cwd().resolve()
-    revision_root = (repository_root / location.store / location.commit).resolve()
-    path = (revision_root / location.path).resolve()
-    if not path.is_relative_to(revision_root) or not path.is_file():
-        raise VerificationError("local immutable file could not be retrieved")
-    return path.read_bytes()
+    try:
+        return local_artifact_store(location).fetch(location)
+    except (OSError, LocalStoreError) as error:
+        raise VerificationError(
+            "local immutable file could not be retrieved"
+        ) from error
 
 
 def fetch_storage_bytes(location: StorageModel) -> bytes:
@@ -364,7 +365,9 @@ def read_snapshot_file(
         )
     elif isinstance(snapshot, LocalStageResultSnapshotRef):
         location = LocalFileRef(
+            workspace=snapshot.workspace,
             store=snapshot.store,
+            store_id=snapshot.store_id,
             commit=snapshot.commit,
             path=reference.path,
         )
@@ -402,7 +405,13 @@ def snapshot_identity(
             snapshot.repo_type,
         )
     if isinstance(snapshot, LocalStageResultSnapshotRef):
-        return (snapshot.kind, snapshot.store, snapshot.commit)
+        return (
+            snapshot.kind,
+            snapshot.workspace.as_posix(),
+            snapshot.store,
+            snapshot.store_id,
+            snapshot.commit,
+        )
     return (snapshot.kind, snapshot.owner, snapshot.workspace, snapshot.revision)
 
 
@@ -416,7 +425,13 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
             location.repo_type,
         )
     if isinstance(location, LocalFileRef):
-        return (location.kind, location.store, location.commit)
+        return (
+            location.kind,
+            location.workspace.as_posix(),
+            location.store,
+            location.store_id,
+            location.commit,
+        )
     if isinstance(location, ViperCloudFileRef):
         return (
             location.kind,

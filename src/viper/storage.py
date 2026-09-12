@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 import tempfile
 import tomllib
 from collections.abc import Mapping
@@ -14,7 +15,7 @@ from typing import Annotated, Literal, Protocol
 from pydantic import Field, TypeAdapter, ValidationError
 
 from ._schema import SHA256, ProtocolModel, RepoRelPath
-from .ids import HumanId, RunId
+from .ids import HumanId, LocalStoreId, RunId
 from .references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
@@ -125,11 +126,54 @@ class LocalArtifactStore:
             )
         except PathError as error:
             raise LocalStoreError("local store escapes the workspace root") from error
+        self.identity_path = self.store_root / ".identity"
+
+    def _read_identity(self) -> LocalStoreId:
+        """Read and validate this local store's durable identity."""
+        try:
+            value = self.identity_path.read_text(encoding="ascii").strip()
+            return TypeAdapter(LocalStoreId).validate_python(value)
+        except (OSError, UnicodeError, ValidationError) as error:
+            raise LocalStoreError("local store identity is invalid") from error
+
+    def _create_identity(self) -> LocalStoreId:
+        """Create this local store's identity without replacing a peer writer's ID."""
+        self.store_root.mkdir(parents=True, exist_ok=True)
+        value = secrets.token_hex(16)
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=self.store_root,
+                prefix=".identity.",
+                delete=False,
+                mode="w",
+                encoding="ascii",
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(f"{value}\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temporary, self.identity_path)
+            except FileExistsError:
+                pass
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        return self._read_identity()
+
+    @property
+    def store_id(self) -> LocalStoreId:
+        """Return this store's durable identity, creating it when absent."""
+        if self.identity_path.exists():
+            return self._read_identity()
+        return self._create_identity()
 
     def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
         """Write one immutable revision and return its content-derived identity."""
         if not files:
             raise LocalStoreError("an immutable revision requires at least one file")
+        _ = self.store_id
         commit = content_revision(files)
         revision_root = self.store_root / commit
         for relative_path, raw in sorted(files.items()):
@@ -163,7 +207,9 @@ class LocalArtifactStore:
     ) -> LocalStageResultSnapshotRef:
         """Publish one stage snapshot and return its immutable location."""
         return LocalStageResultSnapshotRef(
+            workspace=self.repository_root,
             store=self.store,
+            store_id=self.store_id,
             commit=self.publish(files),
         )
 
@@ -178,7 +224,9 @@ class LocalArtifactStore:
                 sha256=hashlib.sha256(raw).hexdigest(),
                 bytes=len(raw),
                 stored_at=LocalFileRef(
+                    workspace=self.repository_root,
                     store=self.store,
+                    store_id=self.store_id,
                     commit=commit,
                     path=path,
                 ),
@@ -191,8 +239,10 @@ class LocalArtifactStore:
         if not isinstance(location, LocalFileRef):
             raise TypeError("LocalArtifactStore can retrieve only LocalFileRef")
 
-        if location.store != self.store:
+        if location.workspace != self.repository_root or location.store != self.store:
             raise LocalStoreError("local file belongs to a different store")
+        if location.store_id != self.store_id:
+            raise LocalStoreError("local file belongs to a different store instance")
 
         revision_root = (self.store_root / location.commit).resolve()
         target = (revision_root / location.path).resolve()
@@ -206,8 +256,12 @@ class LocalArtifactStore:
         snapshot: LocalStageResultSnapshotRef,
     ) -> tuple[RepoRelPath, ...]:
         """List every regular file in one immutable local snapshot."""
-        if snapshot.store != self.store:
+        if snapshot.workspace != self.repository_root or snapshot.store != self.store:
             raise LocalStoreError("local snapshot belongs to a different store")
+        if snapshot.store_id != self.store_id:
+            raise LocalStoreError(
+                "local snapshot belongs to a different store instance"
+            )
 
         revision_root = (self.store_root / snapshot.commit).resolve()
         if not revision_root.is_dir():
@@ -220,6 +274,13 @@ class LocalArtifactStore:
             if path.is_file():
                 paths.append(path.relative_to(revision_root).as_posix())
         return tuple(paths)
+
+
+def local_artifact_store(
+    location: LocalFileRef | LocalStageResultSnapshotRef,
+) -> LocalArtifactStore:
+    """Open the local store named by one serialized local reference."""
+    return LocalArtifactStore(location.workspace, location.store)
 
 
 class LocalSnapshotPublisher:

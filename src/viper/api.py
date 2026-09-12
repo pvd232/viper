@@ -1570,10 +1570,13 @@ def _catalog_run_source(
         policy=_policy(repositories),
         fetcher=fetcher,
     )
+    store = LocalArtifactStore(repository_root)
     reference = ResolvedRunRef(
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
         stored_at=LocalFileRef(
+            workspace=store.repository_root,
+            store_id=store.store_id,
             commit=content_revision({relative: raw}),
             path=relative,
         ),

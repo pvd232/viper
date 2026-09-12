@@ -66,7 +66,12 @@ def test_source_and_plan_revisions_are_independent(tmp_path: Path) -> None:
     plan = ResolvedRunSpecRef(
         sha256="b" * 64,
         bytes=len(run_raw),
-        stored_at=LocalFileRef(commit="c" * 64, path=compiled.run_path),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="c" * 64,
+            path=compiled.run_path,
+        ),
     )
 
     assert isinstance(plan.stored_at, LocalFileRef)
@@ -79,7 +84,12 @@ def test_plan_documents_share_one_storage_revision() -> None:
     run = ResolvedRunSpecRef(
         sha256="a" * 64,
         bytes=10,
-        stored_at=LocalFileRef(commit="b" * 64, path="runs/run.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="b" * 64,
+            path="runs/run.yaml",
+        ),
     )
 
     stage = storage_file(run.stored_at, "runs/stages/train.yaml")
@@ -92,7 +102,12 @@ def test_plan_documents_share_one_storage_revision() -> None:
 
 def test_benchmark_spec_accepts_the_plan_revision() -> None:
     """Keep benchmark and run specifications in the same storage union."""
-    location = LocalFileRef(commit="b" * 64, path="benchmarks/tiny.yaml")
+    location = LocalFileRef(
+        workspace=Path("/workspace"),
+        store_id="0" * 32,
+        commit="b" * 64,
+        path="benchmarks/tiny.yaml",
+    )
 
     benchmark = ResolvedBenchmarkSpecRef(
         sha256="a" * 64,

@@ -72,10 +72,16 @@ def _local_run_reference(root: Path, path: Path) -> ResolvedRunRef:
         raise RestoreError("local terminal run path is invalid") from error
     raw = terminal.read_bytes()
     revision = content_revision({relative: raw})
+    store = LocalArtifactStore(root)
     return ResolvedRunRef(
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
-        stored_at=LocalFileRef(commit=revision, path=relative),
+        stored_at=LocalFileRef(
+            workspace=store.repository_root,
+            store_id=store.store_id,
+            commit=revision,
+            path=relative,
+        ),
     )
 
 

@@ -57,7 +57,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
-from .storage import LocalArtifactStore
+from .storage import local_artifact_store
 
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[
@@ -167,7 +167,7 @@ def preflight_plan(
         ):
             return _git_bytes(root, location.commit, location.path)
         if isinstance(location, LocalFileRef):
-            return LocalArtifactStore(root, location.store).fetch(location)
+            return local_artifact_store(location).fetch(location)
         return fetch_storage_bytes(location)
 
     try:

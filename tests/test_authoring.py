@@ -742,7 +742,12 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
         run=ResolvedRunRef(
             sha256="a" * 64,
             bytes=1,
-            stored_at=LocalFileRef(commit="b" * 64, path="runs/prior/resolved.yaml"),
+            stored_at=LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
+                commit="b" * 64,
+                path="runs/prior/resolved.yaml",
+            ),
         ),
         artifact=StageArtifactRef(stage_id="eval", artifact_name="predictions"),
         path="inputs/datasets/holdout/test.bin",
@@ -798,10 +803,10 @@ def test_benchmark_compilation_uses_the_evaluation_test_input(tmp_path: Path) ->
     assert isinstance(training.spec, TrainSpecDraft)
     loss = training.spec.metrics[0]
     dataset = RunArtifactDraft(
-        run=ResolvedRunRef(
-            sha256="a" * 64,
-            bytes=1,
-            stored_at=LocalFileRef(commit="b" * 64, path="runs/data/resolved.yaml"),
+        run=ResolvedRunRef.model_validate(
+            LocalArtifactStore(tmp_path)
+            .resolved_files({"runs/data/resolved.yaml": b"resolved run"})[0]
+            .model_dump(mode="python")
         ),
         artifact=StageArtifactRef(stage_id="build", artifact_name="dataset"),
         path="inputs/holdout.bin",

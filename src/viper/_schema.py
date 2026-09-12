@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -32,12 +33,20 @@ def validate_python_file_path(value: str) -> str:
     return value
 
 
+def validate_absolute_path(value: Path) -> Path:
+    """Require an absolute filesystem path for a machine-local resource."""
+    if not value.is_absolute():
+        raise ValueError("expected absolute filesystem path")
+    return value
+
+
 def repo_file_paths_overlap(left: str, right: str) -> bool:
     """Return whether either file path equals or sits below the other."""
     return left == right or left.startswith(f"{right}/") or right.startswith(f"{left}/")
 
 
 RepoRelPath = Annotated[str, AfterValidator(validate_repo_rel_path)]
+AbsolutePath = Annotated[Path, AfterValidator(validate_absolute_path)]
 PythonRepoRelPath = Annotated[
     str,
     AfterValidator(validate_repo_rel_path),

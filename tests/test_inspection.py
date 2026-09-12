@@ -423,6 +423,8 @@ def _reuse_receipt() -> StageReuseReceipt:
             sha256="1" * 64,
             bytes=1,
             stored_at=LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
                 commit="2" * 64,
                 path=f"{RUN_ROOT}/resolved.yaml",
             ),
@@ -431,13 +433,19 @@ def _reuse_receipt() -> StageReuseReceipt:
             sha256="3" * 64,
             bytes=1,
             stored_at=LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
                 commit="4" * 64,
                 path=f"{RUN_ROOT}/attempts/1/resolved.yaml",
             ),
         ),
         source_stage=ResolvedStageRef(
             stage_id="download",
-            snapshot=LocalStageResultSnapshotRef(commit="5" * 64),
+            snapshot=LocalStageResultSnapshotRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
+                commit="5" * 64,
+            ),
             resolved_spec=SnapshotFileRef(
                 path=f"{RUN_ROOT}/stages/download/resolved.yaml",
                 sha256="6" * 64,
@@ -499,12 +507,21 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
         source_attempt=ResolvedAttemptRef(
             sha256="d" * 64,
             bytes=1,
-            stored_at=LocalFileRef(commit="e" * 64, path="attempt.yaml"),
+            stored_at=LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
+                commit="e" * 64,
+                path="attempt.yaml",
+            ),
         ),
         attempt_id=1,
         source_stage=ResolvedStageRef(
             stage_id="download",
-            snapshot=LocalStageResultSnapshotRef(commit="f" * 64),
+            snapshot=LocalStageResultSnapshotRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
+                commit="f" * 64,
+            ),
             resolved_spec=SnapshotFileRef(
                 path="resolved.yaml",
                 sha256="0" * 64,
@@ -558,7 +575,12 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
     run = ResolvedRunRef(
         sha256="a" * 64,
         bytes=10,
-        stored_at=LocalFileRef(commit="b" * 64, path="runs/final.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="b" * 64,
+            path="runs/final.yaml",
+        ),
     )
     assignment = DeclaredPrimitiveAssignment(
         target=RunKnowledgeTarget(run=run),
@@ -578,6 +600,8 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
                 sha256="c" * 64,
                 bytes=10,
                 stored_at=LocalFileRef(
+                    workspace=Path("/workspace"),
+                    store_id="0" * 32,
                     commit="d" * 64,
                     path="measurements/first.json",
                 ),
@@ -592,6 +616,8 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
                 sha256="e" * 64,
                 bytes=10,
                 stored_at=LocalFileRef(
+                    workspace=Path("/workspace"),
+                    store_id="0" * 32,
                     commit="f" * 64,
                     path="measurements/second.json",
                 ),

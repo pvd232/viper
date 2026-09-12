@@ -7,8 +7,15 @@ from typing import Annotated, Literal
 
 from pydantic import Field, HttpUrl, model_validator
 
-from ._schema import SHA256, GitCommit, NonEmptyStr, ProtocolModel, RepoRelPath
-from .ids import HumanId, OutputName, StageId
+from ._schema import (
+    SHA256,
+    AbsolutePath,
+    GitCommit,
+    NonEmptyStr,
+    ProtocolModel,
+    RepoRelPath,
+)
+from .ids import HumanId, LocalStoreId, OutputName, StageId
 
 
 class GitSource(ProtocolModel):
@@ -82,7 +89,13 @@ class LocalFileRef(ProtocolModel):
     """A file in one immutable revision of a repository-local VIPER store."""
 
     kind: Literal["local"] = "local"
+    workspace: AbsolutePath = Field(
+        description="Absolute root of the workspace that owns the local store."
+    )
     store: RepoRelPath = ".viper/store"
+    store_id: LocalStoreId = Field(
+        description="Identity of the local store instance containing the file."
+    )
     commit: SHA256
     path: RepoRelPath
 
@@ -91,7 +104,13 @@ class LocalStageResultSnapshotRef(ProtocolModel):
     """One immutable stage-result revision in a repository-local VIPER store."""
 
     kind: Literal["local"] = "local"
+    workspace: AbsolutePath = Field(
+        description="Absolute root of the workspace that owns the local store."
+    )
     store: RepoRelPath = ".viper/store"
+    store_id: LocalStoreId = Field(
+        description="Identity of the local store instance containing the snapshot."
+    )
     commit: SHA256
 
 
@@ -218,8 +237,6 @@ __all__ = [
     "HuggingFaceStageResultSnapshotRef",
     "LocalFileRef",
     "LocalStageResultSnapshotRef",
-    "ResolvedStageRef",
-    "ResolvedStageInvocationRef",
     "ResolvedArtifactPointerRef",
     "ResolvedBenchmarkResultRef",
     "ResolvedBenchmarkSpecRef",
@@ -227,6 +244,8 @@ __all__ = [
     "ResolvedGitFileRef",
     "ResolvedRunRef",
     "ResolvedRunSpecRef",
+    "ResolvedStageInvocationRef",
+    "ResolvedStageRef",
     "SnapshotFileRef",
     "StageResultSnapshot",
     "StorageModel",
@@ -252,7 +271,9 @@ def resolve_snapshot_file_ref(
     stored_at: StorageModel
     if isinstance(snapshot, LocalStageResultSnapshotRef):
         stored_at = LocalFileRef(
+            workspace=snapshot.workspace,
             store=snapshot.store,
+            store_id=snapshot.store_id,
             commit=snapshot.commit,
             path=file.path,
         )

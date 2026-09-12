@@ -3108,7 +3108,12 @@ def test_knowledge_records_preserve_immutable_evidence(tmp_path: Path) -> None:
     run = ResolvedRunRef(
         sha256="a" * 64,
         bytes=10,
-        stored_at=LocalFileRef(commit="b" * 64, path="runs/final.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="b" * 64,
+            path="runs/final.yaml",
+        ),
     )
     assignment = DeclaredPrimitiveAssignment(
         target=RunKnowledgeTarget(run=run),

@@ -17,13 +17,14 @@ from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
     HuggingFaceStageResultSnapshotRef,
+    LocalFileRef,
     ResolvedGitFileRef,
     StageResultSnapshot,
     StorageModel,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
-from ..storage import LocalArtifactStore, ViperCloudClient
+from ..storage import LocalArtifactStore, ViperCloudClient, local_artifact_store
 from .errors import RunError
 
 
@@ -76,6 +77,8 @@ class RunFetcher:
                 revision=location.revision,
                 path=location.path,
             )
+        if isinstance(location, LocalFileRef):
+            return local_artifact_store(location).fetch(location)
         return self.store.fetch(location)
 
     def list_snapshot_files(
@@ -96,7 +99,7 @@ class RunFetcher:
                     revision=snapshot.revision,
                 )
             )
-        return self.store.list_snapshot_files(snapshot)
+        return local_artifact_store(snapshot).list_snapshot_files(snapshot)
 
 
 def resolve_git_file(

@@ -129,11 +129,13 @@ from .stages import (
 from .storage import (
     LocalArtifactStore,
     LocalStorageDestination,
+    LocalStoreError,
     StorageDestination,
     ViperCloudClient,
     ViperCloudDestination,
     bind_run_destination,
     load_storage_settings,
+    local_artifact_store,
     publish_resolved_files,
 )
 
@@ -912,6 +914,18 @@ def _freeze_input(
         LocalFileRef,
     ):
         raise ValueError("storage_graph_unreachable")
+    if isinstance(draft.run.stored_at, LocalFileRef):
+        try:
+            producer_run = local_artifact_store(draft.run.stored_at).fetch(
+                draft.run.stored_at
+            )
+        except (OSError, LocalStoreError) as error:
+            raise ValueError("storage_graph_unreachable") from error
+        if (
+            len(producer_run) != draft.run.bytes
+            or hashlib.sha256(producer_run).hexdigest() != draft.run.sha256
+        ):
+            raise ValueError("storage_graph_unreachable")
     pointer = ArtifactPointer(run=draft.run, artifact=draft.artifact)
     raw = serialize_document(pointer)
     pointer_path = output_pointer_path(
@@ -1611,7 +1625,8 @@ def freeze_run_plan(
         destination=destination,
         cloud_client=cloud_client,
     )
-    commit = LocalArtifactStore(repository_root).publish(compiled.files)
+    store = LocalArtifactStore(repository_root)
+    commit = store.publish(compiled.files)
     paths = tuple(_target_path(repository_root, path) for path in compiled.files)
     for path, raw in zip(paths, compiled.files.values(), strict=True):
         _write_exact_file(path, raw)
@@ -1619,7 +1634,12 @@ def freeze_run_plan(
     reference = ResolvedRunSpecRef(
         sha256=hashlib.sha256(run_raw).hexdigest(),
         bytes=len(run_raw),
-        stored_at=LocalFileRef(commit=commit, path=compiled.run_path),
+        stored_at=LocalFileRef(
+            workspace=store.repository_root,
+            store_id=store.store_id,
+            commit=commit,
+            path=compiled.run_path,
+        ),
     )
     return FrozenPlanFiles(run=compiled.run, reference=reference, files=paths)
 

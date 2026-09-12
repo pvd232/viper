@@ -167,7 +167,8 @@ def freeze_protocol_plan(
     run_path = f"{RUN_ROOT}/spec.yaml"
     run_raw = serialize_document(run)
     files[run_path] = run_raw
-    commit = LocalArtifactStore(root).publish(files)
+    store = LocalArtifactStore(root)
+    commit = store.publish(files)
     paths = tuple(root / path for path in files)
     for path, raw in zip(paths, files.values(), strict=True):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -177,7 +178,12 @@ def freeze_protocol_plan(
         reference=ResolvedRunSpecRef(
             sha256=hashlib.sha256(run_raw).hexdigest(),
             bytes=len(run_raw),
-            stored_at=LocalFileRef(commit=commit, path=run_path),
+            stored_at=LocalFileRef(
+                workspace=store.repository_root,
+                store_id=store.store_id,
+                commit=commit,
+                path=run_path,
+            ),
         ),
         files=paths,
     )

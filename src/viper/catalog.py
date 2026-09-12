@@ -71,7 +71,7 @@ from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
 from .runs import RunAttempt
 from .serialization import document_digest, parse_yaml_bytes, serialize_document
 from .stages import DownloadSpec, InternalSpec
-from .storage import LocalArtifactStore
+from .storage import local_artifact_store
 
 CatalogRunStatus = Literal["succeeded", "failed", "cancelled"]
 
@@ -558,7 +558,7 @@ def _knowledge_bytes(root: Path, reference: ResolvedFileRef) -> bytes:
     """Load one local immutable file and verify its recorded identity."""
     if not isinstance(reference.stored_at, LocalFileRef):
         raise ValueError("catalog knowledge refresh currently requires local files")
-    raw = LocalArtifactStore(root, reference.stored_at.store).fetch(reference.stored_at)
+    raw = local_artifact_store(reference.stored_at).fetch(reference.stored_at)
     if len(raw) != reference.bytes:
         raise ValueError("knowledge file byte count differs")
     if hashlib.sha256(raw).hexdigest() != reference.sha256:

@@ -401,6 +401,8 @@ def test_restore_result_matches_python_api_and_cli(
             sha256="a" * 64,
             bytes=12,
             stored_at=LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
                 commit="b" * 64,
                 path="runs/example/resolved.yaml",
             ),

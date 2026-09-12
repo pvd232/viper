@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.1.0a4 — 2026-09-12
+
+- Let one local workspace consume a stored run produced by another local
+  workspace on the same machine.
+- Bind every local file and stage-snapshot reference to the producer
+  workspace's absolute path and durable store identity.
+- Reject local references whose producer store is absent, has a different
+  identity, or no longer contains the recorded bytes.
+
 ## 0.1.0a3 — 2026-09-11
 
 - Rename the stage function's `Context` class to `StageContext`. Its fields and

@@ -134,7 +134,11 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
     )
     stage_ref = references.ResolvedStageRef(
         stage_id="eval",
-        snapshot=references.LocalStageResultSnapshotRef(commit="b" * 64),
+        snapshot=references.LocalStageResultSnapshotRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="b" * 64,
+        ),
         resolved_spec=references.SnapshotFileRef(
             path="stages/eval/resolved.yaml",
             sha256="c" * 64,
@@ -161,6 +165,8 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
     )
 
     assert resolved[0].files[0].stored_at == references.LocalFileRef(
+        workspace=Path("/workspace"),
+        store_id="0" * 32,
         commit="b" * 64,
         path=file.path,
     )
@@ -171,11 +177,18 @@ def test_metric_dependency_rejects_republished_payload() -> None:
     expected = references.ResolvedFileRef(
         sha256="a" * 64,
         bytes=4,
-        stored_at=references.LocalFileRef(commit="b" * 64, path="predictions.bin"),
+        stored_at=references.LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="b" * 64,
+            path="predictions.bin",
+        ),
     )
     republished = expected.model_copy(
         update={
             "stored_at": references.LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
                 commit="c" * 64,
                 path="predictions.bin",
             )

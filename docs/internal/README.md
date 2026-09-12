@@ -8,6 +8,7 @@ Use these guides when changing or releasing VIPER:
 
 ## Release reports
 
+- [0.1.0a4](../releases/0.1.0a4.md)
 - [0.1.0a3](../releases/0.1.0a3.md)
 - [0.1.0a2](../releases/0.1.0a2.md)
 - [0.1.0a1](../releases/0.1.0a1.md)

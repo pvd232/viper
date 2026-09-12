@@ -32,9 +32,9 @@ from .references import (
 )
 from .serialization import parse_yaml_bytes, serialize_document
 from .storage import (
-    LocalArtifactStore,
     StorageDestination,
     load_storage_settings,
+    local_artifact_store,
     publish_resolved_files,
 )
 
@@ -836,9 +836,7 @@ class KnowledgeStore:
         """Load and verify one locally published knowledge record."""
         if not isinstance(reference.stored_at, LocalFileRef):
             raise ValueError("knowledge verification currently requires local files")
-        raw = LocalArtifactStore(self.root, reference.stored_at.store).fetch(
-            reference.stored_at
-        )
+        raw = local_artifact_store(reference.stored_at).fetch(reference.stored_at)
         if len(raw) != reference.bytes:
             raise ValueError("knowledge record byte count differs")
         if hashlib.sha256(raw).hexdigest() != reference.sha256:

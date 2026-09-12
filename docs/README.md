@@ -44,6 +44,9 @@ public interfaces and distinguishes contributor instructions.
 
 ## Release notes
 
+[0.1.0a4](releases/0.1.0a4.md) adds store-bound local references and
+cross-workspace retrieval on one machine.
+
 [0.1.0a3](releases/0.1.0a3.md) describes the release and its validation.
 
 ## Contributing and internal engineering

@@ -37,7 +37,12 @@ def _file(path: str) -> ResolvedFileRef:
     return ResolvedFileRef(
         sha256="a" * 64,
         bytes=1,
-        stored_at=LocalFileRef(commit="b" * 64, path=path),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="b" * 64,
+            path=path,
+        ),
     )
 
 
@@ -48,6 +53,8 @@ def _pointer(path: str) -> ResolvedArtifactPointerRef:
         sha256="a" * 64,
         bytes=1,
         stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
             commit="b" * 64,
             path=f".viper/pointers/{'a' * 64}/benchmark/{output_name}.pointer.yaml",
         ),
@@ -82,7 +89,9 @@ def test_benchmark_result_reference_accepts_local_immutable_storage() -> None:
         sha256="a" * 64,
         bytes=12,
         stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
             store=".viper/store",
+            store_id="0" * 32,
             commit="b" * 64,
             path="experiments/e/runs/v/01ARZ3NDEKTSV4RRFFQ69G5FAV/benchmark.result.yaml",
         ),

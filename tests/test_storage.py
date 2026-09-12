@@ -47,6 +47,39 @@ from viper.verification import verify_run_result
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 
+def test_local_stores_persist_distinct_workspace_identities(tmp_path: Path) -> None:
+    """Keep one stable identity per local workspace store."""
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+
+    first = LocalArtifactStore(first_root)
+    second = LocalArtifactStore(second_root)
+
+    assert first.store_id == LocalArtifactStore(first_root).store_id
+    assert first.store_id != second.store_id
+    assert (first.store_root / ".identity").read_text(encoding="ascii").strip() == (
+        first.store_id
+    )
+
+
+def test_local_store_rejects_a_reference_owned_by_another_workspace(
+    tmp_path: Path,
+) -> None:
+    """Reject a local reference when a different store attempts retrieval."""
+    producer_root = tmp_path / "producer"
+    consumer_root = tmp_path / "consumer"
+    producer_root.mkdir()
+    consumer_root.mkdir()
+    producer = LocalArtifactStore(producer_root)
+    consumer = LocalArtifactStore(consumer_root)
+    reference = producer.resolved_files({"artifact.bin": b"payload"})[0]
+
+    with pytest.raises(LocalStoreError, match="different store"):
+        consumer.fetch(reference.stored_at)
+
+
 def test_storage_publishes_and_retrieves_one_content_revision(
     tmp_path: Path,
 ) -> None:
@@ -64,6 +97,8 @@ def test_storage_publishes_and_retrieves_one_content_revision(
     assert (
         store.fetch(
             LocalFileRef(
+                workspace=store.repository_root,
+                store_id=store.store_id,
                 commit=first_commit,
                 path="experiments/example/artifacts/parameters.bin",
             )
@@ -265,6 +300,8 @@ def test_cloud_verification_rejects_local_references() -> None:
         attempts=(
             ResolvedAttemptRef.model_construct(
                 stored_at=LocalFileRef(
+                    workspace=Path("/workspace"),
+                    store_id="0" * 32,
                     commit="1" * 64,
                     path="runs/example/attempt.yaml",
                 )
@@ -421,12 +458,22 @@ def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
         ResolvedFileRef(
             sha256=hashlib.sha256(first).hexdigest(),
             bytes=len(first),
-            stored_at=LocalFileRef(commit="a" * 64, path="artifacts/first.bin"),
+            stored_at=LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
+                commit="a" * 64,
+                path="artifacts/first.bin",
+            ),
         ),
         ResolvedFileRef(
             sha256=hashlib.sha256(second).hexdigest(),
             bytes=len(second),
-            stored_at=LocalFileRef(commit="a" * 64, path="artifacts/second.bin"),
+            stored_at=LocalFileRef(
+                workspace=Path("/workspace"),
+                store_id="0" * 32,
+                commit="a" * 64,
+                path="artifacts/second.bin",
+            ),
         ),
     )
     first_destination = tmp_path / "restored/first.bin"
@@ -493,6 +540,8 @@ def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
     assert (
         store.fetch(
             LocalFileRef(
+                workspace=store.repository_root,
+                store_id=store.store_id,
                 commit=target_snapshot.commit,
                 path="runs/target/artifacts/model.bin",
             )

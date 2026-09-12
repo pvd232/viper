@@ -9,6 +9,11 @@ RunId = Annotated[
     Field(pattern=r"^[0-9A-HJKMNP-TV-Z]{26}$"),
 ]
 
+LocalStoreId = Annotated[
+    str,
+    Field(pattern=r"^[0-9a-f]{32}$"),
+]
+
 HumanId = Annotated[
     str,
     Field(pattern=r"^[a-z][a-z0-9_]*$"),

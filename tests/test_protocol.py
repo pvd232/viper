@@ -78,6 +78,21 @@ RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_strand/runs/baseline/{RUN_ID}"
 
 
+@pytest.mark.parametrize("omitted", ("workspace", "store_id"))
+def test_local_file_reference_requires_store_ownership(omitted: str) -> None:
+    """Reject a local reference that cannot identify its owning store."""
+    payload = {
+        "workspace": "/workspace",
+        "store_id": "0" * 32,
+        "commit": SHA_B,
+        "path": "runs/final.yaml",
+    }
+    payload.pop(omitted)
+
+    with pytest.raises(ValidationError):
+        LocalFileRef.model_validate(payload)
+
+
 def test_knowledge_ontology_preserves_assignment_provenance() -> None:
     """Keep each assignment bound to one ontology version and immutable run."""
     ontology = OntologySpec(
@@ -96,7 +111,12 @@ def test_knowledge_ontology_preserves_assignment_provenance() -> None:
     run = ResolvedRunRef(
         sha256=SHA_A,
         bytes=10,
-        stored_at=LocalFileRef(commit=SHA_B, path="runs/final.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit=SHA_B,
+            path="runs/final.yaml",
+        ),
     )
     assignment = DeclaredPrimitiveAssignment(
         target=RunKnowledgeTarget(run=run),
@@ -145,7 +165,12 @@ def test_knowledge_vectors_preserve_view_identity() -> None:
     source = ResolvedFileRef(
         sha256=SHA_A,
         bytes=10,
-        stored_at=LocalFileRef(commit=SHA_B, path="knowledge/signature.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit=SHA_B,
+            path="knowledge/signature.yaml",
+        ),
     )
     vector = KnowledgeVector(
         view=view,
@@ -156,12 +181,22 @@ def test_knowledge_vectors_preserve_view_identity() -> None:
     first = ResolvedFileRef(
         sha256="c" * 64,
         bytes=10,
-        stored_at=LocalFileRef(commit="d" * 64, path="knowledge/vector-1.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="d" * 64,
+            path="knowledge/vector-1.yaml",
+        ),
     )
     second = ResolvedFileRef(
         sha256="e" * 64,
         bytes=10,
-        stored_at=LocalFileRef(commit="f" * 64, path="knowledge/vector-2.yaml"),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="f" * 64,
+            path="knowledge/vector-2.yaml",
+        ),
     )
     judgment = RetrievalJudgment(
         query_vector=first,

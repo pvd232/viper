@@ -185,6 +185,13 @@ use distinct paths for distinct inputs. Execution saves a pointer to the
 selected artifact. Execution verifies the pointer and retrieves the bytes
 before invoking the consumer.
 
+The producer and consumer may use different local VIPER workspaces on the same
+machine. A local file reference records the producer workspace's absolute path
+and durable store identity, so the consumer opens the producer's `.viper/store`
+rather than searching its own store. The producer workspace must remain at that
+recorded path. Use Hugging Face or Viper Cloud storage when the consumer runs on
+another machine or the producer workspace will move.
+
 The selected data role must agree with the stored artifact. Training accepts
 `training` and `validation` inputs. Evaluation test data uses `eval` or
 `benchmark`. Output roles retain the restrictions imposed by their inputs;
