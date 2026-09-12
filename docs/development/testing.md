@@ -91,6 +91,55 @@ Direct file selection remains available:
 python -m pytest tests/test_run_execution.py -q
 ```
 
+## Declaration-impact selection
+
+`tools/select_impacted_tests.py` consumes the version-3 `SourceGraph` emitted
+by VIPER's CodeQL analyzer and AST-location lowerer. The selector starts from
+the changed `path:symbol` declarations, follows incoming dependency edges by
+one hop, and resolves those declarations through
+`tests/declaration_observers.toml` to exact pytest node IDs.
+
+The observer manifest supplies explicit declaration-to-test links and
+source-file domain ownership. For an unmapped affected declaration, the
+selector follows dependent declarations until it reaches their pytest
+functions. Imports and assignments carry that traversal but do not themselves
+require observers. An affected function, method, or class with no reachable or
+declared test widens selection to its owning domain; an unmapped path widens
+selection to every unit and contract test. Existing pytest configuration owns
+test-module tiers and domains. Integration, release, and live-CUDA observers
+remain visible in the result as deferred tests and run at their declared
+closure gate.
+
+The analyzer boundary is inherited from source revision
+`4840ee9875b5382d547595b2bee62b8f16365611`: CodeQL locates dependency
+operations, and the lowerer joins each CodeQL binding location to an exact
+Python AST declaration and byte span. The selector preserves those AST binding
+locations in its JSON result; it does not reconstruct source relationships.
+It recomputes the inherited Python-source manifest digest and rejects a cached
+graph whose source identity differs from the current checkout.
+
+Build the graph with the pinned analyzer, then select tests from declaration
+IDs:
+
+```bash
+python tools/build_test_impact_graph.py \
+  --codeql /path/to/codeql \
+  --cache /path/outside/the/repository/cache \
+  --output /path/outside/the/repository/source-graph.json
+python tools/select_impacted_tests.py \
+  --graph /path/outside/the/repository/source-graph.json \
+  --source-root . \
+  --observers tests/declaration_observers.toml \
+  --declaration src/viper/storage.py:LocalArtifactStore
+```
+
+The compatibility patch limits analysis to `src`, `tests`, and `tools`, omits
+typing overload stubs, applies the existing module/class scope rule to
+assignments, and accepts a CodeQL name-column anchor only when the AST lowerer
+finds one declaration of the same kind on that line. Ambiguous bindings still
+fail. The builder removes its detached analyzer worktree after success or
+failure.
+
 The marker declarations in `pyproject.toml` are authoritative.
 
 ## Continuous integration

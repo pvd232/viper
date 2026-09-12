@@ -1,0 +1,68 @@
+"""Execute the retained analyzer inside its pinned source revision."""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+from pathlib import Path
+
+from viper._system_impact.codeql import (
+    analyze_source,
+    resolve_analysis_specs,
+    source_digest,
+)
+from viper.system_impact.models import SourceSnapshot
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repository", type=Path, required=True)
+    parser.add_argument("--codeql", type=Path, required=True)
+    parser.add_argument("--cache", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    return parser
+
+
+def main() -> int:
+    arguments = _parser().parse_args()
+    root = arguments.repository.resolve()
+    pack = Path(__file__).parent / "codeql/viper-python-impact"
+    extraction, query, graph_format = resolve_analysis_specs(
+        root,
+        codeql_executable=arguments.codeql,
+        query_pack=pack,
+    )
+    revision = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    snapshot = SourceSnapshot(
+        base_revision=revision,
+        source_sha256=source_digest(root),
+        revision=None,
+    )
+    graph = analyze_source(
+        root,
+        snapshot=snapshot,
+        extraction=extraction,
+        query=query,
+        format=graph_format,
+        codeql_executable=arguments.codeql,
+        query_pack=pack,
+        cache_root=arguments.cache,
+        artifact_root=arguments.output.parent / "codeql-results",
+    )
+    arguments.output.parent.mkdir(parents=True, exist_ok=True)
+    arguments.output.write_text(
+        graph.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    print(f"nodes={len(graph.nodes)} edges={len(graph.edges)} graph={arguments.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

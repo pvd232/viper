@@ -1,0 +1,109 @@
+schema_version = 1
+
+[source_domains]
+"src/viper/_verification/storage.py" = "domain_verification"
+"src/viper/_verification/attempt.py" = "domain_verification"
+"src/viper/_verification/metrics.py" = "domain_verification"
+"src/viper/api.py" = "domain_application"
+"src/viper/authoring.py" = "domain_authoring"
+"src/viper/catalog.py" = "domain_verification"
+"src/viper/execution/_attempt.py" = "domain_execution"
+"src/viper/execution/_benchmark.py" = "domain_execution"
+"src/viper/execution/_restore.py" = "domain_execution"
+"src/viper/execution/_source.py" = "domain_execution"
+"src/viper/knowledge.py" = "domain_verification"
+"src/viper/preflight.py" = "domain_verification"
+"src/viper/references.py" = "domain_storage"
+"src/viper/storage.py" = "domain_storage"
+"src/viper/verification.py" = "domain_verification"
+
+[[declarations]]
+id = "src/viper/references.py:LocalFileRef"
+fallback_domain = "domain_storage"
+tests = [
+  "tests/test_storage.py::test_local_store_rejects_a_reference_owned_by_another_workspace",
+  "tests/test_prior_run_inputs.py::test_local_pointer_accepts_a_run_from_another_workspace",
+]
+
+[[declarations]]
+id = "src/viper/references.py:LocalStageResultSnapshotRef"
+fallback_domain = "domain_storage"
+tests = [
+  "tests/test_storage.py::test_local_stores_persist_distinct_workspace_identities",
+]
+
+[[declarations]]
+id = "src/viper/storage.py:LocalArtifactStore"
+fallback_domain = "domain_storage"
+tests = [
+  "tests/test_storage.py::test_local_stores_persist_distinct_workspace_identities",
+  "tests/test_storage.py::test_local_store_rejects_a_reference_owned_by_another_workspace",
+]
+
+[[declarations]]
+id = "src/viper/storage.py:local_artifact_store"
+fallback_domain = "domain_storage"
+tests = [
+  "tests/test_storage.py::test_local_store_rejects_a_reference_owned_by_another_workspace",
+]
+
+[[declarations]]
+id = "src/viper/authoring.py:_freeze_input"
+fallback_domain = "domain_authoring"
+tests = [
+  "tests/test_prior_run_inputs.py::test_local_pointer_accepts_a_run_from_another_workspace",
+  "tests/test_prior_run_inputs.py::test_local_pointer_rejects_an_unknown_producer_store",
+]
+
+[[declarations]]
+id = "src/viper/_verification/storage.py:fetch_local_file_bytes"
+fallback_domain = "domain_verification"
+tests = [
+  "tests/test_prior_run_inputs.py::test_local_pointer_accepts_a_run_from_another_workspace",
+]
+
+[[declarations]]
+id = "src/viper/storage.py:LocalSnapshotPublisher.__init__"
+fallback_domain = "domain_storage"
+tests = ["tests/test_storage.py::test_store_uses_selected_project_root"]
+
+[[declarations]]
+id = "src/viper/storage.py:LocalArtifactStore.resolved_files"
+fallback_domain = "domain_storage"
+tests = ["tests/test_storage.py::test_storage_resolved_files_share_one_revision"]
+
+[[declarations]]
+id = "src/viper/storage.py:LocalArtifactStore.snapshot"
+fallback_domain = "domain_storage"
+tests = ["tests/test_storage.py::test_local_snapshot_reuse_remaps_source_files"]
+
+[[declarations]]
+id = "src/viper/execution/_source.py:RunFetcher.__call__"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_prior_run_inputs.py::test_local_pointer_accepts_a_run_from_another_workspace",
+]
+
+[[declarations]]
+id = "src/viper/execution/_source.py:RunFetcher.list_snapshot_files"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_prior_run_inputs.py::test_local_pointer_accepts_a_run_from_another_workspace",
+]
+
+[[declarations]]
+id = "src/viper/knowledge.py:KnowledgeStore._record"
+fallback_domain = "domain_verification"
+tests = [
+  "tests/test_inspection.py::test_knowledge_retrieval_keeps_exact_indexes_authoritative",
+]
+
+[[declarations]]
+id = "src/viper/catalog.py:_knowledge_bytes"
+fallback_domain = "domain_verification"
+tests = ["tests/test_inspection.py::test_catalog_results_retain_immutable_sources"]
+
+[[declarations]]
+id = "src/viper/execution/_benchmark.py:benchmark"
+fallback_domain = "domain_execution"
+tests = ["tests/test_benchmark_execution.py::test_api_returns_the_verified_benchmark_result"]

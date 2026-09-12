@@ -1,0 +1,56 @@
+diff --git a/src/viper/_system_impact/codeql.py b/src/viper/_system_impact/codeql.py
+--- a/src/viper/_system_impact/codeql.py
++++ b/src/viper/_system_impact/codeql.py
+@@ -48,0 +49 @@
++ANALYZED_ROOTS = frozenset({"src", "tests", "tools"})
+@@ -110,0 +112 @@
++                if path.relative_to(root).parts[0] in ANALYZED_ROOTS
+@@ -484,0 +487,2 @@
++        if Path(path).parts[0] not in ANALYZED_ROOTS:
++            continue
+@@ -539,4 +542,11 @@
+-            raise CodeQLAnalysisError(
+-                "CodeQL anchor has no matching AST declaration: "
+-                f"{path}:{symbol} at {line}:{column}"
+-            ) from error
++            candidates = [
++                candidate
++                for (name, node_kind, node_line, _), candidate in index.items()
++                if (name, node_kind, node_line) == (symbol, kind, line)
++            ]
++            if len(candidates) != 1:
++                raise CodeQLAnalysisError(
++                    "CodeQL anchor has no matching AST declaration: "
++                    f"{path}:{symbol} at {line}:{column}"
++                ) from error
++            declaration = candidates[0]
+@@ -602,3 +612,11 @@
+-        raise CodeQLAnalysisError(
+-            f"CodeQL edge endpoint has no source node: {path} at {line}:{byte_column}"
+-        ) from error
++        candidates = [
++            node
++            for (node_path, node_line, _), node in nodes.items()
++            if (node_path, node_line) == (path, line)
++        ]
++        if len(candidates) != 1:
++            raise CodeQLAnalysisError(
++                f"CodeQL edge endpoint has no source node: "
++                f"{path} at {line}:{byte_column}"
++            ) from error
++        return candidates[0]
+@@ -628,0 +647,5 @@
++        if any(
++            Path(path).parts[0] not in ANALYZED_ROOTS
++            for path in (source_path, target_path)
++        ):
++            continue
+diff --git a/tools/codeql/viper-python-impact/Nodes.qll b/tools/codeql/viper-python-impact/Nodes.qll
+--- a/tools/codeql/viper-python-impact/Nodes.qll
++++ b/tools/codeql/viper-python-impact/Nodes.qll
+@@ -71,0 +72 @@
++    not function.getADecorator().(Name).getId() = "overload" and
+@@ -89,0 +91 @@
++    representedScope(assignment.getScope()) and
+@@ -96,0 +99 @@
++    representedScope(assignment.getScope()) and
