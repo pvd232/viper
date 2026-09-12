@@ -396,6 +396,16 @@ class RunPlanTests(unittest.TestCase):
         self.assertEqual(run.env.machine_type, "n2-standard-8")
         self.assertEqual(run.estimator.artifact_name, TrainKeys.MODEL)
 
+    def test_estimator_field_describes_both_selection_roles(self) -> None:
+        """Expose benchmarked and unbenchmarked selection in JSON Schema."""
+        field = RunSpec.model_json_schema()["properties"]["estimator"]
+
+        self.assertEqual(
+            field["description"],
+            "Selected model for a benchmarked run or terminal artifact for an "
+            "unbenchmarked run.",
+        )
+
     def test_unbenchmarked_run_may_select_a_declared_terminal_artifact(self) -> None:
         """Allow plan verification to resolve an unbenchmarked result."""
         payload = run_payload()

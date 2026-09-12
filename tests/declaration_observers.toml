@@ -23,6 +23,13 @@ schema_version = 1
 "src/viper/verification.py" = "domain_verification"
 
 [[declarations]]
+id = "src/viper/runs.py:RunSpec.estimator"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_protocol.py::RunPlanTests::test_estimator_field_describes_both_selection_roles",
+]
+
+[[declarations]]
 id = "src/viper/runs.py:RunSpec.validate_common_invariants"
 fallback_domain = "domain_protocol"
 tests = [

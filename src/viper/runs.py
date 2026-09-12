@@ -195,7 +195,7 @@ class RunStageRef(ProtocolModel):
 
 
 class RunSpec(ProtocolModel):
-    """Freeze one run plan and its ordered stage specifications."""
+    """Freeze one run plan, its stages, and its selected result artifact."""
 
     schema_version: Literal[2] = 2
     run_id: RunId
@@ -212,7 +212,12 @@ class RunSpec(ProtocolModel):
         description="Selected execution policy for the run",
     )
     stages: tuple[RunStageRef, ...] = Field(min_length=1)
-    estimator: StageArtifactRef
+    estimator: StageArtifactRef = Field(
+        description=(
+            "Selected model for a benchmarked run or terminal artifact for an "
+            "unbenchmarked run."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_common_invariants(self) -> RunSpec:
