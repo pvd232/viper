@@ -351,7 +351,11 @@ def snapshot(*, commit: str = SNAPSHOT_COMMIT) -> HuggingFaceStageResultSnapshot
     )
 
 
-def run_spec(stage_specs: list[tuple[str, object]]) -> tuple[RunSpec, dict[str, bytes]]:
+def run_spec(
+    stage_specs: list[tuple[str, object]],
+    *,
+    estimator_stage: str = "train",
+) -> tuple[RunSpec, dict[str, bytes]]:
     """Build a run plan and the stage-spec files it identifies."""
     documents: dict[str, bytes] = {}
     stage_refs = []
@@ -387,7 +391,7 @@ def run_spec(stage_specs: list[tuple[str, object]]) -> tuple[RunSpec, dict[str, 
         execution_policy=ExecutionPolicyRef(mode="custom"),
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
-            stage_id="train",
+            stage_id=estimator_stage,
             artifact_name=TrainKeys.MODEL,
         ),
     )
@@ -1435,6 +1439,101 @@ class RunAndStageVerificationTests(unittest.TestCase):
 
 class RunPlanRelationshipTests(unittest.TestCase):
     """Verify relationships among experiments, variants, stages, and benchmarks."""
+
+    def test_unbenchmarked_build_may_supply_the_model(self) -> None:
+        """Select an existing model artifact without claiming model training."""
+        build = build_spec()
+        model = build.outputs["prior"].model_copy(
+            update={"path": f"{RUN_ROOT}/artifacts/build/model/model.pt"}
+        )
+        build_with_model = build.model_copy(
+            update={"outputs": type(build.outputs).model_validate({"model": model})}
+        )
+        run, _ = run_spec(
+            [("build", build_with_model)],
+            estimator_stage="build",
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_configs=(
+                BuildVariantStageConfig(
+                    kind="build",
+                    stage_id="build",
+                    config=build.config,
+                ),
+            ),
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            None,
+            {"build": build_with_model},
+        )
+
+        with self.assertRaisesRegex(VerificationError, "declared stage artifact"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                None,
+                {"build": build},
+            )
+
+    def test_benchmark_estimator_requires_training(self) -> None:
+        """Keep benchmark model selection attached to a training stage."""
+        build = build_spec()
+        model = build.outputs["prior"].model_copy(
+            update={"path": f"{RUN_ROOT}/artifacts/build/model/model.pt"}
+        )
+        build = build.model_copy(
+            update={"outputs": type(build.outputs).model_validate({"model": model})}
+        )
+        run, _ = run_spec([("build", build)], estimator_stage="build")
+        run = run.model_copy(
+            update={
+                "benchmark_id": "benchmark",
+            }
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_configs=(
+                BuildVariantStageConfig(
+                    kind="build",
+                    stage_id="build",
+                    config=build.config,
+                ),
+            ),
+        )
+        benchmark = BenchmarkSpec.model_construct()
+
+        with self.assertRaisesRegex(VerificationError, "training stage"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                benchmark,
+                {"build": build},
+            )
 
     def test_training_accepts_validation_inputs_and_preserves_the_role(self) -> None:
         """Allow validation-guided training when every output stays validation."""

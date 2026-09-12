@@ -6,6 +6,7 @@ schema_version = 1
 "src/viper/_workers/file_access.py" = "domain_execution"
 "src/viper/_workers/stages.py" = "domain_execution"
 "src/viper/_verification/metrics.py" = "domain_verification"
+"src/viper/_verification/plan.py" = "domain_verification"
 "src/viper/api.py" = "domain_application"
 "src/viper/authoring.py" = "domain_authoring"
 "src/viper/catalog.py" = "domain_verification"
@@ -19,6 +20,14 @@ schema_version = 1
 "src/viper/storage.py" = "domain_storage"
 "src/viper/stages.py" = "domain_protocol"
 "src/viper/verification.py" = "domain_verification"
+
+[[declarations]]
+id = "src/viper/_verification/plan.py:verify_run_plan_relationships"
+fallback_domain = "domain_verification"
+tests = [
+  "tests/test_verification.py::RunPlanRelationshipTests::test_unbenchmarked_build_may_supply_the_model",
+  "tests/test_verification.py::RunPlanRelationshipTests::test_benchmark_estimator_requires_training",
+]
 
 [[declarations]]
 id = "src/viper/_workers/file_access.py:StageFileAccessObserver"

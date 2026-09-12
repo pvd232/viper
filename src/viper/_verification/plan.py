@@ -396,7 +396,12 @@ def verify_run_plan_relationships(
             raise VerificationError(f"variant config does not match stage {stage_id!r}")
 
     estimator_stage = stages.get(run.estimator.stage_id)
-    if not isinstance(estimator_stage, TrainSpec):
+    if (
+        estimator_stage is None
+        or run.estimator.artifact_name not in estimator_stage.outputs
+    ):
+        raise VerificationError("run estimator must select a declared stage artifact")
+    if benchmark is not None and not isinstance(estimator_stage, TrainSpec):
         raise VerificationError("run estimator must select a training stage")
 
     experiment_metrics = {metric.metric_id: metric for metric in experiment.metrics}
