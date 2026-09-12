@@ -17,14 +17,24 @@ schema_version = 1
 "src/viper/knowledge.py" = "domain_verification"
 "src/viper/preflight.py" = "domain_verification"
 "src/viper/references.py" = "domain_storage"
+"src/viper/runs.py" = "domain_protocol"
 "src/viper/storage.py" = "domain_storage"
 "src/viper/stages.py" = "domain_protocol"
 "src/viper/verification.py" = "domain_verification"
 
 [[declarations]]
+id = "src/viper/runs.py:RunSpec.validate_common_invariants"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_protocol.py::RunPlanTests::test_unbenchmarked_run_may_select_a_declared_terminal_artifact",
+  "tests/test_protocol.py::RunPlanTests::test_benchmarked_run_must_select_the_model_artifact",
+]
+
+[[declarations]]
 id = "src/viper/_verification/plan.py:verify_run_plan_relationships"
 fallback_domain = "domain_verification"
 tests = [
+  "tests/test_verification.py::RunPlanRelationshipTests::test_unbenchmarked_run_requires_the_selected_terminal_artifact",
   "tests/test_verification.py::RunPlanRelationshipTests::test_unbenchmarked_build_may_supply_the_model",
   "tests/test_verification.py::RunPlanRelationshipTests::test_benchmark_estimator_requires_training",
 ]

@@ -396,12 +396,22 @@ class RunPlanTests(unittest.TestCase):
         self.assertEqual(run.env.machine_type, "n2-standard-8")
         self.assertEqual(run.estimator.artifact_name, TrainKeys.MODEL)
 
-    def test_estimator_must_select_configs(self) -> None:
-        """Verify that estimator must select model parameters."""
+    def test_unbenchmarked_run_may_select_a_declared_terminal_artifact(self) -> None:
+        """Allow plan verification to resolve an unbenchmarked result."""
         payload = run_payload()
-        payload["estimator"]["artifact_name"] = TrainKeys.RESUME_STATE
+        payload["estimator"]["artifact_name"] = "receipt"
 
-        with self.assertRaisesRegex(ValidationError, "model"):
+        run = RunSpec.model_validate(payload)
+
+        self.assertEqual(run.estimator.artifact_name, "receipt")
+
+    def test_benchmarked_run_must_select_the_model_artifact(self) -> None:
+        """Keep benchmark evaluation attached to the selected model."""
+        payload = run_payload()
+        payload["benchmark_id"] = "holdout"
+        payload["estimator"]["artifact_name"] = "receipt"
+
+        with self.assertRaisesRegex(ValidationError, "benchmarked run.*model"):
             RunSpec.model_validate(payload)
 
     def test_stage_spec_reference_uses_canonical_run_path(self) -> None:

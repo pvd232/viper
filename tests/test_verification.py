@@ -355,6 +355,7 @@ def run_spec(
     stage_specs: list[tuple[str, object]],
     *,
     estimator_stage: str = "train",
+    estimator_artifact: str = TrainKeys.MODEL,
 ) -> tuple[RunSpec, dict[str, bytes]]:
     """Build a run plan and the stage-spec files it identifies."""
     documents: dict[str, bytes] = {}
@@ -392,7 +393,7 @@ def run_spec(
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id=estimator_stage,
-            artifact_name=TrainKeys.MODEL,
+            artifact_name=estimator_artifact,
         ),
     )
     return run, documents
@@ -1439,6 +1440,56 @@ class RunAndStageVerificationTests(unittest.TestCase):
 
 class RunPlanRelationshipTests(unittest.TestCase):
     """Verify relationships among experiments, variants, stages, and benchmarks."""
+
+    def test_unbenchmarked_run_requires_the_selected_terminal_artifact(self) -> None:
+        """Resolve a non-model result to one output on its selected producer."""
+        build = build_spec()
+        run, _ = run_spec(
+            [("build", build)],
+            estimator_stage="build",
+            estimator_artifact="prior",
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_configs=(
+                BuildVariantStageConfig(
+                    kind="build",
+                    stage_id="build",
+                    config=build.config,
+                ),
+            ),
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            None,
+            {"build": build},
+        )
+
+        missing, _ = run_spec(
+            [("build", build)],
+            estimator_stage="build",
+            estimator_artifact="receipt",
+        )
+        with self.assertRaisesRegex(VerificationError, "declared stage artifact"):
+            verify_run_plan_relationships(
+                missing,
+                experiment,
+                variant,
+                None,
+                {"build": build},
+            )
 
     def test_unbenchmarked_build_may_supply_the_model(self) -> None:
         """Select an existing model artifact without claiming model training."""

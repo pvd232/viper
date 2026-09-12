@@ -239,8 +239,11 @@ class RunSpec(ProtocolModel):
         if self.estimator.stage_id not in set(stage_ids):
             raise ValueError("estimator must select a declared run stage")
 
-        if self.estimator.artifact_name != keys.Train.MODEL:
-            raise ValueError("estimator must select the model artifact")
+        if (
+            self.benchmark_id is not None
+            and self.estimator.artifact_name != keys.Train.MODEL
+        ):
+            raise ValueError("a benchmarked run must select the model artifact")
 
         return self
 
