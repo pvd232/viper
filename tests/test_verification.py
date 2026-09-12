@@ -1524,7 +1524,22 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 ),
             ),
         )
-        benchmark = BenchmarkSpec.model_construct()
+        benchmark = BenchmarkSpec(
+            benchmark_id="benchmark",
+            eval_id="evaluation",
+            test=resolved_pointer("inputs/benchmark/current.pointer.yaml"),
+            splits={
+                "split": resolved_pointer("inputs/benchmark/split.pointer.yaml")
+            },
+            metric_ids=("score",),
+            criteria=(
+                MetricCriterion(
+                    metric_id="score",
+                    comparison="ge",
+                    threshold=0.0,
+                ),
+            ),
+        )
 
         with self.assertRaisesRegex(VerificationError, "training stage"):
             verify_run_plan_relationships(
