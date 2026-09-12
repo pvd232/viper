@@ -7,6 +7,7 @@ import json
 import re
 from collections import Counter
 from collections.abc import Mapping
+from pathlib import Path
 from typing import cast
 
 import yaml
@@ -74,6 +75,7 @@ from ..stages import (
     ResolvedParameterizedSpec,
     ResolvedSpec,
     StageContextBinding,
+    StageFileAccessReceipt,
     StageInvocationReceipt,
 )
 from . import storage
@@ -190,6 +192,42 @@ def _executed_completion(
     return resolved.completion
 
 
+def _verify_declared_file_access(
+    *,
+    stage_id: StageId,
+    access: StageFileAccessReceipt | None,
+    input_paths: tuple[Path, ...],
+    output_paths: tuple[Path, ...],
+    measurement_paths: tuple[Path, ...],
+) -> None:
+    """Match recorded file-open events to the stage's frozen path declarations."""
+    if access is None:
+        raise VerificationError(
+            f"stage {stage_id!r} omitted declared file-access evidence"
+        )
+    read_paths = tuple(Path(path) for path in access.reads)
+    write_paths = tuple(Path(path) for path in access.writes)
+    allowed_reads = (*input_paths, *output_paths)
+    if any(
+        not any(path == root or root in path.parents for root in allowed_reads)
+        for path in read_paths
+    ):
+        raise VerificationError(f"stage {stage_id!r} recorded an undeclared file read")
+    allowed_writes = (*output_paths, *measurement_paths)
+    if any(
+        not any(path == root or root in path.parents for root in allowed_writes)
+        for path in write_paths
+    ):
+        raise VerificationError(f"stage {stage_id!r} recorded an undeclared file write")
+    if any(
+        not any(path == root or root in path.parents for path in read_paths)
+        for root in input_paths
+    ):
+        raise VerificationError(
+            f"stage {stage_id!r} did not open every declared input for reading"
+        )
+
+
 def _verify_stage_invocation(
     reference: ResolvedStageInvocationRef,
     *,
@@ -245,6 +283,23 @@ def _verify_stage_invocation(
     expected_digest = document_digest(expected_binding)
     if receipt.context_digest != expected_digest:
         raise VerificationError(f"stage {stage_id!r} invocation context digest differs")
+    if stage.file_access == "declared":
+        _verify_declared_file_access(
+            stage_id=stage_id,
+            access=receipt.file_access,
+            input_paths=tuple(Path(path) for path in expected_binding.inputs.values()),
+            output_paths=tuple(
+                Path(path) for path in expected_binding.outputs.values()
+            ),
+            measurement_paths=tuple(
+                Path(
+                    f"experiments/{run.experiment_id}/runs/{run.variant_id}/"
+                    f"{run.run_id}/attempts/{attempt.attempt_id}/measurements/"
+                    f"{stage_id}.{metric_id}.jsonl"
+                )
+                for metric_id in stage.metric_ids
+            ),
+        )
     if receipt.outcome != "succeeded":
         raise VerificationError(
             f"resolved stage {stage_id!r} requires a successful invocation"

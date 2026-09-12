@@ -82,6 +82,7 @@ from viper.runtime import (
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     StageContext,
+    StageFileAccessMode,
     StageImplementationRef,
     TrainSpec,
     train,
@@ -480,10 +481,12 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         },
         metrics=(loss,),
         objective=min(loss),
+        file_access="declared",
     )
 
     assert isinstance(draft.spec, TrainSpecDraft)
     assert draft.spec.implementation is fit
+    assert draft.spec.file_access == "declared"
     assert draft.outputs["model"].producer is draft
 
 
@@ -579,7 +582,11 @@ def test_plan_rejects_every_nested_mutator() -> None:
         draft.experiment.variants["baseline"].stages.update({})
 
 
-def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
+def _compiled_plan(
+    tmp_path: Path,
+    *,
+    file_access: StageFileAccessMode = "unrestricted",
+) -> tuple[_CompiledPlan, RunPlanDraft]:
     """Compile one plan whose callables live inside a temporary project."""
     (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
     _git(tmp_path, "init", "--quiet")
@@ -643,6 +650,7 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
         },
         metrics=(loss,),
         objective=min(loss),
+        file_access=file_access,
     )
     authored = experiment(
         experiment_id="e001_strand",
@@ -693,6 +701,17 @@ def test_plan_compiles_complete_protocol_graph(tmp_path: Path) -> None:
     assert "experiments/e001_strand/spec.yaml" in compiled.files
     assert "experiments/e001_strand/variants/baseline.spec.yaml" in compiled.files
     assert any(path.endswith("/stages/train/spec.yaml") for path in compiled.files)
+
+
+def test_plan_freezes_declared_file_access(tmp_path: Path) -> None:
+    """Persist the authored file policy in the immutable stage specification."""
+    compiled, _ = _compiled_plan(tmp_path, file_access="declared")
+    stage_path = next(
+        path for path in compiled.files if path.endswith("/stages/train/spec.yaml")
+    )
+    frozen = TrainSpec.model_validate(parse_yaml_bytes(compiled.files[stage_path]))
+
+    assert frozen.file_access == "declared"
 
 
 def test_freeze_publishes_one_immutable_plan(tmp_path: Path) -> None:

@@ -35,6 +35,28 @@ to explain a non-obvious invariant, state transition, join, or safety boundary.
 Protocol changes require synchronized updates to the formal protocol,
 implementation, verifier rule, and acceptance test.
 
+### Review a framework tradeoff
+
+Before accepting a change to VIPER's public authoring or execution behavior,
+record one fixed workflow and compare the current and proposed paths. The review
+must state:
+
+- the guarantee gained and the evidence that verifies it;
+- each new user action, restriction, and failure message;
+- the runtime operations added to the fixed workflow;
+- a focused benchmark when the change can affect model runtime;
+- unsupported execution paths and the behavior selected for them; and
+- whether the behavior is required, enabled by default, or opt-in.
+
+When a change relies on a runtime observation hook, distinguish cooperative
+evidence from a security boundary. State which operations the hook sees, which
+runtime-owned operations it excludes, and how callers test native-library
+behavior.
+
+Keep the implementation in one reviewable commit with its observing tests and
+documentation. Record broader release tests separately when the changed path
+ends before the release boundary.
+
 ## Validate the change
 
 Run the smallest test that covers the edited behavior. Run the fast gate before

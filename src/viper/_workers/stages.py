@@ -43,6 +43,7 @@ from ..stages import (
     load_stage_callable,
     stage_definition,
 )
+from .file_access import StageFileAccessObserver
 
 
 def _workspace_paths(
@@ -187,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     initialization = None
     execution_context = None
     python_env = None
+    file_access = None
     if not isinstance(stage, ParameterizedSpec):
         raise ValueError("stage worker requires a parameterized stage")
     try:
@@ -277,7 +279,26 @@ def main(argv: list[str] | None = None) -> int:
             startup = observe_process_startup(
                 initialization, run.reproducibility, effective_environment.compute.kind
             )
-            function(context)
+            if stage.file_access == "declared":
+                measurement_paths = tuple(
+                    root / f"experiments/{run.experiment_id}/runs/{run.variant_id}/"
+                    f"{run.run_id}/attempts/{binding.attempt_id}/measurements/"
+                    f"{binding.stage_id}.{metric_id}.jsonl"
+                    for metric_id in binding.metric_ids
+                )
+                observer = StageFileAccessObserver(
+                    root,
+                    context.inputs,
+                    context.outputs,
+                    measurement_paths,
+                )
+                try:
+                    with observer:
+                        function(context)
+                finally:
+                    file_access = observer.receipt()
+            else:
+                function(context)
     except Exception as exc:
         completed_at = datetime.now(UTC)
         invocation = StageInvocationReceipt(
@@ -287,6 +308,7 @@ def main(argv: list[str] | None = None) -> int:
             started_at=started_at,
             completed_at=completed_at,
             outcome="failed",
+            file_access=file_access,
         )
         _write_result(
             worker_context.result_path,
@@ -308,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         started_at=started_at,
         completed_at=completed_at,
         outcome="succeeded",
+        file_access=file_access,
     )
     assert initialization is not None
     assert startup is not None

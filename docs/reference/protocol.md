@@ -11,8 +11,9 @@ fields.
 | `ExperimentSpec` | Defines factors, variants, replicates, and metrics. |
 | `VariantSpec` | Selects the stage graph and config for each stage. |
 | `RunSpec` | Selects one variant and replicate, the source revision, runtime, reproducibility settings, estimator, optional benchmark, and ordered stages. |
-| `Spec` | Declares one stage's function, config, inputs, outputs, metrics, objective, runtime override, and reuse policy. |
+| `Spec` | Declares one stage's function, config, inputs, outputs, metrics, objective, runtime override, reuse policy, and file-access mode. |
 | `ResolvedSpec` | Records the artifacts and runtime evidence produced by one stage attempt. |
+| `StageInvocationReceipt` | Records the executed callable, bound context, timing, outcome, and any governed workspace file accesses. |
 | `RunAttempt` | Records status, timing, completed stages, measurements, logs, and failure evidence for one attempt. |
 | `ResolvedRun` | Records a run's terminal status and the attempt that supports it. |
 

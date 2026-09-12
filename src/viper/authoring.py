@@ -122,6 +122,7 @@ from .stages import (
     EvalSpec,
     Spec,
     StageContext,
+    StageFileAccessMode,
     StageImplementationRef,
     TrainSpec,
     stage_definition,
@@ -233,6 +234,7 @@ class ParameterizedSpecDraft(BaseSpecDraft):
     config: Config
     metrics: tuple[MetricDraft[Any], ...] = ()
     reuse: StageReuseMode = "never"
+    file_access: StageFileAccessMode = "unrestricted"
 
 
 class DownloadSpecDraft(BaseSpecDraft):
@@ -1063,6 +1065,7 @@ def _freeze_stage(
         # Serializing a subclass through the base type would omit its fields.
         "config": draft.config.model_dump(mode="json"),
         "reuse": draft.reuse,
+        "file_access": draft.file_access,
         "inputs": {
             name: _freeze_input(
                 root,
@@ -1226,6 +1229,7 @@ def stage(
     eval_id: EvalId | None = None,
     split_inputs: tuple[InputName, ...] = (),
     reuse: StageReuseMode = "never",
+    file_access: StageFileAccessMode = "unrestricted",
 ) -> StageDraft:
     """Connect a decorated workspace function to its inputs and outputs.
 
@@ -1239,6 +1243,8 @@ def stage(
 
     Returned output handles connect this stage to later stages. env overrides
     the run environment; reuse="verified" permits a verified catalog candidate.
+    file_access="declared" requires a successful Python read-open for every
+    input and checks CPython-visible open attempts against the declared paths.
     """
     selected_inputs = _stage_inputs(inputs)
     for input_name, value in selected_inputs.items():
@@ -1259,6 +1265,7 @@ def stage(
         "metrics": metrics,
         "env": env,
         "reuse": reuse,
+        "file_access": file_access,
     }
     spec: StageSpecDraft
     if definition.kind == "build":

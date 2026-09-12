@@ -31,6 +31,48 @@ an input named `source` supplies `context.inputs["source"]`, and
 `StageOutputs(dataset=...)` supplies `context.outputs["dataset"]`.
 A lookup using an undeclared name raises `KeyError`.
 
+## Enforce declared file access
+
+Set `file_access="declared"` on `stage()` when the invocation receipt must show
+that the workspace function successfully opened every declared input for reading
+and confined its file writes to declared outputs and attached metric files:
+
+```python
+prepared = stage(
+    sort_rows,
+    stage_id="prepare",
+    inputs=(input("source", path="examples/data/tiny.csv", data_role="training"),),
+    outputs=StageOutputs(
+        dataset=output(path="sorted.csv", loader=load_text, data_role="training")
+    ),
+    file_access="declared",
+)
+```
+
+The worker observes Python file-open events during the workspace function. It
+rejects an undeclared read-open, an undeclared write-open, a working-directory
+change, or a Python thread or child-process launch. A successful return requires
+one successful Python read-open beneath every declared input path. The audit hook
+rejects undeclared open attempts before the operation; temporary wrappers around
+`builtins.open`, `io.open`, and `os.open` retain operations that return
+successfully. The receipt proves successful access through those Python APIs.
+Semantic use of particular bytes requires separate evidence.
+`StageInvocationReceipt.file_access` stores the accepted repository-relative
+read and write paths, and verification checks those paths against the frozen
+stage specification.
+
+This mode checks cooperative stage code. Hostile code requires an operating-system
+sandbox because Python permits code to bypass hooks installed with
+`sys.addaudithook()`. The recorded runtime environment covers interpreter-owned
+files beneath `sys.prefix` and `sys.base_prefix`; the stage receipt omits them.
+Native-library file access appears in the receipt only when the library emits a
+Python audit event. Test the actual loader used by the stage before relying on
+this mode for that file type. The default `file_access="unrestricted"` preserves
+the ordinary stage execution path.
+
+See Python's [`sys.addaudithook()` documentation](https://docs.python.org/3/library/sys.html#sys.addaudithook)
+and [audit-event table](https://docs.python.org/3/library/audit_events.html).
+
 Metric functions receive a separate `MetricContext`, described in
 [metrics and benchmarks](metrics-and-benchmarks.md#use-the-metric-context).
 

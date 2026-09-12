@@ -66,6 +66,7 @@ from .runtime import (
 )
 
 ConfigT = TypeVar("ConfigT", bound=Config)
+StageFileAccessMode = Literal["unrestricted", "declared"]
 
 # Loading workspace code temporarily edits process-wide import state. Batch
 # preflight calls must finish restoring that state before another load begins.
@@ -114,6 +115,35 @@ class StageContextBinding(ProtocolModel):
     numpy_generator_names: tuple[HumanId, ...]
 
 
+class StageFileAccessReceipt(ProtocolModel):
+    """Record workspace paths opened by one governed stage."""
+
+    schema_version: Literal[1] = Field(
+        default=1,
+        description="Schema used to decode this stage file-access record.",
+    )
+    reads: tuple[RepoRelPath, ...] = Field(
+        description=(
+            "Repository-relative paths successfully opened for reading during "
+            "the stage."
+        )
+    )
+    writes: tuple[RepoRelPath, ...] = Field(
+        description=(
+            "Repository-relative paths successfully opened for writing during "
+            "the stage."
+        )
+    )
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> StageFileAccessReceipt:
+        """Require each access collection to be unique and sorted."""
+        for name, paths in (("reads", self.reads), ("writes", self.writes)):
+            if tuple(sorted(set(paths))) != paths:
+                raise ValueError(f"stage file-access {name} must be unique and sorted")
+        return self
+
+
 class StageInvocationReceipt(ProtocolModel):
     """Record the callable, logical context, timing, and outcome of one invocation."""
 
@@ -123,6 +153,12 @@ class StageInvocationReceipt(ProtocolModel):
     started_at: AwareDatetime
     completed_at: AwareDatetime
     outcome: Literal["succeeded", "failed", "cancelled", "preempted"]
+    file_access: StageFileAccessReceipt | None = Field(
+        default=None,
+        description=(
+            "CPython-visible file-open evidence retained for a governed stage."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_timing(self) -> StageInvocationReceipt:
@@ -182,6 +218,13 @@ class ParameterizedSpec(BaseSpec):
     implementation: StageImplementationRef
     config_type: ConfigTypeRef
     reuse: StageReuseMode = "never"
+    file_access: StageFileAccessMode = Field(
+        default="unrestricted",
+        description=(
+            "Whether the worker checks CPython-visible file opens against the "
+            "stage's declared paths and records successful Python open calls."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_implementation_path(self) -> ParameterizedSpec:

@@ -3,6 +3,8 @@ schema_version = 1
 [source_domains]
 "src/viper/_verification/storage.py" = "domain_verification"
 "src/viper/_verification/attempt.py" = "domain_verification"
+"src/viper/_workers/file_access.py" = "domain_execution"
+"src/viper/_workers/stages.py" = "domain_execution"
 "src/viper/_verification/metrics.py" = "domain_verification"
 "src/viper/api.py" = "domain_application"
 "src/viper/authoring.py" = "domain_authoring"
@@ -15,7 +17,82 @@ schema_version = 1
 "src/viper/preflight.py" = "domain_verification"
 "src/viper/references.py" = "domain_storage"
 "src/viper/storage.py" = "domain_storage"
+"src/viper/stages.py" = "domain_protocol"
 "src/viper/verification.py" = "domain_verification"
+
+[[declarations]]
+id = "src/viper/_workers/file_access.py:StageFileAccessObserver"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_stage_file_access.py::test_declared_access_records_input_read_and_output_write",
+  "tests/test_stage_file_access.py::test_declared_access_observes_numpy_archive_load",
+  "tests/test_stage_file_access.py::test_declared_access_observes_torch_checkpoint_load",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_unused_input",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_workspace_read",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_write",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_child_process",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_os_process_launch",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_python_thread_launch",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_working_directory_change",
+]
+
+[[declarations]]
+id = "src/viper/_workers/file_access.py:StageFileAccessObserver.receipt"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_stage_file_access.py::test_declared_access_records_input_read_and_output_write",
+  "tests/test_run_execution.py::test_train_stage_captures_local_external_input",
+]
+
+[[declarations]]
+id = "src/viper/_verification/attempt.py:_verify_declared_file_access"
+fallback_domain = "domain_verification"
+tests = [
+  "tests/test_stage_file_access.py::test_verifier_rejects_invalid_file_access_receipts",
+]
+
+[[declarations]]
+id = "src/viper/_workers/stages.py:main"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_run_execution.py::test_train_stage_captures_local_external_input",
+]
+
+[[declarations]]
+id = "src/viper/authoring.py:stage"
+fallback_domain = "domain_authoring"
+tests = [
+  "tests/test_authoring.py::test_python_stage_drafts_replace_yaml_authoring",
+]
+
+[[declarations]]
+id = "src/viper/authoring.py:_freeze_stage"
+fallback_domain = "domain_authoring"
+tests = [
+  "tests/test_authoring.py::test_plan_freezes_declared_file_access",
+]
+
+[[declarations]]
+id = "src/viper/stages.py:StageFileAccessReceipt"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_stage_file_access.py::test_file_access_schema_fields_explain_retained_evidence",
+]
+
+[[declarations]]
+id = "src/viper/stages.py:StageInvocationReceipt.file_access"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_stage_file_access.py::test_file_access_schema_fields_explain_retained_evidence",
+]
+
+[[declarations]]
+id = "src/viper/stages.py:ParameterizedSpec.file_access"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_authoring.py::test_plan_freezes_declared_file_access",
+  "tests/test_stage_file_access.py::test_file_access_schema_fields_explain_retained_evidence",
+]
 
 [[declarations]]
 id = "src/viper/references.py:LocalFileRef"

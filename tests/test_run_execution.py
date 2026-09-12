@@ -118,6 +118,7 @@ from viper.stages import (
     DownloadSpec,
     ResolvedTrainSpec,
     StageImplementationRef,
+    StageInvocationReceipt,
     TrainSpec,
     load_stage_callable,
 )
@@ -873,6 +874,7 @@ def test_train_stage_captures_local_external_input(
             )
         },
         config=train_config,
+        file_access="declared",
         outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: OutputSpec(
                 path=f"{RUN_ROOT}/artifacts/train/model/model.bin",
@@ -933,6 +935,16 @@ def test_train_stage_captures_local_external_input(
     )
     assert resolved_input.file.path == expected_path
     assert (root / expected_path).read_bytes() == b"prior"
+    invocation = StageInvocationReceipt.model_validate(
+        parse_yaml_bytes(store.fetch(verified.attempts[-1].invocations[-1].stored_at))
+    )
+    assert invocation.file_access is not None
+    assert invocation.file_access.reads == (expected_path,)
+    assert invocation.file_access.writes == (
+        f"{RUN_ROOT}/artifacts/train/model/model.bin",
+        f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.bin",
+        f"{RUN_ROOT}/attempts/1/measurements/train.epoch_mean.jsonl",
+    )
 
 
 def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
