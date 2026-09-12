@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from types import ModuleType
+from types import MappingProxyType, ModuleType
 from typing import Annotated, Any, Generic, Literal, TypeVar, cast
 
 import numpy as np
@@ -874,6 +874,19 @@ def load_stage_callable(
             config_source = inspect.getsourcefile(definition.config_type)
             setattr(value, "__viper_config_source__", config_source)
             setattr(value, "__viper_source_path__", str(path.resolve()))
+            loaded_workspace_modules = {
+                name: loaded_module
+                for name, loaded_module in sys.modules.items()
+                if any(
+                    name == prefix or name.startswith(f"{prefix}.")
+                    for prefix in workspace_prefixes
+                )
+            }
+            setattr(
+                value,
+                "__viper_workspace_modules__",
+                MappingProxyType(loaded_workspace_modules),
+            )
         except Exception as exc:
             if isinstance(exc, StageDefinitionError):
                 raise

@@ -87,6 +87,59 @@ tests = [
 ]
 
 [[declarations]]
+id = "src/viper/_workers/stages.py:_activate_workspace_modules"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_stage_invocation.py::test_stage_worker_activates_loaded_workspace_modules",
+]
+
+[[declarations]]
+id = "src/viper/stages.py:load_stage_callable"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_stage_invocation.py::test_stage_loader_resolves_standard_src_layout",
+  "tests/test_stage_invocation.py::test_stage_worker_activates_loaded_workspace_modules",
+]
+
+[[declarations]]
+id = "src/viper/_workers/stages.py:load_stage_callable"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result",
+]
+
+[[declarations]]
+id = "src/viper/stages.py:validate_stage_definition"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_stage_invocation.py::test_stage_loader_resolves_standard_src_layout",
+  "tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result",
+]
+
+[[declarations]]
+id = "tests/test_run_execution.py:load_stage_callable"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result",
+]
+
+[[declarations]]
+id = "tests/test_stage_invocation.py:_activate_workspace_modules"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_stage_invocation.py::test_stage_worker_activates_loaded_workspace_modules",
+]
+
+[[declarations]]
+id = "tests/test_stage_invocation.py:load_stage_callable"
+fallback_domain = "domain_protocol"
+tests = [
+  "tests/test_stage_invocation.py::test_stage_loader_keeps_framework_identity_in_viper_repository",
+  "tests/test_stage_invocation.py::test_stage_loader_requires_exact_decorated_top_level_callable",
+  "tests/test_stage_invocation.py::test_stage_loader_resolves_standard_src_layout",
+]
+
+[[declarations]]
 id = "src/viper/authoring.py:stage"
 fallback_domain = "domain_authoring"
 tests = [

@@ -1,13 +1,17 @@
 """Tests for frozen stage-callable identity and live typed contexts."""
 
 import hashlib
+import importlib
+import sys
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, ModuleType
 
 import numpy as np
 import pytest
 
 from viper import config
+from viper._workers.file_access import StageFileAccessObserver
+from viper._workers.stages import _activate_workspace_modules
 from viper.stages import (
     StageContext,
     StageDefinitionError,
@@ -127,6 +131,41 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
     loaded = load_stage_callable(path, reference, import_root=tmp_path)
 
     assert stage_definition(loaded).config_type.__name__ == "ProjectConfig"
+    workspace_modules = loaded.__viper_workspace_modules__
+    assert workspace_modules["example_project.config"].ProjectConfig is (
+        stage_definition(loaded).config_type
+    )
+
+
+def test_stage_worker_activates_loaded_workspace_modules(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolve the loader's exact module objects only during stage execution."""
+    package = ModuleType("example_project")
+    dependency = ModuleType("example_project.dependency")
+    previous = ModuleType("example_project")
+
+    def fit() -> None:
+        return None
+
+    fit.__viper_workspace_modules__ = MappingProxyType(
+        {
+            "example_project": package,
+            "example_project.dependency": dependency,
+        }
+    )
+    monkeypatch.setitem(sys.modules, "example_project", previous)
+    sys.modules.pop("example_project.dependency", None)
+
+    observer = StageFileAccessObserver(tmp_path, {}, {})
+    with _activate_workspace_modules(fit), observer:
+        assert importlib.import_module("example_project") is package
+        assert importlib.import_module("example_project.dependency") is dependency
+
+    assert observer.receipt().reads == ()
+    assert sys.modules["example_project"] is previous
+    assert "example_project.dependency" not in sys.modules
 
 
 def test_stage_loader_keeps_framework_identity_in_viper_repository(

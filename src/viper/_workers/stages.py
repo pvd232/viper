@@ -5,9 +5,12 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, ModuleType
+from typing import cast
 
 from viper.workspace import captured_input_path
 
@@ -44,6 +47,32 @@ from ..stages import (
     stage_definition,
 )
 from .file_access import StageFileAccessObserver
+
+_MISSING_MODULE = object()
+
+
+@contextmanager
+def _activate_workspace_modules(function: object) -> Iterator[None]:
+    """Expose the exact workspace modules loaded with one stage callable."""
+    modules = getattr(function, "__viper_workspace_modules__", {})
+    if not isinstance(modules, Mapping) or not all(
+        isinstance(name, str) and isinstance(module, ModuleType)
+        for name, module in modules.items()
+    ):
+        raise ValueError("startup.callable: workspace module closure is invalid")
+    previous: dict[str, ModuleType | object] = {
+        name: sys.modules[name] if name in sys.modules else _MISSING_MODULE
+        for name in modules
+    }
+    try:
+        sys.modules.update(modules)
+        yield
+    finally:
+        for name, module in previous.items():
+            if module is _MISSING_MODULE:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = cast(ModuleType, module)
 
 
 def _workspace_paths(
@@ -273,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
             metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )
-        with autocast_context(
+        with _activate_workspace_modules(function), autocast_context(
             run.reproducibility, backend=effective_environment.compute.kind
         ):
             startup = observe_process_startup(
