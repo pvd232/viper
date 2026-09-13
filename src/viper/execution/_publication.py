@@ -111,11 +111,14 @@ def write_attempt_document(
     attempt: RunAttempt,
     destination: StorageDestination,
     cloud_client: ViperCloudClient | None = None,
+    *,
+    replace_existing: bool = False,
 ) -> ResolvedAttemptRef:
-    """Publish one canonical attempt document and return its immutable reference."""
+    """Publish one final attempt document and return its immutable reference."""
     path = root / run_root / "attempts" / str(attempt.attempt_id) / "resolved.yaml"
     raw = serialize_document(attempt)
-    write_synchronized(path, raw)
+    writer = replace_synchronized if replace_existing else write_synchronized
+    writer(path, raw)
     relative_path = path.relative_to(root).as_posix()
     reference = publish_resolved_files(
         root,

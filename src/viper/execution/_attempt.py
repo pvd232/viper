@@ -749,6 +749,7 @@ def execute_attempt(
             failed_attempt,
             destination,
             cloud_client=cloud_client,
+            replace_existing=True,
         )
         if purpose == "benchmark_confirmation":
             failed_attempt_path = (

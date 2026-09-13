@@ -57,6 +57,7 @@ from viper.execution._materialization import (
     verify_captured_inputs,
 )
 from viper.execution._metric import MetricWorkerResult
+from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._source import RunFetcher
 from viper.execution._stage import StageExecutionError, execute_stage_process
@@ -101,7 +102,10 @@ from viper.reuse import (
     catalog_reuse_candidates,
 )
 from viper.runs import (
+    AttemptFailure,
+    AttemptJournalRef,
     ResolvedRun,
+    RunAttempt,
     RunSpec,
     RunStageRef,
 )
@@ -122,12 +126,63 @@ from viper.stages import (
     TrainSpec,
     load_stage_callable,
 )
-from viper.storage import LocalArtifactStore
+from viper.storage import LocalArtifactStore, LocalStorageDestination
 from viper.verification import verify_run_result
 from viper.workspace import AttemptWorkspace, captured_input_path
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
+
+
+def test_failed_attempt_replaces_provisional_document(tmp_path: Path) -> None:
+    """Finalize failure bytes at a path used by provisional success evidence."""
+    store = LocalArtifactStore(tmp_path)
+    path = tmp_path / RUN_ROOT / "attempts/1/resolved.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"provisional success\n")
+    started = datetime(2026, 9, 13, tzinfo=UTC)
+    completed = datetime(2026, 9, 13, 0, 1, tzinfo=UTC)
+    journal = AttemptJournalRef(
+        sha256="a" * 64,
+        bytes=1,
+        stored_at=LocalFileRef(
+            workspace=tmp_path,
+            store_id=store.store_id,
+            commit="b" * 64,
+            path=f"{RUN_ROOT}/attempts/1/journal.jsonl",
+        ),
+    )
+    failed = RunAttempt(
+        attempt_id=1,
+        purpose="run",
+        status="failed",
+        started_at=started,
+        completed_at=completed,
+        resolved_stages=(),
+        invocations=(),
+        journal=journal,
+        measurement_files=(),
+        log_files=(),
+        failure=AttemptFailure(
+            code="verification_failed",
+            stage_id="restore",
+            message="artifact.loadability: loader invocation failed",
+            occurred_at=completed,
+        ),
+    )
+
+    reference = write_attempt_document(
+        tmp_path,
+        RUN_ROOT,
+        failed,
+        LocalStorageDestination(),
+        replace_existing=True,
+    )
+
+    recorded = RunAttempt.model_validate(parse_yaml_bytes(path.read_bytes()))
+    assert recorded.status == "failed"
+    assert recorded.failure == failed.failure
+    assert reference.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def freeze_protocol_plan(

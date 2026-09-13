@@ -11,6 +11,7 @@ schema_version = 1
 "src/viper/authoring.py" = "domain_authoring"
 "src/viper/catalog.py" = "domain_verification"
 "src/viper/execution/_attempt.py" = "domain_execution"
+"src/viper/execution/_publication.py" = "domain_execution"
 "src/viper/execution/_benchmark.py" = "domain_execution"
 "src/viper/execution/_restore.py" = "domain_execution"
 "src/viper/execution/_source.py" = "domain_execution"
@@ -21,6 +22,21 @@ schema_version = 1
 "src/viper/storage.py" = "domain_storage"
 "src/viper/stages.py" = "domain_protocol"
 "src/viper/verification.py" = "domain_verification"
+
+[[declarations]]
+id = "src/viper/execution/_publication.py:write_attempt_document"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_run_execution.py::test_failed_attempt_replaces_provisional_document",
+]
+
+[[declarations]]
+id = "src/viper/execution/_attempt.py:execute_attempt"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_run_execution.py::test_failed_attempt_replaces_provisional_document",
+  "tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result",
+]
 
 [[declarations]]
 id = "src/viper/runs.py:RunSpec.estimator"
