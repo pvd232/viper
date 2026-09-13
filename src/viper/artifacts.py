@@ -86,7 +86,12 @@ class ResolvedSingleFileArtifact(ProtocolModel):
     """Record the exact file representing one artifact."""
 
     kind: Literal["file"] = "file"
-    file: SnapshotFileRef
+    relative_path: RepoRelPath = Field(
+        description="Workspace-relative path declared for artifact materialization."
+    )
+    file: SnapshotFileRef = Field(
+        description="Immutable identity and storage path of the produced file."
+    )
 
 
 class ResolvedBundleMember(ProtocolModel):
@@ -100,7 +105,13 @@ class ResolvedBundleArtifact(ProtocolModel):
     """Record every exact file representing one bundle artifact."""
 
     kind: Literal["bundle"] = "bundle"
-    members: tuple[ResolvedBundleMember, ...] = Field(min_length=2)
+    relative_path: RepoRelPath = Field(
+        description="Workspace-relative root declared for bundle materialization."
+    )
+    members: tuple[ResolvedBundleMember, ...] = Field(
+        min_length=2,
+        description="Ordered identities of the files beneath the output directory.",
+    )
 
     @model_validator(mode="after")
     def validate_member_paths(self) -> ResolvedBundleArtifact:

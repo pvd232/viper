@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Generic, Literal, Self, TypeVar, cast
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from ._schema import DataRole, ProtocolModel, RepoRelPath
 from .artifacts import ArtifactLoaderRef
@@ -36,9 +36,21 @@ class OutputSpec(ProtocolModel):
     """Declare one output using an exact loader reference."""
 
     kind: Literal["file", "bundle"] = "file"
-    path: RepoRelPath
+    path: RepoRelPath = Field(
+        description="Run-owned workspace path where the stage writes the output."
+    )
+    relative_path: RepoRelPath = Field(
+        description="Output path chosen by the stage author before run namespacing."
+    )
     loader: ArtifactLoaderRef
     data_role: DataRole
+
+    @model_validator(mode="after")
+    def validate_storage_path(self) -> Self:
+        """Require the run-owned path to end at the declared output path."""
+        if not self.path.endswith(f"/{self.relative_path}"):
+            raise ValueError("output storage path differs from its declared path")
+        return self
 
 
 class StageOutputs(BaseModel, Generic[OutputT]):

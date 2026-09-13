@@ -979,6 +979,7 @@ def _freeze_output(
     return OutputSpec(
         kind=draft.kind,
         path=f"{run_root}/{relative_output_path}",
+        relative_path=draft.path,
         loader=ArtifactLoaderRef(
             path=path.relative_to(root).as_posix(),
             symbol=draft.loader.__name__,

@@ -28,10 +28,11 @@ from viper.stages import (
 )
 
 
-def _output(path: str) -> OutputSpec:
+def _output(path: str, relative_path: str) -> OutputSpec:
     """Build one training-role file output for local preflight tests."""
     return OutputSpec(
         path=path,
+        relative_path=relative_path,
         loader=artifact_loader_ref("project/loaders/bytes_file.py"),
         data_role="training",
     )
@@ -56,10 +57,12 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
         },
         outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: _output(
-                f"{run_root}/artifacts/train/model/parameters.bin"
+                f"{run_root}/artifacts/train/model/parameters.bin",
+                "parameters.bin",
             ),
             TrainKeys.RESUME_STATE: _output(
-                f"{run_root}/artifacts/train/resume_state/resume_state.bin"
+                f"{run_root}/artifacts/train/resume_state/resume_state.bin",
+                "resume_state.bin",
             ),
         },
         config=config.TrainConfig(),
@@ -180,7 +183,8 @@ def test_future_input_uses_canonical_producer_path(tmp_path: Path) -> None:
         outputs={  # pyright: ignore[reportArgumentType]
             "dataset": _output(
                 "experiments/example/runs/baseline/01JABCDEFGHJKMNPQRSTVWXYZ0/"
-                "artifacts/download/dataset/data.bin"
+                "artifacts/download/dataset/data.bin",
+                "data.bin",
             )
         },
     )

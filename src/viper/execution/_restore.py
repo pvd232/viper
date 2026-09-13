@@ -55,7 +55,6 @@ class _IndexedFile(BaseModel):
 
 
 _RESOLVED_SPEC = TypeAdapter(ResolvedSpec)
-_REPO_REL_PATH = TypeAdapter(RepoRelPath)
 
 
 def _verified_bytes(fetcher: StorageFetcher, reference: ResolvedFileRef) -> bytes:
@@ -70,18 +69,6 @@ def _verified_bytes(fetcher: StorageFetcher, reference: ResolvedFileRef) -> byte
     ):
         raise RestoreError("restore source differs from its recorded identity")
     return raw
-
-
-def _declared_artifact_path(
-    selector: ArtifactRestoreSelector,
-    stored_path: RepoRelPath,
-) -> RepoRelPath:
-    """Remove the run-owned artifact prefix from one frozen output path."""
-    marker = f"/artifacts/{selector.stage_id}/{selector.artifact_name}/"
-    _, separator, relative_path = f"/{stored_path}".partition(marker)
-    if not separator or not relative_path:
-        raise RestoreError("artifact path differs from its stage and artifact names")
-    return _REPO_REL_PATH.validate_python(relative_path)
 
 
 def _local_run_reference(root: Path, path: Path) -> ResolvedRunRef:
@@ -195,16 +182,22 @@ def _stage_artifacts(
                 artifact_name=name,
             )
             if isinstance(artifact, ResolvedSingleFileArtifact):
-                files = (artifact.file,)
+                files = ((artifact.relative_path, artifact.file),)
             else:
                 assert isinstance(artifact, ResolvedBundleArtifact)
-                files = tuple(member.file for member in artifact.members)
+                files = tuple(
+                    (
+                        f"{artifact.relative_path}/{member.relative_path}",
+                        member.file,
+                    )
+                    for member in artifact.members
+                )
             indexed[selector] = tuple(
                 _IndexedFile(
                     reference=resolve_snapshot_file_ref(stage.snapshot, file),
-                    declared_path=_declared_artifact_path(selector, file.path),
+                    declared_path=declared_path,
                 )
-                for file in files
+                for declared_path, file in files
             )
     return indexed
 

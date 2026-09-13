@@ -90,7 +90,10 @@ def _remap_artifacts(
             target_file = source_artifact.file.model_copy(
                 update={"path": target_spec.path}
             )
-            artifacts[name] = ResolvedSingleFileArtifact(file=target_file)
+            artifacts[name] = ResolvedSingleFileArtifact(
+                relative_path=target_spec.relative_path,
+                file=target_file,
+            )
             receipt_files.append(
                 ReusedStageFile(
                     artifact_name=name,
@@ -121,7 +124,10 @@ def _remap_artifacts(
                 )
             )
             publication_files[target_file.path] = member.file
-        artifacts[name] = ResolvedBundleArtifact(members=tuple(members))
+        artifacts[name] = ResolvedBundleArtifact(
+            relative_path=target_spec.relative_path,
+            members=tuple(members),
+        )
     return artifacts, tuple(receipt_files), publication_files
 
 

@@ -27,6 +27,18 @@ from viper.stages import (
 )
 
 
+def test_output_spec_rejects_a_storage_path_outside_its_declared_path() -> None:
+    """Bind the retained path to the run-owned output path."""
+    with pytest.raises(ValidationError, match="differs from its declared path"):
+        OutputSpec(
+            path="experiments/example/runs/baseline/"
+            "01JABCDEFGHJKMNPQRSTVWXYZ0/artifacts/train/model/result.bin",
+            relative_path="parameters.bin",
+            loader=artifact_loader_ref("project/loaders/parameters.py"),
+            data_role="training",
+        )
+
+
 def _model_file(tmp_path: Path) -> tuple[Path, bytes]:
     """Write one constrained training-config class for focused tests."""
     raw = (
@@ -190,6 +202,7 @@ def test_stage_config_validation_runs_in_a_worker(tmp_path: Path) -> None:
             TrainKeys.MODEL: OutputSpec(
                 path="experiments/example/runs/baseline/"
                 "01JABCDEFGHJKMNPQRSTVWXYZ0/artifacts/train/model/parameters.bin",
+                relative_path="parameters.bin",
                 loader=artifact_loader_ref("project/loaders/parameters.py"),
                 data_role="training",
             ),
@@ -197,6 +210,7 @@ def test_stage_config_validation_runs_in_a_worker(tmp_path: Path) -> None:
                 path="experiments/example/runs/baseline/"
                 "01JABCDEFGHJKMNPQRSTVWXYZ0/artifacts/train/"
                 "resume_state/resume.bin",
+                relative_path="resume.bin",
                 loader=artifact_loader_ref("project/loaders/resume.py"),
                 data_role="training",
             ),

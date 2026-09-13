@@ -870,12 +870,14 @@ def add_single_artifact(
     store: DocumentStore,
     snapshot_commit: str,
     path: str,
+    relative_path: str,
     raw: bytes,
 ) -> ResolvedSingleFileArtifact:
     """Publish one single-file artifact into a stage-result snapshot."""
     store.put(hf_file(snapshot_commit, path), raw)
     return ResolvedSingleFileArtifact(
         kind="file",
+        relative_path=relative_path,
         file=SnapshotFileRef(path=path, sha256=sha256(raw), bytes=len(raw)),
     )
 
@@ -884,21 +886,26 @@ def add_bundle_artifact(
     store: DocumentStore,
     snapshot_commit: str,
     root: str,
+    relative_path: str,
     members: dict[str, bytes],
 ) -> ResolvedBundleArtifact:
     """Publish one bundle artifact into a stage-result snapshot."""
     resolved_members = []
-    for relative_path in sorted(members):
-        raw = members[relative_path]
-        path = f"{root}/{relative_path}"
+    for member_path in sorted(members):
+        raw = members[member_path]
+        path = f"{root}/{member_path}"
         store.put(hf_file(snapshot_commit, path), raw)
         resolved_members.append(
             ResolvedBundleMember(
-                relative_path=relative_path,
+                relative_path=member_path,
                 file=SnapshotFileRef(path=path, sha256=sha256(raw), bytes=len(raw)),
             )
         )
-    return ResolvedBundleArtifact(kind="bundle", members=tuple(resolved_members))
+    return ResolvedBundleArtifact(
+        kind="bundle",
+        relative_path=relative_path,
+        members=tuple(resolved_members),
+    )
 
 
 def publish_resolved_stage(
@@ -972,6 +979,7 @@ def publish_producer_run(
             "dataset": OutputSpec(
                 kind="file",
                 path=f"{run_root}/artifacts/download/dataset/dataset.bin",
+                relative_path="dataset.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
@@ -980,12 +988,14 @@ def publish_producer_run(
                 path=(
                     f"{run_root}/artifacts/download/evaluation_dataset/evaluation.bin"
                 ),
+                relative_path="evaluation.bin",
                 loader=loader_ref("bytes_file"),
                 data_role=evaluation_role,
             ),
             "split": OutputSpec(
                 kind="file",
                 path=f"{run_root}/artifacts/download/split/split.json",
+                relative_path="split.json",
                 loader=loader_ref("bytes_file"),
                 data_role=evaluation_role,
             ),
@@ -1017,12 +1027,14 @@ def publish_producer_run(
             TrainKeys.MODEL: OutputSpec(
                 kind="file",
                 path=f"{run_root}/artifacts/train/model/parameters.bin",
+                relative_path="parameters.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
             TrainKeys.RESUME_STATE: OutputSpec(
                 kind="file",
                 path=f"{run_root}/artifacts/train/resume_state/resume_state.bin",
+                relative_path="resume_state.bin",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -1088,18 +1100,21 @@ def publish_producer_run(
             store,
             download_commit,
             str(download.outputs["dataset"].path),
+            str(download.outputs["dataset"].relative_path),
             training_dataset_raw,
         ),
         "evaluation_dataset": add_single_artifact(
             store,
             download_commit,
             str(download.outputs["evaluation_dataset"].path),
+            str(download.outputs["evaluation_dataset"].relative_path),
             evaluation_dataset_raw,
         ),
         "split": add_single_artifact(
             store,
             download_commit,
             str(download.outputs["split"].path),
+            str(download.outputs["split"].relative_path),
             split_raw,
         ),
     }
@@ -1166,12 +1181,14 @@ def publish_producer_run(
                 store,
                 train_commit,
                 str(train.outputs[TrainKeys.MODEL].path),
+                str(train.outputs[TrainKeys.MODEL].relative_path),
                 b"producer model",
             ),
             TrainKeys.RESUME_STATE: add_single_artifact(
                 store,
                 train_commit,
                 str(train.outputs[TrainKeys.RESUME_STATE].path),
+                str(train.outputs[TrainKeys.RESUME_STATE].relative_path),
                 resume_state_bytes(),
             ),
         },
@@ -1318,6 +1335,7 @@ def build_complete_fixture(
             "prior": OutputSpec(
                 kind="bundle",
                 path=f"{run_root}/artifacts/build/prior/toy",
+                relative_path="toy",
                 loader=loader_ref("prior_bundle", bundle=True),
                 data_role="training",
             )
@@ -1349,12 +1367,14 @@ def build_complete_fixture(
             TrainKeys.MODEL: OutputSpec(
                 kind="file",
                 path=f"{run_root}/artifacts/train/model/parameters.bin",
+                relative_path="parameters.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
             TrainKeys.RESUME_STATE: OutputSpec(
                 kind="file",
                 path=f"{run_root}/artifacts/train/resume_state/resume_state.bin",
+                relative_path="resume_state.bin",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -1398,6 +1418,7 @@ def build_complete_fixture(
             "predictions": OutputSpec(
                 kind="file",
                 path=(f"{run_root}/artifacts/evaluate/predictions/predictions.json"),
+                relative_path="predictions.json",
                 loader=loader_ref("json_file"),
                 data_role=evaluation_role,
             )
@@ -1515,6 +1536,7 @@ def build_complete_fixture(
         store,
         build_commit,
         str(build.outputs["prior"].path),
+        str(build.outputs["prior"].relative_path),
         prior_members,
     )
     build_invocation = publish_invocation(
@@ -1580,12 +1602,14 @@ def build_complete_fixture(
                 store,
                 train_commit,
                 str(train.outputs[TrainKeys.MODEL].path),
+                str(train.outputs[TrainKeys.MODEL].relative_path),
                 b"final model parameters",
             ),
             TrainKeys.RESUME_STATE: add_single_artifact(
                 store,
                 train_commit,
                 str(train.outputs[TrainKeys.RESUME_STATE].path),
+                str(train.outputs[TrainKeys.RESUME_STATE].relative_path),
                 resume_state_bytes(),
             ),
         },
@@ -1639,6 +1663,7 @@ def build_complete_fixture(
                 store,
                 evaluate_commit,
                 str(evaluate.outputs["predictions"].path),
+                str(evaluate.outputs["predictions"].relative_path),
                 b"fixed predictions",
             )
         },
@@ -2196,11 +2221,13 @@ def test_worker_startup_derives_attempt_owned_external_input_path(
         outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: OutputSpec(
                 path=f"{run_root}/artifacts/train/model/parameters.bin",
+                relative_path="parameters.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
             TrainKeys.RESUME_STATE: OutputSpec(
                 path=f"{run_root}/artifacts/train/resume_state/resume_state.bin",
+                relative_path="resume_state.bin",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -2878,7 +2905,10 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
         sha256="a" * 64,
         bytes=1,
     )
-    artifact = ResolvedSingleFileArtifact(file=artifact_file)
+    artifact = ResolvedSingleFileArtifact(
+        relative_path="predictions.json",
+        file=artifact_file,
+    )
     config_type = CurrentConfigTypeRef(
         owner="workspace",
         path="project/config/eval.py",
@@ -2915,6 +2945,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
         outputs=EvalOutputs(
             predictions=OutputSpec(
                 path=artifact_file.path,
+                relative_path="predictions.json",
                 loader=loader_ref("json_file"),
                 data_role="eval",
             )

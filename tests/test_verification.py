@@ -436,12 +436,14 @@ def train_spec(*, future_prior: bool = False) -> TrainSpec:
             TrainKeys.MODEL: OutputSpec(
                 kind="file",
                 path=(f"{RUN_ROOT}/artifacts/train/model/parameters.safetensors"),
+                relative_path="parameters.safetensors",
                 loader=loader_ref("parameters"),
                 data_role="training",
             ),
             TrainKeys.RESUME_STATE: OutputSpec(
                 kind="file",
                 path=f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.pt",
+                relative_path="resume_state.pt",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -471,6 +473,7 @@ def build_spec() -> BuildSpec:
             "prior": OutputSpec(
                 kind="file",
                 path=f"{RUN_ROOT}/artifacts/build/prior/prior.pt",
+                relative_path="prior.pt",
                 loader=loader_ref("prior"),
                 data_role="training",
             )
@@ -621,11 +624,12 @@ class FileVerificationTests(unittest.TestCase):
         declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
             file=SnapshotFileRef(
                 path=str(declaration.path),
                 sha256=sha256(content),
                 bytes=len(content),
-            )
+            ),
         )
         verified = VerifiedArtifact(
             artifact=resolved,
@@ -658,11 +662,12 @@ class FileVerificationTests(unittest.TestCase):
         declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
             file=SnapshotFileRef(
                 path=str(declaration.path),
                 sha256=sha256(content),
                 bytes=len(content),
-            )
+            ),
         )
         verified = VerifiedArtifact(
             artifact=resolved,
@@ -692,11 +697,12 @@ class FileVerificationTests(unittest.TestCase):
         declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
             file=SnapshotFileRef(
                 path=str(declaration.path),
                 sha256=sha256(content),
                 bytes=len(content),
-            )
+            ),
         )
         verified = VerifiedArtifact(
             artifact=resolved,
@@ -731,11 +737,12 @@ class FileVerificationTests(unittest.TestCase):
         declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
             file=SnapshotFileRef(
                 path=str(declaration.path),
                 sha256=sha256(content),
                 bytes=len(content),
-            )
+            ),
         )
         verified = VerifiedArtifact(
             artifact=resolved,
@@ -768,11 +775,12 @@ class FileVerificationTests(unittest.TestCase):
         declaration = spec.outputs[TrainKeys.RESUME_STATE]
         content = b"resume state"
         resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
             file=SnapshotFileRef(
                 path=str(declaration.path),
                 sha256=sha256(content),
                 bytes=len(content),
-            )
+            ),
         )
         verified = VerifiedArtifact(
             artifact=resolved,
@@ -801,11 +809,12 @@ class FileVerificationTests(unittest.TestCase):
         content = b"resume state"
 
         resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
             file=SnapshotFileRef(
                 path=str(declaration.path),
                 sha256=sha256(content),
                 bytes=len(content),
-            )
+            ),
         )
         verified = VerifiedArtifact(
             artifact=resolved,
@@ -847,11 +856,12 @@ class FileVerificationTests(unittest.TestCase):
         declaration = spec.outputs[TrainKeys.RESUME_STATE]
         content = b"resume state"
         resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
             file=SnapshotFileRef(
                 path=str(declaration.path),
                 sha256=sha256(content),
                 bytes=len(content),
-            )
+            ),
         )
         verified = VerifiedArtifact(
             artifact=resolved,
@@ -1187,6 +1197,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
             artifacts={
                 TrainKeys.MODEL: ResolvedSingleFileArtifact(
                     kind="file",
+                    relative_path=spec.outputs[TrainKeys.MODEL].relative_path,
                     file=SnapshotFileRef(
                         path=str(spec.outputs[TrainKeys.MODEL].path),
                         sha256=sha256(model_raw),
@@ -1195,6 +1206,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
                 ),
                 TrainKeys.RESUME_STATE: ResolvedSingleFileArtifact(
                     kind="file",
+                    relative_path=spec.outputs[TrainKeys.RESUME_STATE].relative_path,
                     file=SnapshotFileRef(
                         path=str(spec.outputs[TrainKeys.RESUME_STATE].path),
                         sha256=sha256(resume_raw),
@@ -1579,9 +1591,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
             benchmark_id="benchmark",
             eval_id="evaluation",
             test=resolved_pointer("inputs/benchmark/current.pointer.yaml"),
-            splits={
-                "split": resolved_pointer("inputs/benchmark/split.pointer.yaml")
-            },
+            splits={"split": resolved_pointer("inputs/benchmark/split.pointer.yaml")},
             metric_ids=("score",),
             criteria=(
                 MetricCriterion(
@@ -1989,6 +1999,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                     path=(
                         f"{RUN_ROOT}/artifacts/evaluate/predictions/predictions.json"
                     ),
+                    relative_path="predictions.json",
                     loader=loader_ref("json_file"),
                     data_role="benchmark",
                 )
@@ -2332,6 +2343,7 @@ class FutureInputVerificationTests(unittest.TestCase):
             artifacts={
                 "prior": ResolvedSingleFileArtifact(
                     kind="file",
+                    relative_path=build.outputs["prior"].relative_path,
                     file=SnapshotFileRef(
                         path=str(build.outputs["prior"].path),
                         sha256=sha256(prior_raw),
@@ -2360,6 +2372,7 @@ class FutureInputVerificationTests(unittest.TestCase):
             artifacts={
                 TrainKeys.MODEL: ResolvedSingleFileArtifact(
                     kind="file",
+                    relative_path=train.outputs[TrainKeys.MODEL].relative_path,
                     file=SnapshotFileRef(
                         path=str(train.outputs[TrainKeys.MODEL].path),
                         sha256="1" * 64,
@@ -2368,6 +2381,7 @@ class FutureInputVerificationTests(unittest.TestCase):
                 ),
                 TrainKeys.RESUME_STATE: ResolvedSingleFileArtifact(
                     kind="file",
+                    relative_path=train.outputs[TrainKeys.RESUME_STATE].relative_path,
                     file=SnapshotFileRef(
                         path=str(train.outputs[TrainKeys.RESUME_STATE].path),
                         sha256="2" * 64,

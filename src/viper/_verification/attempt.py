@@ -1072,7 +1072,10 @@ def verify_external_inputs(
         verified[input_name] = VerifiedInput(
             path=planned_input.source.path,
             data_role=planned_input.data_role,
-            artifact=ResolvedSingleFileArtifact(file=resolved_input.file),
+            artifact=ResolvedSingleFileArtifact(
+                relative_path=planned_input.source.path,
+                file=resolved_input.file,
+            ),
             files=(
                 VerifiedSnapshotFile(
                     reference=resolved_input.file,

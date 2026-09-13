@@ -469,9 +469,12 @@ class ResolvedBaseSpec(ProtocolModel):
                 )
 
             if declared_artifact.kind == "file" and resolved_artifact.kind == "file":
-                if resolved_artifact.file.path != declared_artifact.path:
+                if (
+                    resolved_artifact.relative_path != declared_artifact.relative_path
+                    or resolved_artifact.file.path != declared_artifact.path
+                ):
                     raise ValueError(
-                        f"resolved artifact {name!r} path must match its declaration"
+                        f"resolved artifact {name!r} paths must match its declaration"
                     )
                 continue
 
@@ -479,6 +482,10 @@ class ResolvedBaseSpec(ProtocolModel):
                 declared_artifact.kind == "bundle"
                 and resolved_artifact.kind == "bundle"
             ):
+                if resolved_artifact.relative_path != declared_artifact.relative_path:
+                    raise ValueError(
+                        f"resolved artifact {name!r} path must match its declaration"
+                    )
                 for member in resolved_artifact.members:
                     expected_path = f"{declared_artifact.path}/{member.relative_path}"
                     if member.file.path != expected_path:

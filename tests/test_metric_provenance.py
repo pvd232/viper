@@ -154,7 +154,12 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
         SimpleNamespace(inputs={}),  # pyright: ignore[reportArgumentType]
         SimpleNamespace(  # pyright: ignore[reportArgumentType]
             inputs={},
-            artifacts={"predictions": artifacts.ResolvedSingleFileArtifact(file=file)},
+            artifacts={
+                "predictions": artifacts.ResolvedSingleFileArtifact(
+                    relative_path="predictions.json",
+                    file=file,
+                )
+            },
         ),
         stage_ref,
         {},

@@ -533,6 +533,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         outputs={  # pyright: ignore[reportArgumentType]
             "prior": OutputSpec(
                 path=f"{RUN_ROOT}/artifacts/download/prior/prior.bin",
+                relative_path="prior.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/bytes_file.py",
                     symbol="load",
@@ -574,6 +575,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: OutputSpec(
                 path=f"{RUN_ROOT}/artifacts/train/model/model.bin",
+                relative_path="model.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/bytes_file.py",
                     symbol="load",
@@ -586,6 +588,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             ),
             TrainKeys.RESUME_STATE: OutputSpec(
                 path=f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.bin",
+                relative_path="resume_state.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/resume_state.py",
                     symbol="load",
@@ -1017,6 +1020,7 @@ def test_train_stage_captures_local_external_input(
         outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: OutputSpec(
                 path=f"{RUN_ROOT}/artifacts/train/model/model.bin",
+                relative_path="model.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/bytes_file.py",
                     symbol="load",
@@ -1029,6 +1033,7 @@ def test_train_stage_captures_local_external_input(
             ),
             TrainKeys.RESUME_STATE: OutputSpec(
                 path=f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.bin",
+                relative_path="resume_state.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/resume_state.py",
                     symbol="load",
@@ -1062,6 +1067,11 @@ def test_train_stage_captures_local_external_input(
 
     resolved_train = verified.resolved_stages["train"]
     assert isinstance(resolved_train, ResolvedTrainSpec)
+    assert resolved_train.artifacts[TrainKeys.MODEL].relative_path == "model.bin"
+    assert (
+        resolved_train.artifacts[TrainKeys.RESUME_STATE].relative_path
+        == "resume_state.bin"
+    )
     resolved_input = resolved_train.inputs["prior"]
 
     assert isinstance(resolved_input, ResolvedExternalInputRef)
@@ -1471,6 +1481,11 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     )
     reused_train = second_verified.resolved_stages["train"]
     assert isinstance(reused_train, ResolvedTrainSpec)
+    assert reused_train.artifacts[TrainKeys.MODEL].relative_path == "model.bin"
+    assert (
+        reused_train.artifacts[TrainKeys.RESUME_STATE].relative_path
+        == "resume_state.bin"
+    )
     completion = reused_train.completion
 
     assert isinstance(completion, ReusedStageCompletion)

@@ -168,7 +168,8 @@ def _resolve_artifact(
     """Convert one materialized artifact into exact file records."""
     if declaration.kind == "file":
         return ResolvedSingleFileArtifact(
-            file=_snapshot_file(repository_root, declaration.path)
+            relative_path=declaration.relative_path,
+            file=_snapshot_file(repository_root, declaration.path),
         )
 
     root = _workspace_path(repository_root, declaration.path)
@@ -195,7 +196,10 @@ def _resolve_artifact(
         )
 
     try:
-        return ResolvedBundleArtifact(members=tuple(members))
+        return ResolvedBundleArtifact(
+            relative_path=declaration.relative_path,
+            members=tuple(members),
+        )
     except ValueError as exc:
         raise StageExecutionError(
             "artifact bundle does not satisfy its declared file contract"

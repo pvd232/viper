@@ -258,7 +258,10 @@ def retrieve_download_inputs(
             started_at=started_at,
             completed_at=completed_at,
         )
-        artifacts[input_name] = ResolvedSingleFileArtifact(file=body)
+        artifacts[input_name] = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
+            file=body,
+        )
         paths[input_name] = root / body.path
     return retrievals, artifacts, paths
 

@@ -212,6 +212,7 @@ def training_spec(
                     "path": (
                         f"{RUN_ROOT}/artifacts/train/model/parameters.safetensors"
                     ),
+                    "relative_path": "parameters.safetensors",
                     "loader": loader_ref(
                         "project_code/loaders/parameters.py"
                     ).model_dump(mode="json"),
@@ -222,6 +223,7 @@ def training_spec(
                     "path": (
                         f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.pt"
                     ),
+                    "relative_path": "resume_state.pt",
                     "loader": loader_ref(
                         "project_code/loaders/resume_state.py"
                     ).model_dump(mode="json"),
@@ -712,6 +714,19 @@ def test_plan_freezes_declared_file_access(tmp_path: Path) -> None:
     frozen = TrainSpec.model_validate(parse_yaml_bytes(compiled.files[stage_path]))
 
     assert frozen.file_access == "declared"
+
+
+def test_plan_retains_the_author_declared_output_path(tmp_path: Path) -> None:
+    """Keep the author's output path separate from the run-owned storage path."""
+    compiled, _ = _compiled_plan(tmp_path)
+    stage_path = next(
+        path for path in compiled.files if path.endswith("/stages/train/spec.yaml")
+    )
+    frozen = TrainSpec.model_validate(parse_yaml_bytes(compiled.files[stage_path]))
+
+    model = frozen.outputs[TrainKeys.MODEL]
+    assert model.relative_path == "model.bin"
+    assert model.path.endswith("/artifacts/train/model/model.bin")
 
 
 def test_freeze_publishes_one_immutable_plan(tmp_path: Path) -> None:

@@ -56,6 +56,9 @@ Each file reports `restored` or `already_present`. A bundle reports one entry
 per member. For one selected file, `output=destination_path` names that file.
 For several selected artifacts or one bundle, `output=destination_directory`
 places each file beneath that directory at the path declared by its output.
+The frozen artifact record retains this declared path separately from the
+immutable storage reference. Restoration therefore remains independent of the
+local or cloud storage layout.
 
 When a new plan consumes artifacts from the completed run, resolve the terminal
 file once and pass the resulting immutable reference to the prior-run input:

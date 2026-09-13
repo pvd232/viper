@@ -129,6 +129,7 @@ def _loader(root: Path, name: str = "bytes_file") -> ArtifactLoaderRef:
 def _artifact(
     root: Path,
     path: str,
+    relative_path: str,
     role: DataRole,
     *,
     loader_name: str = "bytes_file",
@@ -136,6 +137,7 @@ def _artifact(
     """Declare one generated file artifact and its reconstruction function."""
     return OutputSpec(
         path=path,
+        relative_path=relative_path,
         loader=_loader(root, loader_name),
         data_role=role,
     )
@@ -337,16 +339,19 @@ def test_generated_project_uses_runner_owned_downloads(
             "seed_training": _artifact(
                 root,
                 f"{acquisition_root}/artifacts/download/seed_training/seed.bin",
+                "seed.bin",
                 "training",
             ),
             "evaluation_dataset": _artifact(
                 root,
                 f"{acquisition_root}/artifacts/download/evaluation_dataset/evaluation.bin",
+                "evaluation.bin",
                 "benchmark",
             ),
             "test_split": _artifact(
                 root,
                 f"{acquisition_root}/artifacts/download/test_split/test_split.bin",
+                "test_split.bin",
                 "benchmark",
             ),
         },
@@ -370,11 +375,13 @@ def test_generated_project_uses_runner_owned_downloads(
             TrainKeys.MODEL: _artifact(
                 root,
                 f"{acquisition_root}/artifacts/train/model/model.bin",
+                "model.bin",
                 "training",
             ),
             TrainKeys.RESUME_STATE: _artifact(
                 root,
                 f"{acquisition_root}/artifacts/train/resume_state/resume_state.bin",
+                "resume_state.bin",
                 "training",
                 loader_name="resume_state",
             ),
@@ -537,6 +544,7 @@ def test_generated_project_uses_runner_owned_downloads(
             "dataset": _artifact(
                 root,
                 f"{candidate_root}/artifacts/download/dataset/dataset.bin",
+                "dataset.bin",
                 "training",
             )
         },
@@ -555,6 +563,7 @@ def test_generated_project_uses_runner_owned_downloads(
             "result": _artifact(
                 root,
                 f"{candidate_root}/artifacts/build/result/result.bin",
+                "result.bin",
                 "training",
             )
         },
@@ -573,6 +582,7 @@ def test_generated_project_uses_runner_owned_downloads(
             "embedding": _artifact(
                 root,
                 f"{candidate_root}/artifacts/embed/embedding/embedding.bin",
+                "embedding.bin",
                 "training",
             )
         },
@@ -596,11 +606,13 @@ def test_generated_project_uses_runner_owned_downloads(
             TrainKeys.MODEL: _artifact(
                 root,
                 f"{candidate_root}/artifacts/train/model/model.bin",
+                "model.bin",
                 "training",
             ),
             TrainKeys.RESUME_STATE: _artifact(
                 root,
                 f"{candidate_root}/artifacts/train/resume_state/resume_state.bin",
+                "resume_state.bin",
                 "training",
                 loader_name="resume_state",
             ),
@@ -637,6 +649,7 @@ def test_generated_project_uses_runner_owned_downloads(
             EvalKeys.PREDICTIONS: _artifact(
                 root,
                 (f"{candidate_root}/artifacts/eval/predictions/predictions.bin"),
+                "predictions.bin",
                 "benchmark",
             )
         },
