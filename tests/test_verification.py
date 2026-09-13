@@ -1507,7 +1507,10 @@ class RunPlanRelationshipTests(unittest.TestCase):
         """Select an existing model artifact without claiming model training."""
         build = build_spec()
         model = build.outputs["prior"].model_copy(
-            update={"path": f"{RUN_ROOT}/artifacts/build/model/model.pt"}
+            update={
+                "path": f"{RUN_ROOT}/artifacts/build/model/model.pt",
+                "relative_path": "model.pt",
+            }
         )
         build_with_model = build.model_copy(
             update={"outputs": type(build.outputs).model_validate({"model": model})}
@@ -1557,7 +1560,10 @@ class RunPlanRelationshipTests(unittest.TestCase):
         """Keep benchmark model selection attached to a training stage."""
         build = build_spec()
         model = build.outputs["prior"].model_copy(
-            update={"path": f"{RUN_ROOT}/artifacts/build/model/model.pt"}
+            update={
+                "path": f"{RUN_ROOT}/artifacts/build/model/model.pt",
+                "relative_path": "model.pt",
+            }
         )
         build = build.model_copy(
             update={"outputs": type(build.outputs).model_validate({"model": model})}

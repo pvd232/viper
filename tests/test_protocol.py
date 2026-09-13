@@ -285,11 +285,17 @@ def reproducibility() -> dict:
     }
 
 
-def artifact(path: str, loader: str, data_role: DataRole = "training") -> dict:
+def artifact(
+    path: str,
+    relative_path: str,
+    loader: str,
+    data_role: DataRole = "training",
+) -> dict:
     """Build one declared single-file artifact payload."""
     return {
         "kind": "file",
         "path": path,
+        "relative_path": relative_path,
         "loader": artifact_loader_ref(f"project/loaders/{loader}.py").model_dump(
             mode="json"
         ),
@@ -338,10 +344,12 @@ def train_payload() -> dict:
         "outputs": {
             TrainKeys.MODEL: artifact(
                 f"{RUN_ROOT}/artifacts/train/model/parameters.safetensors",
+                "parameters.safetensors",
                 "parameters",
             ),
             TrainKeys.RESUME_STATE: artifact(
                 f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.pt",
+                "resume_state.pt",
                 "resume_state",
             ),
         },
@@ -642,7 +650,8 @@ class TrainingCheckpointTests(unittest.TestCase):
 
         alternate_input = train_payload()
         alternate_input["inputs"]["training_dataset"]["path"] = "data/train.h5ad"
-        TrainSpec.model_validate(alternate_input)
+        with self.assertRaisesRegex(ValidationError, "beneath inputs"):
+            TrainSpec.model_validate(alternate_input)
 
         invalid_pointer = train_payload()
         invalid_pointer["inputs"]["training_dataset"]["pointer"]["path"] = (
@@ -688,6 +697,7 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload["outputs"][TrainKeys.MODEL]["path"] = (
             f"{RUN_ROOT}/artifacts/train/model/alternate.safetensors"
         )
+        payload["outputs"][TrainKeys.MODEL]["relative_path"] = "alternate.safetensors"
 
         spec = TrainSpec.model_validate(payload)
 
@@ -700,6 +710,7 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload = train_payload()
         payload["outputs"][EvalKeys.PREDICTIONS] = artifact(
             f"{RUN_ROOT}/artifacts/train/predictions/predictions.json",
+            "predictions.json",
             "json_file",
         )
 
@@ -832,6 +843,7 @@ class EvaluationTests(unittest.TestCase):
                 "outputs": {
                     EvalKeys.PREDICTIONS: artifact(
                         f"{RUN_ROOT}/artifacts/eval/predictions/predictions.json",
+                        "predictions.json",
                         "json_file",
                         "eval",
                     )
@@ -875,6 +887,7 @@ class EvaluationTests(unittest.TestCase):
                 EvalKeys.PREDICTIONS: {
                     "kind": "bundle",
                     "path": (f"{RUN_ROOT}/artifacts/eval/predictions/bundle"),
+                    "relative_path": "bundle",
                     "loader": artifact_loader_ref(
                         "custom_code/load_prediction_bundle.py"
                     ).model_dump(mode="json"),
@@ -922,6 +935,7 @@ class EvaluationTests(unittest.TestCase):
             "outputs": {
                 EvalKeys.PREDICTIONS: artifact(
                     f"{RUN_ROOT}/artifacts/eval/predictions/predictions.json",
+                    "predictions.json",
                     "json_file",
                     "eval",
                 )
@@ -1006,11 +1020,13 @@ class EvaluationTests(unittest.TestCase):
             "outputs": {
                 EvalKeys.PREDICTIONS: artifact(
                     f"{RUN_ROOT}/artifacts/eval/predictions/predictions.json",
+                    "predictions.json",
                     "json_file",
                     "eval",
                 ),
                 TrainKeys.MODEL: artifact(
                     f"{RUN_ROOT}/artifacts/eval/model/parameters.safetensors",
+                    "parameters.safetensors",
                     "parameters",
                     "eval",
                 ),
@@ -1030,6 +1046,7 @@ class ArtifactAndVariantTests(unittest.TestCase):
             ResolvedBundleArtifact.model_validate(
                 {
                     "kind": "bundle",
+                    "relative_path": "model",
                     "members": [
                         {
                             "relative_path": "config.json",
@@ -1049,6 +1066,7 @@ class ArtifactAndVariantTests(unittest.TestCase):
             ResolvedBundleArtifact.model_validate(
                 {
                     "kind": "bundle",
+                    "relative_path": "model",
                     "members": [
                         {
                             "relative_path": "model",

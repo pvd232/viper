@@ -5,6 +5,7 @@ outputs:
   dataset:
     kind: file
     path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/download/dataset/dataset.txt
+    relative_path: dataset.txt
     loader:
       path: src/sample_project/artifact_loaders/bytes_file.py
       symbol: load
@@ -14,6 +15,7 @@ outputs:
   split:
     kind: file
     path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/download/split/split.txt
+    relative_path: split.txt
     loader:
       path: src/sample_project/artifact_loaders/bytes_file.py
       symbol: load
