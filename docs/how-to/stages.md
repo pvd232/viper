@@ -35,19 +35,8 @@ A lookup using an undeclared name raises `KeyError`.
 
 Set `file_access="declared"` on `stage()` when the invocation receipt must show
 that the workspace function successfully opened every declared input for reading
-and confined its file writes to declared outputs and attached metric files:
-
-```python
-prepared = stage(
-    sort_rows,
-    stage_id="prepare",
-    inputs=(input("source", path="examples/data/tiny.csv", data_role="training"),),
-    outputs=StageOutputs(
-        dataset=output(path="sorted.csv", loader=load_text, data_role="training")
-    ),
-    file_access="declared",
-)
-```
+and confined its file writes to declared outputs and attached metric files. The
+complete build-stage declaration below enables this mode.
 
 The worker observes Python file-open events during the workspace function. It
 rejects an undeclared read-open, an undeclared write-open, a working-directory
@@ -126,6 +115,7 @@ prepared = stage(
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
     ),
+    file_access="declared",
 )
 ```
 

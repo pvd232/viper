@@ -60,12 +60,11 @@ The frozen artifact record retains this declared path separately from the
 immutable storage reference. Restoration therefore remains independent of the
 local or cloud storage layout.
 
-When a new plan consumes artifacts from the completed run, resolve the terminal
-file once and pass the resulting immutable reference to the prior-run input:
+When a new plan consumes artifacts from the completed run, call
+`execution.resolve_run_reference(root, run_path)` after defining `root` and
+`run_path` as above. Pass the resulting immutable reference to the prior-run
+input.
 
-```python
-run_reference = execution.resolve_run_reference(root, run_path)
-```
 VIPER checks source bytes and destinations before writing; it rejects paths
 that overlap or a destination that already contains different bytes.
 
