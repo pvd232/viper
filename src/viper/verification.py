@@ -410,6 +410,24 @@ def verify_promoted_artifact(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedArtifact:
     """Follow a promoted artifact pointer through its completed producer run."""
+    verified_run = _verify_pointer_run(pointer, policy=policy, fetcher=fetcher)
+    return _verify_artifact_in_run(
+        pointer,
+        verified_run=verified_run,
+        policy=policy,
+        expected_data_role=expected_data_role,
+        materialization_path=materialization_path,
+        fetcher=fetcher,
+    )
+
+
+def _verify_pointer_run(
+    pointer: ArtifactPointer,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+) -> VerifiedRunResult:
+    """Load and verify the completed run selected by one artifact pointer."""
     resolved_run_raw = read_resolved_file(pointer.run, fetcher=fetcher)
     try:
         resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(resolved_run_raw))
@@ -418,7 +436,19 @@ def verify_promoted_artifact(
             "artifact pointer run is not a valid ResolvedRun document"
         ) from exc
 
-    verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+    return verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+
+
+def _verify_artifact_in_run(
+    pointer: ArtifactPointer,
+    *,
+    verified_run: VerifiedRunResult,
+    policy: VerificationPolicy,
+    expected_data_role: DataRole | None,
+    materialization_path: RepoRelPath | None,
+    fetcher: StorageFetcher | None,
+) -> VerifiedArtifact:
+    """Verify one pointer selection against its already verified producer run."""
     expected_run_path = f"{run_root(verified_run.plan.run)}/resolved.yaml"
     if pointer.run.stored_at.path != expected_run_path:
         raise VerificationError(
@@ -483,7 +513,7 @@ def verify_promoted_artifact(
     successful_attempt = next(
         attempt
         for attempt in verified_run.attempts
-        if attempt.attempt_id == resolved_run.successful_attempt_id
+        if attempt.attempt_id == verified_run.result.successful_attempt_id
     )
     producer_stage = next(
         stage
@@ -571,6 +601,7 @@ def verify_stored_inputs(
 ) -> dict[StageId, dict[InputName, VerifiedInput]]:
     """Verify every promoted artifact consumed by the resolved stages."""
     verified_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
+    verified_runs: dict[ResolvedRunRef, VerifiedRunResult] = {}
 
     for stage_id, resolved_stage in resolved_stages.items():
         if not isinstance(resolved_stage, ResolvedInternalSpec):
@@ -613,8 +644,15 @@ def verify_stored_inputs(
 
             parsed_pointers[input_name] = pointer
 
-            verified_artifact = verify_promoted_artifact(
+            if pointer.run not in verified_runs:
+                verified_runs[pointer.run] = _verify_pointer_run(
+                    pointer,
+                    policy=policy,
+                    fetcher=fetcher,
+                )
+            verified_artifact = _verify_artifact_in_run(
                 pointer,
+                verified_run=verified_runs[pointer.run],
                 policy=policy,
                 expected_data_role=spec_input.data_role,
                 materialization_path=spec_input.path,

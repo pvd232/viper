@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any, cast
+from unittest import mock
 
 import pytest
 import torch
@@ -32,7 +33,7 @@ from tests.fixtures import (
     stage_implementation_ref,
     verification_policy,
 )
-from viper import config
+from viper import config, verification
 from viper import config as current_config
 from viper._schema import DataRole
 from viper._verification.attempt import verify_external_inputs
@@ -2252,6 +2253,42 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         self.assertEqual(set(verified.resolved_stages), {"build", "train", "evaluate"})
         self.assertEqual(len(verified.measurements), 1)
         self.assertEqual(verified.measurements[0].value, 0.91)
+
+    def test_stored_inputs_verify_one_shared_producer_run_once(self) -> None:
+        """Reuse one verified producer run across pointers in the same stage."""
+        resolved_run, store, _ = build_complete_fixture()
+        verified = verify_run_result(
+            resolved_run,
+            policy=POLICY,
+            fetcher=store.fetch,
+        )
+        resolved_build = verified.resolved_stages["build"]
+        self.assertIsInstance(resolved_build, ResolvedBuildSpec)
+        assert isinstance(resolved_build, ResolvedBuildSpec)
+        dataset_spec = resolved_build.spec.inputs["dataset"]
+        dataset_input = resolved_build.inputs["dataset"]
+        repeated_spec = resolved_build.spec.model_copy(
+            update={"inputs": {**resolved_build.spec.inputs, "repeat": dataset_spec}}
+        )
+        repeated_build = resolved_build.model_copy(
+            update={
+                "spec": repeated_spec,
+                "inputs": {**resolved_build.inputs, "repeat": dataset_input},
+            }
+        )
+
+        with mock.patch.object(
+            verification,
+            "_verify_pointer_run",
+            wraps=verification._verify_pointer_run,
+        ) as observed:
+            verification.verify_stored_inputs(
+                {"build": repeated_build},
+                policy=POLICY,
+                fetcher=store.fetch,
+            )
+
+        self.assertEqual(observed.call_count, 1)
 
     def test_bundle_rejects_an_unrecorded_published_member(self) -> None:
         """Reject a snapshot file omitted from the resolved bundle member list."""
