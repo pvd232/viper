@@ -3,8 +3,10 @@
 import hashlib
 import importlib
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType, ModuleType
+from typing import Protocol, cast
 
 import numpy as np
 import pytest
@@ -22,6 +24,16 @@ from viper.stages import (
 from viper.stages import (
     train as train_stage,
 )
+
+
+class WorkspaceModuleCallable(Protocol):
+    """Expose the workspace modules retained on a loaded stage callable."""
+
+    __viper_workspace_modules__: Mapping[str, ModuleType]
+
+    def __call__(self, *args: object, **kwargs: object) -> object:
+        """Invoke the stage callable."""
+        ...
 
 
 class ExampleTrainConfig(config.TrainConfig):
@@ -131,7 +143,9 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
     loaded = load_stage_callable(path, reference, import_root=tmp_path)
 
     assert stage_definition(loaded).config_type.__name__ == "ProjectConfig"
-    workspace_modules = loaded.__viper_workspace_modules__
+    workspace_modules = cast(
+        WorkspaceModuleCallable, loaded
+    ).__viper_workspace_modules__
     assert workspace_modules["example_project.config"].ProjectConfig is (
         stage_definition(loaded).config_type
     )
@@ -149,7 +163,8 @@ def test_stage_worker_activates_loaded_workspace_modules(
     def fit() -> None:
         return None
 
-    fit.__viper_workspace_modules__ = MappingProxyType(
+    fit_with_modules = cast(WorkspaceModuleCallable, fit)
+    fit_with_modules.__viper_workspace_modules__ = MappingProxyType(
         {
             "example_project": package,
             "example_project.dependency": dependency,
@@ -159,7 +174,7 @@ def test_stage_worker_activates_loaded_workspace_modules(
     sys.modules.pop("example_project.dependency", None)
 
     observer = StageFileAccessObserver(tmp_path, {}, {})
-    with _activate_workspace_modules(fit), observer:
+    with _activate_workspace_modules(fit_with_modules), observer:
         assert importlib.import_module("example_project") is package
         assert importlib.import_module("example_project.dependency") is dependency
 

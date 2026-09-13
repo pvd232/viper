@@ -266,9 +266,10 @@ def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     )
     cache_path.write_bytes(b"corrupt")
 
-    assert RunFetcher(
-        tmp_path, store, CONSUMER_REPOSITORY
-    ).read_verified(reference) == payload
+    assert (
+        RunFetcher(tmp_path, store, CONSUMER_REPOSITORY).read_verified(reference)
+        == payload
+    )
     assert cache_path.read_bytes() == payload
     assert fetches == [location, location]
 
@@ -279,9 +280,10 @@ def test_run_fetcher_does_not_duplicate_local_store_objects(tmp_path: Path) -> N
     reference = store.resolved_files({"evidence.bin": b"evidence"})[0]
     resolved = ResolvedFileRef.model_validate(reference.model_dump(mode="python"))
 
-    assert RunFetcher(
-        tmp_path, store, CONSUMER_REPOSITORY
-    ).read_verified(resolved) == b"evidence"
+    assert (
+        RunFetcher(tmp_path, store, CONSUMER_REPOSITORY).read_verified(resolved)
+        == b"evidence"
+    )
     assert not (tmp_path / ".viper/cache/verified-objects").exists()
 
 

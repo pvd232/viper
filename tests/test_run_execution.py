@@ -1162,8 +1162,7 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         bytes=len(pointer_raw),
         stored_at=LocalFileRef.model_construct(
             path=(
-                ".viper/pointers/"
-                f"{'a' * 64}/predict/raw_gene_predictions.pointer.yaml"
+                f".viper/pointers/{'a' * 64}/predict/raw_gene_predictions.pointer.yaml"
             )
         ),
     )
