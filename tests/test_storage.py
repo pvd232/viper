@@ -11,6 +11,7 @@ from viper import execution
 from viper._schema import SHA256, RepoRelPath
 from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution._restore import (
+    _IndexedFile,
     _plan_files,
     _PlannedFile,
     _restore_files,
@@ -646,8 +647,24 @@ def test_multi_artifact_restore_uses_declared_paths(tmp_path: Path) -> None:
     planned = _plan_files(
         root=tmp_path,
         indexed={
-            prediction: (_restore_file("raw_gene_predictions.npz"),),
-            receipt: (_restore_file("hopfield_replay_receipt.json"),),
+            prediction: (
+                _IndexedFile(
+                    reference=_restore_file(
+                        "runs/example/artifacts/predict/raw_gene_predictions/"
+                        "stored-predictions.npz"
+                    ),
+                    declared_path="raw_gene_predictions.npz",
+                ),
+            ),
+            receipt: (
+                _IndexedFile(
+                    reference=_restore_file(
+                        "runs/example/artifacts/evaluate/parity_receipt/"
+                        "stored-receipt.json"
+                    ),
+                    declared_path="hopfield_replay_receipt.json",
+                ),
+            ),
         },
         selectors=(prediction, receipt),
         output=Path("replay"),
@@ -670,8 +687,18 @@ def test_multi_artifact_restore_rejects_overlapping_declared_paths(
         _plan_files(
             root=tmp_path,
             indexed={
-                first: (_restore_file("result.json"),),
-                second: (_restore_file("result.json"),),
+                first: (
+                    _IndexedFile(
+                        reference=_restore_file("runs/first/result.json"),
+                        declared_path="result.json",
+                    ),
+                ),
+                second: (
+                    _IndexedFile(
+                        reference=_restore_file("runs/second/result.json"),
+                        declared_path="result.json",
+                    ),
+                ),
             },
             selectors=(first, second),
             output=Path("replay"),

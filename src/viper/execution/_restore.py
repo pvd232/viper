@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
-from .._schema import repo_file_paths_overlap
+from .._schema import RepoRelPath, repo_file_paths_overlap
 from ..artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
 from ..evidence import StorageFetcher
 from ..references import (
@@ -43,6 +43,15 @@ class _PlannedFile(BaseModel):
     selector: ArtifactRestoreSelector
     reference: ResolvedFileRef
     destination: Path
+
+
+class _IndexedFile(BaseModel):
+    """Join immutable stored bytes to their declared artifact path."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    reference: ResolvedFileRef
+    declared_path: RepoRelPath
 
 
 _RESOLVED_SPEC = TypeAdapter(ResolvedSpec)
@@ -160,9 +169,9 @@ def _successful_attempt(
 def _stage_artifacts(
     attempt: RunAttempt,
     fetcher: StorageFetcher,
-) -> dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]]:
+) -> dict[ArtifactRestoreSelector, tuple[_IndexedFile, ...]]:
     """Load each resolved stage and index its immutable artifact files."""
-    indexed: dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]] = {}
+    indexed: dict[ArtifactRestoreSelector, tuple[_IndexedFile, ...]] = {}
     for stage in attempt.resolved_stages:
         stage_reference = resolve_snapshot_file_ref(stage.snapshot, stage.resolved_spec)
         stage_raw = _verified_bytes(fetcher, stage_reference)
@@ -178,7 +187,11 @@ def _stage_artifacts(
                 assert isinstance(artifact, ResolvedBundleArtifact)
                 files = tuple(member.file for member in artifact.members)
             indexed[selector] = tuple(
-                resolve_snapshot_file_ref(stage.snapshot, file) for file in files
+                _IndexedFile(
+                    reference=resolve_snapshot_file_ref(stage.snapshot, file),
+                    declared_path=file.path,
+                )
+                for file in files
             )
     return indexed
 
@@ -187,6 +200,7 @@ def _destination(
     *,
     root: Path,
     reference: ResolvedFileRef,
+    declared_path: RepoRelPath,
     selector_count: int,
     bundle: bool,
     output: Path | None,
@@ -198,7 +212,7 @@ def _destination(
         candidate = output if output.is_absolute() else root / output
     else:
         base = output if output.is_absolute() else root / output
-        candidate = base / reference.stored_at.path
+        candidate = base / declared_path
     try:
         relative = candidate.resolve().relative_to(root).as_posix()
         return resolve_path(root, relative, operation="write")
@@ -211,7 +225,7 @@ def _destination(
 def _plan_files(
     *,
     root: Path,
-    indexed: dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]],
+    indexed: dict[ArtifactRestoreSelector, tuple[_IndexedFile, ...]],
     selectors: tuple[ArtifactRestoreSelector, ...],
     output: Path | None,
 ) -> tuple[_PlannedFile, ...]:
@@ -226,16 +240,17 @@ def _plan_files(
         raise RestoreError("selected artifact is absent from the successful attempt")
     planned: list[_PlannedFile] = []
     for selector in selected:
-        references = indexed[selector]
-        bundle = len(references) > 1
-        for reference in references:
+        indexed_files = indexed[selector]
+        bundle = len(indexed_files) > 1
+        for indexed_file in indexed_files:
             planned.append(
                 _PlannedFile(
                     selector=selector,
-                    reference=reference,
+                    reference=indexed_file.reference,
                     destination=_destination(
                         root=root,
-                        reference=reference,
+                        reference=indexed_file.reference,
+                        declared_path=indexed_file.declared_path,
                         selector_count=len(selected),
                         bundle=bundle,
                         output=output,
