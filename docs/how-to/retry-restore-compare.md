@@ -56,6 +56,13 @@ Each file reports `restored` or `already_present`. A bundle reports one entry
 per member. For one selected file, `output=destination_path` names that file.
 For several selected artifacts or one bundle, `output=destination_directory`
 places each file beneath that directory at the path declared by its output.
+
+When a new plan consumes artifacts from the completed run, resolve the terminal
+file once and pass the resulting immutable reference to the prior-run input:
+
+```python
+run_reference = execution.resolve_run_reference(root, run_path)
+```
 VIPER checks source bytes and destinations before writing; it rejects paths
 that overlap or a destination that already contains different bytes.
 

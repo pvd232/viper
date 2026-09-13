@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import HttpUrl
 
+from viper import execution
 from viper._schema import SHA256, RepoRelPath
 from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution._restore import (
@@ -22,6 +23,7 @@ from viper.references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
+    ResolvedRunRef,
     ResolvedRunSpecRef,
     SnapshotFileRef,
     ViperCloudFileRef,
@@ -63,6 +65,24 @@ def _restore_file(path: str) -> ResolvedFileRef:
             path=path,
         ),
     )
+
+
+def test_resolve_run_reference_identifies_local_terminal_bytes(tmp_path: Path) -> None:
+    """Expose a local terminal run as an immutable public run reference."""
+    (tmp_path / "viper.toml").write_text(
+        "[workspace]\nschema_version = 2\n",
+        encoding="utf-8",
+    )
+    terminal = tmp_path / "runs/example/resolved.yaml"
+    terminal.parent.mkdir(parents=True)
+    terminal.write_bytes(b"status: succeeded\n")
+
+    reference = execution.resolve_run_reference(tmp_path, terminal)
+
+    assert isinstance(reference, ResolvedRunRef)
+    assert reference.sha256 == hashlib.sha256(terminal.read_bytes()).hexdigest()
+    assert reference.bytes == terminal.stat().st_size
+    assert reference.stored_at.path == "runs/example/resolved.yaml"
 
 
 def test_run_fetcher_reuses_one_external_git_file_within_an_execution(

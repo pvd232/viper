@@ -270,6 +270,7 @@ Continue from a saved plan or run result:
 | Retry a failed run | `viper.execution.retry()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Confirm a benchmark | `viper.execution.benchmark()` | [Metrics and benchmarks](docs/how-to/metrics-and-benchmarks.md) |
 | Restore verified artifacts | `viper.execution.restore()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
+| Reference a completed local run | `viper.execution.resolve_run_reference()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Inspect lineage or compare runs | `viper.api.lineage()` and `viper.api.compare_runs()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Search completed measurements | `viper.api.catalog_refresh()` and `catalog().measurements()` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
 | Give an agent typed access | `viper mcp --root .` | [Agent interface](docs/reference/agents.md) |

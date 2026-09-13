@@ -121,17 +121,23 @@ def _cloud_run_reference(
     )
 
 
-def _run_reference(
+def resolve_run_reference(
     root: Path,
     selected: RestoreRunReference,
-    client: ViperCloudClient | None,
+    *,
+    cloud_client: ViperCloudClient | None = None,
 ) -> ResolvedRunRef:
-    """Resolve one direct restore input to an immutable terminal reference."""
+    """Resolve a local path or cloud URI to an immutable terminal-run reference.
+
+    The returned reference can connect artifacts from an existing run to a new
+    run plan without calling a private restoration helper.
+    """
+    root = root.resolve(strict=True)
     if isinstance(selected, ResolvedRunRef):
         return selected
     if isinstance(selected, Path):
         return _local_run_reference(root, selected)
-    return _cloud_run_reference(selected, client)
+    return _cloud_run_reference(selected, cloud_client)
 
 
 def _successful_attempt(
@@ -301,7 +307,11 @@ def restore(
 ) -> RestoreResult:
     """Restore selected verified artifacts from one successful immutable run."""
     root = repository_root.resolve(strict=True)
-    reference = _run_reference(root, run_reference, cloud_client)
+    reference = resolve_run_reference(
+        root,
+        run_reference,
+        cloud_client=cloud_client,
+    )
     fetcher = RunFetcher(root, LocalArtifactStore(root), "", cloud_client)
     terminal_raw = _verified_bytes(fetcher, reference)
     run = ResolvedRun.model_validate(parse_yaml_bytes(terminal_raw))

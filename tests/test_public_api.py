@@ -157,6 +157,7 @@ def test_execution_namespace_owns_only_operations() -> None:
     """Keep execution records and errors in their defining modules."""
     assert tuple(execution.__all__) == (
         "benchmark",
+        "resolve_run_reference",
         "retry",
         "restore",
         "run",
@@ -169,6 +170,7 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert callable(execution.run)
     assert callable(execution.retry)
     assert callable(execution.benchmark)
+    assert callable(execution.resolve_run_reference)
     assert callable(execution.restore)
     assert callable(execution.run_many)
 

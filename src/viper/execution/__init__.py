@@ -9,7 +9,7 @@ from ..repository import resolve_root
 from ..storage import ViperCloudClient
 from ._batch import run_many as _run_many
 from ._benchmark import benchmark as _benchmark
-from ._restore import restore
+from ._restore import resolve_run_reference, restore
 from ._run import retry as _retry
 from ._run import run as _run
 from .results import BenchmarkExecutionResult, ExperimentExecutionResult, RunResult
@@ -133,6 +133,7 @@ def run_many(
 
 __all__ = [
     "benchmark",
+    "resolve_run_reference",
     "retry",
     "restore",
     "run",
