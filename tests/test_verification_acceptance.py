@@ -77,6 +77,7 @@ from viper.inputs import (
     ResolvedExternalInputRef,
     ResolvedFutureInputRef,
     ResolvedStoredInputRef,
+    StoredInputMaterialization,
     StoredInputRef,
 )
 from viper.keys import Eval as EvalKeys
@@ -193,7 +194,7 @@ from viper.verification import (
     verify_run_result,
     verify_stage_reuse,
 )
-from viper.workspace import captured_input_path
+from viper.workspace import captured_input_path, stored_input_path
 
 SOURCE_REPOSITORY = HttpUrl("https://github.com/example/viper-project")
 ARTIFACT_REPOSITORY = "example/viper-runs"
@@ -2260,6 +2261,56 @@ def test_worker_startup_derives_attempt_owned_external_input_path(
             stage_id="train",
             input_name="dataset",
             source_path="inputs/raw/dataset.bin",
+        )
+    }
+
+    stored_stage = stage.model_copy(
+        update={
+            "inputs": {
+                "reference_predictions": StoredInputRef(
+                    pointer=ArtifactPointerRef(
+                        repository=SOURCE_REPOSITORY,
+                        commit=MAIN_SOURCE_COMMIT,
+                        path=(
+                            ".viper/pointers/"
+                            f"{'a' * 64}/predict/raw_gene_predictions.pointer.yaml"
+                        ),
+                    ),
+                    path="inputs/parity/historical_predictions.npz",
+                    data_role="training",
+                    materialization=StoredInputMaterialization.ATTEMPT_WORKSPACE,
+                )
+            }
+        }
+    )
+    stored_run = make_run(
+        experiment_id="stored_input",
+        run_id=run_id,
+        source_commit=MAIN_SOURCE_COMMIT,
+        plan_commit=MAIN_PLAN_COMMIT,
+        stage_specs=[("train", stored_stage)],
+        estimator_stage_id="train",
+    )
+    stored_stage_path = tmp_path / stored_run.stages[0].spec
+    stored_stage_path.parent.mkdir(parents=True)
+    stored_stage_path.write_bytes(yaml_bytes(stored_stage))
+
+    planned, expected_inputs = _planned_stage_context(
+        tmp_path,
+        stored_run,
+        "train",
+        attempt_id=3,
+    )
+
+    assert planned == stored_stage
+    assert expected_inputs == {
+        "reference_predictions": stored_input_path(
+            run_id=run_id,
+            attempt_id=3,
+            stage_id="train",
+            input_name="reference_predictions",
+            declared_path="inputs/parity/historical_predictions.npz",
+            materialization=StoredInputMaterialization.ATTEMPT_WORKSPACE,
         )
     }
 

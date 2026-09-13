@@ -12,7 +12,7 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
-from viper.workspace import captured_input_path
+from viper.workspace import captured_input_path, stored_input_path
 
 from .. import _subprocess as subprocess
 from .._config.validation import config_type_path, instantiate_config
@@ -151,7 +151,16 @@ def _planned_stage_context(
             if isinstance(candidate, InternalSpec):
                 for name, input_reference in candidate.inputs.items():
                     if isinstance(input_reference, StoredInputRef):
-                        expected_inputs[name] = str(input_reference.path)
+                        expected_inputs[name] = str(
+                            stored_input_path(
+                                run_id=run.run_id,
+                                attempt_id=attempt_id,
+                                stage_id=reference.stage_id,
+                                input_name=name,
+                                declared_path=input_reference.path,
+                                materialization=input_reference.materialization,
+                            )
+                        )
                     elif isinstance(input_reference, ExternalInputRef):
                         expected_inputs[name] = str(
                             captured_input_path(

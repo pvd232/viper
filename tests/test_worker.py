@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from viper.inputs import StoredInputMaterialization
 from viper.journal import DurableJournal, JournalEntry
 from viper.worker import (
     ExecutionPolicy,
@@ -19,6 +20,7 @@ from viper.workspace import (
     RunWorkspaceLock,
     WorkspaceError,
     next_attempt_id,
+    stored_input_path,
 )
 
 
@@ -50,6 +52,23 @@ def test_attempt_allocator_uses_durable_workspace_history(tmp_path: Path) -> Non
     AttemptWorkspace.create(tmp_path, run_id, 3)
 
     assert next_attempt_id(tmp_path, run_id) == 4
+
+
+def test_stored_input_path_preserves_name_inside_attempt_namespace() -> None:
+    """Keep the declared filename while isolating each consuming attempt."""
+    path = stored_input_path(
+        run_id="01JABCDEFGHJKMNPQRSTVWXYZ",
+        attempt_id=2,
+        stage_id="evaluate",
+        input_name="reference_predictions",
+        declared_path="inputs/parity/historical_predictions.npz",
+        materialization=StoredInputMaterialization.ATTEMPT_WORKSPACE,
+    )
+
+    assert path == (
+        ".viper/workspaces/01JABCDEFGHJKMNPQRSTVWXYZ/attempt-2/"
+        "inputs/evaluate/reference_predictions/parity/historical_predictions.npz"
+    )
 
 
 def test_run_lock_coordinates_distinct_workspace_objects(tmp_path: Path) -> None:

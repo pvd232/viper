@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ._schema import RepoRelPath
 from .ids import InputName, RunId, StageId
+from .inputs import StoredInputMaterialization
 
 
 class WorkspaceError(RuntimeError):
@@ -172,4 +173,23 @@ def captured_input_path(
     return (
         f".viper/workspaces/{run_id}/attempt-{attempt_id}/"
         f"inputs/{stage_id}/{input_name}{suffix}"
+    )
+
+
+def stored_input_path(
+    *,
+    run_id: RunId,
+    attempt_id: int,
+    stage_id: StageId,
+    input_name: InputName,
+    declared_path: RepoRelPath,
+    materialization: StoredInputMaterialization,
+) -> RepoRelPath:
+    """Resolve the local path promised by one stored-input declaration."""
+    if materialization is StoredInputMaterialization.DECLARED_PATH:
+        return declared_path
+    relative_path = Path(declared_path).relative_to("inputs")
+    return (
+        f".viper/workspaces/{run_id}/attempt-{attempt_id}/"
+        f"inputs/{stage_id}/{input_name}/{relative_path.as_posix()}"
     )

@@ -13,7 +13,7 @@ from typing import cast
 import yaml
 from pydantic import TypeAdapter
 
-from viper.workspace import captured_input_path
+from viper.workspace import captured_input_path, stored_input_path
 
 from .._config.validation import (
     ConfigValidationError,
@@ -123,7 +123,14 @@ def _logical_input_paths(
                 source_path=reference.source.path,
             )
         else:
-            paths[name] = reference.path
+            paths[name] = stored_input_path(
+                run_id=run.run_id,
+                attempt_id=attempt_id,
+                stage_id=stage_id,
+                input_name=name,
+                declared_path=reference.path,
+                materialization=reference.materialization,
+            )
 
     return paths
 

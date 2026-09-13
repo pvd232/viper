@@ -10,7 +10,7 @@ from viper._verification.storage import fetch_local_file_bytes
 from viper.artifacts import ArtifactPointer, StageArtifactRef
 from viper.authoring import RunArtifactDraft, _freeze_input, run_artifact
 from viper.execution._source import RunFetcher
-from viper.inputs import StoredInputRef
+from viper.inputs import StoredInputMaterialization, StoredInputRef
 from viper.references import (
     LocalFileRef,
     ResolvedArtifactPointerRef,
@@ -43,6 +43,7 @@ def test_prior_run_input_publishes_verified_pointer(tmp_path) -> None:
     frozen = _freeze_input(tmp_path, {}, draft)
 
     assert isinstance(frozen, StoredInputRef)
+    assert frozen.materialization is StoredInputMaterialization.ATTEMPT_WORKSPACE
     assert isinstance(frozen.pointer, ResolvedArtifactPointerRef)
     raw = LocalArtifactStore(tmp_path).fetch(frozen.pointer.stored_at)
     assert len(raw) == frozen.pointer.bytes

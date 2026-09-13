@@ -81,6 +81,7 @@ from .inputs import (
     FutureInputRef,
     InputRef,
     LocalSource,
+    StoredInputMaterialization,
     StoredInputRef,
 )
 from .metrics import (
@@ -950,6 +951,7 @@ def _freeze_input(
         pointer=reference,
         path=draft.path,
         data_role=draft.data_role,
+        materialization=StoredInputMaterialization.ATTEMPT_WORKSPACE,
     )
     if cache is not None:
         cache[id(draft)] = stored

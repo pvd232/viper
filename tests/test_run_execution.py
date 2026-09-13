@@ -34,6 +34,8 @@ from viper.api import compare_runs as compare_runs_application
 from viper.api import run as run_stage
 from viper.artifacts import (
     ArtifactLoaderRef,
+    ArtifactPointer,
+    ResolvedSingleFileArtifact,
     StageArtifactRef,
 )
 from viper.authoring import (
@@ -48,13 +50,19 @@ from viper.authoring import (
 from viper.authoring import input as external_input
 from viper.catalog import Catalog, CatalogRunSource
 from viper.config import ConfigTypeRef
-from viper.evidence import VerificationError, VerificationPolicy
+from viper.evidence import (
+    VerificationError,
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedSnapshotFile,
+)
 from viper.execution import _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
 from viper.execution._attempt import _verification_policy, execute_attempt
 from viper.execution._materialization import (
     capture_external_input,
+    resolve_inputs,
     verify_captured_inputs,
 )
 from viper.execution._metric import MetricWorkerResult
@@ -75,6 +83,8 @@ from viper.inputs import (
     FutureInputRef,
     LocalSource,
     ResolvedExternalInputRef,
+    StoredInputMaterialization,
+    StoredInputRef,
 )
 from viper.journal import DurableJournal
 from viper.keys import Train as TrainKeys
@@ -96,7 +106,9 @@ from viper.references import (
     GitSource,
     HuggingFaceFileRef,
     LocalFileRef,
+    ResolvedArtifactPointerRef,
     ResolvedRunSpecRef,
+    SnapshotFileRef,
 )
 from viper.reuse import (
     ReusedStageCompletion,
@@ -129,7 +141,11 @@ from viper.stages import (
 )
 from viper.storage import LocalArtifactStore, LocalStorageDestination
 from viper.verification import verify_run_result
-from viper.workspace import AttemptWorkspace, captured_input_path
+from viper.workspace import (
+    AttemptWorkspace,
+    captured_input_path,
+    stored_input_path,
+)
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
@@ -1131,6 +1147,83 @@ def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
     assert resolved.file.path == expected
     assert resolved.file.sha256 == hashlib.sha256(b"dataset").hexdigest()
     assert resolved.file.bytes == len(b"dataset")
+
+
+def test_stored_input_is_materialized_inside_attempt_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep verified prior-run bytes out of stable repository input paths."""
+    root = tmp_path / "project"
+    root.mkdir()
+    pointer_raw = b"pointer"
+    pointer_reference = ResolvedArtifactPointerRef.model_construct(
+        sha256=hashlib.sha256(pointer_raw).hexdigest(),
+        bytes=len(pointer_raw),
+        stored_at=LocalFileRef.model_construct(
+            path=(
+                ".viper/pointers/"
+                f"{'a' * 64}/predict/raw_gene_predictions.pointer.yaml"
+            )
+        ),
+    )
+    stage = TrainSpec.model_construct(
+        inputs={
+            "reference_predictions": StoredInputRef.model_construct(
+                pointer=pointer_reference,
+                path="inputs/parity/historical_predictions.npz",
+                data_role="training",
+                materialization="attempt_workspace",
+            )
+        }
+    )
+    snapshot = SnapshotFileRef(
+        path="artifact-store/predictions.npz",
+        sha256=hashlib.sha256(b"predictions").hexdigest(),
+        bytes=len(b"predictions"),
+    )
+    verified = VerifiedArtifact(
+        artifact=ResolvedSingleFileArtifact(
+            relative_path="historical_predictions.npz",
+            file=snapshot,
+        ),
+        files=(VerifiedSnapshotFile(reference=snapshot, content=b"predictions"),),
+        data_role="training",
+    )
+    monkeypatch.setattr(
+        "viper.execution._materialization.parse_yaml_bytes",
+        lambda raw: ArtifactPointer.model_construct(),
+    )
+    monkeypatch.setattr(
+        "viper.execution._materialization.verify_promoted_artifact",
+        lambda *args, **kwargs: verified,
+    )
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 2)
+
+    _, paths, _, _ = resolve_inputs(
+        root,
+        workspace,
+        RUN_ID,
+        2,
+        "evaluate",
+        stage,
+        {},
+        {},
+        lambda location: pointer_raw,  # type: ignore[arg-type]
+        VerificationPolicy(trusted_source_repositories=frozenset()),
+    )
+
+    expected = stored_input_path(
+        run_id=RUN_ID,
+        attempt_id=2,
+        stage_id="evaluate",
+        input_name="reference_predictions",
+        declared_path="inputs/parity/historical_predictions.npz",
+        materialization=StoredInputMaterialization.ATTEMPT_WORKSPACE,
+    )
+    assert paths["reference_predictions"] == root / expected
+    assert paths["reference_predictions"].read_bytes() == b"predictions"
+    assert not (root / "inputs/parity/historical_predictions.npz").exists()
 
 
 def test_local_input_rejects_symlink_escape(tmp_path: Path) -> None:

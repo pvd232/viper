@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -15,6 +16,13 @@ from .references import (
     SnapshotFileRef,
     StorageModel,
 )
+
+
+class StoredInputMaterialization(StrEnum):
+    """Select where a verified prior-run artifact is materialized."""
+
+    DECLARED_PATH = "declared_path"
+    ATTEMPT_WORKSPACE = "attempt_workspace"
 
 
 class LocalSource(ProtocolModel):
@@ -77,6 +85,9 @@ class StoredInputRef(ProtocolModel):
     pointer: PointerRef
     path: RepoRelPath
     data_role: DataRole
+    materialization: StoredInputMaterialization = (
+        StoredInputMaterialization.DECLARED_PATH
+    )
 
     _validate_input_root = field_validator("path")(validate_stored_input_path)
 

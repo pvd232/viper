@@ -47,7 +47,7 @@ from ..stages import (
 )
 from ..storage import snapshot_file
 from ..verification import verify_promoted_artifact
-from ..workspace import AttemptWorkspace, captured_input_path
+from ..workspace import AttemptWorkspace, captured_input_path, stored_input_path
 from ._downloads import publish_download_body
 from ._source import RunFetcher
 from .errors import RunError
@@ -178,9 +178,17 @@ def resolve_inputs(
                 expected_data_role=input_ref.data_role,
                 fetcher=fetcher,
             )
-            _materialize_verified_artifact(root, input_ref.path, verified)
+            materialized_path = stored_input_path(
+                run_id=run_id,
+                attempt_id=attempt_id,
+                stage_id=stage_id,
+                input_name=name,
+                declared_path=input_ref.path,
+                materialization=input_ref.materialization,
+            )
+            _materialize_verified_artifact(root, materialized_path, verified)
             resolved[name] = ResolvedStoredInputRef(pointer=resolved_pointer)
-            paths[name] = root / input_ref.path
+            paths[name] = root / materialized_path
             stored[name] = verified.references
     return resolved, paths, captured, stored
 
