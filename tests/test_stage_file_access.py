@@ -141,8 +141,11 @@ def test_tracked_python_symlink_is_rejected(tmp_path: Path) -> None:
     source.symlink_to(data.name)
     commit = _commit_files(root, data, source)
 
-    with pytest.raises(ValueError, match="frozen Python source is unavailable"):
-        _frozen_python_sources(root, commit)
+    sources = _frozen_python_sources(root, commit)
+    assert sources == ()
+    with pytest.raises(StageFileAccessError, match="undeclared file read"):
+        with StageFileAccessObserver(root, {}, {}, source_reads=sources):
+            source.read_text(encoding="utf-8")
 
 
 def test_declared_access_records_input_read_and_output_write(tmp_path: Path) -> None:

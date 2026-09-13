@@ -95,13 +95,14 @@ def _frozen_python_sources(root: Path, commit: str) -> tuple[Path, ...]:
         if relative_path.suffix != ".py":
             continue
         candidate = root / relative_path
+        if candidate.is_symlink():
+            continue
         source = candidate.resolve()
-        if (
-            candidate.is_symlink()
-            or not source.is_relative_to(root)
-            or not source.is_file()
-        ):
-            raise ValueError("startup.source: frozen Python source is unavailable")
+        if not source.is_relative_to(root) or not source.is_file():
+            raise ValueError(
+                "startup.source: frozen Python source is unavailable: "
+                f"{relative_path.as_posix()}"
+            )
         sources.append(source)
     return tuple(sources)
 
