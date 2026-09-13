@@ -167,6 +167,35 @@ def test_unmapped_neighbor_uses_its_graph_linked_observing_test(
     ]
 
 
+def test_import_binding_does_not_widen_a_changed_declaration(
+    impact_files: tuple[Path, Path, Path],
+) -> None:
+    """Ignore the local import name when callers already target its declaration."""
+    graph, observers, source_root = impact_files
+    payload = json.loads(graph.read_text(encoding="utf-8"))
+    imported_name = "src/viper/authoring.py:LocalArtifactStore"
+    payload["nodes"].append(_node(imported_name, kind="import"))
+    payload["edges"].append(
+        {
+            "source": imported_name,
+            "target": "src/viper/storage.py:LocalArtifactStore",
+            "kind": "imports",
+        }
+    )
+    graph.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = select_impacted_tests(
+        graph_path=graph,
+        source_root=source_root,
+        observer_path=observers,
+        declarations=("src/viper/storage.py:LocalArtifactStore",),
+    )
+
+    assert result["mode"] == "nodeids"
+    assert imported_name not in result["one_hop_neighbors"]
+    assert result["incomplete_declarations"] == []
+
+
 @pytest.mark.parametrize("kind", ["assignment", "import"])
 def test_unobserved_carrier_widens_to_its_source_domain(
     impact_files: tuple[Path, Path, Path],

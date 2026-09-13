@@ -262,7 +262,11 @@ def select_impacted_tests(
     for edge in edges:
         incoming.setdefault(str(edge["target"]), set()).add(str(edge["source"]))
     neighbors = sorted(
-        {str(edge["source"]) for edge in edges if edge.get("target") in target_set}
+        {
+            str(edge["source"])
+            for edge in edges
+            if edge.get("target") in target_set and edge.get("kind") != "imports"
+        }
     )
 
     selected_tests = set(changed_tests)
