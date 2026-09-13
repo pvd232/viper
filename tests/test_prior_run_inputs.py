@@ -8,7 +8,7 @@ import pytest
 from tests.test_storage import InMemoryViperCloudClient
 from viper._verification.storage import fetch_local_file_bytes
 from viper.artifacts import ArtifactPointer, StageArtifactRef
-from viper.authoring import RunArtifactDraft, _freeze_input
+from viper.authoring import RunArtifactDraft, _freeze_input, run_artifact
 from viper.execution._source import RunFetcher
 from viper.inputs import StoredInputRef
 from viper.references import (
@@ -54,6 +54,25 @@ def test_prior_run_input_publishes_verified_pointer(tmp_path) -> None:
     assert frozen.pointer.stored_at.path == (
         f".viper/pointers/{run.sha256}/download/dataset.pointer.yaml"
     )
+
+
+def test_prior_run_input_rejects_non_input_destination_before_pointer_publication(
+    tmp_path: Path,
+) -> None:
+    """Reject an invalid consumer path before publishing its artifact pointer."""
+    run = _publish_run(
+        tmp_path,
+        "experiments/source/runs/base/run/resolved.yaml",
+    )
+    with pytest.raises(ValueError, match="stored input path must be beneath inputs/"):
+        run_artifact(
+            run=run,
+            artifact=StageArtifactRef(stage_id="download", artifact_name="dataset"),
+            path="experiments/consumer/dataset.bin",
+            data_role="training",
+        )
+
+    assert not (tmp_path / ".viper/pointers").exists()
 
 
 def test_prior_run_pointer_uses_the_selected_cloud_destination(tmp_path) -> None:

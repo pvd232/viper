@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from ._schema import SHA256, BenchmarkId, DataRole, ProtocolModel, RepoRelPath
 from .artifacts import StageArtifactRef
 from .ids import EvalId, InputName, MetricId
+from .inputs import validate_stored_input_path
 from .metrics import MetricCriterionDraft, MetricDraft, metric_definition
 from .references import (
     ResolvedArtifactPointerRef,
@@ -37,6 +45,8 @@ class RunArtifactDraft(BaseModel):
     artifact: StageArtifactRef
     path: RepoRelPath
     data_role: DataRole
+
+    _validate_input_root = field_validator("path")(validate_stored_input_path)
 
 
 class BenchmarkDraft(BaseModel):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from ._schema import DataRole, ProtocolModel, RepoRelPath, repo_file_paths_overlap
 from .ids import OutputName, StageId
@@ -44,6 +44,13 @@ class ResolvedExternalInputRef(ProtocolModel):
 PointerRef = ArtifactPointerRef | ResolvedArtifactPointerRef
 
 
+def validate_stored_input_path(path: RepoRelPath) -> RepoRelPath:
+    """Return a stored-input path rooted beneath the consumer's inputs directory."""
+    if not str(path).startswith("inputs/"):
+        raise ValueError("stored input path must be beneath inputs/")
+    return path
+
+
 def pointer_location(pointer: PointerRef) -> StorageModel:
     """Return the immutable storage location of one artifact pointer."""
     if isinstance(pointer, ResolvedArtifactPointerRef):
@@ -71,9 +78,11 @@ class StoredInputRef(ProtocolModel):
     path: RepoRelPath
     data_role: DataRole
 
+    _validate_input_root = field_validator("path")(validate_stored_input_path)
+
     @model_validator(mode="after")
     def validate_materialization_path(self) -> StoredInputRef:
-        """Keep materialized bytes separate from the immutable pointer file."""
+        """Require the consumer path and pointer path to occupy separate roots."""
         selected_pointer_path = pointer_path(self.pointer)
         if repo_file_paths_overlap(
             self.path, selected_pointer_path
