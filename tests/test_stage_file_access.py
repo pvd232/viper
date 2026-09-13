@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -12,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 
+from viper import _subprocess as subprocess
 from viper._verification.attempt import _verify_declared_file_access
 from viper._workers.file_access import (
     StageFileAccessError,
@@ -86,8 +86,8 @@ def _source_workspace(tmp_path: Path) -> tuple[Path, str, Path, Path, Path]:
 
 def test_frozen_python_source_is_runtime_code(tmp_path: Path) -> None:
     """Permit exact tracked Python source without recording a data read."""
-    root, commit, tracked_source, _tracked_data, _untracked_source = (
-        _source_workspace(tmp_path)
+    root, commit, tracked_source, _tracked_data, _untracked_source = _source_workspace(
+        tmp_path
     )
     sources = _frozen_python_sources(root, commit)
     observer = StageFileAccessObserver(root, {}, {}, source_reads=sources)
@@ -101,8 +101,8 @@ def test_frozen_python_source_is_runtime_code(tmp_path: Path) -> None:
 
 def test_untracked_python_source_is_rejected(tmp_path: Path) -> None:
     """Keep an untracked Python file outside the frozen source boundary."""
-    root, commit, _tracked_source, _tracked_data, untracked_source = (
-        _source_workspace(tmp_path)
+    root, commit, _tracked_source, _tracked_data, untracked_source = _source_workspace(
+        tmp_path
     )
 
     with pytest.raises(StageFileAccessError, match="undeclared file read"):
@@ -117,8 +117,8 @@ def test_untracked_python_source_is_rejected(tmp_path: Path) -> None:
 
 def test_tracked_non_python_file_is_rejected(tmp_path: Path) -> None:
     """Keep tracked non-Python bytes inside the declared data boundary."""
-    root, commit, _tracked_source, tracked_data, _untracked_source = (
-        _source_workspace(tmp_path)
+    root, commit, _tracked_source, tracked_data, _untracked_source = _source_workspace(
+        tmp_path
     )
 
     with pytest.raises(StageFileAccessError, match="undeclared file read"):

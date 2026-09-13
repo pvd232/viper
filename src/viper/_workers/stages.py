@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import subprocess
 import sys
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -15,6 +14,7 @@ from typing import cast
 
 from viper.workspace import captured_input_path
 
+from .. import _subprocess as subprocess
 from .._config.validation import config_type_path, instantiate_config
 from ..config import MetricConfig
 from ..execution._stage import StageWorkerContext, StageWorkerResult
@@ -334,8 +334,11 @@ def main(argv: list[str] | None = None) -> int:
             metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )
-        with _activate_workspace_modules(function), autocast_context(
-            run.reproducibility, backend=effective_environment.compute.kind
+        with (
+            _activate_workspace_modules(function),
+            autocast_context(
+                run.reproducibility, backend=effective_environment.compute.kind
+            ),
         ):
             startup = observe_process_startup(
                 initialization, run.reproducibility, effective_environment.compute.kind
