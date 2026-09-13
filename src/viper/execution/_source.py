@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import tempfile
 from pathlib import Path
 
 import viper._subprocess as subprocess
@@ -59,6 +60,9 @@ class RunFetcher:
         self.cloud_client = cloud_client
         self._external_git_files: dict[GitFileRef, bytes] = {}
         self._external_git_cache_bytes = 0
+        self._external_git_checkout_root = tempfile.TemporaryDirectory(
+            prefix="viper-provenance-execution-git-"
+        )
 
     def __call__(self, location: StorageModel) -> bytes:
         """Retrieve one file from its declared immutable backend."""
@@ -67,7 +71,13 @@ class RunFetcher:
                 try:
                     return self._external_git_files[location]
                 except KeyError:
-                    raw = fetch_git_file_bytes(location)
+                    checkout_identity = hashlib.sha256(
+                        f"{location.repository}\0{location.commit}".encode()
+                    ).hexdigest()
+                    checkout = (
+                        Path(self._external_git_checkout_root.name) / checkout_identity
+                    )
+                    raw = fetch_git_file_bytes(location, checkout=checkout)
                     if (
                         self._external_git_cache_bytes + len(raw)
                         <= _MAX_EXTERNAL_GIT_CACHE_BYTES

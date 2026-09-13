@@ -60,7 +60,7 @@ def test_run_fetcher_reuses_one_external_git_file_within_an_execution(
     )
     fetched: list[GitFileRef] = []
 
-    def fetch(location: GitFileRef) -> bytes:
+    def fetch(location: GitFileRef, *, checkout: Path) -> bytes:
         fetched.append(location)
         return b"source"
 
@@ -88,7 +88,7 @@ def test_run_fetcher_does_not_retain_an_external_git_file_over_its_budget(
     )
     fetched: list[GitFileRef] = []
 
-    def fetch(location: GitFileRef) -> bytes:
+    def fetch(location: GitFileRef, *, checkout: Path) -> bytes:
         fetched.append(location)
         return b"checkpoint"
 
@@ -103,6 +103,38 @@ def test_run_fetcher_does_not_retain_an_external_git_file_over_its_budget(
     assert fetcher(reference) == b"checkpoint"
     assert fetcher(reference) == b"checkpoint"
     assert fetched == [reference, reference]
+
+
+def test_run_fetcher_reuses_one_checkout_for_files_from_the_same_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fetch one external commit when verification reads several of its files."""
+    references = tuple(
+        GitFileRef(
+            repository="https://example.com/producer.git",
+            commit="a" * 40,
+            path=path,
+        )
+        for path in ("src/producer/loader.py", "src/producer/model.py")
+    )
+    checkouts: list[Path] = []
+
+    def fetch(location: GitFileRef, *, checkout: Path) -> bytes:
+        checkouts.append(checkout)
+        return str(location.path).encode()
+
+    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        "https://example.com/consumer.git",
+    )
+
+    assert [fetcher(reference) for reference in references] == [
+        str(reference.path).encode() for reference in references
+    ]
+    assert checkouts[0] == checkouts[1]
 
 
 def test_local_stores_persist_distinct_workspace_identities(tmp_path: Path) -> None:

@@ -65,6 +65,7 @@ def fetch_git_file_bytes(
     location: GitFileRef,
     *,
     timeout_seconds: float = 60,
+    checkout: Path | None = None,
 ) -> bytes:
     """Read one file from the exact commit recorded by a Git reference."""
     if timeout_seconds <= 0:
@@ -91,25 +92,42 @@ def fetch_git_file_bytes(
                 "Git could not retrieve the referenced file"
             ) from exc
 
-    with tempfile.TemporaryDirectory(prefix="viper-provenance-git-") as checkout:
-        init_arguments = ["init", "--quiet"]
-        if len(location.commit) == 64:
-            init_arguments.append("--object-format=sha256")
-        init_arguments.append(checkout)
-        run_git(*init_arguments)
-        run_git("-C", checkout, "remote", "add", "origin", str(location.repository))
-        run_git(
-            "-C",
-            checkout,
-            "fetch",
-            "--quiet",
-            "--depth=1",
-            "origin",
-            location.commit,
-        )
+    def read_from_checkout(checkout_path: Path) -> bytes:
+        """Initialize or reuse one checkout bound to the referenced commit."""
+        if not (checkout_path / ".git").is_dir():
+            checkout_path.parent.mkdir(parents=True, exist_ok=True)
+            init_arguments = ["init", "--quiet"]
+            if len(location.commit) == 64:
+                init_arguments.append("--object-format=sha256")
+            init_arguments.append(str(checkout_path))
+            run_git(*init_arguments)
+            run_git(
+                "-C",
+                str(checkout_path),
+                "remote",
+                "add",
+                "origin",
+                str(location.repository),
+            )
+            run_git(
+                "-C",
+                str(checkout_path),
+                "fetch",
+                "--quiet",
+                "--depth=1",
+                "origin",
+                location.commit,
+            )
 
+        origin = (
+            run_git("-C", str(checkout_path), "remote", "get-url", "origin")
+            .stdout.decode()
+            .strip()
+        )
+        if origin != str(location.repository):
+            raise VerificationError("Git checkout repository differs from reference")
         fetched_commit = (
-            run_git("-C", checkout, "rev-parse", "FETCH_HEAD^{commit}")
+            run_git("-C", str(checkout_path), "rev-parse", "FETCH_HEAD^{commit}")
             .stdout.decode("ascii")
             .strip()
         )
@@ -118,10 +136,15 @@ def fetch_git_file_bytes(
 
         return run_git(
             "-C",
-            checkout,
+            str(checkout_path),
             "show",
             f"FETCH_HEAD:{location.path}",
         ).stdout
+
+    if checkout is not None:
+        return read_from_checkout(checkout)
+    with tempfile.TemporaryDirectory(prefix="viper-provenance-git-") as directory:
+        return read_from_checkout(Path(directory))
 
 
 def fetch_huggingface_file_bytes(location: HuggingFaceFileRef) -> bytes:
