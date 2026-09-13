@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.1.0a4 — 2026-09-12
+## 0.1.0a4 — 2026-09-13
 
 - Let one local workspace consume a stored run produced by another local
   workspace on the same machine.
@@ -10,6 +10,13 @@
   workspace's absolute path and durable store identity.
 - Reject local references whose producer store is absent, has a different
   identity, or no longer contains the recorded bytes.
+- Materialize newly authored prior-run inputs inside the consuming run attempt.
+- Reuse verified remote files and external Git checkouts across executions;
+  recheck content, repository, and commit identities before each use.
+- Restore several selected artifacts in one call using their declared output
+  paths, and expose public resolution of a local terminal run reference.
+- Enforce opt-in stage file-access declarations and retain observed access in
+  the invocation receipt.
 
 ## 0.1.0a3 — 2026-09-11
 

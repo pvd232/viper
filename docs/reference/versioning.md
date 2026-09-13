@@ -31,5 +31,9 @@ lack enough information to distinguish two workspace stores.
 Use `viper.serialization.serialize_document()` to encode a validated record. The
 `serialize_record()` alias has been removed.
 
+Newly frozen `StoredInputRef` records set `materialization` to
+`attempt_workspace`. Records without that field use `declared_path`, which
+preserves their saved stage-invocation paths during verification.
+
 The [release report](../releases/0.1.0a4.md) lists the Python API and protocol changes
 in this candidate.

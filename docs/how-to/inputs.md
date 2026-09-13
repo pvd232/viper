@@ -180,10 +180,16 @@ test_split = run_artifact(
 ```
 
 Here `data_run` is the result of an earlier `execution.run()` that produced the
-named artifacts. Each `path` is the local destination for the retrieved file;
-use distinct paths for distinct inputs. Execution saves a pointer to the
-selected artifact. Execution verifies the pointer and retrieves the bytes
-before invoking the consumer.
+named artifacts. Each `path` names the input beneath `inputs/` and preserves
+the selected filename. When the consumer runs, VIPER writes the verified bytes
+beneath `.viper/workspaces/<run-id>/attempt-<number>/inputs/<stage>/<input>/`.
+Different runs and attempts therefore cannot overwrite one another's stored
+inputs. Execution passes the resulting path through `context.inputs`.
+
+Freezing saves a pointer to each selected artifact. Execution verifies the
+pointer and retrieves the artifact before invoking the consumer. Plans created
+before attempt-owned materialization retain their recorded destination so their
+execution evidence remains verifiable.
 
 The producer and consumer may use different local VIPER workspaces on the same
 machine. A local file reference records the producer workspace's absolute path

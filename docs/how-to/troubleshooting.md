@@ -56,3 +56,10 @@ viper --json capabilities
 
 JSON mode emits one typed success or failure document. Human mode is intended for
 terminal reading.
+
+## Reclaim verification-cache space
+
+VIPER stores reusable remote bytes in `.viper/cache/verified-objects/` and
+external Git commits in `.viper/cache/git-checkouts/`. These directories contain
+retrieval caches, not run evidence. They may be removed while no VIPER process is
+using the workspace. The next verification retrieves the required objects again.

@@ -30,6 +30,13 @@ A recorded measurement is the value returned by its metric function. Metrics
 configured with file dependencies and a comparator are also recomputed from
 the saved files and checked against their recorded values.
 
+For a resolved remote file, VIPER may retain the verified bytes beneath
+`.viper/cache/verified-objects/`. A later execution rechecks the cached byte
+count and SHA-256 before use. A failed check causes retrieval from the recorded
+backend; cached bytes never replace the identity stored in the run record.
+External Git commits use locked checkouts beneath `.viper/cache/git-checkouts/`.
+VIPER checks the checkout's repository and commit before reading a file.
+
 ## Trust and scientific interpretation
 
 Verification depends on the recorded evidence and the source repositories you trust to

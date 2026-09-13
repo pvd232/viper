@@ -12,9 +12,9 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
+import viper._subprocess as subprocess
 from viper.workspace import captured_input_path, stored_input_path
 
-from .. import _subprocess as subprocess
 from .._config.validation import config_type_path, instantiate_config
 from ..config import MetricConfig
 from ..execution._stage import StageWorkerContext, StageWorkerResult

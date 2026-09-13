@@ -1183,9 +1183,10 @@ def run_artifact(
 ) -> RunArtifactDraft:
     """Select a completed run's artifact as an input or benchmark target.
 
-    path chooses where the consumer materializes the input. data_role must
-    agree with the producer's artifact. Freezing records the selection;
-    execution retrieves and verifies its bytes.
+    path names the input beneath inputs/ and preserves its filename inside the
+    consuming attempt workspace. data_role must agree with the producer's
+    artifact. Freezing records the selection; execution retrieves and verifies
+    its bytes.
     """
     return RunArtifactDraft(run=run, artifact=artifact, path=path, data_role=data_role)
 
