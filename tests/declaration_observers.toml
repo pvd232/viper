@@ -55,6 +55,10 @@ tests = [
   "tests/test_stage_file_access.py::test_declared_access_observes_torch_checkpoint_load",
   "tests/test_stage_file_access.py::test_null_device_is_runtime_plumbing",
   "tests/test_stage_file_access.py::test_undeclared_device_is_rejected",
+  "tests/test_stage_file_access.py::test_frozen_python_source_is_runtime_code",
+  "tests/test_stage_file_access.py::test_untracked_python_source_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_non_python_file_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_python_symlink_is_rejected",
   "tests/test_stage_file_access.py::test_declared_access_rejects_unused_input",
   "tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_workspace_read",
   "tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_write",
@@ -62,6 +66,47 @@ tests = [
   "tests/test_stage_file_access.py::test_declared_access_rejects_os_process_launch",
   "tests/test_stage_file_access.py::test_declared_access_rejects_python_thread_launch",
   "tests/test_stage_file_access.py::test_declared_access_rejects_working_directory_change",
+]
+
+[[declarations]]
+id = "src/viper/_workers/stages.py:_frozen_python_sources"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_stage_file_access.py::test_frozen_python_source_is_runtime_code",
+  "tests/test_stage_file_access.py::test_untracked_python_source_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_non_python_file_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_python_symlink_is_rejected",
+]
+
+[[declarations]]
+id = "src/viper/_workers/file_access.py:StageFileAccessObserver.__init__"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_stage_file_access.py::test_frozen_python_source_is_runtime_code",
+  "tests/test_stage_file_access.py::test_untracked_python_source_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_non_python_file_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_python_symlink_is_rejected",
+]
+
+[[declarations]]
+id = "src/viper/_workers/file_access.py:StageFileAccessObserver._check_read"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_stage_file_access.py::test_declared_access_records_input_read_and_output_write",
+  "tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_workspace_read",
+  "tests/test_stage_file_access.py::test_frozen_python_source_is_runtime_code",
+  "tests/test_stage_file_access.py::test_untracked_python_source_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_non_python_file_is_rejected",
+]
+
+[[declarations]]
+id = "tests/test_stage_file_access.py:_frozen_python_sources"
+fallback_domain = "domain_execution"
+tests = [
+  "tests/test_stage_file_access.py::test_frozen_python_source_is_runtime_code",
+  "tests/test_stage_file_access.py::test_untracked_python_source_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_non_python_file_is_rejected",
+  "tests/test_stage_file_access.py::test_tracked_python_symlink_is_rejected",
 ]
 
 [[declarations]]

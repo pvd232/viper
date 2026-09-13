@@ -136,12 +136,14 @@ class StageFileAccessObserver:
         inputs: Mapping[str, Path],
         outputs: Mapping[str, Path],
         managed_writes: tuple[Path, ...] = (),
+        source_reads: tuple[Path, ...] = (),
     ) -> None:
         """Resolve the paths that the stage may read and write."""
         self._root = repository_root.resolve()
         self._inputs = {name: path.resolve() for name, path in sorted(inputs.items())}
         self._outputs = tuple(path.resolve() for path in outputs.values())
         self._managed_writes = tuple(path.resolve() for path in managed_writes)
+        self._source_reads = frozenset(path.resolve() for path in source_reads)
         self._runtime_roots = tuple(
             dict.fromkeys(
                 Path(value).resolve()
@@ -215,6 +217,8 @@ class StageFileAccessObserver:
         allowed = (*self._inputs.values(), *self._outputs)
         if any(_contains(root, path) for root in allowed):
             return True
+        if path in self._source_reads:
+            return False
         if self._is_runtime_path(path) or self._is_null_device(path):
             return False
         raise StageFileAccessError(

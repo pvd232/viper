@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import subprocess
 import sys
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -73,6 +74,36 @@ def _activate_workspace_modules(function: object) -> Iterator[None]:
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = cast(ModuleType, module)
+
+
+def _frozen_python_sources(root: Path, commit: str) -> tuple[Path, ...]:
+    """Return tracked Python files whose working bytes match the source commit."""
+    subprocess.run(
+        ("git", "-C", str(root), "diff", "--quiet", commit, "--", "*.py"),
+        check=True,
+    )
+    completed = subprocess.run(
+        ("git", "-C", str(root), "ls-tree", "-r", "--name-only", "-z", commit),
+        check=True,
+        capture_output=True,
+    )
+    sources: list[Path] = []
+    for raw_path in completed.stdout.split(b"\0"):
+        if not raw_path:
+            continue
+        relative_path = Path(os.fsdecode(raw_path))
+        if relative_path.suffix != ".py":
+            continue
+        candidate = root / relative_path
+        source = candidate.resolve()
+        if (
+            candidate.is_symlink()
+            or not source.is_relative_to(root)
+            or not source.is_file()
+        ):
+            raise ValueError("startup.source: frozen Python source is unavailable")
+        sources.append(source)
+    return tuple(sources)
 
 
 def _workspace_paths(
@@ -320,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
                     context.inputs,
                     context.outputs,
                     measurement_paths,
+                    _frozen_python_sources(root, run.source.commit),
                 )
                 try:
                     with observer:

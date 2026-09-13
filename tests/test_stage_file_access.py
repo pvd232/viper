@@ -17,6 +17,7 @@ from viper._workers.file_access import (
     StageFileAccessError,
     StageFileAccessObserver,
 )
+from viper._workers.stages import _frozen_python_sources
 from viper.evidence import VerificationError
 from viper.stages import (
     ParameterizedSpec,
@@ -36,6 +37,112 @@ def _paths(tmp_path: Path) -> tuple[Path, Path, Path]:
     source.write_bytes(b"source")
     hidden.write_bytes(b"hidden")
     return root, source, output
+
+
+def _commit_files(root: Path, *paths: Path) -> str:
+    """Commit selected fixture paths and return the resulting revision."""
+    subprocess.run(("git", "init", "-q", str(root)), check=True)
+    subprocess.run(
+        ("git", "-C", str(root), "add", *(path.name for path in paths)),
+        check=True,
+    )
+    subprocess.run(
+        (
+            "git",
+            "-C",
+            str(root),
+            "-c",
+            "user.name=VIPER Tests",
+            "-c",
+            "user.email=viper@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "fixture",
+        ),
+        check=True,
+    )
+    return subprocess.run(
+        ("git", "-C", str(root), "rev-parse", "HEAD"),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _source_workspace(tmp_path: Path) -> tuple[Path, str, Path, Path, Path]:
+    """Commit one Python source and one non-Python file beside an untracked source."""
+    root = tmp_path / "workspace"
+    root.mkdir()
+    tracked_source = root / "model.py"
+    tracked_data = root / "model.json"
+    untracked_source = root / "untracked.py"
+    tracked_source.write_text("VALUE = 1\n", encoding="utf-8")
+    tracked_data.write_text("{}\n", encoding="utf-8")
+    untracked_source.write_text("VALUE = 2\n", encoding="utf-8")
+    commit = _commit_files(root, tracked_source, tracked_data)
+    return root, commit, tracked_source, tracked_data, untracked_source
+
+
+def test_frozen_python_source_is_runtime_code(tmp_path: Path) -> None:
+    """Permit exact tracked Python source without recording a data read."""
+    root, commit, tracked_source, _tracked_data, _untracked_source = (
+        _source_workspace(tmp_path)
+    )
+    sources = _frozen_python_sources(root, commit)
+    observer = StageFileAccessObserver(root, {}, {}, source_reads=sources)
+
+    with observer:
+        assert tracked_source.read_text(encoding="utf-8") == "VALUE = 1\n"
+
+    assert sources == (tracked_source,)
+    assert observer.receipt().reads == ()
+
+
+def test_untracked_python_source_is_rejected(tmp_path: Path) -> None:
+    """Keep an untracked Python file outside the frozen source boundary."""
+    root, commit, _tracked_source, _tracked_data, untracked_source = (
+        _source_workspace(tmp_path)
+    )
+
+    with pytest.raises(StageFileAccessError, match="undeclared file read"):
+        with StageFileAccessObserver(
+            root,
+            {},
+            {},
+            source_reads=_frozen_python_sources(root, commit),
+        ):
+            untracked_source.read_text(encoding="utf-8")
+
+
+def test_tracked_non_python_file_is_rejected(tmp_path: Path) -> None:
+    """Keep tracked non-Python bytes inside the declared data boundary."""
+    root, commit, _tracked_source, tracked_data, _untracked_source = (
+        _source_workspace(tmp_path)
+    )
+
+    with pytest.raises(StageFileAccessError, match="undeclared file read"):
+        with StageFileAccessObserver(
+            root,
+            {},
+            {},
+            source_reads=_frozen_python_sources(root, commit),
+        ):
+            tracked_data.read_text(encoding="utf-8")
+
+
+def test_tracked_python_symlink_is_rejected(tmp_path: Path) -> None:
+    """Reject a tracked Python name that redirects to other workspace bytes."""
+    root = tmp_path / "workspace"
+    root.mkdir()
+    data = root / "data.bin"
+    source = root / "model.py"
+    data.write_bytes(b"data")
+    source.symlink_to(data.name)
+    commit = _commit_files(root, data, source)
+
+    with pytest.raises(ValueError, match="frozen Python source is unavailable"):
+        _frozen_python_sources(root, commit)
 
 
 def test_declared_access_records_input_read_and_output_write(tmp_path: Path) -> None:
