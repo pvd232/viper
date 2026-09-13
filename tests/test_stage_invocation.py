@@ -1,7 +1,6 @@
 """Tests for frozen stage-callable identity and live typed contexts."""
 
 import hashlib
-import importlib
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -175,8 +174,8 @@ def test_stage_worker_activates_loaded_workspace_modules(
 
     observer = StageFileAccessObserver(tmp_path, {}, {})
     with _activate_workspace_modules(fit_with_modules), observer:
-        assert importlib.import_module("example_project") is package
-        assert importlib.import_module("example_project.dependency") is dependency
+        assert sys.modules["example_project"] is package
+        assert sys.modules["example_project.dependency"] is dependency
 
     assert observer.receipt().reads == ()
     assert sys.modules["example_project"] is previous
