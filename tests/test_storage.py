@@ -11,6 +11,7 @@ from viper import execution
 from viper._schema import SHA256, RepoRelPath
 from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution._restore import (
+    _declared_artifact_path,
     _IndexedFile,
     _plan_files,
     _PlannedFile,
@@ -84,6 +85,37 @@ def test_resolve_run_reference_identifies_local_terminal_bytes(tmp_path: Path) -
     assert reference.sha256 == hashlib.sha256(terminal.read_bytes()).hexdigest()
     assert reference.bytes == terminal.stat().st_size
     assert reference.stored_at.path == "runs/example/resolved.yaml"
+
+
+def test_declared_artifact_path_removes_the_frozen_run_prefix() -> None:
+    """Recover the author-declared output path from a frozen artifact path."""
+    selector = ArtifactRestoreSelector(
+        stage_id="predict",
+        artifact_name="raw_gene_predictions",
+    )
+    stored_path = (
+        "experiments/replay/runs/selected/run-id/artifacts/predict/"
+        "raw_gene_predictions/results/hopfield_predictions.npz"
+    )
+
+    assert _declared_artifact_path(selector, stored_path) == (
+        "results/hopfield_predictions.npz"
+    )
+
+
+def test_declared_artifact_path_rejects_another_artifact_namespace() -> None:
+    """Reject a frozen path that does not belong to the selected artifact."""
+    selector = ArtifactRestoreSelector(
+        stage_id="evaluate",
+        artifact_name="parity_receipt",
+    )
+
+    with pytest.raises(RestoreError, match="differs from"):
+        _declared_artifact_path(
+            selector,
+            "experiments/replay/runs/selected/run-id/artifacts/predict/"
+            "raw_gene_predictions/hopfield_predictions.npz",
+        )
 
 
 def test_run_fetcher_reuses_one_external_git_file_within_an_execution(
