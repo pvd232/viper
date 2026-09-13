@@ -6,9 +6,9 @@ import builtins
 import io
 import os
 import sys
+import threading
 from collections.abc import Mapping
 from pathlib import Path
-from threading import RLock
 from types import TracebackType
 from typing import Any
 
@@ -19,12 +19,13 @@ class StageFileAccessError(RuntimeError):
     """Reject a governed audit event outside the stage's declared boundary."""
 
 
-_LOCK = RLock()
+_LOCK = threading.RLock()
 _ACTIVE: StageFileAccessObserver | None = None
 _AUDIT_HOOK_INSTALLED = False
 _BUILTIN_OPEN = builtins.open
 _IO_OPEN = io.open
 _OS_OPEN = os.open
+_THREAD_START = threading.Thread.start
 _ESCAPE_EVENTS = frozenset(
     {
         "_thread.start_new_thread",
@@ -127,6 +128,15 @@ def _os_open(*args: Any, **kwargs: Any) -> int:
     return descriptor
 
 
+def _thread_start(self: threading.Thread) -> None:
+    """Reject a thread before it can outlive the active stage observer."""
+    if _ACTIVE is not None:
+        raise StageFileAccessError(
+            "stage.file_access: child execution bypasses the declared file boundary"
+        )
+    _THREAD_START(self)
+
+
 class StageFileAccessObserver:
     """Check cooperative Python code against one stage's declared file paths."""
 
@@ -167,6 +177,7 @@ class StageFileAccessObserver:
         builtins.open = _builtin_open
         io.open = _io_open
         os.open = _os_open
+        threading.Thread.start = _thread_start
         return self
 
     def __exit__(
@@ -180,6 +191,7 @@ class StageFileAccessObserver:
         builtins.open = _BUILTIN_OPEN
         io.open = _IO_OPEN
         os.open = _OS_OPEN
+        threading.Thread.start = _THREAD_START
         _ACTIVE = None
         _LOCK.release()
         if exception_type is None:

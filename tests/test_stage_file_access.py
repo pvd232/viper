@@ -241,14 +241,17 @@ def test_declared_access_rejects_failed_input_open(tmp_path: Path) -> None:
 
 
 def test_importing_observer_preserves_unrestricted_process() -> None:
-    """Keep the audit hook absent until a declared observer activates."""
+    """Keep audit and thread interception absent until an observer activates."""
     script = """
 import sys
+import threading
 
 hooks = []
 sys.addaudithook = hooks.append
+original_thread_start = threading.Thread.start
 import viper._workers.file_access
 print(len(hooks))
+print(threading.Thread.start is original_thread_start)
 """
 
     completed = subprocess.run(
@@ -258,7 +261,7 @@ print(len(hooks))
         text=True,
     )
 
-    assert completed.stdout.strip() == "0"
+    assert completed.stdout.splitlines() == ["0", "True"]
 
 
 def test_declared_access_rejects_undeclared_workspace_read(tmp_path: Path) -> None:
@@ -303,11 +306,13 @@ def test_declared_access_rejects_os_process_launch(tmp_path: Path) -> None:
 def test_declared_access_rejects_python_thread_launch(tmp_path: Path) -> None:
     """Reject a Python thread that could outlive the active observer."""
     root, source, output = _paths(tmp_path)
+    original_start = threading.Thread.start
 
     with pytest.raises(StageFileAccessError, match="child execution bypasses"):
         with StageFileAccessObserver(root, {"source": source}, {"result": output}):
             source.read_bytes()
             threading.Thread(target=lambda: None).start()
+    assert threading.Thread.start is original_start
 
 
 def test_declared_access_rejects_working_directory_change(tmp_path: Path) -> None:
