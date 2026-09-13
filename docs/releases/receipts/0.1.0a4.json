@@ -1,0 +1,48 @@
+{
+  "version": "0.1.0a4",
+  "status": "published",
+  "source_commit": "513ba8437c47e22fc31847de7cb69cf405dd79a2",
+  "tag": "v0.1.0a4",
+  "tag_object": "d609739a81ec858f96231b04376c99e66cdc93ef",
+  "tag_signature_verified": true,
+  "ci_run": 34751040123,
+  "publication_run": 34751893813,
+  "distributions": [
+    {
+      "filename": "viper_provenance-0.1.0a4-py3-none-any.whl",
+      "bytes": 245134,
+      "sha256": "a1af45a46e842762a170120e3302cb69e0e0b1c4ba8c68936e6ab0a73ff82612"
+    },
+    {
+      "filename": "viper_provenance-0.1.0a4.tar.gz",
+      "bytes": 445356,
+      "sha256": "4ac12023ff7b0ef89ba4829fe48e9ea5a1947ef6abad62990e790770a66b12a5"
+    }
+  ],
+  "registry_hashes_match": {
+    "testpypi": true,
+    "pypi": true
+  },
+  "tests": {
+    "unit_contract_python_3_14": 455,
+    "unit_contract_subtests_python_3_14": 9,
+    "integration_python_3_14": 132,
+    "integration_subtests_python_3_14": 22,
+    "minimum_pydantic": 9,
+    "built_wheel_public_api_per_compatibility_python": 14,
+    "compatibility_python_versions": [
+      "3.11",
+      "3.12",
+      "3.13"
+    ],
+    "testpypi_installed_public_api": 14,
+    "testpypi_generated_project": 1
+  },
+  "installed_acceptance": {
+    "workspace": "MANTRA",
+    "python": "3.13.15",
+    "distribution": "viper-provenance==0.1.0a4",
+    "module_origin": "site-packages",
+    "public_run_reference_api": true
+  }
+}
