@@ -108,6 +108,18 @@ def _reuse_input_identities(
     return tuple(sorted(identities, key=lambda item: item.input_name))
 
 
+def _verification_policy(
+    source_repository: str,
+    trusted_source_repositories: frozenset[str],
+) -> VerificationPolicy:
+    """Trust the current source and the additional repositories named by the caller."""
+    return VerificationPolicy(
+        trusted_source_repositories=(
+            frozenset({source_repository}) | trusted_source_repositories
+        )
+    )
+
+
 def execute_attempt(
     repository_root: Path,
     run_spec_path: Path,
@@ -117,6 +129,7 @@ def execute_attempt(
     retry: bool = False,
     purpose: AttemptPurpose = "run",
     cloud_client: ViperCloudClient | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult | ConfirmationRunResult:
     """Execute one ordinary or benchmark-confirmation attempt."""
     root = repository_root.resolve()
@@ -173,8 +186,9 @@ def execute_attempt(
         destination,
         cloud_client=cloud_client,
     )
-    policy = VerificationPolicy(
-        trusted_source_repositories=frozenset({str(run.source.repository)})
+    policy = _verification_policy(
+        str(run.source.repository),
+        trusted_source_repositories,
     )
     experiment = ExperimentSpec.model_validate(
         parse_yaml_bytes(

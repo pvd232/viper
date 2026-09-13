@@ -21,6 +21,7 @@ def run(
     repository_root: Path | None = None,
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult:
     """Execute a Python draft or a saved run specification.
 
@@ -29,6 +30,8 @@ def run(
     Return a verified RunResult with direct status and path attributes.
     Execution and verification failures raise and leave attempt evidence for
     inspection. timeout_seconds bounds each stage or metric worker invocation.
+    trusted_source_repositories approves additional repositories whose artifact
+    loaders must run while verifying prior-run inputs.
     """
     repository_root = resolve_root(repository_root)
     if isinstance(plan, Path):
@@ -37,6 +40,7 @@ def run(
             plan,
             timeout_seconds=timeout_seconds,
             cloud_client=cloud_client,
+            trusted_source_repositories=trusted_source_repositories,
         )
     frozen = freeze_run_plan(
         repository_root,
@@ -50,6 +54,7 @@ def run(
         plan=frozen.reference,
         timeout_seconds=timeout_seconds,
         cloud_client=cloud_client,
+        trusted_source_repositories=trusted_source_repositories,
     )
 
 
@@ -59,17 +64,20 @@ def retry(
     *,
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult:
     """Append an attempt to the same frozen plan and verify its result.
 
     Earlier attempts remain available. Source or config changes require a new
-    plan. The return value and worker timeout follow run().
+    plan. The return value, worker timeout, and explicit source trust follow
+    run().
     """
     return _retry(
         repository_root,
         run_spec_path,
         timeout_seconds=timeout_seconds,
         cloud_client=cloud_client,
+        trusted_source_repositories=trusted_source_repositories,
     )
 
 

@@ -18,8 +18,9 @@ def run(
     timeout_seconds: float | None = None,
     retry: bool = False,
     cloud_client: ViperCloudClient | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult:
-    """Execute one frozen plan and verify its terminal resolved run."""
+    """Execute one plan with the caller's explicit prior-run source trust."""
     result = execute_attempt(
         repository_root,
         run_spec_path,
@@ -28,6 +29,7 @@ def run(
         retry=retry,
         purpose="run",
         cloud_client=cloud_client,
+        trusted_source_repositories=trusted_source_repositories,
     )
     assert isinstance(result, RunResult)
     return result
@@ -40,8 +42,9 @@ def retry(
     plan: ResolvedRunSpecRef | None = None,
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult:
-    """Append one attempt to a failed frozen run and verify its result."""
+    """Retry one plan with the caller's explicit prior-run source trust."""
     return run(
         repository_root,
         run_spec_path,
@@ -49,6 +52,7 @@ def retry(
         timeout_seconds=timeout_seconds,
         retry=True,
         cloud_client=cloud_client,
+        trusted_source_repositories=trusted_source_repositories,
     )
 
 

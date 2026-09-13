@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 import viper.config as current_config
+import viper.execution as execution_module
 from tests.fixtures import (
     builtin_http,
     http_policy,
@@ -51,7 +52,7 @@ from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution import _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
-from viper.execution._attempt import execute_attempt
+from viper.execution._attempt import _verification_policy, execute_attempt
 from viper.execution._materialization import (
     capture_external_input,
     verify_captured_inputs,
@@ -132,6 +133,63 @@ from viper.workspace import AttemptWorkspace, captured_input_path
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
+
+
+def test_trusted_source_repositories_reach_run_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Forward the caller's explicit trust from the public run entry point."""
+    trusted = frozenset({"https://example.com/prior.git"})
+    observed: dict[str, object] = {}
+
+    def execute(root: Path, path: Path, **kwargs) -> RunResult:
+        observed.update(root=root, path=path, **kwargs)
+        return RunResult.model_construct()
+
+    monkeypatch.setattr(execution_module, "_run", execute)
+    repository_root = Path(__file__).parents[1]
+
+    execution_module.run(
+        Path("run.spec.yaml"),
+        repository_root=repository_root,
+        trusted_source_repositories=trusted,
+    )
+
+    assert observed["trusted_source_repositories"] == trusted
+
+
+def test_trusted_source_repositories_reach_retry_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Forward the caller's explicit trust from the public retry entry point."""
+    trusted = frozenset({"https://example.com/prior.git"})
+    observed: dict[str, object] = {}
+
+    def retry(root: Path, path: Path, **kwargs) -> RunResult:
+        observed.update(root=root, path=path, **kwargs)
+        return RunResult.model_construct()
+
+    monkeypatch.setattr(execution_module, "_retry", retry)
+    repository_root = Path(__file__).parents[1]
+
+    execution_module.retry(
+        repository_root,
+        Path("run.spec.yaml"),
+        trusted_source_repositories=trusted,
+    )
+
+    assert observed["trusted_source_repositories"] == trusted
+
+
+def test_trusted_source_repositories_extend_only_the_current_source() -> None:
+    """Trust the run source and caller-approved prior-run source only."""
+    current = "https://example.com/current.git"
+    approved = "https://example.com/approved.git"
+    policy = _verification_policy(current, frozenset({approved}))
+
+    assert policy.permits_source(current)
+    assert policy.permits_source(approved)
+    assert not policy.permits_source("https://example.com/unapproved.git")
 
 
 def test_failed_attempt_replaces_provisional_document(tmp_path: Path) -> None:
