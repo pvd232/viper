@@ -53,9 +53,11 @@ for artifact in restored.artifacts:
 ```
 
 Each file reports `restored` or `already_present`. A bundle reports one entry
-per member. Pass `output=destination_path` to select a destination. VIPER
-checks source bytes and destinations before writing; it rejects a destination
-that already contains different bytes.
+per member. For one selected file, `output=destination_path` names that file.
+For several selected artifacts or one bundle, `output=destination_directory`
+places each file beneath that directory at the path declared by its output.
+VIPER checks source bytes and destinations before writing; it rejects paths
+that overlap or a destination that already contains different bytes.
 
 ## Inspect status and lineage
 

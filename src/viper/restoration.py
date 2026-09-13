@@ -37,6 +37,10 @@ class ArtifactRestoreSelector(ProtocolModel):
         description="Artifact name declared by the selected stage."
     )
 
+    def __hash__(self) -> int:
+        """Hash the stage and artifact names used as the selection identity."""
+        return hash((self.stage_id, self.artifact_name))
+
 
 class RestoredFile(ProtocolModel):
     """Record one restored or already-correct destination file."""

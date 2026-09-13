@@ -5,10 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import HttpUrl
 
 from viper._schema import SHA256, RepoRelPath
 from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution._restore import (
+    _plan_files,
     _PlannedFile,
     _restore_files,
 )
@@ -48,13 +50,28 @@ from viper.verification import verify_run_result
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 
+def _restore_file(path: str) -> ResolvedFileRef:
+    """Create one immutable file reference for restore-planner tests."""
+    payload = path.encode()
+    return ResolvedFileRef(
+        sha256=hashlib.sha256(payload).hexdigest(),
+        bytes=len(payload),
+        stored_at=LocalFileRef(
+            workspace=Path("/workspace"),
+            store_id="0" * 32,
+            commit="a" * 64,
+            path=path,
+        ),
+    )
+
+
 def test_run_fetcher_reuses_one_external_git_file_within_an_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Fetch each immutable external Git file once per RunFetcher."""
     reference = GitFileRef(
-        repository="https://example.com/producer.git",
+        repository=HttpUrl("https://example.com/producer.git"),
         commit="a" * 40,
         path="src/producer/loader.py",
     )
@@ -82,7 +99,7 @@ def test_run_fetcher_does_not_retain_an_external_git_file_over_its_budget(
 ) -> None:
     """Bound retained external Git bytes without rejecting retrieval."""
     reference = GitFileRef(
-        repository="https://example.com/producer.git",
+        repository=HttpUrl("https://example.com/producer.git"),
         commit="a" * 40,
         path="artifacts/model.bin",
     )
@@ -112,7 +129,7 @@ def test_run_fetcher_reuses_one_checkout_for_files_from_the_same_commit(
     """Fetch one external commit when verification reads several of its files."""
     references = tuple(
         GitFileRef(
-            repository="https://example.com/producer.git",
+            repository=HttpUrl("https://example.com/producer.git"),
             commit="a" * 40,
             path=path,
         )
@@ -595,6 +612,50 @@ def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
 
     assert not first_destination.exists()
     assert second_destination.read_bytes() == b"occupied"
+
+
+def test_multi_artifact_restore_uses_declared_paths(tmp_path: Path) -> None:
+    """Place several selected artifacts beneath one output directory."""
+    prediction = ArtifactRestoreSelector(
+        stage_id="predict", artifact_name="raw_gene_predictions"
+    )
+    receipt = ArtifactRestoreSelector(
+        stage_id="evaluate", artifact_name="parity_receipt"
+    )
+
+    planned = _plan_files(
+        root=tmp_path,
+        indexed={
+            prediction: (_restore_file("raw_gene_predictions.npz"),),
+            receipt: (_restore_file("hopfield_replay_receipt.json"),),
+        },
+        selectors=(prediction, receipt),
+        output=Path("replay"),
+    )
+
+    assert tuple(item.destination for item in planned) == (
+        tmp_path / "replay/raw_gene_predictions.npz",
+        tmp_path / "replay/hopfield_replay_receipt.json",
+    )
+
+
+def test_multi_artifact_restore_rejects_overlapping_declared_paths(
+    tmp_path: Path,
+) -> None:
+    """Reject selected artifacts that declare the same destination path."""
+    first = ArtifactRestoreSelector(stage_id="first", artifact_name="result")
+    second = ArtifactRestoreSelector(stage_id="second", artifact_name="result")
+
+    with pytest.raises(RestoreError, match="restore destinations overlap"):
+        _plan_files(
+            root=tmp_path,
+            indexed={
+                first: (_restore_file("result.json"),),
+                second: (_restore_file("result.json"),),
+            },
+            selectors=(first, second),
+            output=Path("replay"),
+        )
 
 
 def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
