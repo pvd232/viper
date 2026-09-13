@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Define one public `FileIdentity` base for exact byte count and SHA-256
+  validation across resolved, snapshot, and stage-reuse file references.
+
 ## 0.1.0a4 — 2026-09-13
 
 - Let one local workspace consume a stored run produced by another local

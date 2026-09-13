@@ -157,20 +157,23 @@ StorageRef = Annotated[
 ]
 
 
-class ResolvedFileRef(ProtocolModel):
+class FileIdentity(ProtocolModel):
+    """Identify one exact byte sequence independently of its location."""
+
+    sha256: SHA256 = Field(description="SHA-256 digest of the file bytes.")
+    bytes: int = Field(ge=0, description="Number of bytes in the file.")
+
+
+class ResolvedFileRef(FileIdentity):
     """Identify one hashed file and its immutable storage location."""
 
-    sha256: SHA256
-    bytes: int = Field(ge=0)
     stored_at: StorageRef
 
 
-class SnapshotFileRef(ProtocolModel):
+class SnapshotFileRef(FileIdentity):
     """Identify one exact file within a stage-result snapshot."""
 
     path: RepoRelPath
-    sha256: SHA256
-    bytes: int = Field(ge=0)
 
 
 class ResolvedGitFileRef(ResolvedFileRef):
@@ -231,6 +234,7 @@ class ResolvedBenchmarkResultRef(ResolvedFileRef):
 
 __all__ = [
     "ArtifactPointerRef",
+    "FileIdentity",
     "GitFileRef",
     "GitSource",
     "HuggingFaceFileRef",

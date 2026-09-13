@@ -22,6 +22,7 @@ from .experiments import ExperimentSpec
 from .ids import InputName, MetricId, StageId
 from .metrics import MetricSpec
 from .references import (
+    FileIdentity,
     ResolvedFileRef,
     ResolvedGitFileRef,
     ResolvedRunRef,
@@ -115,12 +116,10 @@ class _VerifiedRun(Protocol):
     def inputs(self) -> Mapping[StageId, Mapping[InputName, _VerifiedInput]]: ...
 
 
-class ReuseFileIdentity(ProtocolModel):
+class ReuseFileIdentity(FileIdentity):
     """Identify one input file independently of its run-specific path."""
 
     relative_path: RepoRelPath
-    sha256: SHA256
-    bytes: int = Field(ge=0)
 
 
 class ReuseInputIdentity(ProtocolModel):

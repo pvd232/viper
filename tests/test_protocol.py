@@ -48,6 +48,7 @@ from viper.metrics import (
     MetricSpec,
 )
 from viper.references import (
+    FileIdentity,
     LocalFileRef,
     ResolvedFileRef,
     ResolvedRunRef,
@@ -73,6 +74,43 @@ from viper.stages import EvalSpec as EvaluateSpec
 SHA_A = "a" * 64
 SHA_B = "b" * 64
 GIT_COMMIT = "a" * 40
+
+
+def test_file_reference_types_share_exact_byte_identity() -> None:
+    """Keep file identity validation consistent across stored-file contexts."""
+    resolved = ResolvedFileRef(
+        sha256=SHA_A,
+        bytes=7,
+        stored_at=LocalFileRef(
+            workspace=Path("/tmp/workspace"),
+            store_id="a" * 32,
+            commit=SHA_A,
+            path="objects/value.bin",
+        ),
+    )
+    snapshot = SnapshotFileRef(path="value.bin", sha256=SHA_A, bytes=7)
+    reuse = ReuseFileIdentity(relative_path="value.bin", sha256=SHA_A, bytes=7)
+
+    assert isinstance(resolved, FileIdentity)
+    assert isinstance(snapshot, FileIdentity)
+    assert isinstance(reuse, FileIdentity)
+    assert resolved.model_dump() == {
+        "sha256": SHA_A,
+        "bytes": 7,
+        "stored_at": resolved.stored_at.model_dump(),
+    }
+    assert snapshot.model_dump() == {
+        "sha256": SHA_A,
+        "bytes": 7,
+        "path": "value.bin",
+    }
+    assert reuse.model_dump() == {
+        "sha256": SHA_A,
+        "bytes": 7,
+        "relative_path": "value.bin",
+    }
+
+
 REPOSITORY = "https://github.com/example/viper-project"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_strand/runs/baseline/{RUN_ID}"
