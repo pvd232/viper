@@ -27,6 +27,8 @@ from ..references import (
 from ..storage import LocalArtifactStore, ViperCloudClient, local_artifact_store
 from .errors import RunError
 
+_MAX_EXTERNAL_GIT_CACHE_BYTES = 64 * 1024**2
+
 
 def run_git(repository_root: Path, *arguments: str) -> bytes:
     """Run one bounded Git query against the selected repository."""
@@ -55,12 +57,24 @@ class RunFetcher:
         self.store = store
         self.source_repository = source_repository
         self.cloud_client = cloud_client
+        self._external_git_files: dict[GitFileRef, bytes] = {}
+        self._external_git_cache_bytes = 0
 
     def __call__(self, location: StorageModel) -> bytes:
         """Retrieve one file from its declared immutable backend."""
         if isinstance(location, GitFileRef):
             if str(location.repository) != self.source_repository:
-                return fetch_git_file_bytes(location)
+                try:
+                    return self._external_git_files[location]
+                except KeyError:
+                    raw = fetch_git_file_bytes(location)
+                    if (
+                        self._external_git_cache_bytes + len(raw)
+                        <= _MAX_EXTERNAL_GIT_CACHE_BYTES
+                    ):
+                        self._external_git_files[location] = raw
+                        self._external_git_cache_bytes += len(raw)
+                    return raw
             return run_git(
                 self.repository_root,
                 "show",

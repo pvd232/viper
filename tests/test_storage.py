@@ -16,6 +16,7 @@ from viper.execution._source import RunFetcher
 from viper.execution.errors import RestoreError
 from viper.ids import HumanId
 from viper.references import (
+    GitFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
@@ -45,6 +46,63 @@ from viper.storage import (
 from viper.verification import verify_run_result
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+
+def test_run_fetcher_reuses_one_external_git_file_within_an_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fetch each immutable external Git file once per RunFetcher."""
+    reference = GitFileRef(
+        repository="https://example.com/producer.git",
+        commit="a" * 40,
+        path="src/producer/loader.py",
+    )
+    fetched: list[GitFileRef] = []
+
+    def fetch(location: GitFileRef) -> bytes:
+        fetched.append(location)
+        return b"source"
+
+    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        "https://example.com/consumer.git",
+    )
+
+    assert fetcher(reference) == b"source"
+    assert fetcher(reference) == b"source"
+    assert fetched == [reference]
+
+
+def test_run_fetcher_does_not_retain_an_external_git_file_over_its_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bound retained external Git bytes without rejecting retrieval."""
+    reference = GitFileRef(
+        repository="https://example.com/producer.git",
+        commit="a" * 40,
+        path="artifacts/model.bin",
+    )
+    fetched: list[GitFileRef] = []
+
+    def fetch(location: GitFileRef) -> bytes:
+        fetched.append(location)
+        return b"checkpoint"
+
+    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
+    monkeypatch.setattr("viper.execution._source._MAX_EXTERNAL_GIT_CACHE_BYTES", 5)
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        "https://example.com/consumer.git",
+    )
+
+    assert fetcher(reference) == b"checkpoint"
+    assert fetcher(reference) == b"checkpoint"
+    assert fetched == [reference, reference]
 
 
 def test_local_stores_persist_distinct_workspace_identities(tmp_path: Path) -> None:
