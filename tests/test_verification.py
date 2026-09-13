@@ -957,7 +957,18 @@ class FileVerificationTests(unittest.TestCase):
                 path="record.txt",
             )
 
-            self.assertEqual(fetch_git_file_bytes(location), expected)
+            checkout = Path(directory) / "cached-checkout"
+            self.assertEqual(
+                fetch_git_file_bytes(location, checkout=checkout), expected
+            )
+            subprocess.run(
+                ("git", "-C", checkout, "remote", "remove", "origin"),
+                check=True,
+            )
+            (checkout / ".git/FETCH_HEAD").unlink()
+            self.assertEqual(
+                fetch_git_file_bytes(location, checkout=checkout), expected
+            )
 
     def test_resolved_file_requires_matching_bytes(self) -> None:
         """Verify that resolved file requires matching bytes."""

@@ -167,7 +167,7 @@ def execute_attempt(
     else:
         if plan.stored_at.path != relative_run_path:
             raise RunError("run path differs from the immutable plan reference")
-        if fetcher(plan.stored_at) != run_raw:
+        if fetcher.read_verified(plan) != run_raw:
             raise RunError("RunSpec bytes differ from the immutable plan")
         plan_location = plan.stored_at
     plan_revision = (

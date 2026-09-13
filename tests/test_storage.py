@@ -9,6 +9,7 @@ from pydantic import HttpUrl, ValidationError
 
 from viper import execution
 from viper._schema import SHA256, RepoRelPath
+from viper._verification.storage import read_resolved_file
 from viper.artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
 from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution._restore import (
@@ -22,6 +23,7 @@ from viper.execution.errors import RestoreError
 from viper.ids import HumanId
 from viper.references import (
     GitFileRef,
+    HuggingFaceFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
@@ -52,6 +54,7 @@ from viper.storage import (
 from viper.verification import verify_run_result
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+CONSUMER_REPOSITORY = "https://example.com/consumer.git"
 
 
 def _restore_file(path: str) -> ResolvedFileRef:
@@ -174,6 +177,112 @@ def test_run_fetcher_reuses_one_checkout_for_files_from_the_same_commit(
         str(reference.path).encode() for reference in references
     ]
     assert checkouts[0] == checkouts[1]
+    second_fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        "https://example.com/consumer.git",
+    )
+
+    assert second_fetcher(references[0]) == str(references[0].path).encode()
+    assert checkouts[2] == checkouts[0]
+    assert checkouts[0].is_relative_to(tmp_path / ".viper/cache/git-checkouts")
+
+
+def test_run_fetcher_reuses_verified_bytes_across_executions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Serve a second execution from the content-addressed workspace cache."""
+    payload = b"resolved evidence"
+    location = HuggingFaceFileRef(
+        repository="example/evidence",
+        commit="a" * 40,
+        path="runs/example/resolved.yaml",
+        repo_type="dataset",
+    )
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(payload).hexdigest(),
+        bytes=len(payload),
+        stored_at=location,
+    )
+    fetches: list[HuggingFaceFileRef] = []
+
+    def fetch(selected: HuggingFaceFileRef) -> bytes:
+        fetches.append(selected)
+        return payload
+
+    monkeypatch.setattr("viper.execution._source.fetch_huggingface_file_bytes", fetch)
+    store = LocalArtifactStore(tmp_path)
+
+    assert (
+        read_resolved_file(
+            reference,
+            fetcher=RunFetcher(tmp_path, store, CONSUMER_REPOSITORY),
+        )
+        == payload
+    )
+    assert (
+        read_resolved_file(
+            reference,
+            fetcher=RunFetcher(tmp_path, store, CONSUMER_REPOSITORY),
+        )
+        == payload
+    )
+    assert fetches == [location]
+
+
+def test_run_fetcher_repairs_corrupt_verified_cache_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refetch instead of serving cached bytes with the wrong identity."""
+    payload = b"resolved evidence"
+    location = HuggingFaceFileRef(
+        repository="example/evidence",
+        commit="a" * 40,
+        path="runs/example/resolved.yaml",
+        repo_type="dataset",
+    )
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(payload).hexdigest(),
+        bytes=len(payload),
+        stored_at=location,
+    )
+    fetches: list[HuggingFaceFileRef] = []
+
+    def fetch(selected: HuggingFaceFileRef) -> bytes:
+        fetches.append(selected)
+        return payload
+
+    monkeypatch.setattr("viper.execution._source.fetch_huggingface_file_bytes", fetch)
+    store = LocalArtifactStore(tmp_path)
+    fetcher = RunFetcher(tmp_path, store, CONSUMER_REPOSITORY)
+    fetcher.read_verified(reference)
+    cache_path = (
+        tmp_path
+        / ".viper/cache/verified-objects"
+        / reference.sha256[:2]
+        / reference.sha256
+    )
+    cache_path.write_bytes(b"corrupt")
+
+    assert RunFetcher(
+        tmp_path, store, CONSUMER_REPOSITORY
+    ).read_verified(reference) == payload
+    assert cache_path.read_bytes() == payload
+    assert fetches == [location, location]
+
+
+def test_run_fetcher_does_not_duplicate_local_store_objects(tmp_path: Path) -> None:
+    """Read workspace-local immutable bytes from their owning store."""
+    store = LocalArtifactStore(tmp_path)
+    reference = store.resolved_files({"evidence.bin": b"evidence"})[0]
+    resolved = ResolvedFileRef.model_validate(reference.model_dump(mode="python"))
+
+    assert RunFetcher(
+        tmp_path, store, CONSUMER_REPOSITORY
+    ).read_verified(resolved) == b"evidence"
+    assert not (tmp_path / ".viper/cache/verified-objects").exists()
 
 
 def test_local_stores_persist_distinct_workspace_identities(tmp_path: Path) -> None:

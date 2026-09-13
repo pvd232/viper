@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import os
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast, runtime_checkable
 
 import yaml
 from huggingface_hub import HfApi, RepoFile, hf_hub_download
@@ -61,6 +62,15 @@ _ARTIFACT_VALIDATION_CACHE: dict[
 ] = {}
 
 
+@runtime_checkable
+class _VerifiedStorageFetcher(Protocol):
+    """Retrieve a resolved file through a content-validating cache."""
+
+    def read_verified(self, reference: ResolvedFileRef) -> bytes:
+        """Return bytes matching the complete resolved reference."""
+        ...
+
+
 def fetch_git_file_bytes(
     location: GitFileRef,
     *,
@@ -93,14 +103,32 @@ def fetch_git_file_bytes(
             ) from exc
 
     def read_from_checkout(checkout_path: Path) -> bytes:
-        """Initialize or reuse one checkout bound to the referenced commit."""
+        """Initialize or reuse one locked checkout bound to the referenced commit."""
+        checkout_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = checkout_path.with_name(f"{checkout_path.name}.lock")
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            return read_from_locked_checkout(checkout_path)
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+
+    def read_from_locked_checkout(checkout_path: Path) -> bytes:
+        """Read after repairing an absent or interrupted cached checkout."""
         if not (checkout_path / ".git").is_dir():
-            checkout_path.parent.mkdir(parents=True, exist_ok=True)
             init_arguments = ["init", "--quiet"]
             if len(location.commit) == 64:
                 init_arguments.append("--object-format=sha256")
             init_arguments.append(str(checkout_path))
             run_git(*init_arguments)
+        try:
+            origin = (
+                run_git("-C", str(checkout_path), "remote", "get-url", "origin")
+                .stdout.decode()
+                .strip()
+            )
+        except VerificationError:
             run_git(
                 "-C",
                 str(checkout_path),
@@ -109,6 +137,18 @@ def fetch_git_file_bytes(
                 "origin",
                 str(location.repository),
             )
+            origin = str(location.repository)
+        if origin != str(location.repository):
+            raise VerificationError("Git checkout repository differs from reference")
+        try:
+            fetched_commit = (
+                run_git("-C", str(checkout_path), "rev-parse", "FETCH_HEAD^{commit}")
+                .stdout.decode("ascii")
+                .strip()
+            )
+        except VerificationError:
+            fetched_commit = None
+        if fetched_commit != location.commit:
             run_git(
                 "-C",
                 str(checkout_path),
@@ -118,19 +158,11 @@ def fetch_git_file_bytes(
                 "origin",
                 location.commit,
             )
-
-        origin = (
-            run_git("-C", str(checkout_path), "remote", "get-url", "origin")
-            .stdout.decode()
-            .strip()
-        )
-        if origin != str(location.repository):
-            raise VerificationError("Git checkout repository differs from reference")
-        fetched_commit = (
-            run_git("-C", str(checkout_path), "rev-parse", "FETCH_HEAD^{commit}")
-            .stdout.decode("ascii")
-            .strip()
-        )
+            fetched_commit = (
+                run_git("-C", str(checkout_path), "rev-parse", "FETCH_HEAD^{commit}")
+                .stdout.decode("ascii")
+                .strip()
+            )
         if fetched_commit != location.commit:
             raise VerificationError("Git returned a different commit than requested")
 
@@ -277,8 +309,11 @@ def read_resolved_file(
     fetcher: StorageFetcher | None = None,
 ) -> bytes:
     """Retrieve a resolved file and verify its byte count and SHA-256."""
-    retrieve = fetch_storage_bytes if fetcher is None else fetcher
-    raw = retrieve(reference.stored_at)
+    if isinstance(fetcher, _VerifiedStorageFetcher):
+        raw = fetcher.read_verified(reference)
+    else:
+        retrieve = fetch_storage_bytes if fetcher is None else fetcher
+        raw = retrieve(reference.stored_at)
     return verify_resolved_file_bytes(reference, raw)
 
 

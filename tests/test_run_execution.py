@@ -1200,6 +1200,15 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
     )
     workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 2)
 
+    class Fetcher:
+        """Supply the resolved pointer through the verified-read interface."""
+
+        def __call__(self, location: object) -> bytes:
+            return pointer_raw
+
+        def read_verified(self, reference: object) -> bytes:
+            return pointer_raw
+
     _, paths, _, _ = resolve_inputs(
         root,
         workspace,
@@ -1209,7 +1218,7 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         stage,
         {},
         {},
-        lambda location: pointer_raw,  # type: ignore[arg-type]
+        Fetcher(),  # type: ignore[arg-type]
         VerificationPolicy(trusted_source_repositories=frozenset()),
     )
 

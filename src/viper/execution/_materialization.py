@@ -156,13 +156,7 @@ def resolve_inputs(
             captured[name] = resolved_input.file
         elif input_ref.kind == "stored":
             if isinstance(input_ref.pointer, ResolvedArtifactPointerRef):
-                pointer_raw = fetcher(input_ref.pointer.stored_at)
-                if (
-                    len(pointer_raw) != input_ref.pointer.bytes
-                    or hashlib.sha256(pointer_raw).hexdigest()
-                    != input_ref.pointer.sha256
-                ):
-                    raise RunError("stored input pointer identity mismatch")
+                pointer_raw = fetcher.read_verified(input_ref.pointer)
                 resolved_pointer = input_ref.pointer
             else:
                 pointer_raw = fetcher(input_ref.pointer)

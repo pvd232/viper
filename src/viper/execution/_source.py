@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import tempfile
 from pathlib import Path
 
 import viper._subprocess as subprocess
@@ -13,12 +12,14 @@ from .._verification.storage import (
     fetch_git_file_bytes,
     fetch_huggingface_file_bytes,
     list_huggingface_snapshot_files,
+    verify_resolved_file_bytes,
 )
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
     HuggingFaceStageResultSnapshotRef,
     LocalFileRef,
+    ResolvedFileRef,
     ResolvedGitFileRef,
     StageResultSnapshot,
     StorageModel,
@@ -26,6 +27,7 @@ from ..references import (
     ViperCloudStageResultSnapshotRef,
 )
 from ..storage import LocalArtifactStore, ViperCloudClient, local_artifact_store
+from ._verified_cache import VerifiedObjectCache
 from .errors import RunError
 
 _MAX_EXTERNAL_GIT_CACHE_BYTES = 64 * 1024**2
@@ -60,8 +62,11 @@ class RunFetcher:
         self.cloud_client = cloud_client
         self._external_git_files: dict[GitFileRef, bytes] = {}
         self._external_git_cache_bytes = 0
-        self._external_git_checkout_root = tempfile.TemporaryDirectory(
-            prefix="viper-provenance-execution-git-"
+        self._external_git_checkout_root = (
+            self.repository_root / ".viper/cache/git-checkouts"
+        )
+        self._verified_objects = VerifiedObjectCache(
+            self.repository_root / ".viper/cache/verified-objects"
         )
 
     def __call__(self, location: StorageModel) -> bytes:
@@ -74,9 +79,7 @@ class RunFetcher:
                     checkout_identity = hashlib.sha256(
                         f"{location.repository}\0{location.commit}".encode()
                     ).hexdigest()
-                    checkout = (
-                        Path(self._external_git_checkout_root.name) / checkout_identity
-                    )
+                    checkout = self._external_git_checkout_root / checkout_identity
                     raw = fetch_git_file_bytes(location, checkout=checkout)
                     if (
                         self._external_git_cache_bytes + len(raw)
@@ -104,6 +107,21 @@ class RunFetcher:
         if isinstance(location, LocalFileRef):
             return local_artifact_store(location).fetch(location)
         return self.store.fetch(location)
+
+    def read_verified(self, reference: ResolvedFileRef) -> bytes:
+        """Reuse exact bytes across executions without trusting cache contents."""
+        cacheable = not isinstance(reference.stored_at, LocalFileRef) and not (
+            isinstance(reference.stored_at, GitFileRef)
+            and str(reference.stored_at.repository) == self.source_repository
+        )
+        if cacheable:
+            cached = self._verified_objects.read(reference)
+            if cached is not None:
+                return cached
+        raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
+        if cacheable:
+            self._verified_objects.write(reference, raw)
+        return raw
 
     def list_snapshot_files(
         self,
