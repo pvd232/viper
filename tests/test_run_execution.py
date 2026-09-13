@@ -647,6 +647,32 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         "viper.execution._attempt.execute_stage_process",
         execute_stage_process,
     )
+    original_verify_run_result = verify_run_result
+
+    def reject_provisional_result(*args, **kwargs):
+        """Reject the result after its provisional successful attempt is written."""
+        raise VerificationError("artifact.loadability: loader invocation failed")
+
+    monkeypatch.setattr(
+        "viper.execution._attempt.verify_run_result",
+        reject_provisional_result,
+    )
+    with pytest.raises(RunError, match="attempt 3 failed"):
+        execute_retry(root, frozen.files[-1])
+    verification_failed_attempt = RunAttempt.model_validate(
+        parse_yaml_bytes((root / RUN_ROOT / "attempts/3/resolved.yaml").read_bytes())
+    )
+    assert verification_failed_attempt.status == "failed"
+    assert verification_failed_attempt.failure is not None
+    assert verification_failed_attempt.failure.code == "verification_failed"
+    assert verification_failed_attempt.failure.message == (
+        "artifact.loadability: loader invocation failed"
+    )
+
+    monkeypatch.setattr(
+        "viper.execution._attempt.verify_run_result",
+        original_verify_run_result,
+    )
     result = execute_retry(root, frozen.files[-1])
 
     assert result.status == result.record.status == "succeeded"
@@ -659,9 +685,9 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         read_attempt_reference(reference, run_plan, fetcher=fetcher)
         for reference in result.record.attempts
     )
-    assert [attempt.attempt_id for attempt in attempts] == [1, 2, 3]
-    assert (root / RUN_ROOT / "attempts/3/resolved.yaml").is_file()
-    successful_attempt = attempts[2]
+    assert [attempt.attempt_id for attempt in attempts] == [1, 2, 3, 4]
+    assert (root / RUN_ROOT / "attempts/4/resolved.yaml").is_file()
+    successful_attempt = attempts[3]
     assert len(successful_attempt.resolved_stages) == 2
     assert len(successful_attempt.measurement_files) == 2
     assert len(successful_attempt.metric_verification_files) == 1
@@ -716,7 +742,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
 
     candidate_run_raw = result.path.read_bytes()
     confirmation = execute_benchmark_confirmation(root, frozen.files[-1])
-    assert confirmation.attempt.attempt_id == 4
+    assert confirmation.attempt.attempt_id == 5
     assert confirmation.attempt.purpose == "benchmark_confirmation"
     assert confirmation.attempt.status == "succeeded"
     assert confirmation.attempt_path.is_file()

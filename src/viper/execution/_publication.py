@@ -114,7 +114,7 @@ def write_attempt_document(
     *,
     replace_existing: bool = False,
 ) -> ResolvedAttemptRef:
-    """Publish one final attempt document and return its immutable reference."""
+    """Publish one attempt document and return its immutable reference."""
     path = root / run_root / "attempts" / str(attempt.attempt_id) / "resolved.yaml"
     raw = serialize_document(attempt)
     writer = replace_synchronized if replace_existing else write_synchronized
