@@ -70,7 +70,11 @@ from viper.execution._metric import MetricWorkerResult
 from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._source import RunFetcher
-from viper.execution._stage import StageExecutionError, execute_stage_process
+from viper.execution._stage import (
+    StageExecutionError,
+    _resolve_artifact,
+    execute_stage_process,
+)
 from viper.execution.errors import RunError
 from viper.execution.results import RunResult
 from viper.experiments import (
@@ -153,6 +157,37 @@ from viper.workspace import (
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
+
+
+def test_bundle_resolution_sorts_serialized_member_paths(tmp_path: Path) -> None:
+    """Order bundle members by their persisted POSIX paths."""
+    bundle = tmp_path / "runs/selected/artifacts/train/training"
+    hyphenated = bundle / "a-b.bin"
+    nested = bundle / "a/b.bin"
+    hyphenated.parent.mkdir(parents=True)
+    nested.parent.mkdir(parents=True)
+    hyphenated.write_bytes(b"hyphenated")
+    nested.write_bytes(b"nested")
+    declaration = OutputSpec(
+        kind="bundle",
+        path="runs/selected/artifacts/train/training",
+        relative_path="training",
+        loader=ArtifactLoaderRef(
+            path="loaders.py",
+            symbol="load_training",
+            sha256="0" * 64,
+            bytes=1,
+        ),
+        data_role="training",
+    )
+
+    artifact = _resolve_artifact(tmp_path, declaration)
+
+    assert artifact.kind == "bundle"
+    assert tuple(member.relative_path for member in artifact.members) == (
+        "a-b.bin",
+        "a/b.bin",
+    )
 
 
 def test_trusted_source_repositories_reach_run_execution(

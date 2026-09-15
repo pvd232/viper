@@ -180,7 +180,10 @@ def _resolve_artifact(
         )
 
     members: list[ResolvedBundleMember] = []
-    for path in sorted(root.rglob("*")):
+    for path in sorted(
+        root.rglob("*"),
+        key=lambda candidate: candidate.relative_to(root).as_posix(),
+    ):
         if path.is_symlink():
             raise StageExecutionError("artifact bundles must not contain symlinks")
         if not path.is_file():
