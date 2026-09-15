@@ -17,6 +17,7 @@ from viper.storage import (
     StorageConfigurationError,
     ViperCloudDestination,
     manifest_revision,
+    publish_resolved_files,
 )
 
 
@@ -74,6 +75,12 @@ class _Blob:
         """Return the current object bytes."""
         assert checksum == "auto"
         return self.bucket.objects[self.name][0]
+
+    def download_to_filename(self, filename: str, *, checksum: str) -> None:
+        """Model a streamed object download to one local file."""
+        assert checksum == "auto"
+        with Path(filename).open("wb") as stream:
+            stream.write(self.bucket.objects[self.name][0])
 
     def reload(self) -> None:
         """Load the current object's metadata and generation."""
@@ -200,6 +207,31 @@ def test_streams_file_backed_publication(tmp_path: Path) -> None:
 
     key = f"viper/machina/mantra/{'b' * 64}/data/large.bin"
     assert fake.value.objects[key][0] == b"bounded blocks"
+
+
+def test_streams_sealed_file_restore(tmp_path: Path) -> None:
+    """Restore a sealed object without returning its complete byte payload."""
+    client, _ = _client(tmp_path)
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    source = tmp_path / "large.bin"
+    source.write_bytes(b"bounded blocks")
+    reference = publish_resolved_files(
+        tmp_path,
+        destination,
+        {"data/large.bin": source},
+        cloud_client=client,
+    )["data/large.bin"]
+    assert isinstance(reference.stored_at, ViperCloudFileRef)
+
+    restored = client.fetch_to_path(
+        owner=reference.stored_at.owner,
+        workspace=reference.stored_at.workspace,
+        revision=reference.stored_at.revision,
+        path=reference.stored_at.path,
+        destination=tmp_path / "restored/large.bin",
+    )
+
+    assert restored.read_bytes() == b"bounded blocks"
 
 
 def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:

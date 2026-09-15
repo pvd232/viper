@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
@@ -343,6 +345,52 @@ class GcsViperCloudClient(ViperCloudClient):
         ):
             raise StorageConfigurationError("GCS restored file identity changed")
         return raw
+
+    def fetch_to_path(
+        self,
+        *,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        destination: Path,
+    ) -> Path:
+        """Stream one sealed file to a new root-confined path and verify it."""
+        files = {
+            file.path: file
+            for file in self._load_manifest(owner, workspace, revision).files
+        }
+        identity = files.get(path)
+        if identity is None:
+            raise StorageConfigurationError("GCS sealed revision has no requested file")
+        target = destination if destination.is_absolute() else self.root / destination
+        target = target.resolve()
+        if not target.is_relative_to(self.root):
+            raise StorageConfigurationError("GCS restore destination escapes root")
+        if target.exists():
+            raise StorageConfigurationError("GCS restore destination already exists")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=target.parent,
+            prefix=f".{target.name}.",
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            self.bucket.blob(
+                self._file_key(owner, workspace, revision, path)
+            ).download_to_filename(str(temporary), checksum="auto")
+            with temporary.open("rb") as stream:
+                observed_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+            if (
+                temporary.stat().st_size != identity.bytes
+                or observed_sha256 != identity.sha256
+            ):
+                raise StorageConfigurationError("GCS restored file identity changed")
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return target
 
     def list_files(
         self,

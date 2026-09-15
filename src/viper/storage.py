@@ -431,6 +431,18 @@ class ViperCloudClient(Protocol):
         """Retrieve one file from a sealed revision."""
         ...
 
+    def fetch_to_path(
+        self,
+        *,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        destination: Path,
+    ) -> Path:
+        """Restore one sealed file to a local path without buffering its bytes."""
+        ...
+
     def list_files(
         self,
         *,

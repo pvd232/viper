@@ -426,6 +426,27 @@ class InMemoryViperCloudClient(ViperCloudClient):
             raise FileNotFoundError("revision is not sealed")
         return self.uploads[(owner, workspace, revision, path)]
 
+    def fetch_to_path(
+        self,
+        *,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        destination: Path,
+    ) -> Path:
+        """Write one sealed in-memory file to the selected test path."""
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(
+            self.fetch(
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=path,
+            )
+        )
+        return destination
+
     def list_files(
         self,
         *,
