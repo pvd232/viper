@@ -38,6 +38,7 @@ from .references import (
     LocalFileRef,
     ResolvedRunSpecRef,
     StorageModel,
+    ViperCloudFileRef,
 )
 from .runs import RunSpec
 from .runtime import (
@@ -57,7 +58,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
-from .storage import local_artifact_store
+from .storage import ViperCloudClient, local_artifact_store
 
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[
@@ -139,6 +140,7 @@ def preflight_plan(
     run_spec_path: Path,
     *,
     plan: ResolvedRunSpecRef | None = None,
+    cloud_client: ViperCloudClient | None = None,
 ) -> PreflightReport:
     """Validate plan bytes, host requirements, and same-run dependencies."""
     root = repository_root.resolve()
@@ -168,6 +170,15 @@ def preflight_plan(
             return _git_bytes(root, location.commit, location.path)
         if isinstance(location, LocalFileRef):
             return local_artifact_store(location).fetch(location)
+        if isinstance(location, ViperCloudFileRef):
+            if cloud_client is None:
+                raise OSError("Viper Cloud retrieval requires a client")
+            return cloud_client.fetch(
+                owner=location.owner,
+                workspace=location.workspace,
+                revision=location.revision,
+                path=location.path,
+            )
         return fetch_storage_bytes(location)
 
     try:

@@ -277,7 +277,12 @@ def execute_attempt(
         signal.signal(signal.SIGTERM, preempt_attempt)
     try:
         journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
-        preflight = preflight_plan(root, run_path, plan=plan)
+        preflight = preflight_plan(
+            root,
+            run_path,
+            plan=plan,
+            cloud_client=cloud_client,
+        )
         preflight_path = workspace.control / "preflight.json"
         write_synchronized(
             preflight_path,
