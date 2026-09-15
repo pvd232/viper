@@ -343,6 +343,9 @@ def main(argv: list[str] | None = None) -> int:
             metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )
+        runtime_temp_path = Path(os.environ["TMPDIR"]).resolve()
+        if not runtime_temp_path.is_relative_to(root):
+            raise ValueError("startup.runtime: temporary directory escapes repository")
         with (
             _activate_workspace_modules(function),
             autocast_context(
@@ -365,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
                     context.outputs,
                     measurement_paths,
                     _frozen_python_sources(root, run.source.commit),
+                    (runtime_temp_path,),
                 )
                 try:
                     with observer:

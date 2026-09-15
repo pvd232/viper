@@ -207,6 +207,30 @@ def test_null_device_is_runtime_plumbing(tmp_path: Path) -> None:
     assert observer.receipt().writes == ()
 
 
+def test_private_runtime_scratch_is_not_stage_data(tmp_path: Path) -> None:
+    """Permit generated runtime files only inside the worker-owned directory."""
+    root = tmp_path / "workspace"
+    runtime = root / ".viper/workspaces/run/attempt-1/runtime/train"
+    runtime.mkdir(parents=True)
+    generated = runtime / "generated.py"
+    observer = StageFileAccessObserver(root, {}, {}, runtime_paths=(runtime,))
+
+    with observer:
+        generated.write_text("VALUE = 1\n", encoding="utf-8")
+        assert generated.read_text(encoding="utf-8") == "VALUE = 1\n"
+
+    assert observer.receipt().reads == ()
+    assert observer.receipt().writes == ()
+
+
+def test_runtime_scratch_cannot_escape_repository(tmp_path: Path) -> None:
+    """Reject a runtime exception that would expose an arbitrary host directory."""
+    root = tmp_path / "workspace"
+
+    with pytest.raises(ValueError, match="runtime path escapes"):
+        StageFileAccessObserver(root, {}, {}, runtime_paths=(tmp_path / "outside",))
+
+
 @pytest.mark.skipif(not Path("/dev/zero").exists(), reason="requires /dev/zero")
 def test_undeclared_device_is_rejected(tmp_path: Path) -> None:
     """Keep device paths other than the operating system null device governed."""

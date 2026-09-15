@@ -147,13 +147,17 @@ class StageFileAccessObserver:
         outputs: Mapping[str, Path],
         managed_writes: tuple[Path, ...] = (),
         source_reads: tuple[Path, ...] = (),
+        runtime_paths: tuple[Path, ...] = (),
     ) -> None:
-        """Resolve the paths that the stage may read and write."""
+        """Resolve stage data paths and private runtime-scratch paths."""
         self._root = repository_root.resolve()
         self._inputs = {name: path.resolve() for name, path in sorted(inputs.items())}
         self._outputs = tuple(path.resolve() for path in outputs.values())
         self._managed_writes = tuple(path.resolve() for path in managed_writes)
         self._source_reads = frozenset(path.resolve() for path in source_reads)
+        self._runtime_paths = tuple(path.resolve() for path in runtime_paths)
+        if any(not _contains(self._root, path) for path in self._runtime_paths):
+            raise ValueError("stage runtime path escapes the repository root")
         self._runtime_roots = tuple(
             dict.fromkeys(
                 Path(value).resolve()
@@ -211,8 +215,11 @@ class StageFileAccessObserver:
         return path.resolve()
 
     def _is_runtime_path(self, path: Path) -> bool:
-        """Identify interpreter files covered by the recorded runtime environment."""
-        return any(_contains(root, path) for root in self._runtime_roots)
+        """Identify recorded-environment files and private worker scratch."""
+        return any(
+            _contains(root, path)
+            for root in (*self._runtime_roots, *self._runtime_paths)
+        )
 
     def _is_null_device(self, path: Path) -> bool:
         """Identify the operating system sink that carries no stage data."""
@@ -239,7 +246,7 @@ class StageFileAccessObserver:
 
     def _check_write(self, path: Path) -> bool:
         """Accept a write path and identify retained workspace evidence."""
-        if self._is_null_device(path):
+        if self._is_runtime_path(path) or self._is_null_device(path):
             return False
         if any(
             _contains(root, path) for root in (*self._outputs, *self._managed_writes)

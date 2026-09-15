@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import signal
 import sys
 from dataclasses import dataclass
@@ -295,6 +296,18 @@ def execute_stage_process(
     )
     runtime_root = root / ".viper" / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
+    runtime_temp_path = (
+        root
+        / ".viper"
+        / "workspaces"
+        / str(run.run_id)
+        / f"attempt-{attempt_id}"
+        / "runtime"
+        / str(stage_reference.stage_id)
+    )
+    if runtime_temp_path.exists():
+        shutil.rmtree(runtime_temp_path)
+    runtime_temp_path.mkdir(parents=True)
     context_path = runtime_root / (
         f"{run.run_id}.{attempt_id}.{stage_reference.stage_id}.context.json"
     )
@@ -313,6 +326,7 @@ def execute_stage_process(
         encoding="utf-8",
     )
     env["VIPER_CONTEXT_PATH"] = str(context_path)
+    env["TMPDIR"] = str(runtime_temp_path)
     started_at = datetime.now(UTC)
     process = subprocess.Popen(
         (sys.executable, *command[1:]),
