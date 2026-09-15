@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a production Google Cloud Storage client that preserves workspace-relative
+  artifact paths, exposes only sealed content revisions, and verifies restored bytes.
+- Add a publish-and-restore probe receipt for checking durable storage before an
+  ephemeral worker starts.
+
 ## 0.1.0a5 — 2026-09-14
 
 - Define one public `FileIdentity` base for exact byte count and SHA-256

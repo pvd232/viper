@@ -20,6 +20,7 @@ import viper.execution as execution
 import viper.execution.errors as execution_errors
 import viper.execution.results as execution_results
 import viper.experiments as experiments
+import viper.gcs as gcs
 import viper.http as http
 import viper.ids as ids
 import viper.inputs as inputs
@@ -42,6 +43,7 @@ import viper.runtime as runtime
 import viper.serialization as serialization
 import viper.stages as stages
 import viper.storage as storage
+import viper.test_impact as test_impact
 import viper.verification as verification
 import viper.worker as worker
 import viper.workspace as workspace
@@ -87,6 +89,7 @@ PUBLIC_MODULES_BY_NAME = {
         execution_errors,
         execution_results,
         experiments,
+        gcs,
         http,
         ids,
         inputs,
@@ -109,6 +112,7 @@ PUBLIC_MODULES_BY_NAME = {
         serialization,
         stages,
         storage,
+        test_impact,
         verification,
         worker,
         workspace,

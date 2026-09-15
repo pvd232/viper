@@ -53,6 +53,42 @@ workspace retrieve the referenced bytes without confusing the producer store wit
 own. Git and Hugging Face references use repository commits. See
 [`viper.references`](../../src/viper/references.py).
 
+## Workspace and cloud paths
+
+`viper.repository.init_workspace()` creates the starter files returned by
+[`workspace_files()`](../../src/viper/repository.py). A run then writes its records and
+artifacts under the same workspace root:
+
+```text
+<workspace>/
+├── src/<package>/                 # workspace-owned stage code
+├── tests/                         # workspace-owned tests
+├── benchmarks/                    # benchmark declarations
+├── experiments/<experiment_id>/
+│   └── runs/<variant_id>/<run_id>/
+│       ├── resolved.yaml
+│       ├── stages/<stage_id>/
+│       ├── artifacts/<stage_id>/<output_name>/<relative_path>
+│       └── attempts/<attempt_id>/
+└── .viper/
+    ├── store/                     # immutable local objects
+    ├── workspaces/                # materialized execution workspaces
+    ├── pointers/                  # retained artifact pointers
+    └── catalog.sqlite3
+```
+
+The GCS client stores one sealed content revision at:
+
+```text
+gs://<bucket>/<prefix>/<owner>/<workspace>/<content-revision>/<workspace-relative-path>
+gs://<bucket>/<prefix>/<owner>/<workspace>/<content-revision>.manifest.json
+```
+
+Everything after `<content-revision>/` is the exact workspace-relative path. VIPER does
+not rename an artifact to `datasets/`, `models/`, or another cloud-only category. The
+manifest is the revision's seal: readers list and restore only paths named by that
+manifest, then verify the restored byte count and SHA-256 digest.
+
 ## Attempt and terminal states
 
 `retry()` creates another numbered attempt against the same `RunSpec`. Earlier attempts

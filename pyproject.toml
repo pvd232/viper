@@ -50,6 +50,9 @@ release = [
 mcp = [
     "mcp>=2,<3",
 ]
+gcs = [
+    "google-cloud-storage>=3.4,<4",
+]
 
 [project.urls]
 Repository = "https://github.com/pvd232/viper"

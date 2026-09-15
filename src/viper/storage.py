@@ -301,7 +301,7 @@ class LocalSnapshotPublisher:
         """Read validated member paths and publish one local stage snapshot."""
         payload: dict[RepoRelPath, bytes] = {resolved_stage_path: resolved_stage}
         for path, source in files.items():
-            payload[path] = _read_publication_source(self.root, source)
+            payload[path] = read_publication_source(self.root, source)
         return self.store.snapshot(payload)
 
     def publish_reuse(
@@ -359,7 +359,7 @@ def load_storage_settings(root: Path) -> StorageSettings:
         raise StorageConfigurationError("storage settings are invalid") from error
 
 
-def _read_publication_source(root: Path, source: PublicationSource) -> bytes:
+def read_publication_source(root: Path, source: PublicationSource) -> bytes:
     """Return bytes from one in-memory or root-confined publication source."""
     if isinstance(source, bytes):
         return source
@@ -436,7 +436,7 @@ class ViperCloudClient(Protocol):
         ...
 
 
-def _manifest_revision(files: tuple[SnapshotFileRef, ...]) -> SHA256:
+def manifest_revision(files: tuple[SnapshotFileRef, ...]) -> SHA256:
     """Derive the shared local and cloud revision from file identities."""
     digest = hashlib.sha256()
     for file in sorted(files, key=lambda item: item.path):
@@ -452,7 +452,7 @@ def _source_file(
     root: Path, path: RepoRelPath, source: PublicationSource
 ) -> SnapshotFileRef:
     """Read one source and record the identity sent to the cloud client."""
-    raw = _read_publication_source(root, source)
+    raw = read_publication_source(root, source)
     return SnapshotFileRef(
         path=path,
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -531,7 +531,7 @@ def _cloud_publish(
     files = tuple(
         _source_file(root, path, source) for path, source in sorted(sources.items())
     )
-    revision = _manifest_revision(files)
+    revision = manifest_revision(files)
     identities = {file.path: file for file in files}
 
     for path, source in sorted(sources.items()):
@@ -631,7 +631,7 @@ class ViperCloudSnapshotPublisher:
             )
 
         manifest = tuple(sorted(target_files, key=lambda file: file.path))
-        revision = _manifest_revision(manifest)
+        revision = manifest_revision(manifest)
         _cloud_upload_file(
             destination=self.destination,
             client=self.client,
@@ -726,7 +726,7 @@ def publish_resolved_files(
     """Publish standalone files and return references keyed by requested path."""
     if isinstance(destination, LocalStorageDestination):
         payload = {
-            path: _read_publication_source(root, source)
+            path: read_publication_source(root, source)
             for path, source in files.items()
         }
         references = LocalArtifactStore(root).resolved_files(payload)

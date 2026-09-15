@@ -213,6 +213,17 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval |
+| `viper.test_impact` | Repository-neutral selection from source declarations to observing tests |
+| `viper.gcs` | Google Cloud Storage publication and publish-restore probing |
+
+## Google Cloud Storage
+
+Install the optional client with `pip install 'viper-provenance[gcs]'`. Construct
+`GcsViperCloudClient` with the workspace root and bucket, then pass it wherever VIPER
+accepts a `ViperCloudClient`. `probe_gcs_storage()` publishes one immutable object,
+restores it, compares the digest, and writes a local receipt suitable for a launch
+precondition. See [Workspace and cloud paths](protocol.md#workspace-and-cloud-paths) for
+the object-key contract.
 
 ## Typed operations
 

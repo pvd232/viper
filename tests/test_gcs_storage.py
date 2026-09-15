@@ -1,0 +1,278 @@
+"""Verify the production GCS adapter without contacting Google Cloud."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+from google.api_core.exceptions import PreconditionFailed
+
+from viper.gcs import GcsViperCloudClient, probe_gcs_storage
+from viper.references import SnapshotFileRef, ViperCloudFileRef
+from viper.storage import (
+    StorageConfigurationError,
+    ViperCloudDestination,
+    manifest_revision,
+)
+
+
+class _Blob:
+    """Model the GCS blob operations used by the production adapter."""
+
+    def __init__(self, bucket: _Bucket, name: str) -> None:
+        """Bind one object name to the shared fake bucket."""
+        self.bucket = bucket
+        self.name = name
+        self.metadata: dict[str, str] | None = None
+        self.generation: int | None = None
+
+    def upload_from_string(
+        self,
+        raw: bytes,
+        *,
+        content_type: str,
+        if_generation_match: int,
+        checksum: str,
+    ) -> None:
+        """Create an object only when its key is absent."""
+        assert content_type == "application/octet-stream"
+        assert if_generation_match == 0
+        assert checksum == "auto"
+        if self.name in self.bucket.objects:
+            raise PreconditionFailed("object exists")
+        self.bucket.next_generation += 1
+        self.generation = self.bucket.next_generation
+        self.bucket.objects[self.name] = (
+            raw,
+            dict(self.metadata or {}),
+            self.generation,
+        )
+
+    def download_as_bytes(self, *, checksum: str) -> bytes:
+        """Return the current object bytes."""
+        assert checksum == "auto"
+        return self.bucket.objects[self.name][0]
+
+    def reload(self) -> None:
+        """Load the current object's metadata and generation."""
+        raw, metadata, generation = self.bucket.objects[self.name]
+        assert raw is not None
+        self.metadata = dict(metadata)
+        self.generation = generation
+
+
+class _Bucket:
+    """Hold immutable objects and model one server-side copy."""
+
+    def __init__(self) -> None:
+        """Start with no cloud objects."""
+        self.objects: dict[str, tuple[bytes, dict[str, str], int]] = {}
+        self.next_generation = 0
+        self.copy_calls: list[tuple[str, str]] = []
+
+    def blob(self, name: str) -> _Blob:
+        """Return a handle for one object name."""
+        return _Blob(self, name)
+
+    def copy_blob(
+        self,
+        source: _Blob,
+        destination_bucket: _Bucket,
+        *,
+        new_name: str,
+        if_generation_match: int,
+        if_source_generation_match: int | None,
+    ) -> _Blob:
+        """Copy the selected source generation into one absent destination."""
+        assert destination_bucket is self
+        assert if_generation_match == 0
+        if new_name in self.objects:
+            raise PreconditionFailed("object exists")
+        raw, metadata, generation = self.objects[source.name]
+        assert generation == if_source_generation_match
+        self.next_generation += 1
+        self.objects[new_name] = (raw, dict(metadata), self.next_generation)
+        self.copy_calls.append((source.name, new_name))
+        return self.blob(new_name)
+
+
+class _Client:
+    """Return one fake bucket through the Google client boundary."""
+
+    def __init__(self) -> None:
+        """Create the shared bucket."""
+        self.selected_bucket: str | None = None
+        self.value = _Bucket()
+
+    def bucket(self, name: str) -> _Bucket:
+        """Record and return the selected bucket."""
+        self.selected_bucket = name
+        return self.value
+
+
+def _client(root: Path) -> tuple[GcsViperCloudClient, _Client]:
+    """Create the production adapter over an inspectable fake GCS client."""
+    fake = _Client()
+    client = GcsViperCloudClient(
+        root,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+    )
+    return client, fake
+
+
+def test_publishes_and_restores_durable_snapshot(tmp_path: Path) -> None:
+    """Seal a probe, restore identical bytes, and retain its durable reference."""
+    client, fake = _client(tmp_path)
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    receipt_path = tmp_path / ".viper" / "probes" / "gcs.json"
+
+    receipt = probe_gcs_storage(
+        tmp_path,
+        destination,
+        client,
+        receipt_path,
+    )
+
+    assert fake.selected_bucket == "mantra-fixture"
+    assert receipt.passed is True
+    assert receipt.sha256 == receipt.restored_sha256
+    assert json.loads(receipt_path.read_text()) == receipt.model_dump(mode="json")
+    revision = receipt.artifact_uri.split("@", 1)[1].split("/", 1)[0]
+    file_key = f"viper/machina/mantra/{revision}/.viper/probes/gcs-storage.bin"
+    assert file_key in fake.value.objects
+    assert f"viper/machina/mantra/{revision}.manifest.json" in fake.value.objects
+    assert fake.value.objects[file_key][0] == b"VIPER GCS storage probe\n"
+
+    repeated = probe_gcs_storage(
+        tmp_path,
+        destination,
+        client,
+        receipt_path,
+    )
+    assert repeated == receipt
+
+
+def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:
+    """Reject payload substitution and any file omitted by the sealed manifest."""
+    client, fake = _client(tmp_path)
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    receipt = probe_gcs_storage(
+        tmp_path,
+        destination,
+        client,
+        tmp_path / "probe.json",
+    )
+    revision = receipt.artifact_uri.split("@", 1)[1].split("/", 1)[0]
+    path = ".viper/probes/gcs-storage.bin"
+    key = f"viper/machina/mantra/{revision}/{path}"
+    _, metadata, generation = fake.value.objects[key]
+    fake.value.objects[key] = (b"changed", metadata, generation + 1)
+
+    with pytest.raises(StorageConfigurationError, match="identity changed"):
+        client.fetch(
+            owner="machina",
+            workspace="mantra",
+            revision=revision,
+            path=path,
+        )
+    with pytest.raises(StorageConfigurationError, match="no requested file"):
+        client.fetch(
+            owner="machina",
+            workspace="mantra",
+            revision=revision,
+            path="missing.bin",
+        )
+
+
+def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
+    tmp_path: Path,
+) -> None:
+    """Copy a sealed file without downloading it and expose it only after sealing."""
+    client, fake = _client(tmp_path)
+    raw = b"parameters"
+    digest = hashlib.sha256(raw).hexdigest()
+    source = ViperCloudFileRef(
+        owner="machina",
+        workspace="mantra",
+        revision="a" * 64,
+        path="runs/source/model.bin",
+    )
+    client.upload(
+        owner=source.owner,
+        workspace=source.workspace,
+        revision=source.revision,
+        path=source.path,
+        source=raw,
+        sha256=digest,
+        bytes=len(raw),
+    )
+    with pytest.raises(StorageConfigurationError, match="not sealed"):
+        client.copy(
+            source=source,
+            target=ViperCloudFileRef(
+                owner="machina",
+                workspace="mantra",
+                revision="b" * 64,
+                path="runs/target/model.bin",
+            ),
+            sha256=digest,
+            bytes=len(raw),
+        )
+
+    source_file = SnapshotFileRef(
+        path=source.path,
+        sha256=digest,
+        bytes=len(raw),
+    )
+    actual_revision = manifest_revision((source_file,))
+    client.upload(
+        owner=source.owner,
+        workspace=source.workspace,
+        revision=actual_revision,
+        path=source.path,
+        source=raw,
+        sha256=digest,
+        bytes=len(raw),
+    )
+    client.seal(
+        owner=source.owner,
+        workspace=source.workspace,
+        revision=actual_revision,
+        files=(source_file,),
+    )
+    target_path = "runs/target/model.bin"
+    target_file = SnapshotFileRef(path=target_path, sha256=digest, bytes=len(raw))
+    target_revision_value = manifest_revision((target_file,))
+    client.copy(
+        source=source.model_copy(update={"revision": actual_revision}),
+        target=ViperCloudFileRef(
+            owner="machina",
+            workspace="mantra",
+            revision=target_revision_value,
+            path=target_path,
+        ),
+        sha256=digest,
+        bytes=len(raw),
+    )
+    client.seal(
+        owner="machina",
+        workspace="mantra",
+        revision=target_revision_value,
+        files=(target_file,),
+    )
+
+    assert fake.value.copy_calls
+    assert (
+        client.fetch(
+            owner="machina",
+            workspace="mantra",
+            revision=target_revision_value,
+            path=target_path,
+        )
+        == raw
+    )
