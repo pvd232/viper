@@ -165,6 +165,15 @@ class StageFileAccessObserver:
                 if value
             )
         )
+        self._runtime_metadata_roots = tuple(
+            sorted(
+                path.resolve()
+                for entry in sys.path
+                if entry and (directory := Path(entry)).is_dir()
+                for path in directory.iterdir()
+                if path.is_dir() and path.name.endswith((".dist-info", ".egg-info"))
+            )
+        )
         self._null_device = (Path.cwd() / os.devnull).resolve()
         self._reads: set[Path] = set()
         self._writes: set[Path] = set()
@@ -218,7 +227,11 @@ class StageFileAccessObserver:
         """Identify recorded-environment files and private worker scratch."""
         return any(
             _contains(root, path)
-            for root in (*self._runtime_roots, *self._runtime_paths)
+            for root in (
+                *self._runtime_roots,
+                *self._runtime_metadata_roots,
+                *self._runtime_paths,
+            )
         )
 
     def _is_null_device(self, path: Path) -> bool:

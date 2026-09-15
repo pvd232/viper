@@ -223,6 +223,28 @@ def test_private_runtime_scratch_is_not_stage_data(tmp_path: Path) -> None:
     assert observer.receipt().writes == ()
 
 
+def test_python_distribution_metadata_is_runtime_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Permit installed package metadata without exposing neighboring files."""
+    environment = tmp_path / "environment"
+    metadata = environment / "example.egg-info"
+    metadata.mkdir(parents=True)
+    entry_points = metadata / "entry_points.txt"
+    entry_points.write_text("[example]\n", encoding="utf-8")
+    hidden = environment / "hidden.txt"
+    hidden.write_text("hidden\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(environment))
+    observer = StageFileAccessObserver(tmp_path / "workspace", {}, {})
+
+    with observer:
+        assert entry_points.read_text(encoding="utf-8") == "[example]\n"
+        with pytest.raises(StageFileAccessError, match="undeclared file read"):
+            hidden.read_text(encoding="utf-8")
+
+    assert observer.receipt().reads == ()
+
+
 def test_runtime_scratch_cannot_escape_repository(tmp_path: Path) -> None:
     """Reject a runtime exception that would expose an arbitrary host directory."""
     root = tmp_path / "workspace"
