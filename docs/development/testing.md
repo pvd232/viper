@@ -93,22 +93,27 @@ python -m pytest tests/test_run_execution.py -q
 
 ## Declaration-impact selection
 
-`tools/select_impacted_tests.py` consumes the version-3 `SourceGraph` emitted
-by VIPER's CodeQL analyzer and AST-location lowerer. The selector starts from
-the changed `path:symbol` declarations, follows incoming dependency edges by
-one hop, and resolves those declarations through
-`tests/declaration_observers.toml` to exact pytest node IDs.
+`viper.test_impact.select_tests()` owns repository-neutral test selection. It
+combines dependency relationships, explicit observer links, and declarations
+recognized as tests. It returns the selected test references and every
+declaration that still needs fallback coverage. The function does not interpret
+repository paths, test frameworks, marker expressions, or commands.
 
-The observer manifest supplies explicit declaration-to-test links and
-source-file domain ownership. For an unmapped affected declaration, the
-selector follows dependent declarations until it reaches their pytest
-functions. Imports and assignments carry that traversal but do not themselves
-require observers. An affected function, method, or class with no reachable or
-declared test widens selection to its owning domain; an unmapped path widens
-selection to every unit and contract test. Existing pytest configuration owns
-test-module tiers and domains. Integration, release, and live-CUDA observers
-remain visible in the result as deferred tests and run at their declared
-closure gate.
+`tools/select_impacted_tests.py` adapts that engine to VIPER. It validates the
+version-3 `SourceGraph` emitted by VIPER's CodeQL analyzer and AST-location
+lowerer, converts graph test declarations into pytest node IDs, and reads test
+tiers and fallback domains from VIPER's test configuration.
+
+The adapter starts from the changed `path:symbol` declarations and their direct
+dependents. The selection engine follows further dependents until each path
+reaches a pytest test. `tests/declaration_observers.toml` adds test relationships
+that source analysis cannot prove; these observers supplement rather than
+replace graph-reachable tests.
+
+When neither source identifies a test for an affected declaration, the adapter
+widens selection to its owning domain. An unmapped path widens selection to
+every unit and contract test. Integration, release, and live-CUDA observers
+remain visible as deferred tests and run at their declared closure gate.
 
 The analyzer boundary is inherited from source revision
 `4840ee9875b5382d547595b2bee62b8f16365611`: CodeQL locates dependency

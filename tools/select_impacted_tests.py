@@ -7,10 +7,11 @@ import ast
 import hashlib
 import json
 import tomllib
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from viper.test_impact import DeclarationId, TestRef, select_tests
 
 IGNORED_SOURCE_PARTS = frozenset(
     {
@@ -216,30 +217,6 @@ def _pytest_node_id(node: dict[str, Any]) -> str | None:
     return f"{path}::{symbol.replace('.', '::')}"
 
 
-def _reachable_test_ids(
-    start: str,
-    *,
-    nodes: dict[str, dict[str, Any]],
-    incoming: dict[str, set[str]],
-) -> set[str]:
-    """Follow dependent declarations until each path reaches a pytest function."""
-    pending = deque((start,))
-    visited = {start}
-    tests: set[str] = set()
-    while pending:
-        declaration = pending.popleft()
-        for dependent in incoming.get(declaration, set()):
-            if dependent in visited:
-                continue
-            visited.add(dependent)
-            test_id = _pytest_node_id(nodes[dependent])
-            if test_id is None:
-                pending.append(dependent)
-            else:
-                tests.add(test_id)
-    return tests
-
-
 def select_impacted_tests(
     *,
     graph_path: Path,
@@ -249,18 +226,24 @@ def select_impacted_tests(
     changed_tests: tuple[str, ...] = (),
     classification_path: Path = Path("tests/conftest.py"),
 ) -> dict[str, Any]:
-    """Select direct tests or widen to domains when one-hop coverage is incomplete."""
+    """Select impacted tests or widen when graph coverage remains incomplete."""
     if not declarations:
         raise ImpactSelectionError("at least one changed declaration is required")
+
     nodes, edges = _source_graph(graph_path, source_root.resolve())
     manifest = load_observers(observer_path)
     observers = manifest.observers
     tier_by_module, domain_by_module = _test_classification(classification_path)
     target_set = set(declarations)
-    missing_targets = sorted(target_set - nodes.keys())
+    missing_targets = {
+        DeclarationId(declaration) for declaration in target_set - nodes.keys()
+    }
+
+    fallback_domains: set[str] = set()
     incoming: dict[str, set[str]] = {}
     for edge in edges:
         incoming.setdefault(str(edge["target"]), set()).add(str(edge["source"]))
+
     neighbors = sorted(
         {
             str(edge["source"])
@@ -269,30 +252,32 @@ def select_impacted_tests(
         }
     )
 
-    selected_tests = set(changed_tests)
-    fallback_domains: set[str] = set()
-    incomplete_declarations: set[str] = set(missing_targets)
-    for declaration in sorted(target_set | set(neighbors)):
-        observer = observers.get(declaration)
-        if observer is not None:
-            selected_tests.update(observer.tests)
-            continue
-        node = nodes.get(declaration)
-        automatic_test = None if node is None else _pytest_node_id(node)
-        if automatic_test is not None:
-            selected_tests.add(automatic_test)
-            continue
-        if node is not None:
-            reachable_tests = _reachable_test_ids(
-                declaration,
-                nodes=nodes,
-                incoming=incoming,
-            )
-            if reachable_tests:
-                selected_tests.update(reachable_tests)
-                continue
-        incomplete_declarations.add(declaration)
+    dependents = {
+        DeclarationId(declaration): {
+            DeclarationId(dependent) for dependent in declaration_dependents
+        }
+        for declaration, declaration_dependents in incoming.items()
+    }
+    observer_refs = {
+        DeclarationId(declaration): tuple(TestRef(test) for test in observer.tests)
+        for declaration, observer in observers.items()
+    }
+    test_refs_by_declaration = {
+        DeclarationId(declaration): TestRef(test)
+        for declaration, node in nodes.items()
+        if (test := _pytest_node_id(node)) is not None
+    }
 
+    selection = select_tests(
+        (DeclarationId(declaration) for declaration in target_set | set(neighbors)),
+        dependents=dependents,
+        observers=observer_refs,
+        test_refs_by_declaration=test_refs_by_declaration,
+    )
+
+    selected_tests: set[str] = set(changed_tests)
+    selected_tests.update(selection.tests)
+    incomplete_declarations = set(selection.unresolved) | missing_targets
     for declaration in incomplete_declarations:
         node = nodes.get(declaration)
         source_path = declaration.split(":", 1)[0] if node is None else node["path"]

@@ -1,7 +1,8 @@
 {
     "include": [
         "src/viper",
-        "tests"
+        "tests",
+        "tools"
     ],
     "exclude": [
         "archive"
