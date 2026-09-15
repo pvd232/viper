@@ -89,6 +89,20 @@ not rename an artifact to `datasets/`, `models/`, or another cloud-only category
 manifest is the revision's seal: readers list and restore only paths named by that
 manifest, then verify the restored byte count and SHA-256 digest.
 
+### Disk retention boundary
+
+Cloud publication makes a large file eligible for local eviction only after the
+revision is sealed and a streamed restore reproduces its recorded byte count and
+SHA-256 digest. Keep inputs needed by the active run local. Remove completed attempt
+workspaces only after their terminal records and unique artifacts are durably
+published. A download cache may be removed without another cloud copy when its exact
+upstream reference and expected digest are retained. Never evict a file selected only
+by a `LocalFileRef` or a local stage snapshot.
+
+`GcsViperCloudClient` streams path-backed uploads and `fetch_to_path()` restores large
+objects through a temporary file followed by an atomic rename. The in-memory `fetch()`
+method remains appropriate for small protocol documents.
+
 ## Attempt and terminal states
 
 `retry()` creates another numbered attempt against the same `RunSpec`. Earlier attempts

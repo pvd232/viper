@@ -223,7 +223,8 @@ Install the optional client with `pip install 'viper-provenance[gcs]'`. Construc
 accepts a `ViperCloudClient`. `probe_gcs_storage()` publishes one immutable object,
 restores it, compares the digest, and writes a local receipt suitable for a launch
 precondition. See [Workspace and cloud paths](protocol.md#workspace-and-cloud-paths) for
-the object-key contract.
+the object-key contract and its local-eviction boundary. Use
+`GcsViperCloudClient.fetch_to_path()` for artifacts too large to hold in memory.
 
 ## Typed operations
 
