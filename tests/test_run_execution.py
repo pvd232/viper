@@ -109,6 +109,7 @@ from viper.references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
+    ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
@@ -1176,7 +1177,13 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
                 path="inputs/parity/historical_predictions.npz",
                 data_role="training",
                 materialization="attempt_workspace",
-            )
+            ),
+            "reference_predictions_copy": StoredInputRef.model_construct(
+                pointer=pointer_reference,
+                path="inputs/parity/historical_predictions_copy.npz",
+                data_role="training",
+                materialization="attempt_workspace",
+            ),
         }
     )
     snapshot = SnapshotFileRef(
@@ -1192,12 +1199,18 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         files=(VerifiedSnapshotFile(reference=snapshot, content=b"predictions"),),
         data_role="training",
     )
+    producer_run = ResolvedRunRef.model_construct(sha256="b" * 64, bytes=1)
     monkeypatch.setattr(
         "viper.execution._materialization.parse_yaml_bytes",
-        lambda raw: ArtifactPointer.model_construct(),
+        lambda raw: ArtifactPointer.model_construct(run=producer_run),
+    )
+    verified_runs = []
+    monkeypatch.setattr(
+        "viper.execution._materialization._verify_pointer_run",
+        lambda *args, **kwargs: verified_runs.append(object()) or object(),
     )
     monkeypatch.setattr(
-        "viper.execution._materialization.verify_promoted_artifact",
+        "viper.execution._materialization._verify_artifact_in_run",
         lambda *args, **kwargs: verified,
     )
     workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 2)
@@ -1235,6 +1248,8 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
     )
     assert paths["reference_predictions"] == root / expected
     assert paths["reference_predictions"].read_bytes() == b"predictions"
+    assert paths["reference_predictions_copy"].read_bytes() == b"predictions"
+    assert len(verified_runs) == 1
     assert not (root / "inputs/parity/historical_predictions.npz").exists()
 
 

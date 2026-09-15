@@ -14,7 +14,7 @@ from ..artifacts import (
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
 )
-from ..evidence import VerificationPolicy, VerifiedArtifact
+from ..evidence import VerificationPolicy, VerifiedArtifact, VerifiedRunResult
 from ..http import (
     HttpRequestSpec,
     HttpResult,
@@ -36,6 +36,7 @@ from ..inputs import (
 from ..references import (
     ResolvedArtifactPointerRef,
     ResolvedFileRef,
+    ResolvedRunRef,
     ResolvedStageRef,
     SnapshotFileRef,
 )
@@ -47,7 +48,11 @@ from ..stages import (
     ResolvedBaseSpec,
 )
 from ..storage import snapshot_file
-from ..verification import verify_promoted_artifact, verify_snapshot_artifact
+from ..verification import (
+    _verify_artifact_in_run,
+    _verify_pointer_run,
+    verify_snapshot_artifact,
+)
 from ..workspace import AttemptWorkspace, captured_input_path, stored_input_path
 from ._downloads import publish_download_body
 from ._source import RunFetcher
@@ -134,6 +139,7 @@ def resolve_inputs(
     paths: dict[str, Path] = {}
     captured: dict[InputName, SnapshotFileRef] = {}
     stored: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
+    verified_runs: dict[ResolvedRunRef, VerifiedRunResult] = {}
     for name, input_ref in stage.inputs.items():
         if input_ref.kind == "future":
             producer = completed.get(input_ref.producer_stage_id)
@@ -179,10 +185,20 @@ def resolve_inputs(
                     stored_at=input_ref.pointer,
                 )
             pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
-            verified = verify_promoted_artifact(
+            verified_run = verified_runs.get(pointer.run)
+            if verified_run is None:
+                verified_run = _verify_pointer_run(
+                    pointer,
+                    policy=policy,
+                    fetcher=fetcher,
+                )
+                verified_runs[pointer.run] = verified_run
+            verified = _verify_artifact_in_run(
                 pointer,
+                verified_run=verified_run,
                 policy=policy,
                 expected_data_role=input_ref.data_role,
+                materialization_path=None,
                 fetcher=fetcher,
             )
             materialized_path = stored_input_path(
