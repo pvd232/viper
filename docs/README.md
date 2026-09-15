@@ -44,6 +44,9 @@ public interfaces and distinguishes contributor instructions.
 
 ## Release notes
 
+[0.1.0a5](releases/0.1.0a5.md) unifies file identity and makes VIPER's
+graph-based test selection available to other Python repositories.
+
 [0.1.0a4](releases/0.1.0a4.md) adds cross-workspace inputs, attempt-owned
 materialization, verified remote-object caching, and declared multi-artifact
 restoration.
