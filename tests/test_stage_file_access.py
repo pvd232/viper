@@ -163,6 +163,31 @@ def test_declared_access_records_input_read_and_output_write(tmp_path: Path) -> 
     }
 
 
+def test_declared_access_sorts_serialized_paths(tmp_path: Path) -> None:
+    """Sort retained POSIX strings after converting from filesystem paths."""
+    root = tmp_path / "workspace"
+    hyphenated = root / "inputs/a-b.bin"
+    nested = root / "inputs/a/b.bin"
+    hyphenated.parent.mkdir(parents=True)
+    nested.parent.mkdir(parents=True)
+    hyphenated.write_bytes(b"hyphenated")
+    nested.write_bytes(b"nested")
+    observer = StageFileAccessObserver(
+        root,
+        {"hyphenated": hyphenated, "nested": nested},
+        {},
+    )
+
+    with observer:
+        assert hyphenated.read_bytes() == b"hyphenated"
+        assert nested.read_bytes() == b"nested"
+
+    assert observer.receipt().reads == (
+        "inputs/a-b.bin",
+        "inputs/a/b.bin",
+    )
+
+
 def test_declared_access_observes_numpy_archive_load(tmp_path: Path) -> None:
     """Retain a read-open event emitted by NumPy's archive loader."""
     root = tmp_path / "workspace"

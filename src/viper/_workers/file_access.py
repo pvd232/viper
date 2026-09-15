@@ -323,9 +323,9 @@ class StageFileAccessObserver:
         """Return repository-relative paths observed by this invocation."""
         return StageFileAccessReceipt(
             reads=tuple(
-                path.relative_to(self._root).as_posix() for path in sorted(self._reads)
+                sorted(path.relative_to(self._root).as_posix() for path in self._reads)
             ),
             writes=tuple(
-                path.relative_to(self._root).as_posix() for path in sorted(self._writes)
+                sorted(path.relative_to(self._root).as_posix() for path in self._writes)
             ),
         )
