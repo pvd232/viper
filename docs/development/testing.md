@@ -104,6 +104,12 @@ version-3 `SourceGraph` emitted by VIPER's CodeQL analyzer and AST-location
 lowerer, converts graph test declarations into pytest node IDs, and reads test
 tiers and fallback domains from VIPER's test configuration.
 
+`tools/select_unittest_tests.py` adapts the same graph and selection engine to
+repositories that use importable unittest names. The caller supplies the
+analyzed top-level directories and one fallback module. The adapter returns
+exact test names when the graph reaches tests and returns the fallback module
+when any changed declaration remains unresolved.
+
 The adapter starts from the changed `path:symbol` declarations and their direct
 dependents. The selection engine follows further dependents until each path
 reaches a pytest test. `tests/declaration_observers.toml` adds test relationships
@@ -130,7 +136,10 @@ IDs:
 python tools/build_test_impact_graph.py \
   --codeql /path/to/codeql \
   --cache /path/outside/the/repository/cache \
-  --output /path/outside/the/repository/source-graph.json
+  --output /path/outside/the/repository/source-graph.json \
+  --analyzed-root src \
+  --analyzed-root tests \
+  --analyzed-root tools
 python tools/select_impacted_tests.py \
   --graph /path/outside/the/repository/source-graph.json \
   --source-root . \
@@ -138,12 +147,33 @@ python tools/select_impacted_tests.py \
   --declaration src/viper/storage.py:LocalArtifactStore
 ```
 
-The compatibility patch limits analysis to `src`, `tests`, and `tools`, omits
-typing overload stubs, applies the existing module/class scope rule to
-assignments, and accepts a CodeQL name-column anchor only when the AST lowerer
-finds one declaration of the same kind on that line. Ambiguous bindings still
-fail. The builder removes its detached analyzer worktree after success or
-failure.
+To analyze another repository, keep the command in the VIPER checkout and pass
+that repository plus its source roots. The builder uses VIPER's pinned analyzer
+and query pack while CodeQL reads the supplied repository:
+
+```bash
+python tools/build_test_impact_graph.py \
+  --repository /path/to/repository \
+  --codeql /path/to/codeql \
+  --cache /path/outside/both/repositories/cache \
+  --output /path/outside/both/repositories/source-graph.json \
+  --analyzed-root package \
+  --analyzed-root tests
+python -m tools.select_unittest_tests \
+  --graph /path/outside/both/repositories/source-graph.json \
+  --source-root /path/to/repository \
+  --analyzed-root package \
+  --analyzed-root tests \
+  --fallback tests \
+  --declaration package/module.py:changed_function
+```
+
+The compatibility patch defaults analysis to `src`, `tests`, and `tools`; an
+external-repository command replaces those roots explicitly. It omits typing
+overload stubs, applies the existing module/class scope rule to assignments,
+and accepts a CodeQL name-column anchor only when the AST lowerer finds one
+declaration of the same kind on that line. Ambiguous bindings still fail. The
+builder removes its detached analyzer worktree after success or failure.
 
 The marker declarations in `pyproject.toml` are authoritative.
 

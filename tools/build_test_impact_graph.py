@@ -11,6 +11,8 @@ import tempfile
 from pathlib import Path
 
 ANALYZER_REVISION = "4840ee9875b5382d547595b2bee62b8f16365611"
+ANALYZER_ROOT = Path(__file__).parents[1]
+DEFAULT_ANALYZED_ROOTS = ("src", "tests", "tools")
 
 
 class GraphBuildError(RuntimeError):
@@ -37,12 +39,19 @@ def build_graph(
     codeql: Path,
     cache: Path,
     output: Path,
+    analyzed_roots: tuple[str, ...] = DEFAULT_ANALYZED_ROOTS,
 ) -> None:
     """Run the pinned analyzer plus its current-source compatibility patch."""
     root = repository.resolve()
-    patch = root / "tools/codeql/test-impact-compat.patch"
+    analyzer_root = ANALYZER_ROOT.resolve()
+    patch = analyzer_root / "tools/codeql/test-impact-compat.patch"
     if not patch.is_file():
         raise GraphBuildError(f"compatibility patch is absent: {patch}")
+    if not analyzed_roots or any(
+        not item or Path(item).parts != (item,) or item in {".", ".."}
+        for item in analyzed_roots
+    ):
+        raise GraphBuildError("analyzed roots must be top-level directory names")
 
     with tempfile.TemporaryDirectory(prefix="viper-test-impact.") as directory:
         worktree = Path(directory) / "analyzer"
@@ -55,13 +64,18 @@ def build_graph(
                 str(worktree),
                 ANALYZER_REVISION,
             ),
-            cwd=root,
+            cwd=analyzer_root,
         )
         try:
             _run(("git", "apply", "--unidiff-zero", str(patch)), cwd=worktree)
             shutil.copyfile(
-                root / "tools/codeql/historical_test_impact_worker.py.txt",
+                analyzer_root / "tools/codeql/historical_test_impact_worker.py.txt",
                 worktree / "tools/_historical_test_impact_worker.py",
+            )
+            root_arguments = tuple(
+                argument
+                for analyzed_root in analyzed_roots
+                for argument in ("--analyzed-root", analyzed_root)
             )
             _run(
                 (
@@ -75,12 +89,16 @@ def build_graph(
                     str(cache.resolve()),
                     "--output",
                     str(output.resolve()),
+                    *root_arguments,
                 ),
                 cwd=worktree,
                 env={**os.environ, "PYTHONPATH": str(worktree / "src")},
             )
         finally:
-            _run(("git", "worktree", "remove", "--force", str(worktree)), cwd=root)
+            _run(
+                ("git", "worktree", "remove", "--force", str(worktree)),
+                cwd=analyzer_root,
+            )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -90,6 +108,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--codeql", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--analyzed-root", action="append", dest="analyzed_roots")
     return parser
 
 
@@ -101,6 +120,7 @@ def main() -> int:
         codeql=arguments.codeql,
         cache=arguments.cache,
         output=arguments.output,
+        analyzed_roots=tuple(arguments.analyzed_roots or DEFAULT_ANALYZED_ROOTS),
     )
     return 0
 

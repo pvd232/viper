@@ -52,8 +52,9 @@ def test_graph_builder_removes_worktree_after_worker_failure(
 ) -> None:
     """Remove the detached analyzer checkout when graph construction fails."""
     root = tmp_path / "repository"
-    patch = root / "tools/codeql/test-impact-compat.patch"
-    worker = root / "tools/codeql/historical_test_impact_worker.py.txt"
+    analyzer = tmp_path / "viper"
+    patch = analyzer / "tools/codeql/test-impact-compat.patch"
+    worker = analyzer / "tools/codeql/historical_test_impact_worker.py.txt"
     patch.parent.mkdir(parents=True)
     patch.write_text("patch", encoding="utf-8")
     worker.write_text("worker", encoding="utf-8")
@@ -71,6 +72,7 @@ def test_graph_builder_removes_worktree_after_worker_failure(
             raise GraphBuildError("worker failed")
 
     monkeypatch.setattr("tools.build_test_impact_graph._run", fake_run)
+    monkeypatch.setattr("tools.build_test_impact_graph.ANALYZER_ROOT", analyzer)
     monkeypatch.setattr(
         "tools.build_test_impact_graph.shutil.copyfile",
         lambda *_: None,
@@ -82,6 +84,16 @@ def test_graph_builder_removes_worktree_after_worker_failure(
             codeql=tmp_path / "codeql",
             cache=tmp_path / "cache",
             output=tmp_path / "graph.json",
+            analyzed_roots=("contract_protocol", "tests"),
         )
 
     assert commands[-1][0:4] == ("git", "worktree", "remove", "--force")
+    worker_command = next(
+        command for command in commands if command[0].endswith("python")
+    )
+    assert worker_command[-4:] == (
+        "--analyzed-root",
+        "contract_protocol",
+        "--analyzed-root",
+        "tests",
+    )

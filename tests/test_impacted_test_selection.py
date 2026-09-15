@@ -273,3 +273,18 @@ def test_rejects_a_graph_for_different_source_bytes(
             observer_path=observers,
             declarations=("src/viper/storage.py:LocalArtifactStore",),
         )
+
+
+def test_source_identity_uses_declared_top_level_roots(tmp_path: Path) -> None:
+    """Ignore Python files outside the repository roots selected for analysis."""
+    selected = tmp_path / "contract_protocol" / "package.py"
+    ignored = tmp_path / "archive" / "old.py"
+    selected.parent.mkdir()
+    ignored.parent.mkdir()
+    selected.write_text("VALUE = 1\n", encoding="utf-8")
+    ignored.write_text("VALUE = 1\n", encoding="utf-8")
+
+    digest = source_digest(tmp_path, frozenset({"contract_protocol"}))
+    ignored.write_text("VALUE = 2\n", encoding="utf-8")
+
+    assert source_digest(tmp_path, frozenset({"contract_protocol"})) == digest

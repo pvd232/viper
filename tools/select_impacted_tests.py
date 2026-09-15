@@ -48,7 +48,10 @@ class ImpactManifest:
     source_domains: dict[str, str]
 
 
-def source_digest(root: Path) -> str:
+def source_digest(
+    root: Path,
+    analyzed_roots: frozenset[str] = ANALYZED_SOURCE_ROOTS,
+) -> str:
     """Hash Python paths and bytes exactly as the inherited graph lowerer does."""
     rows = [
         {
@@ -59,7 +62,7 @@ def source_digest(root: Path) -> str:
             (
                 candidate
                 for candidate in root.rglob("*.py")
-                if candidate.relative_to(root).parts[0] in ANALYZED_SOURCE_ROOTS
+                if candidate.relative_to(root).parts[0] in analyzed_roots
                 if not any(
                     part in IGNORED_SOURCE_PARTS
                     for part in candidate.relative_to(root).parts
@@ -159,9 +162,10 @@ def _test_module(node_id: str) -> str:
     return Path(node_id.split("::", 1)[0]).stem
 
 
-def _source_graph(
+def load_source_graph(
     path: Path,
     source_root: Path,
+    analyzed_roots: frozenset[str],
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
     """Load the version-3 graph emitted by VIPER's CodeQL/AST lowerer."""
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -169,7 +173,7 @@ def _source_graph(
         raise ImpactSelectionError("source graph schema_version must equal 3")
     snapshot = payload.get("snapshot")
     if not isinstance(snapshot, dict) or snapshot.get("source_sha256") != source_digest(
-        source_root
+        source_root, analyzed_roots
     ):
         raise ImpactSelectionError("source graph does not describe the current source")
     raw_nodes = payload.get("nodes")
@@ -225,12 +229,17 @@ def select_impacted_tests(
     declarations: tuple[str, ...],
     changed_tests: tuple[str, ...] = (),
     classification_path: Path = Path("tests/conftest.py"),
+    analyzed_roots: frozenset[str] = ANALYZED_SOURCE_ROOTS,
 ) -> dict[str, Any]:
     """Select impacted tests or widen when graph coverage remains incomplete."""
     if not declarations:
         raise ImpactSelectionError("at least one changed declaration is required")
 
-    nodes, edges = _source_graph(graph_path, source_root.resolve())
+    nodes, edges = load_source_graph(
+        graph_path,
+        source_root.resolve(),
+        analyzed_roots,
+    )
     manifest = load_observers(observer_path)
     observers = manifest.observers
     tier_by_module, domain_by_module = _test_classification(classification_path)
@@ -344,6 +353,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--observers", required=True, type=Path)
     parser.add_argument("--declaration", action="append", required=True)
     parser.add_argument("--changed-test", action="append", default=[])
+    parser.add_argument("--analyzed-root", action="append", dest="analyzed_roots")
     parser.add_argument(
         "--classifications",
         type=Path,
@@ -362,6 +372,7 @@ def main() -> int:
         declarations=tuple(arguments.declaration),
         changed_tests=tuple(arguments.changed_test),
         classification_path=arguments.classifications,
+        analyzed_roots=frozenset(arguments.analyzed_roots or ANALYZED_SOURCE_ROOTS),
     )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0

@@ -6,11 +6,7 @@ import argparse
 import subprocess
 from pathlib import Path
 
-from viper._system_impact.codeql import (
-    analyze_source,
-    resolve_analysis_specs,
-    source_digest,
-)
+from viper._system_impact import codeql as codeql_analysis
 from viper.system_impact.models import SourceSnapshot
 
 
@@ -20,14 +16,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--codeql", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--analyzed-root", action="append", required=True)
     return parser
 
 
 def main() -> int:
     arguments = _parser().parse_args()
     root = arguments.repository.resolve()
+    codeql_analysis.ANALYZED_ROOTS = frozenset(arguments.analyzed_root)
     pack = Path(__file__).parent / "codeql/viper-python-impact"
-    extraction, query, graph_format = resolve_analysis_specs(
+    extraction, query, graph_format = codeql_analysis.resolve_analysis_specs(
         root,
         codeql_executable=arguments.codeql,
         query_pack=pack,
@@ -41,10 +39,10 @@ def main() -> int:
     ).stdout.strip()
     snapshot = SourceSnapshot(
         base_revision=revision,
-        source_sha256=source_digest(root),
+        source_sha256=codeql_analysis.source_digest(root),
         revision=None,
     )
-    graph = analyze_source(
+    graph = codeql_analysis.analyze_source(
         root,
         snapshot=snapshot,
         extraction=extraction,
