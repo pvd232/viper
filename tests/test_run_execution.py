@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -106,8 +107,10 @@ from viper.references import (
     GitSource,
     HuggingFaceFileRef,
     LocalFileRef,
+    LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
     ResolvedRunSpecRef,
+    ResolvedStageRef,
     SnapshotFileRef,
 )
 from viper.reuse import (
@@ -1217,6 +1220,7 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         stage,
         {},
         {},
+        {},
         Fetcher(),  # type: ignore[arg-type]
         VerificationPolicy(trusted_source_repositories=frozenset()),
     )
@@ -1232,6 +1236,71 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
     assert paths["reference_predictions"] == root / expected
     assert paths["reference_predictions"].read_bytes() == b"predictions"
     assert not (root / "inputs/parity/historical_predictions.npz").exists()
+
+
+def test_future_input_materializes_verified_producer_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Restore a prior-stage artifact when its worker checkout is already gone."""
+    root = tmp_path / "project"
+    root.mkdir()
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 1)
+    artifact_path = "experiments/example/runs/base/run/artifacts/build/data/data.bin"
+    artifact_file = SnapshotFileRef(
+        path=artifact_path,
+        sha256=hashlib.sha256(b"rebuilt").hexdigest(),
+        bytes=len(b"rebuilt"),
+    )
+    artifact = ResolvedSingleFileArtifact(
+        relative_path="data.bin",
+        file=artifact_file,
+    )
+    verified = VerifiedArtifact(
+        artifact=artifact,
+        files=(VerifiedSnapshotFile(reference=artifact_file, content=b"rebuilt"),),
+        data_role="training",
+    )
+    producer = ResolvedStageRef.model_construct(
+        stage_id="build",
+        snapshot=LocalStageResultSnapshotRef.model_construct(),
+        resolved_spec=artifact_file,
+    )
+    stage = TrainSpec.model_construct(
+        inputs={
+            "data": FutureInputRef(producer_stage_id="build", name="data"),
+        }
+    )
+    producer_spec = SimpleNamespace(
+        outputs={
+            "data": OutputSpec.model_construct(
+                path=artifact_path,
+                data_role="training",
+            )
+        }
+    )
+    producer_result = SimpleNamespace(artifacts={"data": artifact})
+    monkeypatch.setattr(
+        "viper.execution._materialization.verify_snapshot_artifact",
+        lambda *args, **kwargs: verified,
+    )
+
+    _, paths, _, _ = resolve_inputs(
+        root,
+        workspace,
+        RUN_ID,
+        1,
+        "train",
+        stage,
+        {"build": producer},
+        {"build": producer_result},  # type: ignore[dict-item]
+        {"build": producer_spec},  # type: ignore[dict-item]
+        SimpleNamespace(),  # type: ignore[arg-type]
+        VerificationPolicy(trusted_source_repositories=frozenset()),
+    )
+
+    assert paths["data"] == root / artifact_path
+    assert paths["data"].read_bytes() == b"rebuilt"
 
 
 def test_local_input_rejects_symlink_escape(tmp_path: Path) -> None:

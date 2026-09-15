@@ -44,9 +44,10 @@ from ..stages import (
     BaseSpec,
     DownloadSpec,
     InternalSpec,
+    ResolvedBaseSpec,
 )
 from ..storage import snapshot_file
-from ..verification import verify_promoted_artifact
+from ..verification import verify_promoted_artifact, verify_snapshot_artifact
 from ..workspace import AttemptWorkspace, captured_input_path, stored_input_path
 from ._downloads import publish_download_body
 from ._source import RunFetcher
@@ -118,6 +119,7 @@ def resolve_inputs(
     stage_id: StageId,
     stage: InternalSpec,
     completed: Mapping[StageId, ResolvedStageRef],
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
     stage_specs: Mapping[StageId, BaseSpec],
     fetcher: RunFetcher,
     policy: VerificationPolicy,
@@ -137,10 +139,21 @@ def resolve_inputs(
             producer = completed.get(input_ref.producer_stage_id)
             if producer is None:
                 raise RunError("future input producer has not completed")
+            producer_result = completed_results.get(input_ref.producer_stage_id)
+            if producer_result is None:
+                raise RunError("future input producer result is unavailable")
             resolved[name] = ResolvedFutureInputRef(producer=producer)
             producer_spec = stage_specs[input_ref.producer_stage_id]
-            artifact = producer_spec.outputs[input_ref.name]
-            paths[name] = root / artifact.path
+            output_spec = producer_spec.outputs[input_ref.name]
+            artifact = producer_result.artifacts[input_ref.name]
+            verified = verify_snapshot_artifact(
+                producer,
+                artifact,
+                data_role=output_spec.data_role,
+                fetcher=fetcher,
+            )
+            _materialize_verified_artifact(root, output_spec.path, verified)
+            paths[name] = root / output_spec.path
         elif input_ref.kind == "external":
             resolved_input, captured_path = capture_external_input(
                 root,

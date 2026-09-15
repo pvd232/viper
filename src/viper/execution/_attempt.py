@@ -366,6 +366,7 @@ def execute_attempt(
                         stage_reference.stage_id,
                         stage,
                         completed,
+                        completed_results,
                         loaded_stages,
                         fetcher,
                         policy,
