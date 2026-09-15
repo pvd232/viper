@@ -26,7 +26,7 @@ from ..metrics import (
     compare_metric_values,
     is_recomputed_metric,
 )
-from ..references import HuggingFaceFileRef, LocalFileRef
+from ..references import HuggingFaceFileRef, LocalFileRef, ViperCloudFileRef
 from ..reuse import ReusedStageCompletion
 from ..runs import RunAttempt, RunSpec
 from ..runtime import (
@@ -157,7 +157,10 @@ def verify_recomputed_metrics(
     receipts: dict[tuple[StageId, str], MetricVerificationReceipt] = {}
     root_path = run_root(plan.run)
     for reference in attempt.metric_verification_files:
-        if not isinstance(reference.stored_at, (HuggingFaceFileRef, LocalFileRef)):
+        if not isinstance(
+            reference.stored_at,
+            (HuggingFaceFileRef, LocalFileRef, ViperCloudFileRef),
+        ):
             raise VerificationError(
                 "metric verification files must use immutable artifact storage"
             )
