@@ -1642,16 +1642,30 @@ def freeze_run_plan(
     for path, raw in zip(paths, compiled.files.values(), strict=True):
         _write_exact_file(path, raw)
     run_raw = compiled.files[compiled.run_path]
-    reference = ResolvedRunSpecRef(
-        sha256=hashlib.sha256(run_raw).hexdigest(),
-        bytes=len(run_raw),
-        stored_at=LocalFileRef(
-            workspace=store.repository_root,
-            store_id=store.store_id,
-            commit=commit,
-            path=compiled.run_path,
-        ),
-    )
+    if isinstance(destination, ViperCloudDestination):
+        published = publish_resolved_files(
+            repository_root,
+            destination,
+            compiled.files,
+            cloud_client=cloud_client,
+        )
+        published_run = published[compiled.run_path]
+        reference = ResolvedRunSpecRef(
+            sha256=published_run.sha256,
+            bytes=published_run.bytes,
+            stored_at=published_run.stored_at,
+        )
+    else:
+        reference = ResolvedRunSpecRef(
+            sha256=hashlib.sha256(run_raw).hexdigest(),
+            bytes=len(run_raw),
+            stored_at=LocalFileRef(
+                workspace=store.repository_root,
+                store_id=store.store_id,
+                commit=commit,
+                path=compiled.run_path,
+            ),
+        )
     return FrozenPlanFiles(run=compiled.run, reference=reference, files=paths)
 
 
