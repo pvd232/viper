@@ -457,6 +457,26 @@ class InMemoryViperCloudClient(ViperCloudClient):
         """List the files exposed by a sealed revision."""
         return self.sealed[(owner, workspace, revision)]
 
+    def verify_file(
+        self,
+        *,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Verify one sealed in-memory file without writing another copy."""
+        raw = self.fetch(
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
+        )
+        if len(raw) != bytes or hashlib.sha256(raw).hexdigest() != sha256:
+            raise StorageConfigurationError("cloud file identity changed")
+
 
 def test_cloud_publication_is_atomic_and_retryable(tmp_path: Path) -> None:
     """Expose cloud files only after sealing one deterministic revision."""

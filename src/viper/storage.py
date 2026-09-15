@@ -453,6 +453,19 @@ class ViperCloudClient(Protocol):
         """List every verified file in a sealed revision."""
         ...
 
+    def verify_file(
+        self,
+        *,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Verify one sealed file without materializing another local copy."""
+        ...
+
 
 def manifest_revision(files: tuple[SnapshotFileRef, ...]) -> SHA256:
     """Derive the shared local and cloud revision from file identities."""

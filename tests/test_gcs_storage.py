@@ -82,6 +82,19 @@ class _Blob:
         with Path(filename).open("wb") as stream:
             stream.write(self.bucket.objects[self.name][0])
 
+    def download_to_file(
+        self,
+        stream: Any,
+        *,
+        if_generation_match: int,
+        checksum: str,
+    ) -> None:
+        """Stream the selected immutable generation to a file-like consumer."""
+        assert checksum == "auto"
+        raw, _, generation = self.bucket.objects[self.name]
+        assert generation == if_generation_match
+        stream.write(raw)
+
     def reload(self) -> None:
         """Load the current object's metadata and generation."""
         raw, metadata, generation = self.bucket.objects[self.name]
@@ -173,6 +186,14 @@ def test_publishes_and_restores_durable_snapshot(tmp_path: Path) -> None:
     assert file_key in fake.value.objects
     assert f"viper/machina/mantra/{revision}.manifest.json" in fake.value.objects
     assert fake.value.objects[file_key][0] == b"VIPER GCS storage probe\n"
+    client.verify_file(
+        owner="machina",
+        workspace="mantra",
+        revision=revision,
+        path=".viper/probes/gcs-storage.bin",
+        sha256=receipt.sha256,
+        bytes=len(b"VIPER GCS storage probe\n"),
+    )
 
     repeated = probe_gcs_storage(
         tmp_path,
@@ -256,6 +277,15 @@ def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:
             workspace="mantra",
             revision=revision,
             path=path,
+        )
+    with pytest.raises(StorageConfigurationError, match="identity changed"):
+        client.verify_file(
+            owner="machina",
+            workspace="mantra",
+            revision=revision,
+            path=path,
+            sha256=receipt.sha256,
+            bytes=len(b"VIPER GCS storage probe\n"),
         )
     with pytest.raises(StorageConfigurationError, match="no requested file"):
         client.fetch(

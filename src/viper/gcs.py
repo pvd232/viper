@@ -402,6 +402,50 @@ class GcsViperCloudClient(ViperCloudClient):
         """List the exact files exposed by one sealed revision."""
         return self._load_manifest(owner, workspace, revision).files
 
+    def verify_file(
+        self,
+        *,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Stream and hash one sealed object without creating a local copy."""
+        expected = SnapshotFileRef(path=path, sha256=sha256, bytes=bytes)
+        if expected not in self._load_manifest(owner, workspace, revision).files:
+            raise StorageConfigurationError("GCS file differs from its sealed manifest")
+
+        class DigestWriter:
+            """Count and hash chunks written by the GCS downloader."""
+
+            def __init__(self) -> None:
+                self.digest = hashlib.sha256()
+                self.bytes = 0
+
+            def write(self, chunk: bytes) -> int:
+                """Consume one downloaded chunk."""
+                self.digest.update(chunk)
+                self.bytes += len(chunk)
+                return len(chunk)
+
+        blob = self.bucket.blob(self._file_key(owner, workspace, revision, path))
+        try:
+            blob.reload()
+            if blob.generation is None:
+                raise StorageConfigurationError("GCS file has no immutable generation")
+            observed = DigestWriter()
+            blob.download_to_file(
+                observed,
+                if_generation_match=blob.generation,
+                checksum="auto",
+            )
+        except GoogleAPIError as error:
+            raise StorageConfigurationError("GCS file could not be verified") from error
+        if observed.bytes != bytes or observed.digest.hexdigest() != sha256:
+            raise StorageConfigurationError("GCS file identity changed")
+
 
 def probe_gcs_storage(
     root: Path,

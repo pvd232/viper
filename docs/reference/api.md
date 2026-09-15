@@ -213,6 +213,7 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval |
+| `viper.retention` | Verified release of local copies of cloud-backed run artifacts |
 | `viper.test_impact` | Repository-neutral selection from source declarations to observing tests |
 | `viper.gcs` | Google Cloud Storage publication and publish-restore probing |
 
@@ -225,6 +226,12 @@ restores it, compares the digest, and writes a local receipt suitable for a laun
 precondition. See [Workspace and cloud paths](protocol.md#workspace-and-cloud-paths) for
 the object-key contract and its local-eviction boundary. Use
 `GcsViperCloudClient.fetch_to_path()` for artifacts too large to hold in memory.
+After accepting parity, pass the completed `RunResult`—or its retained
+`ResolvedRunRef` after a restart—and that same client to
+`viper.execution.evict_cloud_backed_run_artifacts()`. The returned
+`RunArtifactEviction` lists the removed file identities and total bytes released. Run
+records and inputs remain local; every removed output remains restorable through its
+sealed Viper Cloud snapshot.
 
 ## Typed operations
 
