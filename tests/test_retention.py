@@ -16,7 +16,7 @@ from viper.references import (
     ResolvedStageRef,
     SnapshotFileRef,
 )
-from viper.retention import ArtifactEvictionError, evict_cloud_backed_run_artifacts
+from viper.retention import RunFileEvictionError, evict_cloud_backed_run_files
 from viper.runs import AttemptJournalRef, ResolvedAttemptRef, ResolvedRun, RunAttempt
 from viper.serialization import serialize_document
 from viper.storage import (
@@ -56,6 +56,11 @@ def _successful_result(
     history = artifact.parent.parent / "training_history/history.json"
     history.parent.mkdir(parents=True)
     history.write_bytes(b'{"loss":[1.0]}\n')
+    attempt_workspace = (
+        root / ".viper/workspaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/attempt-1/inputs/embed"
+    )
+    attempt_workspace.mkdir(parents=True)
+    (attempt_workspace / "prior.bin").write_bytes(b"copied input")
     resolved_path = (
         "experiments/example/runs/selected/01ARZ3NDEKTSV4RRFFQ69G5FAV/"
         "stages/embed/resolved.yaml"
@@ -166,7 +171,7 @@ def test_evicts_only_verified_cloud_backed_run_artifacts(tmp_path: Path) -> None
     client = InMemoryViperCloudClient()
     result, artifacts = _successful_result(tmp_path, client)
 
-    eviction = evict_cloud_backed_run_artifacts(
+    eviction = evict_cloud_backed_run_files(
         tmp_path,
         result,
         cloud_client=client,
@@ -174,17 +179,24 @@ def test_evicts_only_verified_cloud_backed_run_artifacts(tmp_path: Path) -> None
 
     assert all(not artifact.exists() for artifact in artifacts)
     assert result.path.is_file()
-    assert eviction.bytes_released == len(b"parameters") + len(b'{"loss":[1.0]}\n')
+    assert not (
+        tmp_path / ".viper/workspaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/attempt-1"
+    ).exists()
+    assert eviction.attempt_workspace_bytes_released == len(b"copied input")
+    assert eviction.bytes_released == (
+        len(b"parameters") + len(b'{"loss":[1.0]}\n') + len(b"copied input")
+    )
     assert tuple(file.path for file in eviction.artifacts) == (
         artifacts[0].relative_to(tmp_path).as_posix(),
         artifacts[1].relative_to(tmp_path).as_posix(),
     )
-    repeated = evict_cloud_backed_run_artifacts(
+    repeated = evict_cloud_backed_run_files(
         tmp_path,
         result.reference,
         cloud_client=client,
     )
     assert repeated.bytes_released == 0
+    assert repeated.attempt_workspace_bytes_released == 0
     assert repeated.artifacts == ()
 
 
@@ -196,8 +208,8 @@ def test_rejects_changed_local_artifact_before_removing_any_file(
     result, artifacts = _successful_result(tmp_path, client)
     artifacts[1].write_bytes(b"substitute")
 
-    with pytest.raises(ArtifactEvictionError, match="local artifact identity changed"):
-        evict_cloud_backed_run_artifacts(
+    with pytest.raises(RunFileEvictionError, match="local artifact identity changed"):
+        evict_cloud_backed_run_files(
             tmp_path,
             result,
             cloud_client=client,
@@ -205,3 +217,6 @@ def test_rejects_changed_local_artifact_before_removing_any_file(
 
     assert artifacts[0].read_bytes() == b"parameters"
     assert artifacts[1].read_bytes() == b"substitute"
+    assert (
+        tmp_path / ".viper/workspaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/attempt-1"
+    ).is_dir()

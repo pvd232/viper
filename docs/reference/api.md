@@ -228,10 +228,11 @@ the object-key contract and its local-eviction boundary. Use
 `GcsViperCloudClient.fetch_to_path()` for artifacts too large to hold in memory.
 After accepting parity, pass the completed `RunResult`—or its retained
 `ResolvedRunRef` after a restart—and that same client to
-`viper.execution.evict_cloud_backed_run_artifacts()`. The returned
-`RunArtifactEviction` lists the removed file identities and total bytes released. Run
-records and inputs remain local; every removed output remains restorable through its
-sealed Viper Cloud snapshot.
+`viper.execution.evict_cloud_backed_run_files()`. The returned `RunFileEviction`
+lists the removed file identities and total bytes released. Run
+records and canonical inputs remain local; every removed output remains restorable
+through its sealed Viper Cloud snapshot. The selected attempt's transient input
+materializations are removed and reported separately from output bytes.
 
 ## Typed operations
 

@@ -93,19 +93,20 @@ manifest, then verify the restored byte count and SHA-256 digest.
 
 Cloud publication makes a stage output eligible for local eviction only after the
 run succeeds and its parity decision is accepted. Call
-`execution.evict_cloud_backed_run_artifacts()` with that `RunResult`, or its retained
+`execution.evict_cloud_backed_run_files()` with that `RunResult`, or its retained
 `ResolvedRunRef` after a restart, and the same cloud client on any host running the
 workspace. VIPER verifies the local terminal record, selected attempt, sealed
 snapshot manifest, and the complete local and remote bytes before deleting any
 artifact. It checks every candidate before the first deletion, so one mismatch leaves
 the complete local set untouched.
 
-The operation preserves inputs, the terminal record, attempt records, journals,
-resolved stage documents, measurements, and logs. A second call releases zero bytes.
-It refuses unsuccessful runs and attempts containing local-only stage snapshots. A
-download cache may be removed without another cloud copy when its exact upstream
-reference and expected digest are retained. Never manually evict a file selected only
-by a `LocalFileRef` or a local stage snapshot.
+The operation preserves canonical inputs, the terminal record, attempt records,
+journals, resolved stage documents, measurements, and logs. It removes the selected
+attempt's transient `.viper/workspaces` materializations. A second call releases zero
+bytes. It refuses unsuccessful runs, attempts containing local-only stage snapshots,
+and workspaces with an active owner. A download cache may be removed without another
+cloud copy when its exact upstream reference and expected digest are retained. Never
+manually evict a file selected only by a `LocalFileRef` or a local stage snapshot.
 
 `GcsViperCloudClient` streams path-backed uploads and `fetch_to_path()` restores large
 objects through a temporary file followed by an atomic rename. The in-memory `fetch()`
