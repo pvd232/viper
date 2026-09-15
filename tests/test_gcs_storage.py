@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 import pytest
 from google.api_core.exceptions import PreconditionFailed
@@ -49,6 +50,24 @@ class _Blob:
             raw,
             dict(self.metadata or {}),
             self.generation,
+        )
+
+    def upload_from_filename(
+        self,
+        filename: str,
+        *,
+        content_type: str,
+        if_generation_match: int,
+        checksum: str,
+    ) -> None:
+        """Model the streaming upload path used for file-backed sources."""
+        with Path(filename).open("rb") as stream:
+            raw = stream.read()
+        self.upload_from_string(
+            raw,
+            content_type=content_type,
+            if_generation_match=if_generation_match,
+            checksum=checksum,
         )
 
     def download_as_bytes(self, *, checksum: str) -> bytes:
@@ -155,6 +174,32 @@ def test_publishes_and_restores_durable_snapshot(tmp_path: Path) -> None:
         receipt_path,
     )
     assert repeated == receipt
+
+
+def test_streams_file_backed_publication(tmp_path: Path) -> None:
+    """Upload a root-confined path without calling its ``read_bytes`` method."""
+    client, fake = _client(tmp_path)
+    source = tmp_path / "large.bin"
+    source.write_bytes(b"bounded blocks")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+
+    with patch.object(
+        Path,
+        "read_bytes",
+        side_effect=AssertionError("loaded whole file"),
+    ):
+        client.upload(
+            owner="machina",
+            workspace="mantra",
+            revision="b" * 64,
+            path="data/large.bin",
+            source=source,
+            sha256=digest,
+            bytes=source.stat().st_size,
+        )
+
+    key = f"viper/machina/mantra/{'b' * 64}/data/large.bin"
+    assert fake.value.objects[key][0] == b"bounded blocks"
 
 
 def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:

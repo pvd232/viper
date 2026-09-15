@@ -359,8 +359,8 @@ def load_storage_settings(root: Path) -> StorageSettings:
         raise StorageConfigurationError("storage settings are invalid") from error
 
 
-def read_publication_source(root: Path, source: PublicationSource) -> bytes:
-    """Return bytes from one in-memory or root-confined publication source."""
+def resolve_publication_source(root: Path, source: PublicationSource) -> bytes | Path:
+    """Return in-memory bytes or one validated root-confined source path."""
     if isinstance(source, bytes):
         return source
     repository_root = root.resolve(strict=True)
@@ -372,7 +372,13 @@ def read_publication_source(root: Path, source: PublicationSource) -> bytes:
         raise StorageConfigurationError(
             "storage publication source is invalid"
         ) from error
-    return validated.read_bytes()
+    return validated
+
+
+def read_publication_source(root: Path, source: PublicationSource) -> bytes:
+    """Return bytes from one in-memory or root-confined publication source."""
+    resolved = resolve_publication_source(root, source)
+    return resolved if isinstance(resolved, bytes) else resolved.read_bytes()
 
 
 class ViperCloudClient(Protocol):
@@ -451,12 +457,19 @@ def manifest_revision(files: tuple[SnapshotFileRef, ...]) -> SHA256:
 def _source_file(
     root: Path, path: RepoRelPath, source: PublicationSource
 ) -> SnapshotFileRef:
-    """Read one source and record the identity sent to the cloud client."""
-    raw = read_publication_source(root, source)
+    """Hash one source without loading a file-sized payload into memory."""
+    resolved = resolve_publication_source(root, source)
+    if isinstance(resolved, bytes):
+        sha256 = hashlib.sha256(resolved).hexdigest()
+        size = len(resolved)
+    else:
+        with resolved.open("rb") as stream:
+            sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+        size = resolved.stat().st_size
     return SnapshotFileRef(
         path=path,
-        sha256=hashlib.sha256(raw).hexdigest(),
-        bytes=len(raw),
+        sha256=sha256,
+        bytes=size,
     )
 
 

@@ -21,7 +21,7 @@ from .storage import (
     ViperCloudDestination,
     manifest_revision,
     publish_resolved_files,
-    read_publication_source,
+    resolve_publication_source,
 )
 
 
@@ -147,26 +147,42 @@ class GcsViperCloudClient(ViperCloudClient):
     def _upload_exact(
         self,
         key: str,
-        raw: bytes,
+        source: PublicationSource,
         *,
         sha256: SHA256,
         size: int,
     ) -> None:
-        """Create one object once, accepting only an identical retry."""
-        if len(raw) != size or hashlib.sha256(raw).hexdigest() != sha256:
+        """Create one object once and stream validated file-backed sources."""
+        resolved = resolve_publication_source(self.root, source)
+        if isinstance(resolved, bytes):
+            observed_size = len(resolved)
+            observed_sha256 = hashlib.sha256(resolved).hexdigest()
+        else:
+            observed_size = resolved.stat().st_size
+            with resolved.open("rb") as stream:
+                observed_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+        if observed_size != size or observed_sha256 != sha256:
             raise StorageConfigurationError("GCS upload source identity changed")
         blob = self.bucket.blob(key)
         blob.metadata = {"sha256": sha256, "bytes": str(size)}
         try:
-            blob.upload_from_string(
-                raw,
-                content_type="application/octet-stream",
-                if_generation_match=0,
-                checksum="auto",
-            )
+            if isinstance(resolved, bytes):
+                blob.upload_from_string(
+                    resolved,
+                    content_type="application/octet-stream",
+                    if_generation_match=0,
+                    checksum="auto",
+                )
+            else:
+                blob.upload_from_filename(
+                    str(resolved),
+                    content_type="application/octet-stream",
+                    if_generation_match=0,
+                    checksum="auto",
+                )
         except PreconditionFailed:
             existing = blob.download_as_bytes(checksum="auto")
-            if existing != raw:
+            if len(existing) != size or hashlib.sha256(existing).hexdigest() != sha256:
                 raise StorageConfigurationError(
                     "GCS object already contains different bytes"
                 ) from None
@@ -205,10 +221,9 @@ class GcsViperCloudClient(ViperCloudClient):
         bytes: int,
     ) -> None:
         """Upload one immutable file while leaving its revision unsealed."""
-        raw = read_publication_source(self.root, source)
         self._upload_exact(
             self._file_key(owner, workspace, revision, path),
-            raw,
+            source,
             sha256=sha256,
             size=bytes,
         )
