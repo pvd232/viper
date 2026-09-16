@@ -105,7 +105,7 @@ def validate_config(
         else _installed_config_type(reference.symbol, expected_base)
     )
     frozen = cast(dict[str, JsonValue], config.model_dump(mode="json"))
-    validated = model.model_validate(frozen, strict=True)
+    validated = model.model_validate_json(json.dumps(frozen), strict=True)
     effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
     if effective != frozen:
         raise ConfigValidationError(
@@ -129,7 +129,7 @@ def instantiate_config(
         else _installed_config_type(reference.symbol, expected_base)
     )
     frozen = cast(dict[str, JsonValue], config.model_dump(mode="json"))
-    validated = model.model_validate(frozen, strict=True)
+    validated = model.model_validate_json(json.dumps(frozen), strict=True)
     effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
     if effective != frozen:
         raise ConfigValidationError(

@@ -10,6 +10,7 @@ from tests.fixtures import artifact_loader_ref, stage_implementation_ref
 from viper import config
 from viper._config.validation import (
     ConfigValidationError,
+    instantiate_config,
     load_config_type,
     validate_config,
     validate_stage_config,
@@ -130,6 +131,41 @@ def test_config_type_rejects_type_coercion(tmp_path: Path) -> None:
             config.TrainConfig.model_validate({"epochs": "2", "learning_rate": 0.1}),
             config.TrainConfig,
         )
+
+
+def test_config_type_round_trips_json_arrays_as_tuples(tmp_path: Path) -> None:
+    """Validate immutable tuple fields from their persisted JSON-array form."""
+    raw = (
+        b"from viper import config\n\n"
+        b"class TupleTrainConfig(config.TrainConfig):\n"
+        b"    splits: tuple[str, ...]\n"
+    )
+    path = tmp_path / "tuple_config.py"
+    path.write_bytes(raw)
+    reference = ConfigTypeRef(
+        owner="workspace",
+        path="project/config/tuple_config.py",
+        symbol="TupleTrainConfig",
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+    frozen = config.TrainConfig.model_validate({"splits": ["fit", "tune"]})
+
+    effective = validate_config(
+        path,
+        reference,
+        frozen,
+        config.TrainConfig,
+    )
+    instantiated = instantiate_config(
+        path,
+        reference,
+        frozen,
+        config.TrainConfig,
+    )
+
+    assert effective["splits"] == ["fit", "tune"]
+    assert getattr(instantiated, "splits") == ("fit", "tune")
 
 
 def test_config_type_requires_the_stage_specific_base(tmp_path: Path) -> None:
