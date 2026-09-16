@@ -6,7 +6,6 @@ from pathlib import Path
 
 from ..authoring import RunPlanDraft, freeze_run_plan
 from ..repository import resolve_root
-from ..retention import RunFileEviction, evict_cloud_backed_run_files
 from ..storage import ViperCloudClient
 from ._batch import run_many as _run_many
 from ._benchmark import benchmark as _benchmark
@@ -134,11 +133,9 @@ def run_many(
 
 __all__ = [
     "benchmark",
-    "evict_cloud_backed_run_files",
     "resolve_run_reference",
     "retry",
     "restore",
     "run",
     "run_many",
-    "RunFileEviction",
 ]

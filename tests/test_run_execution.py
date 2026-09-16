@@ -1241,11 +1241,11 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
     )
     verified_runs = []
     monkeypatch.setattr(
-        "viper.execution._materialization._verify_pointer_run",
+        "viper.execution._materialization.verify_pointer_run",
         lambda *args, **kwargs: verified_runs.append(object()) or object(),
     )
     monkeypatch.setattr(
-        "viper.execution._materialization._verify_artifact_in_run",
+        "viper.execution._materialization.verify_artifact_in_run",
         lambda *args, **kwargs: verified,
     )
     workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 2)

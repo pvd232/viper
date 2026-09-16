@@ -49,8 +49,8 @@ from ..stages import (
 )
 from ..storage import snapshot_file
 from ..verification import (
-    _verify_artifact_in_run,
-    _verify_pointer_run,
+    verify_artifact_in_run,
+    verify_pointer_run,
     verify_snapshot_artifact,
 )
 from ..workspace import AttemptWorkspace, captured_input_path, stored_input_path
@@ -187,13 +187,13 @@ def resolve_inputs(
             pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
             verified_run = verified_runs.get(pointer.run)
             if verified_run is None:
-                verified_run = _verify_pointer_run(
+                verified_run = verify_pointer_run(
                     pointer,
                     policy=policy,
                     fetcher=fetcher,
                 )
                 verified_runs[pointer.run] = verified_run
-            verified = _verify_artifact_in_run(
+            verified = verify_artifact_in_run(
                 pointer,
                 verified_run=verified_run,
                 policy=policy,

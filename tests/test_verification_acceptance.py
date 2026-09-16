@@ -2357,8 +2357,8 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
 
         with mock.patch.object(
             verification,
-            "_verify_pointer_run",
-            wraps=verification._verify_pointer_run,
+            "verify_pointer_run",
+            wraps=verification.verify_pointer_run,
         ) as observed:
             verification.verify_stored_inputs(
                 {"build": repeated_build},

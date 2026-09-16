@@ -93,7 +93,7 @@ manifest, then verify the restored byte count and SHA-256 digest.
 
 Cloud publication makes a stage output eligible for local eviction only after the
 run succeeds and its parity decision is accepted. Call
-`execution.evict_cloud_backed_run_files()` with that `RunResult`, or its retained
+`retention.evict_cloud_backed_run_files()` with that `RunResult`, or its retained
 `ResolvedRunRef` after a restart, and the same cloud client on any host running the
 workspace. VIPER verifies the local terminal record, selected attempt, sealed
 snapshot manifest, and the complete local and remote bytes before deleting any

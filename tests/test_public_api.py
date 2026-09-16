@@ -37,6 +37,7 @@ import viper.references as references
 import viper.repository as repository
 import viper.restoration as restoration
 import viper.resume as resume
+import viper.retention as retention
 import viper.reuse as reuse
 import viper.runs as runs
 import viper.runtime as runtime
@@ -105,6 +106,7 @@ PUBLIC_MODULES_BY_NAME = {
         randomness,
         references,
         restoration,
+        retention,
         resume,
         reuse,
         runs,

@@ -410,8 +410,8 @@ def verify_promoted_artifact(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedArtifact:
     """Follow a promoted artifact pointer through its completed producer run."""
-    verified_run = _verify_pointer_run(pointer, policy=policy, fetcher=fetcher)
-    return _verify_artifact_in_run(
+    verified_run = verify_pointer_run(pointer, policy=policy, fetcher=fetcher)
+    return verify_artifact_in_run(
         pointer,
         verified_run=verified_run,
         policy=policy,
@@ -421,7 +421,7 @@ def verify_promoted_artifact(
     )
 
 
-def _verify_pointer_run(
+def verify_pointer_run(
     pointer: ArtifactPointer,
     *,
     policy: VerificationPolicy,
@@ -439,7 +439,7 @@ def _verify_pointer_run(
     return verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
 
 
-def _verify_artifact_in_run(
+def verify_artifact_in_run(
     pointer: ArtifactPointer,
     *,
     verified_run: VerifiedRunResult,
@@ -645,12 +645,12 @@ def verify_stored_inputs(
             parsed_pointers[input_name] = pointer
 
             if pointer.run not in verified_runs:
-                verified_runs[pointer.run] = _verify_pointer_run(
+                verified_runs[pointer.run] = verify_pointer_run(
                     pointer,
                     policy=policy,
                     fetcher=fetcher,
                 )
-            verified_artifact = _verify_artifact_in_run(
+            verified_artifact = verify_artifact_in_run(
                 pointer,
                 verified_run=verified_runs[pointer.run],
                 policy=policy,
