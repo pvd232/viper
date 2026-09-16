@@ -1418,8 +1418,6 @@ def _compile_variant(
                     ),
                 )
             )
-    if not stage_configs:
-        raise ValueError("variant requires one workspace stage")
     return VariantSpec(
         experiment_id=experiment_id,
         variant_id=variant_id,

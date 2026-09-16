@@ -28,7 +28,9 @@ from viper.authoring import (
     TrainSpecDraft,
     VariantDraft,
     _compile_plan,
+    _compile_variant,
     _CompiledPlan,
+    download,
     expand,
     expand_http_url,
     experiment,
@@ -54,7 +56,9 @@ from viper.experiments import (
 from viper.http import (
     CustomHttpDraft,
     HttpContext,
+    HttpRequestSpec,
     HttpResult,
+    HttpRetrievalPolicy,
     ObservedHttpResponse,
     http,
 )
@@ -68,7 +72,7 @@ from viper.metrics import (
     metric,
     min,
 )
-from viper.outputs import EvalOutputs, output
+from viper.outputs import EvalOutputs, StageOutputs, output
 from viper.preflight import preflight_plan
 from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 from viper.resume import DataLoaderConfiguration
@@ -1182,6 +1186,46 @@ def test_named_experiment_declarations_preserve_order_and_identity() -> None:
     assert baseline.levels == {}
     assert tuple(study.replicates) == ("seed_19", "seed_7")
     assert study.replicates["seed_19"].seed == 19
+
+
+def test_download_only_variant_compiles_without_workspace_stage_config() -> None:
+    """Compile a real runner-owned stage without inventing workspace config."""
+    raw = output(
+        path="source.bin",
+        loader=lambda path: path.read_bytes(),
+        data_role="training",
+    )
+    source = download(
+        stage_id="download_source",
+        inputs={
+            "source": HttpRequestSpec.model_validate(
+                {
+                    "url": "https://example.com/source.bin",
+                    "version": "v1",
+                    "expected_body_sha256": "0" * 64,
+                    "expected_body_bytes": 1,
+                }
+            )
+        },
+        outputs=StageOutputs.model_validate({"source": raw}),
+        policy=HttpRetrievalPolicy(
+            allowed_schemes=frozenset({"https"}),
+            allowed_hosts=frozenset({"example.com"}),
+            allowed_ports=frozenset({443}),
+            max_redirects=0,
+            max_body_bytes=1,
+            timeout_seconds=1,
+        ),
+    )
+    draft = variant(
+        "source_download",
+        stages=(source,),
+        estimator=source.outputs["source"],
+    )
+
+    compiled = _compile_variant("download_only", "source_download", draft)
+
+    assert compiled.stage_configs == ()
 
 
 @pytest.mark.parametrize("identity", ("stage", "variant", "replicate"))

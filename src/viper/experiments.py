@@ -120,13 +120,13 @@ VariantStageConfig = Annotated[
 
 
 class VariantSpec(ProtocolModel):
-    """Assign factor levels and typed stage config to one variant."""
+    """Assign factor levels and parameterized-stage config to one variant."""
 
     schema_version: Literal[2] = 2
     experiment_id: ExperimentId
     variant_id: VariantId
     levels: dict[FactorId, LevelId]
-    stage_configs: tuple[VariantStageConfig, ...] = Field(min_length=1)
+    stage_configs: tuple[VariantStageConfig, ...]
 
     @model_validator(mode="after")
     def validate_unique_stage_ids(self) -> VariantSpec:

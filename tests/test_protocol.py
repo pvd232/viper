@@ -1157,17 +1157,18 @@ class ArtifactAndVariantTests(unittest.TestCase):
                 }
             )
 
-    def test_variant_requires_stage_configs(self) -> None:
-        """Verify that variant requires stage parameters."""
-        with self.assertRaisesRegex(ValidationError, "at least 1 item"):
-            VariantSpec.model_validate(
-                {
-                    "experiment_id": "e001_strand",
-                    "variant_id": "baseline",
-                    "levels": {},
-                    "stage_configs": [],
-                }
-            )
+    def test_variant_allows_no_workspace_stage_configs(self) -> None:
+        """Represent variants whose stages are entirely runner-owned."""
+        variant = VariantSpec.model_validate(
+            {
+                "experiment_id": "e001_strand",
+                "variant_id": "source_download",
+                "levels": {},
+                "stage_configs": [],
+            }
+        )
+
+        self.assertEqual(variant.stage_configs, ())
 
 
 class YAMLLoadingTests(unittest.TestCase):
