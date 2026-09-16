@@ -163,6 +163,7 @@ def workspace_files(package: str) -> dict[str, str]:
             ".viper/*\n"
             "!.viper/pointers/\n"
             "!.viper/pointers/**\n"
+            "experiments/**/artifacts/\n"
             "__pycache__/\n"
             "*.egg-info/\n"
         ),

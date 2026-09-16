@@ -97,11 +97,13 @@ def test_init_generates_importable_python_project(
     assert len(result.files) == 23
     assert target / "viper.toml" in result.files
     assert target / "inputs" / ".gitkeep" in result.files
+    ignore_rules = (target / ".gitignore").read_text(encoding="utf-8").splitlines()
     readme = (target / "README.md").read_text(encoding="utf-8")
     runner = (target / "run.py").read_text(encoding="utf-8")
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert "1 passed" in completed.stdout
+    assert "experiments/**/artifacts/" in ignore_rules
     assert "freeze-run" not in readme
     assert "viper.execution.run()" in readme
     assert "execution.run(draft, repository_root=root)" in runner
