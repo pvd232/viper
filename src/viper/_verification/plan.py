@@ -121,6 +121,9 @@ def _verify_stage_data_roles(
                 f"than its {evaluation_role!r} evaluation: {names}"
             )
 
+    if not input_roles:
+        return
+
     highest_input_rank = max(_DATA_ROLE_RANK[role] for role in input_roles.values())
     downgraded_outputs = {
         name

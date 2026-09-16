@@ -1464,6 +1464,42 @@ class RunAndStageVerificationTests(unittest.TestCase):
 class RunPlanRelationshipTests(unittest.TestCase):
     """Verify relationships among experiments, variants, stages, and benchmarks."""
 
+    def test_source_only_build_has_no_input_role_to_propagate(self) -> None:
+        """Accept declared output roles when a build consumes no artifacts."""
+        build = build_spec().model_copy(update={"inputs": {}})
+        run, _ = run_spec(
+            [("build", build)],
+            estimator_stage="build",
+            estimator_artifact="prior",
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_configs=(
+                BuildVariantStageConfig(
+                    kind="build",
+                    stage_id="build",
+                    config=build.config,
+                ),
+            ),
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            None,
+            {"build": build},
+        )
+
     def test_unbenchmarked_run_requires_the_selected_terminal_artifact(self) -> None:
         """Resolve a non-model result to one output on its selected producer."""
         build = build_spec()
