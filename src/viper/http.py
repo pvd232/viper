@@ -301,6 +301,17 @@ class HttpRetrievalError(RuntimeError):
     """Report one rejected request, HTTP implementation, response, or body."""
 
 
+def _stream_file_identity(path: Path) -> tuple[int, str]:
+    """Return file size and SHA-256 without materializing the body in memory."""
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            size += len(chunk)
+            digest.update(chunk)
+    return size, digest.hexdigest()
+
+
 @dataclass(frozen=True)
 class RuntimeHttpCredential:
     """Carry one resolved secret only for the active HTTP invocation."""
@@ -723,11 +734,11 @@ def invoke_http(
         raise HttpRetrievalError("HTTP terminal status is unaccepted")
     terminal_request = request.model_copy(update={"url": result.response.response_url})
     validate_request_policy(terminal_request, policy)
-    raw = result.body.read_bytes()
-    if len(raw) > policy.max_body_bytes:
+    body_bytes, body_sha256 = _stream_file_identity(result.body)
+    if body_bytes > policy.max_body_bytes:
         raise HttpRetrievalError("HTTP body exceeds the policy limit")
-    if len(raw) != request.expected_body_bytes:
+    if body_bytes != request.expected_body_bytes:
         raise HttpRetrievalError("HTTP body byte count differs from frozen request")
-    if hashlib.sha256(raw).hexdigest() != request.expected_body_sha256:
+    if body_sha256 != request.expected_body_sha256:
         raise HttpRetrievalError("HTTP body SHA-256 differs from frozen request")
     return result

@@ -25,6 +25,7 @@ from viper.http import (
     ResolvedHttpImplementation,
     ResolvedHttpRetrieval,
     WorkspaceHttpImplementationSpec,
+    _stream_file_identity,
     invoke_http,
     resolve_http,
 )
@@ -746,3 +747,22 @@ def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
             workspace,
             workspace / "body",
         )
+
+
+def test_file_identity_streams_without_read_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hash large response bodies without copying the complete file into memory."""
+    body = tmp_path / "body.bin"
+    payload = b"verified chunk" * 100_000
+    body.write_bytes(payload)
+
+    def reject_read_bytes(self: Path) -> bytes:
+        raise AssertionError(f"read_bytes called for {self}")
+
+    monkeypatch.setattr(Path, "read_bytes", reject_read_bytes)
+
+    size, sha256 = _stream_file_identity(body)
+
+    assert size == len(payload)
+    assert sha256 == hashlib.sha256(payload).hexdigest()
