@@ -1,7 +1,9 @@
 # Compose stages
 
-A stage is a function with declared inputs and outputs. Connect stages by
-passing an earlier stage's output to a later stage's input.
+A stage is a function with declared outputs and zero or more declared inputs.
+Connect stages by passing an earlier stage's output to a later stage's input.
+A source-and-config stage may omit inputs when its frozen workspace source and
+configuration fully determine its outputs.
 
 The [complete pipeline](../tutorials/stages.md) connects preparation, feature
 computation, training, and diagnostics. The snippets below explain those stage
@@ -18,7 +20,7 @@ validated `BuildConfig` as `context.config`.
 | Attribute | Value supplied to the stage |
 | --- | --- |
 | `config` | Validated settings from `stage(config=...)`, using the config class named in the decorator. |
-| `inputs` | Mapping from the names in `stage(inputs=...)` to local `Path` objects for those files. Read input files through these paths. |
+| `inputs` | Mapping from the names in `stage(inputs=...)` to local `Path` objects for those files. It is empty for a source-and-config stage with no input artifacts. Read declared input files through these paths. |
 | `outputs` | Mapping from the names in the stage's output declaration to destination `Path` objects. VIPER creates the parent directories; your function writes the files. |
 | `metrics` | Mapping from each attached stage-recorded metric's `metric_id` to a `MetricHandle`. Call its `record()` method to compute and save a measurement. Metrics configured for recomputation run separately. |
 | `numpy_generators` | Mapping from generator names in the run's reproducibility settings to initialized NumPy generators. Use these generators for random sampling and checkpoint their state when saving training progress. |

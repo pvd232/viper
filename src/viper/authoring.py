@@ -257,9 +257,9 @@ class DownloadSpecDraft(BaseSpecDraft):
 
 
 class InternalSpecDraft(ParameterizedSpecDraft):
-    """Hold a workspace stage that consumes authored inputs."""
+    """Hold a workspace stage with zero or more authored inputs."""
 
-    inputs: dict[InputName, StageInputDraft] = Field(min_length=1)
+    inputs: dict[InputName, StageInputDraft] = Field(default_factory=dict)
 
 
 class BuildSpecDraft(InternalSpecDraft):
@@ -1225,7 +1225,7 @@ def stage(
     stage_id: StageId | None = None,
     config: Config | None = None,
     inputs: tuple[StageInputDraft | InputBinding, ...]
-    | Mapping[InputName, StageInputDraft],
+    | Mapping[InputName, StageInputDraft] = (),
     outputs: StageOutputs[OutputDraft],
     metrics: tuple[MetricDraft[Any], ...] = (),
     objective: MetricObjectiveDraft | None = None,
@@ -1241,6 +1241,7 @@ def stage(
     instantiate that class with its defaults; required fields still need values.
     Tuple inputs use each file or artifact's name. input(name, source=artifact)
     assigns a different name for this function. Duplicate names are rejected.
+    Omit inputs when frozen source and config fully determine the outputs.
     Training and evaluation require an objective; evaluation also requires eval_id and
     named split_inputs. An embedding objective is optional. Diagnostic outputs
     are terminal and must be omitted from downstream input selections.

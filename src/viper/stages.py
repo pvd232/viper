@@ -256,9 +256,9 @@ class DownloadSpec(BaseSpec):
 
 
 class InternalSpec(ParameterizedSpec):
-    """Request a stage that consumes stored or prior-stage artifacts."""
+    """Request a workspace stage with zero or more declared inputs."""
 
-    inputs: dict[InputName, InputRef] = Field(min_length=1)
+    inputs: dict[InputName, InputRef] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_local_path_collisions(self) -> InternalSpec:
