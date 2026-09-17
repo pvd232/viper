@@ -79,7 +79,9 @@ declaration, outside `EvalConfig`.
 `LocalEnvSpec` selects CPU compute by default. Its `lockfile` identifies a committed
 dependency file, and `python_env` records the installed Python and package versions.
 Install the required packages before calling `observe_python_env()` to capture the
-environment.
+environment. Run `viper env doctor` first when observation reports conflicting
+distributions; its JSON output names the interpreter, search paths, versions, and
+installation roots used to locate the conflict.
 
 The [CPU example](../../examples/cpu_quickstart.py) uses its committed `pyproject.toml`
 as the dependency-file reference. That file contains version ranges. For your own

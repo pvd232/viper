@@ -257,6 +257,19 @@ def build_parser() -> ArgumentParser:
         help="source repository URL approved to supply executable loaders",
     )
 
+    environment = commands.add_parser(
+        "env",
+        help="inspect the active execution environment",
+    )
+    environment_commands = environment.add_subparsers(
+        dest="environment_command",
+        required=True,
+    )
+    environment_commands.add_parser(
+        "doctor",
+        help="diagnose strict Python-environment violations",
+    )
+
     restore = commands.add_parser(
         "restore",
         help="restore verified artifacts from one successful run",
@@ -337,6 +350,8 @@ def _operation_and_payload(
     values = vars(arguments).copy()
     command = values.pop("command")
     values.pop("json_output")
+    if command == "env":
+        command = f"env-{values.pop('environment_command')}"
     if command == "knowledge":
         knowledge_command = values.pop("knowledge_command")
         if knowledge_command == "refresh":
@@ -381,6 +396,7 @@ def _operation_and_payload(
         "retry": "retry",
         "execute-benchmark": "execute_benchmark",
         "export-run": "export_run",
+        "env-doctor": "env_doctor",
         "restore": "restore",
         "plan-diff": "plan_diff",
         "lineage": "lineage",
@@ -472,6 +488,9 @@ def _human_success(result: SuccessModel) -> str:
     if result.operation == "export_run":
         exported = getattr(result, "result")
         return f"exported {exported.file_count} files to {exported.bundle_path}"
+    if result.operation == "env_doctor":
+        diagnosis = getattr(result, "diagnosis")
+        return f"Python environment is healthy: {diagnosis.interpreter}"
     if result.operation == "restore":
         restored = getattr(result, "result")
         file_count = sum(len(artifact.files) for artifact in restored.artifacts)

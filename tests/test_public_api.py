@@ -334,6 +334,9 @@ def test_env_vocabulary_is_complete() -> None:
     assert runtime.PythonEnvSpec.__name__ == "PythonEnvSpec"
     assert runtime.EnvSpec is not None
     assert runtime.ResolvedEnv is not None
+    assert runtime.PythonEnvironmentDiagnosis.__name__ == "PythonEnvironmentDiagnosis"
+    assert runtime.PythonEnvironmentError.__name__ == "PythonEnvironmentError"
+    assert callable(runtime.diagnose_python_env)
     assert callable(runtime.observe_python_env)
     assert not hasattr(runtime, "PythonEnvironmentSpec")
     assert not hasattr(runtime, "EnvironmentSpec")
