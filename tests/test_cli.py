@@ -9,9 +9,81 @@ from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 
+import viper.runtime as runtime
 from viper import _subprocess as subprocess
 from viper.cli import main
 from viper.journal import DurableJournal
+
+
+class _Distribution:
+    """Supply installed-distribution metadata for CLI diagnosis tests."""
+
+    def __init__(self, version: str, root: Path) -> None:
+        self.metadata = {"Name": "cffi"}
+        self.version = version
+        self.root = root
+
+    def locate_file(self, path: str) -> Path:
+        """Resolve a package-relative path below the test installation root."""
+        return self.root / path
+
+
+def test_env_doctor_reports_active_interpreter(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """Return a structured healthy report without starting a run."""
+    root = tmp_path / "site-packages"
+    monkeypatch.setattr(
+        runtime.importlib.metadata,
+        "distributions",
+        lambda: (_Distribution("1.17.0", root),),
+    )
+    monkeypatch.setattr(runtime.sys, "executable", str(tmp_path / "bin/python"))
+    monkeypatch.setattr(runtime.sys, "path", [str(root)])
+
+    status = main(["--json", "env", "doctor"])
+    result = json.loads(capsys.readouterr().out)
+
+    assert status == 0
+    assert result["operation"] == "env_doctor"
+    assert result["diagnosis"]["healthy"] is True
+    assert result["diagnosis"]["interpreter"] == str(tmp_path / "bin/python")
+
+
+def test_env_doctor_fails_with_duplicate_distribution_evidence(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """Return every conflicting installation and a nonzero CLI status."""
+    roots = (tmp_path / "first-site", tmp_path / "second-site")
+    monkeypatch.setattr(
+        runtime.importlib.metadata,
+        "distributions",
+        lambda: (
+            _Distribution("1.16.0", roots[0]),
+            _Distribution("1.17.0", roots[1]),
+        ),
+    )
+    monkeypatch.setattr(runtime.sys, "executable", str(tmp_path / "bin/python"))
+    monkeypatch.setattr(runtime.sys, "path", [str(root) for root in roots])
+
+    status = main(["--json", "env", "doctor"])
+    result = json.loads(capsys.readouterr().out)
+    diagnosis = result["details"]["diagnosis"]
+
+    assert status == 1
+    assert result["operation"] == "env_doctor"
+    assert diagnosis["healthy"] is False
+    assert {item["version"] for item in diagnosis["conflicts"][0]["installations"]} == {
+        "1.16.0",
+        "1.17.0",
+    }
+    assert {item["root"] for item in diagnosis["conflicts"][0]["installations"]} == {
+        str(root) for root in roots
+    }
 
 
 def test_mcp_stdio_requires_explicit_execution_access(
@@ -200,6 +272,7 @@ class CommandLineTests(unittest.TestCase):
                 "--trust-source",
                 "https://example.test/repository",
             ],
+            "env doctor": ["env", "doctor"],
             "plan-diff": ["plan-diff", "left.yaml", "right.yaml"],
             "lineage": [
                 "lineage",

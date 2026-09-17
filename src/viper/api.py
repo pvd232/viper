@@ -121,6 +121,7 @@ from .runs import (
     ResolvedRun,
     RunSpec,
 )
+from .runtime import PythonEnvironmentDiagnosis, diagnose_python_env
 from .serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
 from .stages import (
     ParameterizedSpec,
@@ -147,6 +148,7 @@ OperationName = Literal[
     "retry",
     "execute_benchmark",
     "export_run",
+    "env_doctor",
     "restore",
     "plan_diff",
     "lineage",
@@ -560,6 +562,17 @@ class SchemaSuccess(SuccessModel):
     json_schema: dict[str, Any]
 
 
+class EnvDoctorRequest(APIModel):
+    """Request a diagnosis of the active Python interpreter."""
+
+
+class EnvDoctorSuccess(SuccessModel):
+    """Return one healthy active Python-environment diagnosis."""
+
+    operation: Literal["env_doctor"] = "env_doctor"  # pyright: ignore[reportIncompatibleVariableOverride]
+    diagnosis: PythonEnvironmentDiagnosis
+
+
 class CapabilitiesRequest(APIModel):
     """Request the installed operation and backend inventory."""
 
@@ -806,6 +819,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
     "ExportRunRequest": ExportRunRequest,
     "ExportRunSuccess": ExportRunSuccess,
+    "EnvDoctorRequest": EnvDoctorRequest,
+    "EnvDoctorSuccess": EnvDoctorSuccess,
     "RestoreRequest": RestoreRequest,
     "RestoreSuccess": RestoreSuccess,
     "FreezeRunRequest": FreezeRunRequest,
@@ -872,6 +887,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "retry",
     "execute_benchmark",
     "export_run",
+    "env_doctor",
     "restore",
     "plan_diff",
     "lineage",
@@ -1513,6 +1529,23 @@ def get_schema(request: SchemaRequest) -> SchemaSuccess:
     )
 
 
+def env_doctor(request: EnvDoctorRequest) -> EnvDoctorSuccess:
+    """Diagnose the active Python environment without starting a run."""
+    del request
+    diagnosis = diagnose_python_env()
+    if not diagnosis.healthy:
+        raise ViperError(
+            ViperFailure(
+                operation="env_doctor",
+                origin="application",
+                code="execution_failed",
+                message="active Python environment violates strict requirements",
+                details={"diagnosis": diagnosis.model_dump(mode="json")},
+            )
+        )
+    return EnvDoctorSuccess(diagnosis=diagnosis)
+
+
 def get_capabilities(request: CapabilitiesRequest) -> CapabilitiesSuccess:
     """Return installed operations and available execution backends."""
     del request
@@ -1909,6 +1942,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "retry": RetryRequest,
     "execute_benchmark": ExecuteBenchmarkRequest,
     "export_run": ExportRunRequest,
+    "env_doctor": EnvDoctorRequest,
     "restore": RestoreRequest,
     "plan_diff": PlanDiffRequest,
     "lineage": LineageRequest,
@@ -1959,6 +1993,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "retry": retry_request,
     "execute_benchmark": execute_benchmark,
     "export_run": export_run,
+    "env_doctor": env_doctor,
     "restore": restore_artifacts,
     "plan_diff": plan_diff,
     "lineage": lineage,
