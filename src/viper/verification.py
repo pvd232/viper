@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Protocol, runtime_checkable
 
 import yaml
 from pydantic import BaseModel
@@ -42,6 +43,7 @@ from .evidence import (
     VerifiedArtifact,
     VerifiedBenchmarkResult,
     VerifiedInput,
+    VerifiedProducerRun,
     VerifiedRunPlan,
     VerifiedRunResult,
 )
@@ -469,6 +471,61 @@ def verify_pointer_run(
     return verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
 
 
+@runtime_checkable
+class _VerifiedProducerCache(Protocol):
+    """Reuse producer structure proven earlier in one execution process."""
+
+    def read_verified_producer(
+        self,
+        reference: ResolvedRunRef,
+        policy: VerificationPolicy,
+    ) -> VerifiedProducerRun | None:
+        """Return cached producer evidence when available."""
+        ...
+
+    def remember_verified_producer(
+        self,
+        reference: ResolvedRunRef,
+        policy: VerificationPolicy,
+        producer: VerifiedProducerRun,
+    ) -> None:
+        """Retain producer evidence without artifact payload bytes."""
+        ...
+
+
+def _verified_producer_cache(
+    fetcher: StorageFetcher | None,
+) -> _VerifiedProducerCache | None:
+    """Return the cache owner behind a callable storage fetcher."""
+    owner = None if fetcher is None else getattr(fetcher, "__self__", fetcher)
+    return owner if isinstance(owner, _VerifiedProducerCache) else None
+
+
+def verify_pointer_producer(
+    pointer: ArtifactPointer,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+) -> VerifiedProducerRun:
+    """Verify one producer once and retain only its structural evidence."""
+    cache = _verified_producer_cache(fetcher)
+    if cache is not None:
+        cached = cache.read_verified_producer(pointer.run, policy)
+        if cached is not None:
+            return cached
+
+    verified = verify_pointer_run(pointer, policy=policy, fetcher=fetcher)
+    producer = VerifiedProducerRun(
+        result=verified.result,
+        plan=verified.plan,
+        attempts=verified.attempts,
+        resolved_stages=verified.resolved_stages,
+    )
+    if cache is not None:
+        cache.remember_verified_producer(pointer.run, policy, producer)
+    return producer
+
+
 def _verify_benchmark_plan_pointers(
     plan: VerifiedRunPlan,
     *,
@@ -478,7 +535,7 @@ def _verify_benchmark_plan_pointers(
     """Verify benchmark pointer payloads reachable before their eval executes."""
     if plan.benchmark is None or getattr(fetcher, "read_plan_source", None) is None:
         return
-    verified_runs: dict[ResolvedRunRef, VerifiedRunResult] = {}
+    verified_runs: dict[ResolvedRunRef, VerifiedProducerRun] = {}
     references = (plan.benchmark.test, *plan.benchmark.splits.values())
     for reference in references:
         pointer_raw = read_resolved_file(reference, fetcher=fetcher)
@@ -489,7 +546,7 @@ def _verify_benchmark_plan_pointers(
                 "benchmark input pointer is not a valid ArtifactPointer document"
             ) from exc
         if pointer.run not in verified_runs:
-            verified_runs[pointer.run] = verify_pointer_run(
+            verified_runs[pointer.run] = verify_pointer_producer(
                 pointer,
                 policy=policy,
                 fetcher=fetcher,
@@ -507,7 +564,7 @@ def _verify_benchmark_plan_pointers(
 def verify_artifact_in_run(
     pointer: ArtifactPointer,
     *,
-    verified_run: VerifiedRunResult,
+    verified_run: VerifiedRunResult | VerifiedProducerRun,
     policy: VerificationPolicy,
     expected_data_role: DataRole | None,
     materialization_path: RepoRelPath | None,
@@ -666,7 +723,7 @@ def verify_stored_inputs(
 ) -> dict[StageId, dict[InputName, VerifiedInput]]:
     """Verify every promoted artifact consumed by the resolved stages."""
     verified_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
-    verified_runs: dict[ResolvedRunRef, VerifiedRunResult] = {}
+    verified_runs: dict[ResolvedRunRef, VerifiedProducerRun] = {}
 
     for stage_id, resolved_stage in resolved_stages.items():
         if not isinstance(resolved_stage, ResolvedInternalSpec):
@@ -710,7 +767,7 @@ def verify_stored_inputs(
             parsed_pointers[input_name] = pointer
 
             if pointer.run not in verified_runs:
-                verified_runs[pointer.run] = verify_pointer_run(
+                verified_runs[pointer.run] = verify_pointer_producer(
                     pointer,
                     policy=policy,
                     fetcher=fetcher,

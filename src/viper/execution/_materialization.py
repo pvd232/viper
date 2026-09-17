@@ -14,7 +14,7 @@ from ..artifacts import (
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
 )
-from ..evidence import VerificationPolicy, VerifiedArtifact, VerifiedRunResult
+from ..evidence import VerificationPolicy, VerifiedArtifact, VerifiedProducerRun
 from ..http import (
     HttpRequestSpec,
     HttpResult,
@@ -50,7 +50,7 @@ from ..stages import (
 from ..storage import snapshot_file
 from ..verification import (
     verify_artifact_in_run,
-    verify_pointer_run,
+    verify_pointer_producer,
     verify_snapshot_artifact,
 )
 from ..workspace import AttemptWorkspace, captured_input_path, stored_input_path
@@ -139,7 +139,7 @@ def resolve_inputs(
     paths: dict[str, Path] = {}
     captured: dict[InputName, SnapshotFileRef] = {}
     stored: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
-    verified_runs: dict[ResolvedRunRef, VerifiedRunResult] = {}
+    verified_runs: dict[ResolvedRunRef, VerifiedProducerRun] = {}
     for name, input_ref in stage.inputs.items():
         if input_ref.kind == "future":
             producer = completed.get(input_ref.producer_stage_id)
@@ -187,7 +187,7 @@ def resolve_inputs(
             pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
             verified_run = verified_runs.get(pointer.run)
             if verified_run is None:
-                verified_run = verify_pointer_run(
+                verified_run = verify_pointer_producer(
                     pointer,
                     policy=policy,
                     fetcher=fetcher,

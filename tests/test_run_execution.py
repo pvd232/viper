@@ -1251,7 +1251,7 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
     )
     verified_runs = []
     monkeypatch.setattr(
-        "viper.execution._materialization.verify_pointer_run",
+        "viper.execution._materialization.verify_pointer_producer",
         lambda *args, **kwargs: verified_runs.append(object()) or object(),
     )
     monkeypatch.setattr(

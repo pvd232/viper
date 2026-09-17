@@ -105,6 +105,16 @@ class VerifiedRunResult:
 
 
 @dataclass(frozen=True)
+class VerifiedProducerRun:
+    """Retain verified producer structure without retaining input payload bytes."""
+
+    result: ResolvedRun
+    plan: VerifiedRunPlan
+    attempts: tuple[RunAttempt, ...]
+    resolved_stages: dict[StageId, ResolvedBaseSpec]
+
+
+@dataclass(frozen=True)
 class VerifiedBenchmarkResult:
     """A benchmark result and its verified run and confirmation execution."""
 

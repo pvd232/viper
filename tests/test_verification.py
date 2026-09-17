@@ -55,8 +55,10 @@ from viper.evidence import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
+    VerifiedRunResult,
     VerifiedSnapshotFile,
 )
+from viper.execution._source import RunFetcher
 from viper.experiments import (
     BuildVariantStageConfig,
     DiagnosticVariantStageConfig,
@@ -137,8 +139,10 @@ from viper.stages import (
     StageInvocationReceipt,
     TrainSpec,
 )
+from viper.storage import LocalArtifactStore
 from viper.verification import (
     verify_attempt_future_inputs,
+    verify_pointer_producer,
     verify_stored_input_selections,
 )
 
@@ -2573,3 +2577,56 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
         VerificationError, match="training objectives require stage-recorded"
     ):
         verify_stage_objectives({"train": stage}, invalid)
+
+
+def test_pointer_producer_reuses_structural_proof_without_payloads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not recursively reverify one immutable producer in the same execution."""
+    run_reference = ResolvedRunRef.model_construct(
+        sha256="d" * 64,
+        bytes=1,
+        stored_at=git_file(f"{RUN_ROOT}/resolved.yaml"),
+    )
+    pointer = ArtifactPointer.model_construct(run=run_reference)
+    placeholder: Any = object()
+    verified = VerifiedRunResult(
+        result=placeholder,
+        plan=placeholder,
+        attempts=(),
+        resolved_stages={},
+        measurements=(),
+        inputs={"build": placeholder},
+        attempt_inputs={1: {"build": placeholder}},
+    )
+    calls = 0
+
+    def verify_once(*args: object, **kwargs: object) -> VerifiedRunResult:
+        """Return one expensive producer proof and count its executions."""
+        nonlocal calls
+        del args, kwargs
+        calls += 1
+        return verified
+
+    monkeypatch.setattr("viper.verification.verify_pointer_run", verify_once)
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        str(REPOSITORY),
+    )
+
+    first = verify_pointer_producer(pointer, policy=POLICY, fetcher=fetcher)
+    second = verify_pointer_producer(pointer, policy=POLICY, fetcher=fetcher)
+    restrictive = verify_pointer_producer(
+        pointer,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset()),
+        fetcher=fetcher,
+    )
+
+    assert first is second
+    assert restrictive is not first
+    assert calls == 2
+    assert first.result is placeholder
+    assert first.resolved_stages == {}
+    assert not hasattr(first, "inputs")

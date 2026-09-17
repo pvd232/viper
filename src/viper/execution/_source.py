@@ -14,6 +14,7 @@ from .._verification.storage import (
     list_huggingface_snapshot_files,
     verify_resolved_file_bytes,
 )
+from ..evidence import VerificationPolicy, VerifiedProducerRun
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
@@ -21,6 +22,7 @@ from ..references import (
     LocalFileRef,
     ResolvedFileRef,
     ResolvedGitFileRef,
+    ResolvedRunRef,
     StageResultSnapshot,
     StorageModel,
     ViperCloudFileRef,
@@ -68,6 +70,10 @@ class RunFetcher:
         self._verified_objects = VerifiedObjectCache(
             self.repository_root / ".viper/cache/verified-objects"
         )
+        self._verified_producers: dict[
+            tuple[ResolvedRunRef, VerificationPolicy],
+            VerifiedProducerRun,
+        ] = {}
 
     def __call__(self, location: StorageModel) -> bytes:
         """Retrieve one file from its declared immutable backend."""
@@ -122,6 +128,23 @@ class RunFetcher:
         if cacheable:
             self._verified_objects.write(reference, raw)
         return raw
+
+    def read_verified_producer(
+        self,
+        reference: ResolvedRunRef,
+        policy: VerificationPolicy,
+    ) -> VerifiedProducerRun | None:
+        """Return producer structure verified earlier in this execution."""
+        return self._verified_producers.get((reference, policy))
+
+    def remember_verified_producer(
+        self,
+        reference: ResolvedRunRef,
+        policy: VerificationPolicy,
+        producer: VerifiedProducerRun,
+    ) -> None:
+        """Reuse one immutable producer proof without retaining artifact bytes."""
+        self._verified_producers[(reference, policy)] = producer
 
     def list_snapshot_files(
         self,
