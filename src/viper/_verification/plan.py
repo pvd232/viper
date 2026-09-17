@@ -521,11 +521,15 @@ def verify_config_type_references(
             installed_path = (
                 Path(inspect.getfile(Config)).resolve().parent / reference.path
             )
-            raw = (
-                retrieve(_source_file(run, reference.path))
-                if reference.owner == "workspace"
-                else installed_path.read_bytes()
-            )
+            if reference.owner == "workspace":
+                raw = retrieve(_source_file(run, reference.path))
+            else:
+                bundle_reader = getattr(fetcher, "read_viper_source", None)
+                raw = (
+                    bundle_reader(reference)
+                    if bundle_reader is not None
+                    else installed_path.read_bytes()
+                )
             verify_config_type_bytes(reference, raw)
             tree = ast.parse(raw, filename=reference.path)
         except (KeyError, OSError, SyntaxError, ConfigValidationError) as exc:

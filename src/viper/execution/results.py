@@ -1,10 +1,13 @@
 """Define the public results returned by complete run execution."""
 
+import hashlib
+import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .._schema import SHA256, RepoRelPath
 from ..benchmark import BenchmarkResult
 from ..ids import ReplicateId, RunId, StageId, VariantId
 from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
@@ -43,6 +46,89 @@ class RunResult(BaseModel):
         """Return the stage active when the latest attempt failed, if any."""
         failure = self.latest_attempt.failure
         return None if failure is None else failure.stage_id
+
+
+class RunBundleEntry(BaseModel):
+    """Identify one payload retained in a portable run bundle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: RepoRelPath
+    bytes: int = Field(ge=0)
+    sha256: SHA256
+    source: dict[str, Any]
+
+
+class RunBundleSnapshot(BaseModel):
+    """Retain the complete ordered membership of one stage snapshot."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_sha256: SHA256
+    members: tuple[RepoRelPath, ...]
+
+
+class RunBundleManifest(BaseModel):
+    """Describe every file required by one portable run bundle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    root_run: RepoRelPath
+    entries: tuple[RunBundleEntry, ...] = Field(min_length=1)
+    snapshots: tuple[RunBundleSnapshot, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_manifest(self) -> "RunBundleManifest":
+        """Require canonical unique entries and snapshot memberships."""
+        paths = tuple(item.path for item in self.entries)
+        if paths != tuple(sorted(paths)) or len(paths) != len(set(paths)):
+            raise ValueError("bundle entries must have unique sorted paths")
+        sources = tuple(item.source for item in self.entries)
+        if sum(source.get("kind") == "root_run" for source in sources) != 1:
+            raise ValueError("bundle manifest must contain one root run")
+        if self.root_run != "root/resolved.yaml":
+            raise ValueError("bundle root run path is not canonical")
+        source_keys = tuple(
+            json.dumps(source, sort_keys=True, separators=(",", ":"))
+            for source in sources
+        )
+        if len(source_keys) != len(set(source_keys)):
+            raise ValueError("bundle entries must have unique sources")
+        for entry in self.entries:
+            if entry.source.get("kind") == "root_run":
+                if entry.path != self.root_run:
+                    raise ValueError("bundle root entry path differs")
+                continue
+            source_raw = (
+                json.dumps(entry.source, sort_keys=True, separators=(",", ":")) + "\n"
+            ).encode()
+            digest = hashlib.sha256(source_raw).hexdigest()
+            if entry.path != f"objects/{digest[:2]}/{digest}":
+                raise ValueError("bundle object path is not canonical")
+        snapshot_ids = tuple(item.source_sha256 for item in self.snapshots)
+        if snapshot_ids != tuple(sorted(snapshot_ids)) or len(snapshot_ids) != len(
+            set(snapshot_ids)
+        ):
+            raise ValueError("bundle snapshots must have unique sorted identities")
+        known = set(paths)
+        if any(
+            member not in known for item in self.snapshots for member in item.members
+        ):
+            raise ValueError("bundle snapshot names an absent member")
+        return self
+
+
+class RunExportResult(BaseModel):
+    """Return one written or verified portable run bundle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    bundle_path: Path
+    manifest_path: Path
+    manifest_sha256: SHA256
+    file_count: int = Field(ge=1)
+    total_bytes: int = Field(ge=0)
 
 
 class ConfirmationRunResult(BaseModel):
