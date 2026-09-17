@@ -33,9 +33,10 @@ from ..reuse import (
     ReusedMetricEvidence,
     ReusedStageCompletion,
     ReusedStageFile,
+    StageReuseCandidate,
     StageReuseKey,
     StageReuseReceipt,
-    catalog_reuse_candidates,
+    attempt_reuse_candidates,
 )
 from ..runs import ResolvedRun
 from ..serialization import parse_yaml_bytes, serialize_document
@@ -223,10 +224,13 @@ def reuse_stage(
     destination: StorageDestination,
     cloud_client: ViperCloudClient | None,
     metrics: dict[MetricId, MetricSpec],
+    candidate: StageReuseCandidate | None = None,
 ) -> ReuseStageResult | None:
     """Verify one catalog hit and materialize it without running a worker."""
-    candidate = catalog.reuse_candidate(key)
+    candidate = catalog.reuse_candidate(key) if candidate is None else candidate
     if candidate is None:
+        return None
+    if candidate.key != key:
         return None
     try:
         raw = fetcher(cast(StorageModel, candidate.source_run.stored_at))
@@ -235,14 +239,18 @@ def reuse_stage(
         rebuilt = next(
             (
                 item
-                for item in catalog_reuse_candidates(candidate.source_run, verified)
+                for item in attempt_reuse_candidates(
+                    candidate.source_run,
+                    verified,
+                    candidate.attempt_id,
+                )
                 if item.source_stage == candidate.source_stage
             ),
             None,
         )
         if rebuilt is None or rebuilt.key != key:
             return None
-        source = verified.resolved_stages.get(key.stage_id)
+        source = verified.attempt_stages.get(candidate.attempt_id, {}).get(key.stage_id)
         if not isinstance(source, ResolvedParameterizedSpec):
             return None
         if not isinstance(source.completion, ExecutedStageCompletion):

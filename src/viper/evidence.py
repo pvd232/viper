@@ -93,6 +93,12 @@ class VerifiedRunResult:
     measurement_references: tuple[ResolvedFileRef, ...] = ()
     inputs: dict[StageId, dict[InputName, VerifiedInput]] = field(default_factory=dict)
     reuse: dict[StageId, StageReuseReceipt] = field(default_factory=dict)
+    attempt_stages: dict[int, dict[StageId, ResolvedBaseSpec]] = field(
+        default_factory=dict
+    )
+    attempt_inputs: dict[int, dict[StageId, dict[InputName, VerifiedInput]]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)

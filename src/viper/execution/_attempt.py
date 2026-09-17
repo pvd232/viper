@@ -30,7 +30,13 @@ from ..references import (
     ViperCloudFileRef,
     storage_file,
 )
-from ..reuse import ReuseInputIdentity, build_stage_reuse_key, input_identity
+from ..reuse import (
+    ReuseInputIdentity,
+    StageReuseCandidate,
+    attempt_reuse_candidates,
+    build_stage_reuse_key,
+    input_identity,
+)
 from ..runs import (
     AttemptFailure,
     AttemptPurpose,
@@ -207,10 +213,10 @@ def execute_attempt(
     run_lock.acquire()
     terminal_path = run_path.parent / "resolved.yaml"
     previous_run: ResolvedRun | None = None
+    previous_run_raw: bytes | None = None
     if terminal_path.is_file():
-        previous_run = ResolvedRun.model_validate(
-            parse_yaml_bytes(terminal_path.read_bytes())
-        )
+        previous_run_raw = terminal_path.read_bytes()
+        previous_run = ResolvedRun.model_validate(parse_yaml_bytes(previous_run_raw))
         if purpose == "run" and not retry:
             run_lock.release()
             raise RunError("run already has terminal attempt history; use retry")
@@ -240,6 +246,37 @@ def execute_attempt(
         destination,
         known_attempts,
     )
+    retry_candidates: dict[StageId, StageReuseCandidate] = {}
+    if retry and previous_run is not None and previous_run_raw is not None:
+        terminal_relative_path = terminal_path.relative_to(root).as_posix()
+        published = publish_resolved_files(
+            root,
+            destination,
+            {terminal_relative_path: previous_run_raw},
+            cloud_client=cloud_client,
+        )[terminal_relative_path]
+        previous_reference = ResolvedRunRef(
+            sha256=published.sha256,
+            bytes=published.bytes,
+            stored_at=published.stored_at,
+        )
+        try:
+            verified_previous = verify_run_result(
+                previous_run,
+                policy=policy,
+                fetcher=fetcher,
+            )
+        except VerificationError as exc:
+            raise RunError("prior failed run cannot be verified for retry") from exc
+        latest_previous_attempt = verified_previous.attempts[-1]
+        retry_candidates = {
+            candidate.key.stage_id: candidate
+            for candidate in attempt_reuse_candidates(
+                previous_reference,
+                verified_previous,
+                latest_previous_attempt.attempt_id,
+            )
+        }
     attempt_id = max(
         next_attempt_id(workspace_root, run.run_id),
         max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
@@ -378,8 +415,11 @@ def execute_attempt(
                     )
                 if (
                     isinstance(stage, InternalSpec)
-                    and stage.reuse == "verified"
                     and purpose == "run"
+                    and (
+                        stage.reuse == "verified"
+                        or stage_reference.stage_id in retry_candidates
+                    )
                 ):
                     metric_specs = {
                         metric.metric_id: metric for metric in experiment.metrics
@@ -415,6 +455,7 @@ def execute_attempt(
                         destination=destination,
                         cloud_client=cloud_client,
                         metrics=metric_specs,
+                        candidate=retry_candidates.get(stage_reference.stage_id),
                     )
                     if reused is not None:
                         journal.append(
@@ -689,6 +730,7 @@ def execute_attempt(
             ),
             path=terminal_path,
             journal_path=journal.path,
+            latest_attempt=attempt,
         )
     except (Exception, KeyboardInterrupt) as exc:
         failed_at = datetime.now(UTC)
@@ -803,8 +845,27 @@ def execute_attempt(
         terminal_raw = serialize_document(failed_run)
         replace_synchronized(terminal_path, terminal_raw)
         replace_synchronized(workspace.terminal, terminal_raw)
+        terminal_relative_path = terminal_path.relative_to(root).as_posix()
+        terminal_reference = publish_resolved_files(
+            root,
+            destination,
+            {terminal_relative_path: terminal_raw},
+            cloud_client=cloud_client,
+        )[terminal_relative_path]
+        result = RunResult(
+            record=failed_run,
+            reference=ResolvedRunRef(
+                sha256=terminal_reference.sha256,
+                bytes=terminal_reference.bytes,
+                stored_at=terminal_reference.stored_at,
+            ),
+            path=terminal_path,
+            journal_path=journal.path,
+            latest_attempt=failed_attempt,
+        )
         raise RunError(
-            f"attempt {attempt_id} failed; evidence written to {terminal_path}"
+            f"attempt {attempt_id} failed; evidence written to {terminal_path}",
+            result=result,
         ) from exc
     finally:
         if owns_signals:

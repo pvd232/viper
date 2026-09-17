@@ -1,8 +1,17 @@
-"""Define the error raised when complete run execution fails."""
+"""Define errors raised by run and benchmark execution."""
+
+from __future__ import annotations
+
+from .results import RunResult
 
 
 class RunError(RuntimeError):
-    """Report a local plan, source, materialization, or execution failure."""
+    """Report a run failure and retain its terminal result when available."""
+
+    def __init__(self, message: str, *, result: RunResult | None = None) -> None:
+        """Attach the failed terminal result without suppressing the exception."""
+        super().__init__(message)
+        self.result = result
 
 
 class BenchmarkExecutionError(RuntimeError):

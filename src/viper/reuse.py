@@ -115,6 +115,14 @@ class _VerifiedRun(Protocol):
     @property
     def inputs(self) -> Mapping[StageId, Mapping[InputName, _VerifiedInput]]: ...
 
+    @property
+    def attempt_stages(self) -> Mapping[int, Mapping[StageId, _ResolvedStage]]: ...
+
+    @property
+    def attempt_inputs(
+        self,
+    ) -> Mapping[int, Mapping[StageId, Mapping[InputName, _VerifiedInput]]]: ...
+
 
 class ReuseFileIdentity(FileIdentity):
     """Identify one input file independently of its run-specific path."""
@@ -340,40 +348,40 @@ def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:
     return _canonical_sha256(key)
 
 
-def catalog_reuse_candidates(
+def attempt_reuse_candidates(
     source_run: ResolvedRunRef,
     verified: _VerifiedRun,
+    attempt_id: int,
 ) -> tuple[StageReuseCandidate, ...]:
-    """Build catalog candidates from one fully verified successful run."""
-    successful_id = verified.result.successful_attempt_id
-    if successful_id is None:
-        return ()
+    """Build reuse candidates from one verified attempt, successful or failed."""
     attempt_pairs = tuple(zip(verified.attempts, verified.result.attempts, strict=True))
     selected = next(
         (
             (attempt, reference)
             for attempt, reference in attempt_pairs
-            if attempt.attempt_id == successful_id
+            if attempt.attempt_id == attempt_id
         ),
         None,
     )
     if selected is None:
-        raise ValueError("verified run has no successful attempt reference")
+        raise ValueError("verified run has no selected attempt reference")
     attempt, attempt_reference = selected
     stage_references = {item.stage_id: item for item in attempt.resolved_stages}
+    resolved_stages = verified.attempt_stages.get(attempt_id, {})
+    attempt_inputs = verified.attempt_inputs.get(attempt_id, {})
     metrics = {item.metric_id: item for item in verified.plan.experiment.metrics}
     candidates = []
-    for stage_id, resolved in verified.resolved_stages.items():
+    for stage_id, resolved in resolved_stages.items():
         completion = getattr(resolved, "completion", None)
         if not isinstance(completion, ExecutedStageCompletion):
             continue
         stage = cast("_ParameterizedStage", resolved.spec)
         source_stage = stage_references.get(stage_id)
         if source_stage is None:
-            raise ValueError("verified stage has no successful attempt reference")
+            raise ValueError("verified stage has no selected attempt reference")
         inputs = tuple(
             verified_input_identity(name, value)
-            for name, value in sorted(verified.inputs.get(stage_id, {}).items())
+            for name, value in sorted(attempt_inputs.get(stage_id, {}).items())
         )
         declared_inputs = getattr(stage, "inputs", {})
         if len(inputs) != len(declared_inputs):
@@ -400,6 +408,17 @@ def catalog_reuse_candidates(
     return tuple(candidates)
 
 
+def catalog_reuse_candidates(
+    source_run: ResolvedRunRef,
+    verified: _VerifiedRun,
+) -> tuple[StageReuseCandidate, ...]:
+    """Build catalog candidates from one fully verified successful run."""
+    successful_id = verified.result.successful_attempt_id
+    if successful_id is None:
+        return ()
+    return attempt_reuse_candidates(source_run, verified, successful_id)
+
+
 __all__ = [
     "ExecutedStageCompletion",
     "ResolvedStageReuseRef",
@@ -413,6 +432,7 @@ __all__ = [
     "StageReuseKey",
     "StageReuseMode",
     "StageReuseReceipt",
+    "attempt_reuse_candidates",
     "build_stage_reuse_key",
     "catalog_reuse_candidates",
     "input_identity",
