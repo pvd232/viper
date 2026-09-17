@@ -1,0 +1,159 @@
+diff --git a/src/viper/_verification/plan.py b/src/viper/_verification/plan.py
+index 5fa4348..bace3e8 100644
+--- a/src/viper/_verification/plan.py
++++ b/src/viper/_verification/plan.py
+@@ -404,6 +404,8 @@ def verify_run_plan_relationships(
+         or run.estimator.artifact_name not in estimator_stage.outputs
+     ):
+         raise VerificationError("run estimator must select a declared stage artifact")
++    if isinstance(estimator_stage, DiagnosticSpec):
++        raise VerificationError("run estimator cannot select a diagnostic stage")
+     if benchmark is not None and not isinstance(estimator_stage, TrainSpec):
+         raise VerificationError("run estimator must select a training stage")
+ 
+diff --git a/src/viper/authoring.py b/src/viper/authoring.py
+index 7e07ebc..2e0c214 100644
+--- a/src/viper/authoring.py
++++ b/src/viper/authoring.py
+@@ -402,6 +402,8 @@ class VariantDraft(BaseModel):
+         """Require the estimator to come from this variant's stage graph."""
+         if not any(stage is self.estimator.producer for stage in self.stages.values()):
+             raise ValueError("estimator producer is absent from the variant")
++        if isinstance(self.estimator.producer.spec, DiagnosticSpecDraft):
++            raise ValueError("diagnostic outputs are terminal and cannot be estimators")
+         return self
+ 
+ 
+diff --git a/tests/test_diagnostic_stage.py b/tests/test_diagnostic_stage.py
+index cca2d93..7f2fda8 100644
+--- a/tests/test_diagnostic_stage.py
++++ b/tests/test_diagnostic_stage.py
+@@ -10,12 +10,10 @@ import pytest
+ from pydantic import TypeAdapter, ValidationError
+ 
+ import viper.authoring as authoring
+-import viper.benchmark as benchmark
+ import viper.config as config
+ import viper.execution._resolution as resolution
+ import viper.metrics as metrics
+ import viper.outputs as outputs
+-import viper.runs as runs
+ import viper.stages as stages
+ 
+ PAIR_BLOCK_ID = "P2-PAC-04"
+@@ -61,12 +59,38 @@ def test_diagnostic_spec_has_no_optimization_objective() -> None:
+     assert "objective" not in stages.DiagnosticSpec.model_fields
+ 
+ 
+-def test_diagnostic_is_excluded_from_estimator_and_benchmark_selection() -> None:
+-    """Prevent a terminal report stage from becoming a selected model result."""
+-    run_source = inspect.getsource(runs.RunSpec)
+-    benchmark_schema = benchmark.BenchmarkSpec.model_json_schema()
+-    assert "model" in run_source
+-    assert "diagnostic" not in str(benchmark_schema)
++def test_diagnostic_output_cannot_be_an_estimator() -> None:
++    """Reject a terminal diagnostic output selected as the run estimator."""
++
++    class DiagnosticOutputs(outputs.StageOutputs[OutputT], Generic[OutputT]):
++        report: OutputT
++
++    class DiagnosticConfig(config.DiagnosticConfig):
++        pass
++
++    @stages.diagnostic(config=DiagnosticConfig)
++    def inspect_model(context: object) -> None:
++        del context
++
++    def load_bytes(path: Path) -> bytes:
++        return path.read_bytes()
++
++    diagnostic_stage = authoring.stage(
++        inspect_model,
++        config=DiagnosticConfig(),
++        outputs=DiagnosticOutputs[outputs.OutputDraft](
++            report=outputs.output(
++                path="report.json", loader=load_bytes, data_role="eval"
++            )
++        ),
++    )
++
++    with pytest.raises(ValueError, match=r"diagnostic.+terminal.+estimators"):
++        authoring.variant(
++            "invalid",
++            stages={"diagnose": diagnostic_stage},
++            estimator=diagnostic_stage.outputs["report"],
++        )
+ 
+ 
+ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
+diff --git a/tests/test_verification.py b/tests/test_verification.py
+index cf2fd73..33a361e 100644
+--- a/tests/test_verification.py
++++ b/tests/test_verification.py
+@@ -59,6 +59,7 @@ from viper.evidence import (
+ )
+ from viper.experiments import (
+     BuildVariantStageConfig,
++    DiagnosticVariantStageConfig,
+     EvalVariantStageConfig,
+     ExperimentSpec,
+     ReplicateSpec,
+@@ -128,6 +129,7 @@ from viper.runtime import (
+ from viper.serialization import document_digest
+ from viper.stages import (
+     BuildSpec,
++    DiagnosticSpec,
+     EvalSpec,
+     ResolvedBuildSpec,
+     ResolvedTrainSpec,
+@@ -1664,6 +1666,50 @@ class RunPlanRelationshipTests(unittest.TestCase):
+                 {"build": build},
+             )
+ 
++    def test_plan_rejects_diagnostic_estimator(self) -> None:
++        """Reject a hand-edited plan that selects a terminal diagnostic output."""
++        build = build_spec()
++        diagnostic = DiagnosticSpec(
++            implementation=build.implementation,
++            config_type=config_type_ref("diagnostic"),
++            inputs=build.inputs,
++            config=config.DiagnosticConfig(),
++            outputs=build.outputs,
++        )
++        run, _ = run_spec(
++            [("diagnose", diagnostic)],
++            estimator_stage="diagnose",
++            estimator_artifact="prior",
++        )
++        experiment = ExperimentSpec(
++            experiment_id="e001_strand",
++            factors=(),
++            variant_ids=("baseline",),
++            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
++            metrics=(),
++        )
++        variant = VariantSpec(
++            experiment_id="e001_strand",
++            variant_id="baseline",
++            levels={},
++            stage_configs=(
++                DiagnosticVariantStageConfig(
++                    kind="diagnostic",
++                    stage_id="diagnose",
++                    config=diagnostic.config,
++                ),
++            ),
++        )
++
++        with self.assertRaisesRegex(VerificationError, "diagnostic stage"):
++            verify_run_plan_relationships(
++                run,
++                experiment,
++                variant,
++                None,
++                {"diagnose": diagnostic},
++            )
++
+     def test_training_accepts_validation_inputs_and_preserves_the_role(self) -> None:
+         """Allow validation-guided training when every output stays validation."""
+         train = train_spec()

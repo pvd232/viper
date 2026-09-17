@@ -1,0 +1,37 @@
+schema_version = 1
+contract_id = "python-environment-diagnostics"
+title = "Python Environment Diagnostics"
+
+[[requirements]]
+id = "PED-REQ-01"
+claim = "When Python distribution metadata contains more than one version of a normalized package name, observe_python_env() must reject the environment and report every conflicting version, distribution root, the interpreter path, and the sys.path entries from which the conflict can be investigated."
+depends_on = []
+verifier_ids = ["PED-VR-01"]
+
+[[requirements]]
+id = "PED-REQ-02"
+claim = "viper env doctor must inspect the active interpreter without starting a run, emit the same structured environment diagnosis used by observe_python_env(), and return a failing status when duplicate distributions or another strict environment violation is present."
+depends_on = ["PED-REQ-01"]
+verifier_ids = ["PED-VR-02"]
+
+[[verifiers]]
+id = "PED-VR-01"
+requirement_ids = ["PED-REQ-01"]
+acceptance_conditions = ["Injected metadata for two versions of one normalized distribution raises an error that names both versions, both distribution roots, sys.executable, and the relevant sys.path entries."]
+success_case = { repository_id = "viper", path = "tests/test_runtime.py", symbol = "test_python_env_conflict_reports_actionable_locations" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_runtime.py", symbol = "test_python_env_still_rejects_duplicate_versions" }]
+
+[[verifiers]]
+id = "PED-VR-02"
+requirement_ids = ["PED-REQ-02"]
+acceptance_conditions = ["The CLI returns a structured healthy report for one unambiguous environment and a structured nonzero failure containing the duplicate-distribution evidence for a conflicting environment."]
+success_case = { repository_id = "viper", path = "tests/test_cli.py", symbol = "test_env_doctor_reports_active_interpreter" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_cli.py", symbol = "test_env_doctor_fails_with_duplicate_distribution_evidence" }]
+
+[[pair_blocks]]
+id = "PED-PB-01"
+requirement_ids = ["PED-REQ-01", "PED-REQ-02"]
+depends_on = ["ARE-PB-02"]
+repository_id = "viper"
+requirement_contribution = "Retain strict Python-environment rejection while exposing enough evidence to diagnose it before execution."
+completion_evidence = ["implementation_review"]

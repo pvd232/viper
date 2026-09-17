@@ -1,0 +1,107 @@
+schema_version = 1
+contract_id = "authoring-guardrails"
+package_sha256 = "d65dc2f0790442ba9241cb2a5cb841d8e339f08e6898336bff7d9d33db845e95"
+pair_block_id = "AUG-PB-01"
+baseline_commit = "43a939a7abb2412cf5da7a0ddd5d01f67d1d84ab"
+change_summary = [
+  "Variant authoring rejects an estimator produced by a terminal diagnostic stage.",
+  "Frozen-plan verification independently rejects a hand-edited diagnostic estimator.",
+  "Executable tests replace the previous source-inspection assertion at the authoring boundary and add the persisted-plan counterexample.",
+]
+deviation_summary = "No deviations from AUG-REQ-01. The candidate preserves exception-based validation and adds no execution behavior."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/diagnostic-estimator.patch"
+target_paths = [
+  "src/viper/_verification/plan.py",
+  "src/viper/authoring.py",
+  "tests/test_diagnostic_stage.py",
+  "tests/test_verification.py",
+]
+
+[[handoff_targets]]
+label = "Complete diagnostic-estimator candidate"
+source = "plan"
+path = "patches/diagnostic-estimator.patch"
+line = 1
+
+[[handoff_targets]]
+label = "Authoring validation owner"
+source = "repository"
+path = "src/viper/authoring.py"
+line = 400
+
+[[handoff_targets]]
+label = "Frozen-plan verification owner"
+source = "repository"
+path = "src/viper/_verification/plan.py"
+line = 401
+
+[gate]
+source_roots = ["pyproject.toml", "src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = [
+  "pyright",
+  "src/viper/authoring.py",
+  "src/viper/_verification/plan.py",
+  "tests/test_diagnostic_stage.py",
+  "tests/test_verification.py",
+]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = [
+  "python3",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_diagnostic_stage.py::test_diagnostic_output_cannot_be_an_estimator",
+  "tests/test_verification.py::RunPlanRelationshipTests::test_plan_rejects_diagnostic_estimator",
+]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--select",
+  "D",
+  "src/viper/authoring.py",
+  "src/viper/_verification/plan.py",
+  "tests/test_diagnostic_stage.py",
+  "tests/test_verification.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "format",
+  "--check",
+  "src/viper/authoring.py",
+  "src/viper/_verification/plan.py",
+  "tests/test_diagnostic_stage.py",
+  "tests/test_verification.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "src/viper/authoring.py",
+  "src/viper/_verification/plan.py",
+  "tests/test_diagnostic_stage.py",
+  "tests/test_verification.py",
+]

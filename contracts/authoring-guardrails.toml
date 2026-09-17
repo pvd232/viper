@@ -1,0 +1,45 @@
+schema_version = 1
+contract_id = "authoring-guardrails"
+title = "Authoring Guardrails"
+
+[[requirements]]
+id = "AUG-REQ-01"
+claim = "variant() must reject an estimator produced by a terminal diagnostic stage, and verify_plan() must reject the same invalid selection in a hand-edited frozen plan."
+depends_on = []
+verifier_ids = ["AUG-VR-01"]
+
+[[requirements]]
+id = "AUG-REQ-02"
+claim = "matrix() must enumerate the deterministic Cartesian product of named factor levels, invoke one variant factory for each cell in factor declaration order, and reject a missing cell, a returned variant whose levels differ from that cell, or a duplicate variant ID."
+depends_on = []
+verifier_ids = ["AUG-VR-02"]
+
+[[verifiers]]
+id = "AUG-VR-01"
+requirement_ids = ["AUG-REQ-01"]
+acceptance_conditions = ["A diagnostic output fails estimator selection through the Python authoring API and through verification of a frozen plan whose estimator was edited to name that output."]
+success_case = { repository_id = "viper", path = "tests/test_diagnostic_stage.py", symbol = "test_diagnostic_output_cannot_be_an_estimator" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_verification.py", symbol = "test_plan_rejects_diagnostic_estimator" }]
+
+[[verifiers]]
+id = "AUG-VR-02"
+requirement_ids = ["AUG-REQ-02"]
+acceptance_conditions = ["Two factors with two and three levels produce six variants in stable factor and level order; omitted, mismatched, and duplicate cells fail before experiment construction."]
+success_case = { repository_id = "viper", path = "tests/test_authoring.py", symbol = "test_matrix_builds_complete_cartesian_variants_in_order" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_authoring.py", symbol = "test_matrix_rejects_incomplete_mismatched_or_duplicate_cells" }]
+
+[[pair_blocks]]
+id = "AUG-PB-01"
+requirement_ids = ["AUG-REQ-01"]
+depends_on = []
+repository_id = "viper"
+requirement_contribution = "Enforce the existing terminal-diagnostic rule at authoring and frozen-plan verification boundaries."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "AUG-PB-02"
+requirement_ids = ["AUG-REQ-02"]
+depends_on = ["PED-PB-01"]
+repository_id = "viper"
+requirement_contribution = "Add deterministic, complete factor-matrix construction without changing variant or expansion semantics."
+completion_evidence = ["implementation_review"]

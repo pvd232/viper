@@ -1,0 +1,58 @@
+schema_version = 1
+contract_id = "attempt-recovery-and-export"
+title = "Attempt Recovery and Run Export"
+
+[[requirements]]
+id = "ARE-REQ-01"
+claim = "When run() or retry() raises after allocating an attempt, RunError.result must expose the failed terminal RunResult, its latest RunAttempt, the completed stage IDs, and the failed stage ID without suppressing the exception."
+depends_on = []
+verifier_ids = ["ARE-VR-01"]
+
+[[requirements]]
+id = "ARE-REQ-02"
+claim = "retry() must verify and republish every eligible completed stage from the same run's prior failed attempt, retain a StageReuseReceipt that cites that attempt, and execute only the remaining stages; changed or unverifiable stage evidence must execute again or fail before reuse."
+depends_on = ["ARE-REQ-01"]
+verifier_ids = ["ARE-VR-02"]
+
+[[requirements]]
+id = "ARE-REQ-03"
+claim = "execution.export_run() and viper export-run must write one self-contained bundle containing every record and payload reachable from a terminal successful or failed run, plus a deterministic path, byte-count, and SHA-256 manifest that an offline verifier can validate without the source checkout or VIPER store."
+depends_on = ["ARE-REQ-02"]
+verifier_ids = ["ARE-VR-03"]
+
+[[verifiers]]
+id = "ARE-VR-01"
+requirement_ids = ["ARE-REQ-01"]
+acceptance_conditions = ["A two-stage run whose second stage fails raises RunError with a failed RunResult whose latest attempt names the first stage as completed and the second as failed."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_run_error_exposes_partial_attempt_result" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_preflight_failure_exposes_no_completed_stage" }]
+
+[[verifiers]]
+id = "ARE-VR-02"
+requirement_ids = ["ARE-REQ-02"]
+acceptance_conditions = ["Retrying the failed two-stage run republishes the verified first-stage output through a reuse receipt tied to the prior attempt and invokes only the second stage; changed or corrupted evidence is not reused."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_retry_reuses_completed_stage_from_failed_attempt" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_retry_rejects_tampered_completed_stage" }]
+
+[[verifiers]]
+id = "ARE-VR-03"
+requirement_ids = ["ARE-REQ-03"]
+acceptance_conditions = ["Exporting one successful run and one failed run copies every reachable record and payload, records each relative path with its byte count and digest, and passes verification after the source checkout and store are unavailable."]
+success_case = { repository_id = "viper", path = "tests/test_export.py", symbol = "test_export_run_verifies_offline" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_export.py", symbol = "test_export_verifier_rejects_missing_or_changed_file" }]
+
+[[pair_blocks]]
+id = "ARE-PB-01"
+requirement_ids = ["ARE-REQ-01", "ARE-REQ-02"]
+depends_on = ["AUG-PB-01"]
+repository_id = "viper"
+requirement_contribution = "Expose structured failed-attempt results and reuse verified completed stages when the same immutable run is retried."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "ARE-PB-02"
+requirement_ids = ["ARE-REQ-03"]
+depends_on = ["ARE-PB-01"]
+repository_id = "viper"
+requirement_contribution = "Export successful and failed terminal runs as complete, digest-verified offline bundles."
+completion_evidence = ["implementation_review"]
