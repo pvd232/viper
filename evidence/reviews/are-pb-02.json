@@ -1,0 +1,11 @@
+{
+  "gate_receipt_ref": {
+    "path": "evidence/gates/are-pb-02-r11.json",
+    "sha256": "2b0a0341ac10d11c99a7f3072a0de54c198a8d78ffb46402c9171ec4e243ffc3"
+  },
+  "implementation_repository_commit": "b7fcb1c3c28015d88db5c6ceac999dc100e3510d",
+  "pair_block_id": "ARE-PB-02",
+  "reviewed_at": "2026-09-17T12:10:50.854548Z",
+  "reviewer": "matrix:design_review,evidence_review,implementation_review",
+  "schema_version": 1
+}

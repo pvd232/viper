@@ -5,7 +5,7 @@
 **Contract status:** Planned in the [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md) checklist.
 
 <!-- contract-protocol:generated:start -->
-**In progress.** [Jump to current PairBlock](#are-pb-02)
+**Complete.**
 
 **Checklist:** [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md)
 
@@ -77,7 +77,7 @@
 
 #### <nobr><code>ARE-PB-02</code></nobr>
 
-**Status:** approved
+**Status:** complete
 
 **Requirement contribution:** Export successful and failed terminal runs as complete, digest-verified offline bundles.
 
@@ -102,7 +102,7 @@
 
 **Evidence:** [Passing gate receipt](../evidence/gates/are-pb-02-r11.json)
 
-**Decision:** Approval is recorded for <nobr><code>ARE-PB-02</code></nobr>; review the installed commit.
+**Decision:** <nobr><code>ARE-PB-02</code></nobr> is complete; no further decision is required.
 
 <details>
 <summary>Implementation details</summary>
@@ -141,7 +141,7 @@
 |---|---|---|---|---|
 | <nobr><code>ARE-REQ-01</code></nobr> | When run() or retry() raises after allocating an attempt, RunError.result must expose the failed terminal RunResult, its latest RunAttempt, the completed stage IDs, and the failed stage ID without suppressing the exception. | complete | <nobr><code>ARE-VR-01</code></nobr> | <nobr><code>ARE-PB-01</code></nobr> |
 | <nobr><code>ARE-REQ-02</code></nobr> | retry() must verify and republish every eligible completed stage from the same run's prior failed attempt, retain a StageReuseReceipt that cites that attempt, and execute only the remaining stages; changed or unverifiable stage evidence must execute again or fail before reuse. | complete | <nobr><code>ARE-VR-02</code></nobr> | <nobr><code>ARE-PB-01</code></nobr> |
-| <nobr><code>ARE-REQ-03</code></nobr> | execution.export_run() and viper export-run must write one self-contained bundle containing every record and payload reachable from a terminal successful or failed run, plus a deterministic path, byte-count, and SHA-256 manifest that an offline verifier can validate without the source checkout or VIPER store. | in_progress | <nobr><code>ARE-VR-03</code></nobr> | <nobr><code>ARE-PB-02</code></nobr> |
+| <nobr><code>ARE-REQ-03</code></nobr> | execution.export_run() and viper export-run must write one self-contained bundle containing every record and payload reachable from a terminal successful or failed run, plus a deterministic path, byte-count, and SHA-256 manifest that an offline verifier can validate without the source checkout or VIPER store. | complete | <nobr><code>ARE-VR-03</code></nobr> | <nobr><code>ARE-PB-02</code></nobr> |
 
 ### Verification rules
 
