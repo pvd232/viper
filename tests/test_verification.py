@@ -59,6 +59,7 @@ from viper.evidence import (
 )
 from viper.experiments import (
     BuildVariantStageConfig,
+    DiagnosticVariantStageConfig,
     EvalVariantStageConfig,
     ExperimentSpec,
     ReplicateSpec,
@@ -128,6 +129,7 @@ from viper.runtime import (
 from viper.serialization import document_digest
 from viper.stages import (
     BuildSpec,
+    DiagnosticSpec,
     EvalSpec,
     ResolvedBuildSpec,
     ResolvedTrainSpec,
@@ -1662,6 +1664,50 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 variant,
                 benchmark,
                 {"build": build},
+            )
+
+    def test_plan_rejects_diagnostic_estimator(self) -> None:
+        """Reject a hand-edited plan that selects a terminal diagnostic output."""
+        build = build_spec()
+        diagnostic = DiagnosticSpec(
+            implementation=build.implementation,
+            config_type=config_type_ref("diagnostic"),
+            inputs=build.inputs,
+            config=config.DiagnosticConfig(),
+            outputs=build.outputs,
+        )
+        run, _ = run_spec(
+            [("diagnose", diagnostic)],
+            estimator_stage="diagnose",
+            estimator_artifact="prior",
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_configs=(
+                DiagnosticVariantStageConfig(
+                    kind="diagnostic",
+                    stage_id="diagnose",
+                    config=diagnostic.config,
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(VerificationError, "diagnostic stage"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                None,
+                {"diagnose": diagnostic},
             )
 
     def test_training_accepts_validation_inputs_and_preserves_the_role(self) -> None:
