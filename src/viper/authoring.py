@@ -12,6 +12,7 @@ import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from typing import Annotated, Any, Literal, Never, TypeVar, cast, overload
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
@@ -565,6 +566,50 @@ def factor(
 ) -> FactorDraft:
     """Declare one experimental factor."""
     return FactorDraft(factor_id=factor_id, levels=levels)
+
+
+MatrixCell = tuple[FactorLevel, ...]
+MatrixFactory = Callable[[MatrixCell], VariantDraft | None]
+
+
+def matrix(
+    factors: tuple[FactorDraft, ...] | dict[FactorId, FactorDraft],
+    factory: MatrixFactory,
+) -> tuple[VariantDraft, ...]:
+    """Build one variant for every factor-level cell in declaration order.
+
+    The factory receives a tuple containing one selected level per factor.
+    Returning ``None`` omits that cell and is rejected. The returned variant
+    must retain exactly the supplied levels and have a unique ID.
+    """
+    named_factors = _named_drafts(factors, "factor_id")
+    if not named_factors:
+        raise ValueError("matrix requires at least one factor")
+
+    variants: list[VariantDraft] = []
+    variant_ids: set[VariantId] = set()
+    factor_ids = tuple(named_factors)
+    for level_ids in product(*(item.levels for item in named_factors.values())):
+        cell = tuple(
+            FactorLevel(factor_id=factor_id, level_id=level_id)
+            for factor_id, level_id in zip(factor_ids, level_ids, strict=True)
+        )
+        built = factory(cell)
+        expected_levels = dict(zip(factor_ids, level_ids, strict=True))
+        if built is None:
+            raise ValueError(f"variant factory omitted matrix cell {expected_levels!r}")
+        if built.levels != expected_levels:
+            raise ValueError(
+                "variant factory returned levels that differ from matrix cell "
+                f"{expected_levels!r}"
+            )
+        if built.variant_id is None:
+            raise ValueError("variant_id is required for a matrix variant")
+        if built.variant_id in variant_ids:
+            raise ValueError(f"duplicate variant_id: {built.variant_id!r}")
+        variant_ids.add(built.variant_id)
+        variants.append(built)
+    return tuple(variants)
 
 
 def variant(

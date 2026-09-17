@@ -75,6 +75,7 @@ For saved plans, retries, batch outcomes, and benchmark execution, see
 | `stage()` | `StageDraft` | Connect a decorated function to config, inputs, outputs, metrics, and an objective. |
 | `factor()` | `FactorDraft` | Declare the permitted levels of one experimental factor. |
 | `FactorDraft.level()` | `FactorLevel` | Select a permitted level while retaining its factor's name. |
+| `matrix()` | `tuple[VariantDraft, ...]` | Build one variant for every factor-level combination. |
 | `variant()` | `VariantDraft` | Declare one reusable stage graph and estimator artifact. |
 | `replicate()` | `ReplicateDraft` | Declare one reproducible seed. |
 | `experiment()` | `ExperimentDraft` | Group factors, variants, and replicates. |
@@ -110,6 +111,11 @@ collects stages whose `stage_id` values identify them in that variant. Omit
 as a tuple to `experiment(replicates=...)`. Duplicate names are rejected.
 Mappings are also accepted; their keys must agree with explicitly named
 objects. See [the complete declarations](../how-to/variants-and-replicates.md).
+
+For a complete factorial experiment, pass the factors and a variant factory to
+`matrix()`. It calls the factory once per Cartesian-product cell in factor and
+level declaration order. The factory must return a named variant whose levels
+match that cell; omitted cells and duplicate variant IDs are rejected.
 
 ## Naming conventions
 
