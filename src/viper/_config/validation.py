@@ -78,10 +78,17 @@ def load_config_type(
     if spec is None or spec.loader is None:
         raise ConfigValidationError("config type module could not be loaded")
     module = importlib.util.module_from_spec(spec)
+    previous_module = sys.modules.get(module_name)
+    sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
     except Exception as exc:
         raise ConfigValidationError("config type module raised during import") from exc
+    finally:
+        if previous_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous_module
     value = getattr(module, symbol, None)
     if not isinstance(value, type) or not issubclass(value, expected_base):
         raise ConfigValidationError(

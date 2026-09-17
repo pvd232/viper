@@ -192,6 +192,29 @@ def test_config_type_reports_import_failure(tmp_path: Path) -> None:
         load_config_type(path, "BrokenConfig", config.TrainConfig)
 
 
+def test_config_type_loads_modules_that_define_dataclasses(tmp_path: Path) -> None:
+    """Register the temporary module while standard decorators inspect it."""
+    path = tmp_path / "dataclass_config.py"
+    path.write_text(
+        "from dataclasses import dataclass\n"
+        "from viper import config\n\n"
+        "@dataclass(frozen=True)\n"
+        "class Helper:\n"
+        "    label: str\n\n"
+        "class DataclassTrainConfig(config.TrainConfig):\n"
+        "    epochs: int\n",
+        encoding="utf-8",
+    )
+
+    model = load_config_type(
+        path,
+        "DataclassTrainConfig",
+        config.TrainConfig,
+    )
+
+    assert model.model_validate({"epochs": 2}).model_dump()["epochs"] == 2
+
+
 def test_config_type_rejects_tampered_bytes(tmp_path: Path) -> None:
     """Reject implementation bytes that differ from the frozen reference."""
     _, raw = _model_file(tmp_path)
