@@ -47,12 +47,18 @@ from .catalog import (
 from .evidence import StorageFetcher, VerificationError, VerificationPolicy
 from .execution._batch import run_many as execute_many
 from .execution._benchmark import benchmark as execute_benchmark_run
+from .execution._export import export_run as execute_run_export
 from .execution._restore import restore as restore_run_artifacts
 from .execution._run import run as execute_run
 from .execution._source import RunFetcher, run_git
 from .execution._stage import StageExecutionError, execute_stage_process
-from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
-from .execution.results import ExperimentExecutionResult
+from .execution.errors import (
+    BenchmarkExecutionError,
+    RestoreError,
+    RunError,
+    RunExportError,
+)
+from .execution.results import ExperimentExecutionResult, RunExportResult
 from .ids import RunId, StageId
 from .inspection import (
     InspectionError,
@@ -140,6 +146,7 @@ OperationName = Literal[
     "run_many",
     "retry",
     "execute_benchmark",
+    "export_run",
     "restore",
     "plan_diff",
     "lineage",
@@ -404,6 +411,22 @@ class ExecuteBenchmarkSuccess(SuccessModel):
     operation: Literal["execute_benchmark"] = "execute_benchmark"  # pyright: ignore[reportIncompatibleVariableOverride]
     result: BenchmarkResult
     result_path: Path
+
+
+class ExportRunRequest(APIModel):
+    """Select one terminal run and a new portable bundle destination."""
+
+    resolved_run: Path
+    output: Path
+    root: Path
+    trusted_source_repositories: frozenset[str] = Field(min_length=1)
+
+
+class ExportRunSuccess(SuccessModel):
+    """Report one complete portable run-evidence bundle."""
+
+    operation: Literal["export_run"] = "export_run"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: RunExportResult
 
 
 class PlanDiffRequest(APIModel):
@@ -781,6 +804,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "ExecuteStageSuccess": ExecuteStageSuccess,
     "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
     "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
+    "ExportRunRequest": ExportRunRequest,
+    "ExportRunSuccess": ExportRunSuccess,
     "RestoreRequest": RestoreRequest,
     "RestoreSuccess": RestoreSuccess,
     "FreezeRunRequest": FreezeRunRequest,
@@ -846,6 +871,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "run_many",
     "retry",
     "execute_benchmark",
+    "export_run",
     "restore",
     "plan_diff",
     "lineage",
@@ -1228,6 +1254,33 @@ def status(request: StatusRequest) -> StatusSuccess:
         next_states=result.next_states,
         terminal=result.terminal,
     )
+
+
+def export_run(request: ExportRunRequest) -> ExportRunSuccess:
+    """Export one verified terminal run to a portable evidence bundle."""
+    repository_root = _root(request.root, "export_run")
+    selected = (
+        request.resolved_run
+        if request.resolved_run.is_absolute()
+        else repository_root / request.resolved_run
+    )
+    try:
+        result = execute_run_export(
+            repository_root,
+            selected,
+            request.output,
+            trusted_source_repositories=request.trusted_source_repositories,
+        )
+    except (OSError, RunError, RunExportError, VerificationError, ValueError) as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="export_run",
+                origin="application",
+                code="verification_failed",
+                message="run export failed",
+            )
+        ) from exc
+    return ExportRunSuccess(result=result)
 
 
 def _policy(repositories: frozenset[str]) -> VerificationPolicy:
@@ -1855,6 +1908,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "run_many": RunManyRequest,
     "retry": RetryRequest,
     "execute_benchmark": ExecuteBenchmarkRequest,
+    "export_run": ExportRunRequest,
     "restore": RestoreRequest,
     "plan_diff": PlanDiffRequest,
     "lineage": LineageRequest,
@@ -1904,6 +1958,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "run_many": run_many,
     "retry": retry_request,
     "execute_benchmark": execute_benchmark,
+    "export_run": export_run,
     "restore": restore_artifacts,
     "plan_diff": plan_diff,
     "lineage": lineage,
@@ -2165,6 +2220,8 @@ __all__ = [
     "ExecuteStageSuccess",
     "ExecuteBenchmarkRequest",
     "ExecuteBenchmarkSuccess",
+    "ExportRunRequest",
+    "ExportRunSuccess",
     "ErrorCode",
     "FailureOrigin",
     "FreezeRunRequest",

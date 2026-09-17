@@ -18,8 +18,12 @@ class BenchmarkExecutionError(RuntimeError):
     """Report a benchmark request, execution, or publication failure."""
 
 
+class RunExportError(RuntimeError):
+    """Report invalid, incomplete, or unsafe run-bundle operations."""
+
+
 class RestoreError(RuntimeError):
     """Report an invalid restore reference, selection, or destination."""
 
 
-__all__ = ["BenchmarkExecutionError", "RestoreError", "RunError"]
+__all__ = ["BenchmarkExecutionError", "RestoreError", "RunError", "RunExportError"]

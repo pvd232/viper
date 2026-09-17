@@ -4,15 +4,55 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .._schema import SHA256
 from ..authoring import RunPlanDraft, freeze_run_plan
 from ..repository import resolve_root
 from ..storage import ViperCloudClient
 from ._batch import run_many as _run_many
 from ._benchmark import benchmark as _benchmark
+from ._export import export_run as _export_run
+from ._export import verify_run_bundle as _verify_run_bundle
 from ._restore import resolve_run_reference, restore
 from ._run import retry as _retry
 from ._run import run as _run
-from .results import BenchmarkExecutionResult, ExperimentExecutionResult, RunResult
+from .results import (
+    BenchmarkExecutionResult,
+    ExperimentExecutionResult,
+    RunExportResult,
+    RunResult,
+)
+
+
+def export_run(
+    repository_root: Path,
+    resolved_run_path: Path,
+    output: Path,
+    *,
+    trusted_source_repositories: frozenset[str],
+    cloud_client: ViperCloudClient | None = None,
+) -> RunExportResult:
+    """Write a complete verified-run evidence graph to a portable directory."""
+    return _export_run(
+        repository_root,
+        resolved_run_path,
+        output,
+        trusted_source_repositories=trusted_source_repositories,
+        cloud_client=cloud_client,
+    )
+
+
+def verify_run_bundle(
+    bundle_path: Path,
+    *,
+    trusted_source_repositories: frozenset[str],
+    expected_manifest_sha256: SHA256 | None = None,
+) -> RunExportResult:
+    """Verify one exported run bundle without its source workspace or store."""
+    return _verify_run_bundle(
+        bundle_path,
+        trusted_source_repositories=trusted_source_repositories,
+        expected_manifest_sha256=expected_manifest_sha256,
+    )
 
 
 def run(
@@ -133,9 +173,11 @@ def run_many(
 
 __all__ = [
     "benchmark",
+    "export_run",
     "resolve_run_reference",
     "retry",
     "restore",
     "run",
     "run_many",
+    "verify_run_bundle",
 ]

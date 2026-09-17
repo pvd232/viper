@@ -469,6 +469,41 @@ def verify_pointer_run(
     return verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
 
 
+def _verify_benchmark_plan_pointers(
+    plan: VerifiedRunPlan,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+) -> None:
+    """Verify benchmark pointer payloads reachable before their eval executes."""
+    if plan.benchmark is None or getattr(fetcher, "read_plan_source", None) is None:
+        return
+    verified_runs: dict[ResolvedRunRef, VerifiedRunResult] = {}
+    references = (plan.benchmark.test, *plan.benchmark.splits.values())
+    for reference in references:
+        pointer_raw = read_resolved_file(reference, fetcher=fetcher)
+        try:
+            pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError(
+                "benchmark input pointer is not a valid ArtifactPointer document"
+            ) from exc
+        if pointer.run not in verified_runs:
+            verified_runs[pointer.run] = verify_pointer_run(
+                pointer,
+                policy=policy,
+                fetcher=fetcher,
+            )
+        verify_artifact_in_run(
+            pointer,
+            verified_run=verified_runs[pointer.run],
+            policy=policy,
+            expected_data_role=None,
+            materialization_path=None,
+            fetcher=fetcher,
+        )
+
+
 def verify_artifact_in_run(
     pointer: ArtifactPointer,
     *,
@@ -1242,6 +1277,7 @@ def _verify_run_result(
     """Verify one run while retaining the reuse chain already visited."""
     _verify_cloud_graph(resolved_run)
     plan = verify_run_plan(resolved_run, fetcher=fetcher)
+    _verify_benchmark_plan_pointers(plan, policy=policy, fetcher=fetcher)
     attempts = verify_run_attempt_references(
         resolved_run,
         plan.run,
