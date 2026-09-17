@@ -49,8 +49,12 @@ import viper.verification as verification
 import viper.worker as worker
 import viper.workspace as workspace
 from viper import evidence
-from viper.execution.errors import BenchmarkExecutionError, RunError
-from viper.execution.results import BenchmarkExecutionResult, RunResult
+from viper.execution.errors import BenchmarkExecutionError, RunError, RunExportError
+from viper.execution.results import (
+    BenchmarkExecutionResult,
+    RunExportResult,
+    RunResult,
+)
 from viper.stages import eval
 
 PUBLIC_MODULES = (
@@ -163,22 +167,28 @@ def test_execution_namespace_owns_only_operations() -> None:
     """Keep execution records and errors in their defining modules."""
     assert tuple(execution.__all__) == (
         "benchmark",
+        "export_run",
         "resolve_run_reference",
         "retry",
         "restore",
         "run",
         "run_many",
+        "verify_run_bundle",
     )
     assert issubclass(BenchmarkExecutionError, RuntimeError)
     assert issubclass(RunError, RuntimeError)
+    assert issubclass(RunExportError, RuntimeError)
     assert BenchmarkExecutionResult.__module__ == "viper.execution.results"
     assert RunResult.__module__ == "viper.execution.results"
+    assert RunExportResult.__module__ == "viper.execution.results"
     assert callable(execution.run)
     assert callable(execution.retry)
     assert callable(execution.benchmark)
     assert callable(execution.resolve_run_reference)
     assert callable(execution.restore)
     assert callable(execution.run_many)
+    assert callable(execution.export_run)
+    assert callable(execution.verify_run_bundle)
 
 
 def test_stage_interface_names_its_context_and_operations() -> None:
