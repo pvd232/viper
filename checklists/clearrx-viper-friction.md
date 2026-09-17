@@ -3,7 +3,7 @@
 This checklist converts the concrete friction observed in the CleaRx audio-retention runs into independently verifiable VIPER changes. It keeps GPU/CPU stage separation and stateless build or metric functions in the existing stage model; those paths did not require a new abstraction.
 
 <!-- contract-protocol:generated:start -->
-**Resume here:** [Resume at PED-PB-01](../contracts/python-environment-diagnostics.md#ped-pb-01)
+**Resume here:** [Resume at AUG-PB-02](../contracts/authoring-guardrails.md#aug-pb-02)
 
 
 ### Phase 1: Fail invalid plans before execution
@@ -29,14 +29,14 @@ This checklist converts the concrete friction observed in the CleaRx audio-reten
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>PED-REQ-01</code></nobr> | in_progress | [python-environment-diagnostics](../contracts/python-environment-diagnostics.md#ped-req-01) | <nobr><code>PED-PB-01</code></nobr> | None |
-| <nobr><code>PED-REQ-02</code></nobr> | in_progress | [python-environment-diagnostics](../contracts/python-environment-diagnostics.md#ped-req-02) | <nobr><code>PED-PB-01</code></nobr> | <nobr><code>PED-REQ-01</code></nobr> |
+| <nobr><code>PED-REQ-01</code></nobr> | complete | [python-environment-diagnostics](../contracts/python-environment-diagnostics.md#ped-req-01) | <nobr><code>PED-PB-01</code></nobr> | None |
+| <nobr><code>PED-REQ-02</code></nobr> | complete | [python-environment-diagnostics](../contracts/python-environment-diagnostics.md#ped-req-02) | <nobr><code>PED-PB-01</code></nobr> | <nobr><code>PED-REQ-01</code></nobr> |
 
 ### Phase 5: Generate complete experiment matrices
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>AUG-REQ-02</code></nobr> | planned | [authoring-guardrails](../contracts/authoring-guardrails.md#aug-req-02) | <nobr><code>AUG-PB-02</code></nobr> | None |
+| <nobr><code>AUG-REQ-02</code></nobr> | in_progress | [authoring-guardrails](../contracts/authoring-guardrails.md#aug-req-02) | <nobr><code>AUG-PB-02</code></nobr> | None |
 <!-- contract-protocol:generated:end -->
 
 The execution order front-loads invalid-plan rejection, then protects completed computation, packages provenance, improves environment diagnosis, and finishes with authoring ergonomics. Each PairBlock is independently reviewable and may stop without weakening later acceptance criteria.

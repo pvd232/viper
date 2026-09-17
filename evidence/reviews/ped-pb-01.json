@@ -1,0 +1,11 @@
+{
+  "gate_receipt_ref": {
+    "path": "evidence/gates/ped-pb-01-r5.json",
+    "sha256": "ac0b00ae1534b0e50cee8e29ddfdd03744a74c0d376a6d220de860316162f4be"
+  },
+  "implementation_repository_commit": "3d14d3ac6d238111e39ae0e9f6d5d9b3b94cf296",
+  "pair_block_id": "PED-PB-01",
+  "reviewed_at": "2026-09-17T12:38:14.933090Z",
+  "reviewer": "matrix:design_review,evidence_review,implementation_review",
+  "schema_version": 1
+}

@@ -75,7 +75,7 @@
 
 #### <nobr><code>AUG-PB-02</code></nobr>
 
-**Status:** waiting
+**Status:** drafting
 
 **Requirement contribution:** Add deterministic, complete factor-matrix construction without changing variant or expansion semantics.
 
@@ -85,7 +85,7 @@
 
 **Dependencies:** <nobr><code>PED-PB-01</code></nobr>
 
-**Next action:** Wait for the declared dependencies.
+**Next action:** Run the current PairBlock plan.
 
 
 ### Requirements
@@ -93,7 +93,7 @@
 | Requirement | Claim | Progress | Verifiers | PairBlocks |
 |---|---|---|---|---|
 | <nobr><code>AUG-REQ-01</code></nobr> | variant() must reject an estimator produced by a terminal diagnostic stage, and verify_plan() must reject the same invalid selection in a hand-edited frozen plan. | complete | <nobr><code>AUG-VR-01</code></nobr> | <nobr><code>AUG-PB-01</code></nobr> |
-| <nobr><code>AUG-REQ-02</code></nobr> | matrix() must enumerate the deterministic Cartesian product of named factor levels, invoke one variant factory for each cell in factor declaration order, and reject a missing cell, a returned variant whose levels differ from that cell, or a duplicate variant ID. | planned | <nobr><code>AUG-VR-02</code></nobr> | <nobr><code>AUG-PB-02</code></nobr> |
+| <nobr><code>AUG-REQ-02</code></nobr> | matrix() must enumerate the deterministic Cartesian product of named factor levels, invoke one variant factory for each cell in factor declaration order, and reject a missing cell, a returned variant whose levels differ from that cell, or a duplicate variant ID. | in_progress | <nobr><code>AUG-VR-02</code></nobr> | <nobr><code>AUG-PB-02</code></nobr> |
 
 ### Verification rules
 

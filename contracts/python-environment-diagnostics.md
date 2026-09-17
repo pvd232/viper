@@ -5,7 +5,7 @@
 **Contract status:** Planned in the [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md) checklist.
 
 <!-- contract-protocol:generated:start -->
-**In progress.** [Jump to current PairBlock](#ped-pb-01)
+**Complete.**
 
 **Checklist:** [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md)
 
@@ -15,7 +15,7 @@
 
 #### <nobr><code>PED-PB-01</code></nobr>
 
-**Status:** approved
+**Status:** complete
 
 **Requirement contribution:** Retain strict Python-environment rejection while exposing enough evidence to diagnose it before execution.
 
@@ -40,7 +40,7 @@
 
 **Evidence:** [Passing gate receipt](../evidence/gates/ped-pb-01-r5.json)
 
-**Decision:** Approval is recorded for <nobr><code>PED-PB-01</code></nobr>; review the installed commit.
+**Decision:** <nobr><code>PED-PB-01</code></nobr> is complete; no further decision is required.
 
 <details>
 <summary>Implementation details</summary>
@@ -77,8 +77,8 @@
 
 | Requirement | Claim | Progress | Verifiers | PairBlocks |
 |---|---|---|---|---|
-| <nobr><code>PED-REQ-01</code></nobr> | When Python distribution metadata contains more than one version of a normalized package name, observe_python_env() must reject the environment and report every conflicting version, distribution root, the interpreter path, and the sys.path entries from which the conflict can be investigated. | in_progress | <nobr><code>PED-VR-01</code></nobr> | <nobr><code>PED-PB-01</code></nobr> |
-| <nobr><code>PED-REQ-02</code></nobr> | viper env doctor must inspect the active interpreter without starting a run, emit the same structured environment diagnosis used by observe_python_env(), and return a failing status when duplicate distributions or another strict environment violation is present. | in_progress | <nobr><code>PED-VR-02</code></nobr> | <nobr><code>PED-PB-01</code></nobr> |
+| <nobr><code>PED-REQ-01</code></nobr> | When Python distribution metadata contains more than one version of a normalized package name, observe_python_env() must reject the environment and report every conflicting version, distribution root, the interpreter path, and the sys.path entries from which the conflict can be investigated. | complete | <nobr><code>PED-VR-01</code></nobr> | <nobr><code>PED-PB-01</code></nobr> |
+| <nobr><code>PED-REQ-02</code></nobr> | viper env doctor must inspect the active interpreter without starting a run, emit the same structured environment diagnosis used by observe_python_env(), and return a failing status when duplicate distributions or another strict environment violation is present. | complete | <nobr><code>PED-VR-02</code></nobr> | <nobr><code>PED-PB-01</code></nobr> |
 
 ### Verification rules
 
