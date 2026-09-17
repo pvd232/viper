@@ -29,6 +29,43 @@ class VerifiedObjectCache:
             return raw
         return None
 
+    def verified_path(self, reference: ResolvedFileRef) -> Path | None:
+        """Return a cached path only when its complete identity still matches."""
+        path = self._path(reference.sha256)
+        try:
+            if path.stat().st_size != reference.bytes:
+                return None
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        except OSError:
+            return None
+        return path if digest == reference.sha256 else None
+
+    def adopt_verified_path(self, reference: ResolvedFileRef, source: Path) -> Path:
+        """Atomically retain a path already verified by its storage client."""
+        if source.stat().st_size != reference.bytes:
+            raise VerificationError(
+                "retrieved file size differs from its resolved reference"
+            )
+        path = self._path(reference.sha256)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(source, path)
+        return path
+
+    def temporary_path(self, reference: ResolvedFileRef) -> Path:
+        """Allocate an absent same-filesystem path for one streamed restore."""
+        parent = self._path(reference.sha256).parent
+        parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(dir=parent)
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        temporary.unlink()
+        return temporary
+
+    def path(self, reference: ResolvedFileRef) -> Path:
+        """Return the content-addressed path for one resolved reference."""
+        return self._path(reference.sha256)
+
     def write(self, reference: ResolvedFileRef, raw: bytes) -> None:
         """Atomically publish bytes after validating their recorded identity."""
         if not self._matches(reference, raw):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import tempfile
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -14,7 +15,12 @@ from ..artifacts import (
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
 )
-from ..evidence import VerificationPolicy, VerifiedArtifact, VerifiedProducerRun
+from ..evidence import (
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedProducerRun,
+    VerifiedSnapshotFile,
+)
 from ..http import (
     HttpRequestSpec,
     HttpResult,
@@ -59,15 +65,32 @@ from ._source import RunFetcher
 from .errors import RunError
 
 
-def _write_materialized_file(root: Path, relative_path: str, raw: bytes) -> None:
-    """Write verified input bytes at one safe repository-relative path."""
+def _write_materialized_file(
+    root: Path,
+    relative_path: str,
+    verified_file: VerifiedSnapshotFile,
+) -> None:
+    """Write one verified input without buffering a path-backed payload."""
     target = (root / relative_path).resolve()
     if not target.is_relative_to(root):
         raise RunError("materialized input escapes the repository root")
-    if target.exists() and (not target.is_file() or target.read_bytes() != raw):
-        raise RunError("materialized input path contains different bytes")
+    if target.exists():
+        if not target.is_file():
+            raise RunError("materialized input path contains different bytes")
+        with target.open("rb") as stream:
+            target_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+        if (
+            target.stat().st_size != verified_file.reference.bytes
+            or target_sha256 != verified_file.reference.sha256
+        ):
+            raise RunError("materialized input path contains different bytes")
+        return
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(raw)
+    if verified_file.content is not None:
+        target.write_bytes(verified_file.content)
+    else:
+        assert verified_file.local_path is not None
+        shutil.copyfile(verified_file.local_path, target)
 
 
 def _materialize_verified_artifact(
@@ -77,7 +100,7 @@ def _materialize_verified_artifact(
 ) -> None:
     """Write every verified artifact file at its selected input path."""
     if artifact.artifact.kind == "file":
-        _write_materialized_file(root, target_path, artifact.files[0].content)
+        _write_materialized_file(root, target_path, artifact.files[0])
         return
     for member, verified_file in zip(
         artifact.artifact.members,
@@ -87,7 +110,7 @@ def _materialize_verified_artifact(
         _write_materialized_file(
             root,
             f"{target_path}/{member.relative_path}",
-            verified_file.content,
+            verified_file,
         )
 
 

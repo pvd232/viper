@@ -1236,12 +1236,20 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         sha256=hashlib.sha256(b"predictions").hexdigest(),
         bytes=len(b"predictions"),
     )
+    cached_predictions = root / ".viper/cache/verified-objects/predictions"
+    cached_predictions.parent.mkdir(parents=True)
+    cached_predictions.write_bytes(b"predictions")
     verified = VerifiedArtifact(
         artifact=ResolvedSingleFileArtifact(
             relative_path="historical_predictions.npz",
             file=snapshot,
         ),
-        files=(VerifiedSnapshotFile(reference=snapshot, content=b"predictions"),),
+        files=(
+            VerifiedSnapshotFile(
+                reference=snapshot,
+                local_path=cached_predictions,
+            ),
+        ),
         data_role="training",
     )
     producer_run = ResolvedRunRef.model_construct(sha256="b" * 64, bytes=1)

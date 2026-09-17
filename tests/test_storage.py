@@ -356,6 +356,7 @@ class InMemoryViperCloudClient(ViperCloudClient):
         self.sealed: dict[tuple[str, str, str], tuple[SnapshotFileRef, ...]] = {}
         self.upload_calls: list[tuple[str, str, str, str]] = []
         self.copy_calls: list[tuple[ViperCloudFileRef, ViperCloudFileRef]] = []
+        self.fetch_to_path_calls: list[ViperCloudFileRef] = []
         self.rejected_seals = rejected_seals
         self.seal_calls = 0
 
@@ -436,6 +437,14 @@ class InMemoryViperCloudClient(ViperCloudClient):
         destination: Path,
     ) -> Path:
         """Write one sealed in-memory file to the selected test path."""
+        self.fetch_to_path_calls.append(
+            ViperCloudFileRef(
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=path,
+            )
+        )
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(
             self.fetch(
@@ -564,6 +573,57 @@ def test_cloud_fetcher_retrieves_the_selected_sealed_file(tmp_path: Path) -> Non
     )
 
     assert fetcher(location) == raw
+
+
+def test_cloud_fetcher_streams_one_verified_path_per_execution(tmp_path: Path) -> None:
+    """Reuse a streamed immutable object without fetching or hashing it again."""
+    client = InMemoryViperCloudClient()
+    raw = b"large artifact"
+    location = ViperCloudFileRef(
+        owner="machina",
+        workspace="weekend_models",
+        revision="1" * 64,
+        path="runs/example/large.bin",
+    )
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=location,
+    )
+    client.upload(
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+        path=location.path,
+        source=raw,
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+    )
+    client.seal(
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+        files=(
+            SnapshotFileRef(
+                path=location.path,
+                sha256=reference.sha256,
+                bytes=reference.bytes,
+            ),
+        ),
+    )
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        CONSUMER_REPOSITORY,
+        cloud_client=client,
+    )
+
+    first = fetcher.read_verified_path(reference)
+    second = fetcher.read_verified_path(reference)
+
+    assert first == second
+    assert first.read_bytes() == raw
+    assert client.fetch_to_path_calls == [location]
 
 
 def test_cloud_verification_rejects_local_references() -> None:

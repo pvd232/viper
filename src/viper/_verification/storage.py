@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import os
+import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -68,6 +69,15 @@ class _VerifiedStorageFetcher(Protocol):
 
     def read_verified(self, reference: ResolvedFileRef) -> bytes:
         """Return bytes matching the complete resolved reference."""
+        ...
+
+
+@runtime_checkable
+class _VerifiedStoragePathFetcher(Protocol):
+    """Materialize a resolved file through a path-backed verified cache."""
+
+    def read_verified_path(self, reference: ResolvedFileRef) -> Path:
+        """Return a local file matching the complete resolved reference."""
         ...
 
 
@@ -543,23 +553,39 @@ def verify_snapshot_artifact(
     else:
         raise TypeError(f"unsupported resolved artifact: {type(artifact).__name__}")
 
-    files = tuple(
-        VerifiedSnapshotFile(
-            reference=reference,
-            content=read_snapshot_file(
-                stage.snapshot,
-                reference,
-                fetcher=fetcher,
-            ),
-        )
-        for reference in references
-    )
     resolved_references = tuple(
         resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references
     )
+    if isinstance(fetcher, _VerifiedStoragePathFetcher):
+        observer = getattr(fetcher, "observe_snapshot", None)
+        files = []
+        for reference, resolved_reference in zip(
+            references, resolved_references, strict=True
+        ):
+            if observer is not None:
+                observer(stage.snapshot, reference)
+            files.append(
+                VerifiedSnapshotFile(
+                    reference=reference,
+                    local_path=fetcher.read_verified_path(resolved_reference),
+                )
+            )
+        verified_files = tuple(files)
+    else:
+        verified_files = tuple(
+            VerifiedSnapshotFile(
+                reference=reference,
+                content=read_snapshot_file(
+                    stage.snapshot,
+                    reference,
+                    fetcher=fetcher,
+                ),
+            )
+            for reference in references
+        )
     return VerifiedArtifact(
         artifact=artifact,
-        files=files,
+        files=verified_files,
         data_role=data_role,
         references=resolved_references,
     )
@@ -635,7 +661,11 @@ def load_verified_artifact(
         for path, verified_file in materialized_files:
             materialized = root / path
             materialized.parent.mkdir(parents=True, exist_ok=True)
-            materialized.write_bytes(verified_file.content)
+            if verified_file.content is not None:
+                materialized.write_bytes(verified_file.content)
+            else:
+                assert verified_file.local_path is not None
+                shutil.copyfile(verified_file.local_path, materialized)
 
         materialized_loader = root / loader_reference.path
         materialized_loader.parent.mkdir(parents=True, exist_ok=True)

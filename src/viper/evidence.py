@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ._schema import DataRole, RepoRelPath
 from .artifacts import ResolvedArtifact
@@ -42,10 +43,18 @@ class VerificationPolicy:
 
 @dataclass(frozen=True)
 class VerifiedSnapshotFile:
-    """One snapshot file whose bytes match its recorded identity."""
+    """One snapshot file whose bytes or local cache path match its identity."""
 
     reference: SnapshotFileRef
-    content: bytes
+    content: bytes | None = None
+    local_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        """Require one in-memory or path-backed representation."""
+        if (self.content is None) == (self.local_path is None):
+            raise ValueError(
+                "verified snapshot file requires exactly one local representation"
+            )
 
 
 @dataclass(frozen=True)

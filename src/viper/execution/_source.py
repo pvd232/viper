@@ -70,6 +70,7 @@ class RunFetcher:
         self._verified_objects = VerifiedObjectCache(
             self.repository_root / ".viper/cache/verified-objects"
         )
+        self._verified_paths: dict[ResolvedFileRef, Path] = {}
         self._verified_producers: dict[
             tuple[ResolvedRunRef, VerificationPolicy],
             VerifiedProducerRun,
@@ -128,6 +129,40 @@ class RunFetcher:
         if cacheable:
             self._verified_objects.write(reference, raw)
         return raw
+
+    def read_verified_path(self, reference: ResolvedFileRef) -> Path:
+        """Return one path-backed verified object without buffering its payload."""
+        if not isinstance(reference.stored_at, ViperCloudFileRef):
+            raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
+            self._verified_objects.write(reference, raw)
+            return self._verified_objects.path(reference)
+
+        remembered = self._verified_paths.get(reference)
+        if remembered is not None:
+            return remembered
+
+        cached = self._verified_objects.verified_path(reference)
+        if cached is not None:
+            self._verified_paths[reference] = cached
+            return cached
+
+        if self.cloud_client is None:
+            raise RunError("Viper Cloud retrieval requires a client")
+        temporary = self._verified_objects.temporary_path(reference)
+        try:
+            restored = self.cloud_client.fetch_to_path(
+                owner=reference.stored_at.owner,
+                workspace=reference.stored_at.workspace,
+                revision=reference.stored_at.revision,
+                path=reference.stored_at.path,
+                destination=temporary,
+            )
+            cached = self._verified_objects.adopt_verified_path(reference, restored)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+        self._verified_paths[reference] = cached
+        return cached
 
     def read_verified_producer(
         self,

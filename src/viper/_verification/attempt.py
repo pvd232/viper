@@ -46,6 +46,7 @@ from ..references import (
     ResolvedStageInvocationRef,
     StageResultSnapshot,
     ViperCloudFileRef,
+    resolve_snapshot_file_ref,
 )
 from ..reuse import ExecutedStageCompletion
 from ..runs import RunAttempt, RunSpec
@@ -533,19 +534,33 @@ def verify_download_retrieval(
     if retrieval.body.path != expected_path:
         raise VerificationError(f"HTTP retrieval {input_name!r} body uses another path")
     if body_raw is None:
-        body_raw = storage.read_snapshot_file(
-            snapshot,
-            retrieval.body,
-            fetcher=fetcher,
-        )
+        resolved_body = resolve_snapshot_file_ref(snapshot, retrieval.body)
+        path_reader = getattr(fetcher, "read_verified_path", None)
+        if path_reader is None:
+            body_raw = storage.read_snapshot_file(
+                snapshot,
+                retrieval.body,
+                fetcher=fetcher,
+            )
+        else:
+            observer = getattr(fetcher, "observe_snapshot", None)
+            if observer is not None:
+                observer(snapshot, retrieval.body)
+            path_reader(resolved_body)
     artifact = resolved.artifacts[input_name]
     if artifact.kind != "file" or artifact.file != retrieval.body:
         raise VerificationError(
             f"HTTP retrieval {input_name!r} differs from its artifact"
         )
+    body_sha256 = (
+        retrieval.body.sha256
+        if body_raw is None
+        else hashlib.sha256(body_raw).hexdigest()
+    )
+    body_bytes = retrieval.body.bytes if body_raw is None else len(body_raw)
     if (
-        hashlib.sha256(body_raw).hexdigest() != retrieval.request.expected_body_sha256
-        or len(body_raw) != retrieval.request.expected_body_bytes
+        body_sha256 != retrieval.request.expected_body_sha256
+        or body_bytes != retrieval.request.expected_body_bytes
     ):
         raise VerificationError(
             f"HTTP retrieval {input_name!r} body differs from its request"
