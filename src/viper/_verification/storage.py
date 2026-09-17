@@ -414,6 +414,9 @@ def read_snapshot_file(
 ) -> bytes:
     """Retrieve and verify one file from a stage-result snapshot."""
     retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    snapshot_observer = getattr(fetcher, "observe_snapshot", None)
+    if snapshot_observer is not None:
+        snapshot_observer(snapshot)
     if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
         location: StorageModel = HuggingFaceFileRef(
             repository=snapshot.repository,

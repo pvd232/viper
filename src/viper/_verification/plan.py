@@ -17,10 +17,12 @@ from .._config.validation import (
     verify_config_type_bytes,
 )
 from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
+from ..artifact_loaders import ArtifactLoaderError, verify_artifact_loader_bytes
 from ..benchmark import BenchmarkSpec
-from ..config import Config
+from ..config import Config, ConfigTypeRef
 from ..evidence import StorageFetcher, VerificationError, VerifiedRunPlan
 from ..experiments import ExperimentSpec, VariantSpec
+from ..http import WorkspaceHttpImplementationSpec
 from ..ids import InputName, StageId
 from ..inputs import (
     ExternalInputRef,
@@ -42,6 +44,7 @@ from ..stages import (
     BaseSpec,
     BuildSpec,
     DiagnosticSpec,
+    DownloadSpec,
     EmbedSpec,
     EvalSpec,
     InternalSpec,
@@ -72,6 +75,101 @@ def _source_file(run: RunSpec, path: RepoRelPath) -> GitFileRef:
         commit=run.source.commit,
         path=path,
     )
+
+
+def _config_type_source(
+    run: RunSpec,
+    reference: ConfigTypeRef,
+    fetcher: StorageFetcher | None,
+) -> bytes:
+    """Read one workspace or VIPER config source through the active evidence path."""
+    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
+    if reference.owner == "workspace":
+        return retrieve(_source_file(run, reference.path))
+    bundle_reader = getattr(fetcher, "read_viper_source", None)
+    if bundle_reader is not None:
+        return bundle_reader(reference)
+    installed_path = Path(inspect.getfile(Config)).resolve().parent / reference.path
+    return installed_path.read_bytes()
+
+
+def _verify_config_type_reference(
+    run: RunSpec,
+    reference: ConfigTypeRef,
+    *,
+    label: str,
+    fetcher: StorageFetcher | None,
+) -> None:
+    """Verify one config class against its frozen source bytes and symbol."""
+    try:
+        raw = _config_type_source(run, reference, fetcher)
+        verify_config_type_bytes(reference, raw)
+        tree = ast.parse(raw, filename=reference.path)
+    except (KeyError, OSError, SyntaxError, ConfigValidationError) as exc:
+        raise VerificationError(f"{label} failed source verification") from exc
+    if not any(
+        isinstance(node, ast.ClassDef) and node.name == reference.symbol
+        for node in tree.body
+    ):
+        raise VerificationError(f"{label} must define {reference.symbol}")
+
+
+def _verify_http_dependencies(
+    run: RunSpec,
+    spec: DownloadSpec,
+    *,
+    fetcher: StorageFetcher | None,
+) -> None:
+    """Verify every frozen source and host payload of a workspace HTTP stage."""
+    if not isinstance(spec.http, WorkspaceHttpImplementationSpec):
+        return
+    plan_reader = getattr(fetcher, "read_plan_source", None)
+    if plan_reader is None:
+        return
+    http = spec.http
+    implementation_raw = plan_reader(_source_file(run, http.implementation.path))
+    if (
+        len(implementation_raw) != http.implementation.bytes
+        or hashlib.sha256(implementation_raw).hexdigest() != http.implementation.sha256
+    ):
+        raise VerificationError(
+            f"HTTP implementation {http.id!r} failed source verification"
+        )
+    try:
+        implementation_tree = ast.parse(
+            implementation_raw,
+            filename=http.implementation.path,
+        )
+    except SyntaxError as exc:
+        raise VerificationError(
+            f"HTTP implementation {http.id!r} is not valid Python"
+        ) from exc
+    if not any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == http.implementation.symbol
+        for node in implementation_tree.body
+    ):
+        raise VerificationError(
+            f"HTTP implementation {http.id!r} must define {http.implementation.symbol}"
+        )
+    _verify_config_type_reference(
+        run,
+        http.config_type,
+        label=f"config type of HTTP implementation {http.id!r}",
+        fetcher=fetcher,
+    )
+    executable_reader = getattr(fetcher, "read_external_executable_spec", None)
+    if executable_reader is None:
+        return
+    for executable in http.executables:
+        raw = executable_reader(executable)
+        if (
+            len(raw) != executable.bytes
+            or hashlib.sha256(raw).hexdigest() != executable.sha256
+        ):
+            raise VerificationError(
+                f"HTTP executable {executable.executable_id!r} identity differs"
+            )
 
 
 def _verify_stage_data_roles(
@@ -274,6 +372,13 @@ def verify_experiment_and_variant(
             raise VerificationError(
                 f"metric {metric.metric_id!r} implementation must define "
                 f"{implementation.symbol}"
+            )
+        if getattr(fetcher, "read_plan_source", None) is not None:
+            _verify_config_type_reference(
+                run,
+                metric.config_type,
+                label=f"config type of metric {metric.metric_id!r}",
+                fetcher=fetcher,
             )
 
     if experiment.experiment_id != run.experiment_id:
@@ -512,33 +617,15 @@ def verify_config_type_references(
     fetcher: StorageFetcher | None = None,
 ) -> None:
     """Verify each parameterized stage's class against frozen source bytes."""
-    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     for stage_id, stage in stages.items():
         if not isinstance(stage, ParameterizedSpec):
             continue
-        reference = stage.config_type
-        try:
-            installed_path = (
-                Path(inspect.getfile(Config)).resolve().parent / reference.path
-            )
-            raw = (
-                retrieve(_source_file(run, reference.path))
-                if reference.owner == "workspace"
-                else installed_path.read_bytes()
-            )
-            verify_config_type_bytes(reference, raw)
-            tree = ast.parse(raw, filename=reference.path)
-        except (KeyError, OSError, SyntaxError, ConfigValidationError) as exc:
-            raise VerificationError(
-                f"config type of stage {stage_id!r} failed source verification"
-            ) from exc
-        if not any(
-            isinstance(node, ast.ClassDef) and node.name == reference.symbol
-            for node in tree.body
-        ):
-            raise VerificationError(
-                f"config type of stage {stage_id!r} must define {reference.symbol}"
-            )
+        _verify_config_type_reference(
+            run,
+            stage.config_type,
+            label=f"config type of stage {stage_id!r}",
+            fetcher=fetcher,
+        )
 
 
 def verify_stage_plan(
@@ -572,6 +659,22 @@ def verify_stage_plan(
             raise VerificationError(
                 f"stage {stage.stage_id!r} file is not a valid stage spec"
             ) from exc
+
+        plan_reader = getattr(fetcher, "read_plan_source", None)
+        if plan_reader is not None:
+            for artifact_name, artifact in spec.outputs.items():
+                loader = artifact.loader
+                loader_raw = plan_reader(_source_file(run, loader.path))
+                try:
+                    verify_artifact_loader_bytes(loader, loader_raw)
+                except ArtifactLoaderError as exc:
+                    raise VerificationError(
+                        f"loader of artifact {artifact_name!r} in stage "
+                        f"{stage.stage_id!r} failed source verification"
+                    ) from exc
+
+        if isinstance(spec, DownloadSpec):
+            _verify_http_dependencies(run, spec, fetcher=fetcher)
 
         if isinstance(spec, ParameterizedSpec):
             implementation = spec.implementation
