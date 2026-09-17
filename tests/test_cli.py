@@ -192,6 +192,14 @@ class CommandLineTests(unittest.TestCase):
                 "missing-run.yaml",
                 "missing-benchmark.yaml",
             ],
+            "export-run": [
+                "export-run",
+                "missing-run.yaml",
+                "--output",
+                "bundle",
+                "--trust-source",
+                "https://example.test/repository",
+            ],
             "plan-diff": ["plan-diff", "left.yaml", "right.yaml"],
             "lineage": [
                 "lineage",
