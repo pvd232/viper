@@ -3,7 +3,7 @@
 This checklist converts the concrete friction observed in the CleaRx audio-retention runs into independently verifiable VIPER changes. It keeps GPU/CPU stage separation and stateless build or metric functions in the existing stage model; those paths did not require a new abstraction.
 
 <!-- contract-protocol:generated:start -->
-**Resume here:** [Resume at ARE-PB-01](../contracts/attempt-recovery-and-export.md#are-pb-01)
+**Resume here:** [Resume at ARE-PB-02](../contracts/attempt-recovery-and-export.md#are-pb-02)
 
 
 ### Phase 1: Fail invalid plans before execution
@@ -16,14 +16,14 @@ This checklist converts the concrete friction observed in the CleaRx audio-reten
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>ARE-REQ-01</code></nobr> | in_progress | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-01) | <nobr><code>ARE-PB-01</code></nobr> | None |
-| <nobr><code>ARE-REQ-02</code></nobr> | in_progress | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-02) | <nobr><code>ARE-PB-01</code></nobr> | <nobr><code>ARE-REQ-01</code></nobr> |
+| <nobr><code>ARE-REQ-01</code></nobr> | complete | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-01) | <nobr><code>ARE-PB-01</code></nobr> | None |
+| <nobr><code>ARE-REQ-02</code></nobr> | complete | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-02) | <nobr><code>ARE-PB-01</code></nobr> | <nobr><code>ARE-REQ-01</code></nobr> |
 
 ### Phase 3: Export complete run evidence
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>ARE-REQ-03</code></nobr> | planned | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-03) | <nobr><code>ARE-PB-02</code></nobr> | <nobr><code>ARE-REQ-02</code></nobr> |
+| <nobr><code>ARE-REQ-03</code></nobr> | in_progress | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-03) | <nobr><code>ARE-PB-02</code></nobr> | <nobr><code>ARE-REQ-02</code></nobr> |
 
 ### Phase 4: Diagnose Python environments before execution
 
