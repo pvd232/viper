@@ -1,0 +1,1783 @@
+diff --git a/src/viper/_verification/attempt.py b/src/viper/_verification/attempt.py
+index 59d64a1..1ed77d1 100644
+--- a/src/viper/_verification/attempt.py
++++ b/src/viper/_verification/attempt.py
+@@ -595,7 +595,12 @@ def _verify_download_retrievals(
+                 ) from exc
+             for executable in http.external_executables:
+                 try:
+-                    executable_raw = executable.path.read_bytes()
++                    bundle_reader = getattr(fetcher, "read_external_executable", None)
++                    executable_raw = (
++                        bundle_reader(executable)
++                        if bundle_reader is not None
++                        else executable.path.read_bytes()
++                    )
+                 except OSError as exc:
+                     raise VerificationError(
+                         f"HTTP retrieval {input_name!r} executable is unavailable"
+diff --git a/src/viper/_verification/plan.py b/src/viper/_verification/plan.py
+index bace3e8..c3f993c 100644
+--- a/src/viper/_verification/plan.py
++++ b/src/viper/_verification/plan.py
+@@ -17,10 +17,12 @@ from .._config.validation import (
+     verify_config_type_bytes,
+ )
+ from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
++from ..artifact_loaders import ArtifactLoaderError, verify_artifact_loader_bytes
+ from ..benchmark import BenchmarkSpec
+-from ..config import Config
++from ..config import Config, ConfigTypeRef
+ from ..evidence import StorageFetcher, VerificationError, VerifiedRunPlan
+ from ..experiments import ExperimentSpec, VariantSpec
++from ..http import WorkspaceHttpImplementationSpec
+ from ..ids import InputName, StageId
+ from ..inputs import (
+     ExternalInputRef,
+@@ -42,6 +44,7 @@ from ..stages import (
+     BaseSpec,
+     BuildSpec,
+     DiagnosticSpec,
++    DownloadSpec,
+     EmbedSpec,
+     EvalSpec,
+     InternalSpec,
+@@ -74,6 +77,101 @@ def _source_file(run: RunSpec, path: RepoRelPath) -> GitFileRef:
+     )
+
+
++def _config_type_source(
++    run: RunSpec,
++    reference: ConfigTypeRef,
++    fetcher: StorageFetcher | None,
++) -> bytes:
++    """Read one workspace or VIPER config source through the active evidence path."""
++    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
++    if reference.owner == "workspace":
++        return retrieve(_source_file(run, reference.path))
++    bundle_reader = getattr(fetcher, "read_viper_source", None)
++    if bundle_reader is not None:
++        return bundle_reader(reference)
++    installed_path = Path(inspect.getfile(Config)).resolve().parent / reference.path
++    return installed_path.read_bytes()
++
++
++def _verify_config_type_reference(
++    run: RunSpec,
++    reference: ConfigTypeRef,
++    *,
++    label: str,
++    fetcher: StorageFetcher | None,
++) -> None:
++    """Verify one config class against its frozen source bytes and symbol."""
++    try:
++        raw = _config_type_source(run, reference, fetcher)
++        verify_config_type_bytes(reference, raw)
++        tree = ast.parse(raw, filename=reference.path)
++    except (KeyError, OSError, SyntaxError, ConfigValidationError) as exc:
++        raise VerificationError(f"{label} failed source verification") from exc
++    if not any(
++        isinstance(node, ast.ClassDef) and node.name == reference.symbol
++        for node in tree.body
++    ):
++        raise VerificationError(f"{label} must define {reference.symbol}")
++
++
++def _verify_http_dependencies(
++    run: RunSpec,
++    spec: DownloadSpec,
++    *,
++    fetcher: StorageFetcher | None,
++) -> None:
++    """Verify every frozen source and host payload of a workspace HTTP stage."""
++    if not isinstance(spec.http, WorkspaceHttpImplementationSpec):
++        return
++    plan_reader = getattr(fetcher, "read_plan_source", None)
++    if plan_reader is None:
++        return
++    http = spec.http
++    implementation_raw = plan_reader(_source_file(run, http.implementation.path))
++    if (
++        len(implementation_raw) != http.implementation.bytes
++        or hashlib.sha256(implementation_raw).hexdigest() != http.implementation.sha256
++    ):
++        raise VerificationError(
++            f"HTTP implementation {http.id!r} failed source verification"
++        )
++    try:
++        implementation_tree = ast.parse(
++            implementation_raw,
++            filename=http.implementation.path,
++        )
++    except SyntaxError as exc:
++        raise VerificationError(
++            f"HTTP implementation {http.id!r} is not valid Python"
++        ) from exc
++    if not any(
++        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
++        and node.name == http.implementation.symbol
++        for node in implementation_tree.body
++    ):
++        raise VerificationError(
++            f"HTTP implementation {http.id!r} must define {http.implementation.symbol}"
++        )
++    _verify_config_type_reference(
++        run,
++        http.config_type,
++        label=f"config type of HTTP implementation {http.id!r}",
++        fetcher=fetcher,
++    )
++    executable_reader = getattr(fetcher, "read_external_executable_spec", None)
++    if executable_reader is None:
++        return
++    for executable in http.executables:
++        raw = executable_reader(executable)
++        if (
++            len(raw) != executable.bytes
++            or hashlib.sha256(raw).hexdigest() != executable.sha256
++        ):
++            raise VerificationError(
++                f"HTTP executable {executable.executable_id!r} identity differs"
++            )
++
++
+ def _verify_stage_data_roles(
+     stage_id: StageId,
+     stage: BaseSpec,
+@@ -275,6 +373,13 @@ def verify_experiment_and_variant(
+                 f"metric {metric.metric_id!r} implementation must define "
+                 f"{implementation.symbol}"
+             )
++        if getattr(fetcher, "read_plan_source", None) is not None:
++            _verify_config_type_reference(
++                run,
++                metric.config_type,
++                label=f"config type of metric {metric.metric_id!r}",
++                fetcher=fetcher,
++            )
+
+     if experiment.experiment_id != run.experiment_id:
+         raise VerificationError("run and experiment IDs do not match")
+@@ -512,33 +617,15 @@ def verify_config_type_references(
+     fetcher: StorageFetcher | None = None,
+ ) -> None:
+     """Verify each parameterized stage's class against frozen source bytes."""
+-    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
+     for stage_id, stage in stages.items():
+         if not isinstance(stage, ParameterizedSpec):
+             continue
+-        reference = stage.config_type
+-        try:
+-            installed_path = (
+-                Path(inspect.getfile(Config)).resolve().parent / reference.path
+-            )
+-            raw = (
+-                retrieve(_source_file(run, reference.path))
+-                if reference.owner == "workspace"
+-                else installed_path.read_bytes()
+-            )
+-            verify_config_type_bytes(reference, raw)
+-            tree = ast.parse(raw, filename=reference.path)
+-        except (KeyError, OSError, SyntaxError, ConfigValidationError) as exc:
+-            raise VerificationError(
+-                f"config type of stage {stage_id!r} failed source verification"
+-            ) from exc
+-        if not any(
+-            isinstance(node, ast.ClassDef) and node.name == reference.symbol
+-            for node in tree.body
+-        ):
+-            raise VerificationError(
+-                f"config type of stage {stage_id!r} must define {reference.symbol}"
+-            )
++        _verify_config_type_reference(
++            run,
++            stage.config_type,
++            label=f"config type of stage {stage_id!r}",
++            fetcher=fetcher,
++        )
+
+
+ def verify_stage_plan(
+@@ -573,6 +660,22 @@ def verify_stage_plan(
+                 f"stage {stage.stage_id!r} file is not a valid stage spec"
+             ) from exc
+
++        plan_reader = getattr(fetcher, "read_plan_source", None)
++        if plan_reader is not None:
++            for artifact_name, artifact in spec.outputs.items():
++                loader = artifact.loader
++                loader_raw = plan_reader(_source_file(run, loader.path))
++                try:
++                    verify_artifact_loader_bytes(loader, loader_raw)
++                except ArtifactLoaderError as exc:
++                    raise VerificationError(
++                        f"loader of artifact {artifact_name!r} in stage "
++                        f"{stage.stage_id!r} failed source verification"
++                    ) from exc
++
++        if isinstance(spec, DownloadSpec):
++            _verify_http_dependencies(run, spec, fetcher=fetcher)
++
+         if isinstance(spec, ParameterizedSpec):
+             implementation = spec.implementation
+             implementation_location = _source_file(run, implementation.path)
+@@ -707,6 +810,12 @@ def verify_run_plan(
+         fetcher=fetcher,
+     )
+     stages = verify_stage_plan(run, resolved_run.spec, fetcher=fetcher)
++    plan_reader = getattr(fetcher, "read_plan_source", None)
++    if plan_reader is not None:
++        plan_reader(run.env.lockfile)
++        for stage in stages.values():
++            if stage.env is not None:
++                plan_reader(stage.env.lockfile)
+     verify_run_plan_relationships(
+         run,
+         experiment,
+diff --git a/src/viper/_verification/storage.py b/src/viper/_verification/storage.py
+index 20ffe21..f4bbd3c 100644
+--- a/src/viper/_verification/storage.py
++++ b/src/viper/_verification/storage.py
+@@ -436,6 +436,9 @@ def read_snapshot_file(
+             revision=snapshot.revision,
+             path=reference.path,
+         )
++    snapshot_observer = getattr(fetcher, "observe_snapshot", None)
++    if snapshot_observer is not None:
++        snapshot_observer(snapshot, reference)
+     try:
+         raw = retrieve(location)
+     except Exception as exc:
+diff --git a/src/viper/api.py b/src/viper/api.py
+index 976774e..a461736 100644
+--- a/src/viper/api.py
++++ b/src/viper/api.py
+@@ -47,12 +47,18 @@ from .catalog import (
+ from .evidence import StorageFetcher, VerificationError, VerificationPolicy
+ from .execution._batch import run_many as execute_many
+ from .execution._benchmark import benchmark as execute_benchmark_run
++from .execution._export import export_run as execute_run_export
+ from .execution._restore import restore as restore_run_artifacts
+ from .execution._run import run as execute_run
+ from .execution._source import RunFetcher, run_git
+ from .execution._stage import StageExecutionError, execute_stage_process
+-from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
+-from .execution.results import ExperimentExecutionResult
++from .execution.errors import (
++    BenchmarkExecutionError,
++    RestoreError,
++    RunError,
++    RunExportError,
++)
++from .execution.results import ExperimentExecutionResult, RunExportResult
+ from .ids import RunId, StageId
+ from .inspection import (
+     InspectionError,
+@@ -140,6 +146,7 @@ OperationName = Literal[
+     "run_many",
+     "retry",
+     "execute_benchmark",
++    "export_run",
+     "restore",
+     "plan_diff",
+     "lineage",
+@@ -406,6 +413,22 @@ class ExecuteBenchmarkSuccess(SuccessModel):
+     result_path: Path
+
+
++class ExportRunRequest(APIModel):
++    """Select one terminal run and a new portable bundle destination."""
++
++    resolved_run: Path
++    output: Path
++    root: Path
++    trusted_source_repositories: frozenset[str] = Field(min_length=1)
++
++
++class ExportRunSuccess(SuccessModel):
++    """Report one complete portable run-evidence bundle."""
++
++    operation: Literal["export_run"] = "export_run"  # pyright: ignore[reportIncompatibleVariableOverride]
++    result: RunExportResult
++
++
+ class PlanDiffRequest(APIModel):
+     """Select two complete frozen plans for deterministic comparison."""
+
+@@ -781,6 +804,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
+     "ExecuteStageSuccess": ExecuteStageSuccess,
+     "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
+     "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
++    "ExportRunRequest": ExportRunRequest,
++    "ExportRunSuccess": ExportRunSuccess,
+     "RestoreRequest": RestoreRequest,
+     "RestoreSuccess": RestoreSuccess,
+     "FreezeRunRequest": FreezeRunRequest,
+@@ -846,6 +871,7 @@ OPERATIONS: tuple[OperationName, ...] = (
+     "run_many",
+     "retry",
+     "execute_benchmark",
++    "export_run",
+     "restore",
+     "plan_diff",
+     "lineage",
+@@ -1230,6 +1256,33 @@ def status(request: StatusRequest) -> StatusSuccess:
+     )
+
+
++def export_run(request: ExportRunRequest) -> ExportRunSuccess:
++    """Export one verified terminal run to a portable evidence bundle."""
++    repository_root = _root(request.root, "export_run")
++    selected = (
++        request.resolved_run
++        if request.resolved_run.is_absolute()
++        else repository_root / request.resolved_run
++    )
++    try:
++        result = execute_run_export(
++            repository_root,
++            selected,
++            request.output,
++            trusted_source_repositories=request.trusted_source_repositories,
++        )
++    except (OSError, RunError, RunExportError, VerificationError, ValueError) as exc:
++        raise ViperError(
++            ViperFailure(
++                operation="export_run",
++                origin="application",
++                code="verification_failed",
++                message="run export failed",
++            )
++        ) from exc
++    return ExportRunSuccess(result=result)
++
++
+ def _policy(repositories: frozenset[str]) -> VerificationPolicy:
+     """Construct the verifier policy carried by one API request."""
+     return VerificationPolicy(trusted_source_repositories=repositories)
+@@ -1855,6 +1908,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
+     "run_many": RunManyRequest,
+     "retry": RetryRequest,
+     "execute_benchmark": ExecuteBenchmarkRequest,
++    "export_run": ExportRunRequest,
+     "restore": RestoreRequest,
+     "plan_diff": PlanDiffRequest,
+     "lineage": LineageRequest,
+@@ -1904,6 +1958,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
+     "run_many": run_many,
+     "retry": retry_request,
+     "execute_benchmark": execute_benchmark,
++    "export_run": export_run,
+     "restore": restore_artifacts,
+     "plan_diff": plan_diff,
+     "lineage": lineage,
+@@ -2165,6 +2220,8 @@ __all__ = [
+     "ExecuteStageSuccess",
+     "ExecuteBenchmarkRequest",
+     "ExecuteBenchmarkSuccess",
++    "ExportRunRequest",
++    "ExportRunSuccess",
+     "ErrorCode",
+     "FailureOrigin",
+     "FreezeRunRequest",
+diff --git a/src/viper/cli.py b/src/viper/cli.py
+index 774bb70..4dc276f 100644
+--- a/src/viper/cli.py
++++ b/src/viper/cli.py
+@@ -243,6 +243,20 @@ def build_parser() -> ArgumentParser:
+     add_root(benchmark_command)
+     benchmark_command.add_argument("--timeout-seconds", type=float)
+
++    export = commands.add_parser(
++        "export-run",
++        help="write one terminal run as a portable verified evidence bundle",
++    )
++    export.add_argument("resolved_run", type=Path)
++    export.add_argument("--output", type=Path, required=True)
++    add_root(export)
++    export.add_argument(
++        "--trust-source",
++        action="append",
++        required=True,
++        help="source repository URL approved to supply executable loaders",
++    )
++
+     restore = commands.add_parser(
+         "restore",
+         help="restore verified artifacts from one successful run",
+@@ -366,6 +380,7 @@ def _operation_and_payload(
+         "publish-retrieval-judgment": "publish_retrieval_judgment",
+         "retry": "retry",
+         "execute-benchmark": "execute_benchmark",
++        "export-run": "export_run",
+         "restore": "restore",
+         "plan-diff": "plan_diff",
+         "lineage": "lineage",
+@@ -454,6 +469,9 @@ def _human_success(result: SuccessModel) -> str:
+             f"benchmark {benchmark.status}: confirmation attempt "
+             f"{benchmark.confirmation.stored_at.path}"
+         )
++    if result.operation == "export_run":
++        exported = getattr(result, "result")
++        return f"exported {exported.file_count} files to {exported.bundle_path}"
+     if result.operation == "restore":
+         restored = getattr(result, "result")
+         file_count = sum(len(artifact.files) for artifact in restored.artifacts)
+diff --git a/src/viper/execution/__init__.py b/src/viper/execution/__init__.py
+index 5992521..3d3eed1 100644
+--- a/src/viper/execution/__init__.py
++++ b/src/viper/execution/__init__.py
+@@ -4,15 +4,55 @@ from __future__ import annotations
+
+ from pathlib import Path
+
++from .._schema import SHA256
+ from ..authoring import RunPlanDraft, freeze_run_plan
+ from ..repository import resolve_root
+ from ..storage import ViperCloudClient
+ from ._batch import run_many as _run_many
+ from ._benchmark import benchmark as _benchmark
++from ._export import export_run as _export_run
++from ._export import verify_run_bundle as _verify_run_bundle
+ from ._restore import resolve_run_reference, restore
+ from ._run import retry as _retry
+ from ._run import run as _run
+-from .results import BenchmarkExecutionResult, ExperimentExecutionResult, RunResult
++from .results import (
++    BenchmarkExecutionResult,
++    ExperimentExecutionResult,
++    RunExportResult,
++    RunResult,
++)
++
++
++def export_run(
++    repository_root: Path,
++    resolved_run_path: Path,
++    output: Path,
++    *,
++    trusted_source_repositories: frozenset[str],
++    cloud_client: ViperCloudClient | None = None,
++) -> RunExportResult:
++    """Write a complete verified-run evidence graph to a portable directory."""
++    return _export_run(
++        repository_root,
++        resolved_run_path,
++        output,
++        trusted_source_repositories=trusted_source_repositories,
++        cloud_client=cloud_client,
++    )
++
++
++def verify_run_bundle(
++    bundle_path: Path,
++    *,
++    trusted_source_repositories: frozenset[str],
++    expected_manifest_sha256: SHA256 | None = None,
++) -> RunExportResult:
++    """Verify one exported run bundle without its source workspace or store."""
++    return _verify_run_bundle(
++        bundle_path,
++        trusted_source_repositories=trusted_source_repositories,
++        expected_manifest_sha256=expected_manifest_sha256,
++    )
+
+
+ def run(
+@@ -133,9 +173,11 @@ def run_many(
+
+ __all__ = [
+     "benchmark",
++    "export_run",
+     "resolve_run_reference",
+     "retry",
+     "restore",
+     "run",
+     "run_many",
++    "verify_run_bundle",
+ ]
+diff --git a/src/viper/execution/_export.py b/src/viper/execution/_export.py
+new file mode 100644
+index 0000000..15523c9
+--- /dev/null
++++ b/src/viper/execution/_export.py
+@@ -0,0 +1,552 @@
++"""Export complete verified-run evidence into a portable directory bundle."""
++
++from __future__ import annotations
++
++import hashlib
++import inspect
++import json
++import os
++import shutil
++import tempfile
++from collections.abc import Mapping
++from pathlib import Path, PurePosixPath
++from typing import Any
++
++import yaml
++from pydantic import TypeAdapter, ValidationError
++
++from .._schema import SHA256, RepoRelPath
++from .._verification.storage import verify_resolved_file_bytes
++from ..config import Config, ConfigTypeRef
++from ..evidence import VerificationError, VerificationPolicy
++from ..http import ExternalExecutableSpec, ResolvedExternalExecutable
++from ..references import (
++    GitFileRef,
++    HuggingFaceFileRef,
++    HuggingFaceStageResultSnapshotRef,
++    LocalFileRef,
++    LocalStageResultSnapshotRef,
++    ResolvedFileRef,
++    SnapshotFileRef,
++    StageResultSnapshot,
++    StorageModel,
++    StorageRef,
++    ViperCloudFileRef,
++)
++from ..runs import ResolvedRun, RunSpec
++from ..serialization import parse_yaml_bytes
++from ..storage import LocalArtifactStore, ViperCloudClient
++from ..verification import verify_run_result
++from ._source import RunFetcher
++from .errors import RunExportError
++from .results import (
++    RunBundleEntry,
++    RunBundleManifest,
++    RunBundleSnapshot,
++    RunExportResult,
++)
++
++_STORAGE_ADAPTER = TypeAdapter(StorageRef)
++_SNAPSHOT_ADAPTER = TypeAdapter(StageResultSnapshot)
++
++
++def _canonical_json(value: object) -> bytes:
++    """Serialize one manifest value with stable object-key ordering."""
++    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
++
++
++def _source_key(source: Mapping[str, Any]) -> str:
++    """Return one stable identity for an original payload location."""
++    return hashlib.sha256(_canonical_json(dict(source))).hexdigest()
++
++
++def _snapshot_location(
++    snapshot: StageResultSnapshot,
++    path: RepoRelPath,
++) -> StorageModel:
++    """Build the concrete storage location of one snapshot member."""
++    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
++        return HuggingFaceFileRef(
++            repository=snapshot.repository,
++            commit=snapshot.commit,
++            path=path,
++            repo_type=snapshot.repo_type,
++        )
++    if isinstance(snapshot, LocalStageResultSnapshotRef):
++        return LocalFileRef(
++            workspace=snapshot.workspace,
++            store=snapshot.store,
++            store_id=snapshot.store_id,
++            commit=snapshot.commit,
++            path=path,
++        )
++    return ViperCloudFileRef(
++        owner=snapshot.owner,
++        workspace=snapshot.workspace,
++        revision=snapshot.revision,
++        path=path,
++    )
++
++
++class _RecordingFetcher:
++    """Record every immutable payload read through the normal execution fetcher."""
++
++    def __init__(self, delegate: RunFetcher) -> None:
++        self.delegate = delegate
++        self.payloads: dict[str, tuple[dict[str, Any], bytes]] = {}
++        self.snapshots: dict[str, tuple[str, ...]] = {}
++        self.snapshot_paths: dict[str, tuple[RepoRelPath, ...]] = {}
++
++    def __call__(self, location: StorageModel) -> bytes:
++        """Retrieve and retain one payload by its complete storage locator."""
++        source = location.model_dump(mode="json")
++        key = _source_key(source)
++        if key in self.payloads:
++            return self.payloads[key][1]
++        raw = self.delegate(location)
++        self.payloads[key] = (source, raw)
++        return raw
++
++    def _retain_local(self, source: dict[str, Any], raw: bytes) -> bytes:
++        """Retain one verified host payload under its stable logical identity."""
++        self.payloads[_source_key(source)] = (source, raw)
++        return raw
++
++    def read_viper_source(self, reference: ConfigTypeRef) -> bytes:
++        """Read and retain one installed VIPER config source file."""
++        raw = (
++            Path(inspect.getfile(Config)).resolve().parent / reference.path
++        ).read_bytes()
++        return self._retain_local(
++            {
++                "kind": "viper_source",
++                "bytes": reference.bytes,
++                "path": reference.path,
++                "sha256": reference.sha256,
++                "symbol": reference.symbol,
++            },
++            raw,
++        )
++
++    def read_plan_source(self, location: GitFileRef) -> bytes:
++        """Read and retain one workspace source dependency from a frozen plan."""
++        return self(location)
++
++    def read_external_executable(
++        self,
++        executable: ResolvedExternalExecutable,
++    ) -> bytes:
++        """Read and retain one resolved external executable."""
++        return self._retain_local(
++            {
++                "kind": "executable",
++                "bytes": executable.spec.bytes,
++                "command": executable.spec.command,
++                "executable_id": executable.spec.executable_id,
++                "sha256": executable.spec.sha256,
++            },
++            executable.path.read_bytes(),
++        )
++
++    def read_external_executable_spec(self, spec: ExternalExecutableSpec) -> bytes:
++        """Locate, read, and retain one executable required by a frozen plan."""
++        selected = shutil.which(spec.command)
++        if selected is None:
++            raise RunExportError(f"required executable is unavailable: {spec.command}")
++        return self._retain_local(
++            {
++                "kind": "executable",
++                "bytes": spec.bytes,
++                "command": spec.command,
++                "executable_id": spec.executable_id,
++                "sha256": spec.sha256,
++            },
++            Path(selected).resolve().read_bytes(),
++        )
++
++    def list_snapshot_files(
++        self,
++        snapshot: StageResultSnapshot,
++    ) -> tuple[RepoRelPath, ...]:
++        """Record the complete ordered membership of one immutable snapshot."""
++        source = snapshot.model_dump(mode="json")
++        snapshot_key = _source_key(source)
++        if snapshot_key in self.snapshot_paths:
++            return self.snapshot_paths[snapshot_key]
++        paths = self.delegate.list_snapshot_files(snapshot)
++        members = []
++        for path in paths:
++            location = _snapshot_location(snapshot, path)
++            self(location)
++            members.append(_source_key(location.model_dump(mode="json")))
++        self.snapshots[snapshot_key] = tuple(members)
++        self.snapshot_paths[snapshot_key] = paths
++        return paths
++
++    def observe_snapshot(
++        self,
++        snapshot: StageResultSnapshot,
++        reference: SnapshotFileRef,
++    ) -> None:
++        """Retain membership and require the referenced file to belong to it."""
++        if reference.path not in self.list_snapshot_files(snapshot):
++            raise RunExportError("referenced file is absent from its snapshot")
++
++
++class _BundleFetcher:
++    """Serve exported evidence without falling back to any original backend."""
++
++    def __init__(self, root: Path, manifest: RunBundleManifest) -> None:
++        self.root = root
++        self.entries = {entry.path: entry for entry in manifest.entries}
++        self.entries_by_source = {
++            _source_key(entry.source): entry.path
++            for entry in manifest.entries
++            if entry.source.get("kind") != "root_run"
++        }
++        self.bindings = {
++            _source_key(entry.source): entry.path
++            for entry in manifest.entries
++            if entry.source.get("kind")
++            not in {"root_run", "executable", "viper_source"}
++        }
++        self.snapshots = {
++            snapshot.source_sha256: snapshot.members for snapshot in manifest.snapshots
++        }
++        self.consumed_paths: set[RepoRelPath] = set()
++        self.consumed_snapshots: set[SHA256] = set()
++
++    def __call__(self, location: StorageModel) -> bytes:
++        """Read one bound object or reject the absent original location."""
++        key = _source_key(location.model_dump(mode="json"))
++        try:
++            path = self.bindings[key]
++        except KeyError as exc:
++            raise RunExportError(
++                "bundle has no binding for a referenced payload"
++            ) from exc
++        self.consumed_paths.add(path)
++        return (self.root / path).read_bytes()
++
++    def read_verified(self, reference: ResolvedFileRef) -> bytes:
++        """Read and verify one resolved reference from the bundle."""
++        return verify_resolved_file_bytes(reference, self(reference.stored_at))
++
++    def _read_local(self, source: dict[str, Any]) -> bytes:
++        """Read one bundled host payload by its stable logical identity."""
++        try:
++            path = self.entries_by_source[_source_key(source)]
++        except KeyError as exc:
++            raise RunExportError("bundle omits a required host payload") from exc
++        self.consumed_paths.add(path)
++        return (self.root / path).read_bytes()
++
++    def read_viper_source(self, reference: ConfigTypeRef) -> bytes:
++        """Read one bundled VIPER config source file."""
++        return self._read_local(
++            {
++                "kind": "viper_source",
++                "bytes": reference.bytes,
++                "path": reference.path,
++                "sha256": reference.sha256,
++                "symbol": reference.symbol,
++            }
++        )
++
++    def read_plan_source(self, location: GitFileRef) -> bytes:
++        """Read one bundled workspace source dependency from a frozen plan."""
++        return self(location)
++
++    def read_external_executable(
++        self,
++        executable: ResolvedExternalExecutable,
++    ) -> bytes:
++        """Read one bundled executable selected by a resolved retrieval."""
++        return self.read_external_executable_spec(executable.spec)
++
++    def read_external_executable_spec(self, spec: ExternalExecutableSpec) -> bytes:
++        """Read one bundled executable selected by a planned retrieval."""
++        return self._read_local(
++            {
++                "kind": "executable",
++                "bytes": spec.bytes,
++                "command": spec.command,
++                "executable_id": spec.executable_id,
++                "sha256": spec.sha256,
++            }
++        )
++
++    def list_snapshot_files(
++        self,
++        snapshot: StageResultSnapshot,
++    ) -> tuple[RepoRelPath, ...]:
++        """Return the complete retained membership of one snapshot."""
++        key = _source_key(snapshot.model_dump(mode="json"))
++        try:
++            members = self.snapshots[key]
++        except KeyError as exc:
++            raise RunExportError("bundle has no snapshot membership") from exc
++        self.consumed_snapshots.add(key)
++        self.consumed_paths.update(members)
++        paths = []
++        for member in members:
++            entry = self.entries[member]
++            location = _model_or_none(_STORAGE_ADAPTER, entry.source)
++            if not isinstance(
++                location,
++                (GitFileRef, HuggingFaceFileRef, LocalFileRef, ViperCloudFileRef),
++            ):
++                raise RunExportError("snapshot member has no storage binding")
++            if location != _snapshot_location(snapshot, location.path):
++                raise RunExportError("snapshot member belongs to another snapshot")
++            paths.append(location.path)
++        return tuple(paths)
++
++    def observe_snapshot(
++        self,
++        snapshot: StageResultSnapshot,
++        reference: SnapshotFileRef,
++    ) -> None:
++        """Consume membership and require the referenced file to belong to it."""
++        if reference.path not in self.list_snapshot_files(snapshot):
++            raise RunExportError("referenced file is absent from its snapshot")
++
++    def require_complete_consumption(self) -> None:
++        """Reject manifest objects and snapshots outside the verified graph."""
++        expected_paths = {
++            entry.path
++            for entry in self.entries.values()
++            if entry.source.get("kind") != "root_run"
++        }
++        if self.consumed_paths != expected_paths:
++            raise RunExportError("bundle contains an unreachable payload")
++        if self.consumed_snapshots != set(self.snapshots):
++            raise RunExportError("bundle contains an unreachable snapshot")
++
++
++def _model_or_none(adapter: TypeAdapter[Any], value: object) -> Any | None:
++    """Try one strict protocol model without treating mismatch as an error."""
++    try:
++        return adapter.validate_python(value)
++    except (TypeError, ValidationError, ValueError):
++        return None
++
++
++def _entry(
++    path: RepoRelPath,
++    source: dict[str, Any],
++    raw: bytes,
++) -> RunBundleEntry:
++    """Describe one retained payload with its exact byte identity."""
++    return RunBundleEntry(
++        path=path,
++        bytes=len(raw),
++        sha256=hashlib.sha256(raw).hexdigest(),
++        source=source,
++    )
++
++
++def _manifest_bytes(manifest: RunBundleManifest) -> bytes:
++    """Serialize one bundle manifest deterministically."""
++    return _canonical_json(manifest.model_dump(mode="json"))
++
++
++def _source_repository(
++    resolved_run: ResolvedRun,
++    *,
++    repository_root: Path,
++    store: LocalArtifactStore,
++    cloud_client: ViperCloudClient | None,
++) -> str:
++    """Read the run's own frozen source identity without guessing from trust."""
++    if isinstance(resolved_run.spec.stored_at, GitFileRef):
++        return str(resolved_run.spec.stored_at.repository)
++    bootstrap = RunFetcher(
++        repository_root,
++        store,
++        "",
++        cloud_client=cloud_client,
++    )
++    try:
++        raw = verify_resolved_file_bytes(
++            resolved_run.spec,
++            bootstrap(resolved_run.spec.stored_at),
++        )
++        run = RunSpec.model_validate(parse_yaml_bytes(raw))
++    except (yaml.YAMLError, ValueError, TypeError) as exc:
++        raise RunExportError("run specification is invalid") from exc
++    return str(run.source.repository)
++
++
++def export_run(
++    repository_root: Path,
++    resolved_run_path: Path,
++    output: Path,
++    *,
++    trusted_source_repositories: frozenset[str],
++    cloud_client: ViperCloudClient | None = None,
++) -> RunExportResult:
++    """Verify and export one complete terminal run evidence graph."""
++    root = repository_root.resolve()
++    terminal_path = resolved_run_path.resolve()
++    destination = output.resolve()
++    if not terminal_path.is_relative_to(root):
++        raise RunExportError("resolved run path is outside the workspace root")
++    if destination.exists() or destination.is_symlink():
++        raise RunExportError("bundle output already exists")
++    terminal_raw = terminal_path.read_bytes()
++    try:
++        resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(terminal_raw))
++    except (yaml.YAMLError, ValueError, TypeError) as exc:
++        raise RunExportError("terminal run document is invalid") from exc
++    store = LocalArtifactStore(root)
++    source_repository = _source_repository(
++        resolved_run,
++        repository_root=root,
++        store=store,
++        cloud_client=cloud_client,
++    )
++    delegate = RunFetcher(
++        root,
++        store,
++        source_repository,
++        cloud_client=cloud_client,
++    )
++    recording = _RecordingFetcher(delegate)
++    verify_run_result(
++        resolved_run,
++        policy=VerificationPolicy(
++            trusted_source_repositories=trusted_source_repositories
++        ),
++        fetcher=recording,
++    )
++    payloads = recording.payloads
++    entries = [_entry("root/resolved.yaml", {"kind": "root_run"}, terminal_raw)]
++    objects: dict[RepoRelPath, bytes] = {"root/resolved.yaml": terminal_raw}
++    for key, (source, raw) in sorted(payloads.items()):
++        path: RepoRelPath = f"objects/{key[:2]}/{key}"
++        entries.append(_entry(path, source, raw))
++        objects[path] = raw
++    snapshots = tuple(
++        RunBundleSnapshot(
++            source_sha256=key,
++            members=tuple(f"objects/{item[:2]}/{item}" for item in members),
++        )
++        for key, members in sorted(recording.snapshots.items())
++    )
++    manifest = RunBundleManifest(
++        root_run="root/resolved.yaml",
++        entries=tuple(sorted(entries, key=lambda item: item.path)),
++        snapshots=snapshots,
++    )
++    manifest_raw = _manifest_bytes(manifest)
++    destination.parent.mkdir(parents=True, exist_ok=True)
++    temporary = Path(
++        tempfile.mkdtemp(prefix=f".{destination.name}.", dir=destination.parent)
++    )
++    try:
++        for path, raw in sorted(objects.items()):
++            target = temporary / path
++            target.parent.mkdir(parents=True, exist_ok=True)
++            target.write_bytes(raw)
++        (temporary / "manifest.json").write_bytes(manifest_raw)
++        os.replace(temporary, destination)
++    except BaseException:
++        shutil.rmtree(temporary, ignore_errors=True)
++        raise
++    return RunExportResult(
++        bundle_path=destination,
++        manifest_path=destination / "manifest.json",
++        manifest_sha256=hashlib.sha256(manifest_raw).hexdigest(),
++        file_count=len(entries),
++        total_bytes=sum(item.bytes for item in entries),
++    )
++
++
++def _load_manifest(path: Path) -> tuple[RunBundleManifest, bytes]:
++    """Load a duplicate-key-safe JSON bundle manifest."""
++    try:
++        raw = path.read_bytes()
++    except OSError as exc:
++        raise RunExportError("bundle manifest is unavailable") from exc
++
++    def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
++        result: dict[str, Any] = {}
++        for key, value in pairs:
++            if key in result:
++                raise RunExportError(f"duplicate manifest key: {key}")
++            result[key] = value
++        return result
++
++    try:
++        value = json.loads(raw, object_pairs_hook=unique)
++        return RunBundleManifest.model_validate(value), raw
++    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
++        raise RunExportError("bundle manifest is invalid") from exc
++
++
++def verify_run_bundle(
++    bundle_path: Path,
++    *,
++    trusted_source_repositories: frozenset[str],
++    expected_manifest_sha256: SHA256 | None = None,
++) -> RunExportResult:
++    """Verify exact bundle membership and every retained payload offline."""
++    root = bundle_path.resolve()
++    if not root.is_dir() or bundle_path.is_symlink():
++        raise RunExportError("bundle path is not a regular directory")
++    manifest, manifest_raw = _load_manifest(root / "manifest.json")
++    manifest_sha256 = hashlib.sha256(manifest_raw).hexdigest()
++    if (
++        expected_manifest_sha256 is not None
++        and manifest_sha256 != expected_manifest_sha256
++    ):
++        raise RunExportError("bundle manifest SHA-256 differs")
++    expected = {
++        PurePosixPath("manifest.json"),
++        *(PurePosixPath(e.path) for e in manifest.entries),
++    }
++    observed: set[PurePosixPath] = set()
++    for path in root.rglob("*"):
++        if path.is_symlink():
++            raise RunExportError("bundle contains a symlink")
++        if path.is_file():
++            observed.add(PurePosixPath(path.relative_to(root).as_posix()))
++    if observed != expected:
++        raise RunExportError("bundle files differ from the manifest")
++    for entry in manifest.entries:
++        raw = (root / entry.path).read_bytes()
++        if len(raw) != entry.bytes:
++            raise RunExportError(f"bundle byte count differs: {entry.path}")
++        if hashlib.sha256(raw).hexdigest() != entry.sha256:
++            raise RunExportError(f"bundle SHA-256 differs: {entry.path}")
++    if manifest.root_run not in {entry.path for entry in manifest.entries}:
++        raise RunExportError("bundle root run is absent from the manifest")
++    try:
++        resolved_run = ResolvedRun.model_validate(
++            parse_yaml_bytes((root / manifest.root_run).read_bytes())
++        )
++        fetcher = _BundleFetcher(root, manifest)
++        verify_run_result(
++            resolved_run,
++            policy=VerificationPolicy(
++                trusted_source_repositories=trusted_source_repositories
++            ),
++            fetcher=fetcher,
++        )
++        fetcher.require_complete_consumption()
++    except (
++        RunExportError,
++        VerificationError,
++        yaml.YAMLError,
++        ValueError,
++        TypeError,
++    ) as exc:
++        raise RunExportError("bundle evidence graph is invalid") from exc
++    return RunExportResult(
++        bundle_path=root,
++        manifest_path=root / "manifest.json",
++        manifest_sha256=manifest_sha256,
++        file_count=len(manifest.entries),
++        total_bytes=sum(item.bytes for item in manifest.entries),
++    )
+diff --git a/src/viper/execution/errors.py b/src/viper/execution/errors.py
+index 2da646a..edc93b2 100644
+--- a/src/viper/execution/errors.py
++++ b/src/viper/execution/errors.py
+@@ -18,8 +18,12 @@ class BenchmarkExecutionError(RuntimeError):
+     """Report a benchmark request, execution, or publication failure."""
+
+
++class RunExportError(RuntimeError):
++    """Report invalid, incomplete, or unsafe run-bundle operations."""
++
++
+ class RestoreError(RuntimeError):
+     """Report an invalid restore reference, selection, or destination."""
+
+
+-__all__ = ["BenchmarkExecutionError", "RestoreError", "RunError"]
++__all__ = ["BenchmarkExecutionError", "RestoreError", "RunError", "RunExportError"]
+diff --git a/src/viper/execution/results.py b/src/viper/execution/results.py
+index eea4102..24d6828 100644
+--- a/src/viper/execution/results.py
++++ b/src/viper/execution/results.py
+@@ -1,10 +1,13 @@
+ """Define the public results returned by complete run execution."""
+
++import hashlib
++import json
+ from pathlib import Path
+-from typing import Literal
++from typing import Any, Literal
+
+ from pydantic import BaseModel, ConfigDict, Field, model_validator
+
++from .._schema import SHA256, RepoRelPath
+ from ..benchmark import BenchmarkResult
+ from ..ids import ReplicateId, RunId, StageId, VariantId
+ from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
+@@ -45,6 +48,96 @@ class RunResult(BaseModel):
+         return None if failure is None else failure.stage_id
+
+
++class RunBundleEntry(BaseModel):
++    """Identify one payload retained in a portable run bundle."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    path: RepoRelPath
++    bytes: int = Field(ge=0)
++    sha256: SHA256
++    source: dict[str, Any]
++
++
++class RunBundleSnapshot(BaseModel):
++    """Retain the complete ordered membership of one stage snapshot."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    source_sha256: SHA256
++    members: tuple[RepoRelPath, ...] = Field(min_length=1)
++
++    @model_validator(mode="after")
++    def validate_members(self) -> "RunBundleSnapshot":
++        """Require every snapshot member to occur exactly once."""
++        if len(self.members) != len(set(self.members)):
++            raise ValueError("bundle snapshot members must be unique")
++        return self
++
++
++class RunBundleManifest(BaseModel):
++    """Describe every file required by one portable run bundle."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    schema_version: Literal[1] = 1
++    root_run: RepoRelPath
++    entries: tuple[RunBundleEntry, ...] = Field(min_length=1)
++    snapshots: tuple[RunBundleSnapshot, ...] = ()
++
++    @model_validator(mode="after")
++    def validate_manifest(self) -> "RunBundleManifest":
++        """Require canonical unique entries and snapshot memberships."""
++        paths = tuple(item.path for item in self.entries)
++        if paths != tuple(sorted(paths)) or len(paths) != len(set(paths)):
++            raise ValueError("bundle entries must have unique sorted paths")
++        sources = tuple(item.source for item in self.entries)
++        if sum(source.get("kind") == "root_run" for source in sources) != 1:
++            raise ValueError("bundle manifest must contain one root run")
++        if self.root_run != "root/resolved.yaml":
++            raise ValueError("bundle root run path is not canonical")
++        source_keys = tuple(
++            json.dumps(source, sort_keys=True, separators=(",", ":"))
++            for source in sources
++        )
++        if len(source_keys) != len(set(source_keys)):
++            raise ValueError("bundle entries must have unique sources")
++        for entry in self.entries:
++            if entry.source.get("kind") == "root_run":
++                if entry.path != self.root_run:
++                    raise ValueError("bundle root entry path differs")
++                continue
++            source_raw = (
++                json.dumps(entry.source, sort_keys=True, separators=(",", ":")) + "\n"
++            ).encode()
++            digest = hashlib.sha256(source_raw).hexdigest()
++            if entry.path != f"objects/{digest[:2]}/{digest}":
++                raise ValueError("bundle object path is not canonical")
++        snapshot_ids = tuple(item.source_sha256 for item in self.snapshots)
++        if snapshot_ids != tuple(sorted(snapshot_ids)) or len(snapshot_ids) != len(
++            set(snapshot_ids)
++        ):
++            raise ValueError("bundle snapshots must have unique sorted identities")
++        known = set(paths)
++        if any(
++            member not in known for item in self.snapshots for member in item.members
++        ):
++            raise ValueError("bundle snapshot names an absent member")
++        return self
++
++
++class RunExportResult(BaseModel):
++    """Return one written or verified portable run bundle."""
++
++    model_config = ConfigDict(extra="forbid", frozen=True)
++
++    bundle_path: Path
++    manifest_path: Path
++    manifest_sha256: SHA256
++    file_count: int = Field(ge=1)
++    total_bytes: int = Field(ge=0)
++
++
+ class ConfirmationRunResult(BaseModel):
+     """Return one independently executed benchmark-confirmation attempt."""
+
+diff --git a/tests/conftest.py b/tests/conftest.py
+index ac823d9..0dd66a5 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -51,6 +51,7 @@ TIER_BY_MODULE = {
+     "test_resume": "integration",
+     "test_run_execution": "integration",
+     "test_execution_signals": "integration",
++    "test_export": "integration",
+     "test_execution_policy_controls": "integration",
+     "test_execution_policy_acceptance": "integration",
+     "test_stage_invocation": "contract",
+@@ -111,6 +112,7 @@ DOMAIN_BY_MODULE = {
+     "test_resume": "domain_execution",
+     "test_run_execution": "domain_execution",
+     "test_execution_signals": "domain_execution",
++    "test_export": "domain_execution",
+     "test_stage_invocation": "domain_execution",
+     "test_stage_file_access": "domain_execution",
+     "test_validation_architecture": "domain_protocol",
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 7ef17f7..a9431fa 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -192,6 +192,14 @@ class CommandLineTests(unittest.TestCase):
+                 "missing-run.yaml",
+                 "missing-benchmark.yaml",
+             ],
++            "export-run": [
++                "export-run",
++                "missing-run.yaml",
++                "--output",
++                "bundle",
++                "--trust-source",
++                "https://example.test/repository",
++            ],
+             "plan-diff": ["plan-diff", "left.yaml", "right.yaml"],
+             "lineage": [
+                 "lineage",
+diff --git a/tests/test_export.py b/tests/test_export.py
+new file mode 100644
+index 0000000..55a4b7a
+--- /dev/null
++++ b/tests/test_export.py
+@@ -0,0 +1,287 @@
++"""Acceptance tests for portable terminal-run evidence bundles."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from pathlib import Path
++
++import pytest
++
++from tests.git_repository import REPOSITORY
++from tests.test_run_execution import _freeze_retry_plan
++from viper.execution import export_run, retry, verify_run_bundle
++from viper.execution._attempt import execute_attempt
++from viper.execution._export import _RecordingFetcher
++from viper.execution.errors import RunError, RunExportError
++from viper.http import ExternalExecutableSpec, ResolvedExternalExecutable
++
++
++def test_export_run_verifies_offline(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify failed and successful bundles after removing their source workspace."""
++    trusted_repositories = frozenset(
++        {REPOSITORY, "https://example.test/extra-repository"}
++    )
++
++    def reject_external_fetch(*_args, **_kwargs):
++        raise AssertionError("local run source was treated as external")
++
++    monkeypatch.setattr(
++        "viper.execution._source.fetch_git_file_bytes",
++        reject_external_fetch,
++    )
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError) as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    failed = caught.value.result
++    assert failed is not None
++
++    failed_bundle = tmp_path / "failed-bundle"
++    failed_export = export_run(
++        root,
++        failed.path,
++        failed_bundle,
++        trusted_source_repositories=trusted_repositories,
++    )
++    first_duplicate = tmp_path / "failed-bundle-copy"
++    export_run(
++        root,
++        failed.path,
++        first_duplicate,
++        trusted_source_repositories=trusted_repositories,
++    )
++    assert (failed_bundle / "manifest.json").read_bytes() == (
++        first_duplicate / "manifest.json"
++    ).read_bytes()
++    failed_manifest = json.loads((failed_bundle / "manifest.json").read_bytes())
++    assert failed_manifest["snapshots"]
++    assert all(item["members"] for item in failed_manifest["snapshots"])
++    assert any(
++        entry["source"].get("path") == "environment.yml"
++        for entry in failed_manifest["entries"]
++    )
++
++    succeeded = retry(root, frozen.files[-1])
++    succeeded_bundle = tmp_path / "succeeded-bundle"
++    succeeded_export = export_run(
++        root,
++        succeeded.path,
++        succeeded_bundle,
++        trusted_source_repositories=trusted_repositories,
++    )
++    root.rename(tmp_path / "source-workspace-removed")
++
++    verified_failed = verify_run_bundle(
++        failed_bundle,
++        trusted_source_repositories=trusted_repositories,
++        expected_manifest_sha256=failed_export.manifest_sha256,
++    )
++    verified_succeeded = verify_run_bundle(
++        succeeded_bundle,
++        trusted_source_repositories=trusted_repositories,
++        expected_manifest_sha256=succeeded_export.manifest_sha256,
++    )
++    assert verified_failed.file_count > 1
++    assert verified_succeeded.file_count >= verified_failed.file_count
++
++
++def test_export_verifier_rejects_missing_or_changed_file(tmp_path: Path) -> None:
++    """Reject absent and altered payloads without consulting their source store."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError) as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    failed = caught.value.result
++    assert failed is not None
++    bundle = tmp_path / "bundle"
++    export_run(
++        root,
++        failed.path,
++        bundle,
++        trusted_source_repositories=frozenset({REPOSITORY}),
++    )
++    payload = next(
++        path
++        for path in sorted(bundle.rglob("*"))
++        if path.name != "manifest.json" and path.is_file()
++    )
++    raw = payload.read_bytes()
++    payload.unlink()
++    with pytest.raises(RunExportError, match="files differ"):
++        verify_run_bundle(
++            bundle,
++            trusted_source_repositories=frozenset({REPOSITORY}),
++        )
++    payload.write_bytes(raw + b"changed")
++    with pytest.raises(RunExportError, match="byte count differs"):
++        verify_run_bundle(
++            bundle,
++            trusted_source_repositories=frozenset({REPOSITORY}),
++        )
++
++
++def test_export_verifier_consumes_every_manifest_payload(tmp_path: Path) -> None:
++    """Reject changed framework source and otherwise valid orphan payloads."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError) as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    failed = caught.value.result
++    assert failed is not None
++    bundle = tmp_path / "bundle"
++    export_run(
++        root,
++        failed.path,
++        bundle,
++        trusted_source_repositories=frozenset({REPOSITORY}),
++    )
++    manifest_path = bundle / "manifest.json"
++    original_manifest = manifest_path.read_bytes()
++    manifest = json.loads(original_manifest)
++    source_entry = next(
++        entry
++        for entry in manifest["entries"]
++        if entry["source"].get("kind") == "viper_source"
++    )
++    source_path = bundle / source_entry["path"]
++    original_source = source_path.read_bytes()
++    changed_source = b"not the declared VIPER source\n"
++    source_path.write_bytes(changed_source)
++    source_entry["bytes"] = len(changed_source)
++    source_entry["sha256"] = hashlib.sha256(changed_source).hexdigest()
++    manifest_path.write_text(
++        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
++    )
++    with pytest.raises(RunExportError, match="evidence graph is invalid"):
++        verify_run_bundle(
++            bundle,
++            trusted_source_repositories=frozenset({REPOSITORY}),
++        )
++
++    source_path.write_bytes(original_source)
++    manifest_path.write_bytes(original_manifest)
++    manifest = json.loads(original_manifest)
++    manifest["snapshots"][0]["members"] = []
++    manifest_path.write_text(
++        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
++    )
++    with pytest.raises(RunExportError, match="manifest is invalid"):
++        verify_run_bundle(
++            bundle,
++            trusted_source_repositories=frozenset({REPOSITORY}),
++        )
++
++    manifest_path.write_bytes(original_manifest)
++    manifest = json.loads(original_manifest)
++    foreign_source = {
++        "kind": "git",
++        "repository": "https://attacker.invalid/repository",
++        "commit": "a" * 40,
++        "path": "foreign.bin",
++    }
++    foreign_source_raw = (
++        json.dumps(foreign_source, sort_keys=True, separators=(",", ":")) + "\n"
++    ).encode()
++    foreign_digest = hashlib.sha256(foreign_source_raw).hexdigest()
++    foreign_path = f"objects/{foreign_digest[:2]}/{foreign_digest}"
++    foreign_raw = b"foreign snapshot payload"
++    foreign_target = bundle / foreign_path
++    foreign_target.parent.mkdir(parents=True, exist_ok=True)
++    foreign_target.write_bytes(foreign_raw)
++    manifest["entries"].append(
++        {
++            "path": foreign_path,
++            "bytes": len(foreign_raw),
++            "sha256": hashlib.sha256(foreign_raw).hexdigest(),
++            "source": foreign_source,
++        }
++    )
++    manifest["entries"].sort(key=lambda entry: entry["path"])
++    manifest["snapshots"][0]["members"].append(foreign_path)
++    manifest["snapshots"][0]["members"].sort()
++    manifest_path.write_text(
++        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
++    )
++    with pytest.raises(RunExportError, match="evidence graph is invalid"):
++        verify_run_bundle(
++            bundle,
++            trusted_source_repositories=frozenset({REPOSITORY}),
++        )
++
++    foreign_target.unlink()
++    manifest_path.write_bytes(original_manifest)
++    manifest = json.loads(original_manifest)
++    orphan_source = {
++        "kind": "executable",
++        "command": "unused",
++        "executable_id": "unused",
++    }
++    source_raw = (
++        json.dumps(orphan_source, sort_keys=True, separators=(",", ":")) + "\n"
++    ).encode()
++    source_digest = hashlib.sha256(source_raw).hexdigest()
++    orphan_path = f"objects/{source_digest[:2]}/{source_digest}"
++    orphan_raw = b"unused executable"
++    target = bundle / orphan_path
++    target.parent.mkdir(parents=True, exist_ok=True)
++    target.write_bytes(orphan_raw)
++    manifest["entries"].append(
++        {
++            "path": orphan_path,
++            "bytes": len(orphan_raw),
++            "sha256": hashlib.sha256(orphan_raw).hexdigest(),
++            "source": orphan_source,
++        }
++    )
++    manifest["entries"].sort(key=lambda entry: entry["path"])
++    manifest_path.write_text(
++        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
++    )
++    with pytest.raises(RunExportError, match="evidence graph is invalid"):
++        verify_run_bundle(
++            bundle,
++            trusted_source_repositories=frozenset({REPOSITORY}),
++        )
++
++
++def test_export_verifier_wraps_missing_manifest(tmp_path: Path) -> None:
++    """Report an incomplete bundle through the public export error type."""
++    bundle = tmp_path / "bundle"
++    bundle.mkdir()
++
++    with pytest.raises(RunExportError, match="manifest is unavailable"):
++        verify_run_bundle(
++            bundle,
++            trusted_source_repositories=frozenset({REPOSITORY}),
++        )
++
++
++def test_export_retains_distinct_executable_versions(tmp_path: Path) -> None:
++    """Keep two versions of one named executable as distinct bundle payloads."""
++    first_raw = b"first executable"
++    second_raw = b"second executable"
++    first_path = tmp_path / "first"
++    second_path = tmp_path / "second"
++    first_path.write_bytes(first_raw)
++    second_path.write_bytes(second_raw)
++    recording = _RecordingFetcher(None)  # type: ignore[arg-type]
++
++    for path, raw in ((first_path, first_raw), (second_path, second_raw)):
++        recording.read_external_executable(
++            ResolvedExternalExecutable(
++                spec=ExternalExecutableSpec(
++                    executable_id="transfer",
++                    command="transfer",
++                    sha256=hashlib.sha256(raw).hexdigest(),
++                    bytes=len(raw),
++                ),
++                path=path,
++            )
++        )
++
++    assert len(recording.payloads) == 2
++    assert {raw for _, raw in recording.payloads.values()} == {first_raw, second_raw}
+diff --git a/tests/test_public_api.py b/tests/test_public_api.py
+index 01009ac..6552100 100644
+--- a/tests/test_public_api.py
++++ b/tests/test_public_api.py
+@@ -49,8 +49,12 @@ import viper.verification as verification
+ import viper.worker as worker
+ import viper.workspace as workspace
+ from viper import evidence
+-from viper.execution.errors import BenchmarkExecutionError, RunError
+-from viper.execution.results import BenchmarkExecutionResult, RunResult
++from viper.execution.errors import BenchmarkExecutionError, RunError, RunExportError
++from viper.execution.results import (
++    BenchmarkExecutionResult,
++    RunExportResult,
++    RunResult,
++)
+ from viper.stages import eval
+
+ PUBLIC_MODULES = (
+@@ -163,22 +167,28 @@ def test_execution_namespace_owns_only_operations() -> None:
+     """Keep execution records and errors in their defining modules."""
+     assert tuple(execution.__all__) == (
+         "benchmark",
++        "export_run",
+         "resolve_run_reference",
+         "retry",
+         "restore",
+         "run",
+         "run_many",
++        "verify_run_bundle",
+     )
+     assert issubclass(BenchmarkExecutionError, RuntimeError)
+     assert issubclass(RunError, RuntimeError)
++    assert issubclass(RunExportError, RuntimeError)
+     assert BenchmarkExecutionResult.__module__ == "viper.execution.results"
+     assert RunResult.__module__ == "viper.execution.results"
++    assert RunExportResult.__module__ == "viper.execution.results"
+     assert callable(execution.run)
+     assert callable(execution.retry)
+     assert callable(execution.benchmark)
+     assert callable(execution.resolve_run_reference)
+     assert callable(execution.restore)
+     assert callable(execution.run_many)
++    assert callable(execution.export_run)
++    assert callable(execution.verify_run_bundle)
+
+
+ def test_stage_interface_names_its_context_and_operations() -> None:
+diff --git a/src/viper/verification.py b/src/viper/verification.py
+index b7e2f99..a6a785c 100644
+--- a/src/viper/verification.py
++++ b/src/viper/verification.py
+@@ -469,6 +469,41 @@ def verify_pointer_run(
+     return verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+
+
++def _verify_benchmark_plan_pointers(
++    plan: VerifiedRunPlan,
++    *,
++    policy: VerificationPolicy,
++    fetcher: StorageFetcher | None,
++) -> None:
++    """Verify benchmark pointer payloads reachable before their eval executes."""
++    if plan.benchmark is None or getattr(fetcher, "read_plan_source", None) is None:
++        return
++    verified_runs: dict[ResolvedRunRef, VerifiedRunResult] = {}
++    references = (plan.benchmark.test, *plan.benchmark.splits.values())
++    for reference in references:
++        pointer_raw = read_resolved_file(reference, fetcher=fetcher)
++        try:
++            pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
++        except (yaml.YAMLError, ValueError) as exc:
++            raise VerificationError(
++                "benchmark input pointer is not a valid ArtifactPointer document"
++            ) from exc
++        if pointer.run not in verified_runs:
++            verified_runs[pointer.run] = verify_pointer_run(
++                pointer,
++                policy=policy,
++                fetcher=fetcher,
++            )
++        verify_artifact_in_run(
++            pointer,
++            verified_run=verified_runs[pointer.run],
++            policy=policy,
++            expected_data_role=None,
++            materialization_path=None,
++            fetcher=fetcher,
++        )
++
++
+ def verify_artifact_in_run(
+     pointer: ArtifactPointer,
+     *,
+@@ -1242,6 +1277,7 @@ def _verify_run_result(
+     """Verify one run while retaining the reuse chain already visited."""
+     _verify_cloud_graph(resolved_run)
+     plan = verify_run_plan(resolved_run, fetcher=fetcher)
++    _verify_benchmark_plan_pointers(plan, policy=policy, fetcher=fetcher)
+     attempts = verify_run_attempt_references(
+         resolved_run,
+         plan.run,
+diff --git a/tests/test_export.py b/tests/test_export.py
+index 55a4b7a..858138f 100644
+--- a/tests/test_export.py
++++ b/tests/test_export.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+
+ import hashlib
++import inspect
+ import json
+ from pathlib import Path
+
+@@ -10,11 +11,65 @@ import pytest
+
+ from tests.git_repository import REPOSITORY
+ from tests.test_run_execution import _freeze_retry_plan
++from tests.test_verification_acceptance import POLICY, build_complete_fixture
++from viper.config import Config, ConfigTypeRef
+ from viper.execution import export_run, retry, verify_run_bundle
+ from viper.execution._attempt import execute_attempt
+ from viper.execution._export import _RecordingFetcher
+ from viper.execution.errors import RunError, RunExportError
+ from viper.http import ExternalExecutableSpec, ResolvedExternalExecutable
++from viper.references import (
++    GitFileRef,
++    HuggingFaceStageResultSnapshotRef,
++    LocalStageResultSnapshotRef,
++    StorageModel,
++)
++from viper.verification import verify_run_result
++
++
++def test_export_traversal_reads_benchmark_pointers_before_root_attempt() -> None:
++    """Retain benchmark pointer dependencies even before evaluation is inspected."""
++    resolved_run, store, _ = build_complete_fixture(benchmark_enabled=True)
++
++    class RecordingPlanFetcher:
++        """Record plan reads while serving one in-memory provenance fixture."""
++
++        def __init__(self) -> None:
++            self.paths: list[str] = []
++
++        def __call__(self, location: StorageModel) -> bytes:
++            self.paths.append(str(location.path))
++            return store.fetch(location)
++
++        def read_plan_source(self, location: GitFileRef) -> bytes:
++            return self(location)
++
++        def read_viper_source(self, reference: ConfigTypeRef) -> bytes:
++            return (
++                Path(inspect.getfile(Config)).resolve().parent / reference.path
++            ).read_bytes()
++
++        def list_snapshot_files(
++            self,
++            snapshot: HuggingFaceStageResultSnapshotRef | LocalStageResultSnapshotRef,
++        ) -> tuple[str, ...]:
++            return store.list_snapshot_files(snapshot)
++
++    fetcher = RecordingPlanFetcher()
++    verified = verify_run_result(resolved_run, policy=POLICY, fetcher=fetcher)
++    assert verified.plan.benchmark is not None
++    pointer_paths = {
++        str(verified.plan.benchmark.test.stored_at.path),
++        *(
++            str(reference.stored_at.path)
++            for reference in verified.plan.benchmark.splits.values()
++        ),
++    }
++    root_attempt_path = str(resolved_run.attempts[0].stored_at.path)
++    root_attempt_index = fetcher.paths.index(root_attempt_path)
++
++    assert pointer_paths
++    assert all(fetcher.paths.index(path) < root_attempt_index for path in pointer_paths)
+
+
+ def test_export_run_verifies_offline(
+diff --git a/docs/reference/api.md b/docs/reference/api.md
+index e79fee0..f8c565a 100644
+--- a/docs/reference/api.md
++++ b/docs/reference/api.md
+@@ -252,6 +252,7 @@ operations.
+ | `run_many` | `RunManyRequest` | `RunManySuccess` | `run-many` |
+ | `retry` | `RetryRequest` | `RetrySuccess` | `retry` |
+ | `execute_benchmark` | `ExecuteBenchmarkRequest` | `ExecuteBenchmarkSuccess` | `execute-benchmark` |
++| `export_run` | `ExportRunRequest` | `ExportRunSuccess` | `export-run` |
+ | `restore` | `RestoreRequest` | `RestoreSuccess` | `restore` |
+ | `plan_diff` | `PlanDiffRequest` | `PlanDiffSuccess` | `plan-diff` |
+ | `lineage` | `LineageRequest` | `LineageSuccess` | `lineage` |
+diff --git a/tests/golden/api/success.json b/tests/golden/api/success.json
+index 12c127b..7d1485b 100644
+--- a/tests/golden/api/success.json
++++ b/tests/golden/api/success.json
+@@ -1 +1 @@
+-{"authoring_vocabulary":["config","outputs","workspace","repository"],"execution_backends":["trusted_local"],"operation":"get_capabilities","operations":["validate_stage","validate_resolved_stage","validate_run_spec","freeze_run","preflight","execute_stage","run","run_many","retry","execute_benchmark","restore","plan_diff","lineage","status","compare_runs","verify_run","verify_benchmark","verify_pointer","get_schema","get_capabilities","init_workspace","catalog_refresh","search_runs","search_artifacts","search_measurements","search_benchmarks","knowledge_refresh","search_primitives","search_assignments","search_modulations","search_effects","search_impacts","search_diagnostics","search_assertions","search_retrieval_judgments","search_similar","publish_ontology","publish_assignment","publish_modulation","publish_effect","publish_impact_policy","publish_impact","publish_diagnostic","publish_assertion","publish_vector","publish_retrieval_judgment"],"protocol_version":2,"schemas":["ArtifactPointer","AssertionQuery","AssignmentQuery","BenchmarkResult","CapabilitiesRequest","CapabilitiesSuccess","CatalogRefreshRequest","CatalogRefreshSuccess","CompareRunsRequest","CompareRunsSuccess","DiagnosticQuery","EffectQuery","ExecuteBenchmarkRequest","ExecuteBenchmarkSuccess","ExecuteStageRequest","ExecuteStageSuccess","FreezeRunRequest","FreezeRunSuccess","ImpactQuery","InitWorkspaceRequest","InitWorkspaceSuccess","KnowledgeRefreshRequest","KnowledgeRefreshSuccess","KnowledgeSearchRequest","KnowledgeSearchSuccess","LineageRequest","LineageSuccess","ModulationQuery","PlanDiffRequest","PlanDiffSuccess","PreflightRequest","PreflightSuccess","PrimitiveQuery","PublishKnowledgeRequest","PublishKnowledgeSuccess","ResolvedRun","RestoreRequest","RestoreSuccess","RetrievalJudgmentQuery","RetryRequest","RetrySuccess","RunManyRequest","RunManySuccess","RunRequest","RunSpec","RunSuccess","SchemaRequest","SchemaSuccess","SearchArtifactsRequest","SearchArtifactsSuccess","SearchBenchmarksRequest","SearchBenchmarksSuccess","SearchMeasurementsRequest","SearchMeasurementsSuccess","SearchRunsRequest","SearchRunsSuccess","SimilarityQuery","Spec","StatusRequest","StatusSuccess","ValidateResolvedStageRequest","ValidateResolvedStageSuccess","ValidateRunSpecRequest","ValidateRunSpecSuccess","ValidateStageRequest","ValidateStageSuccess","VerifyBenchmarkRequest","VerifyBenchmarkSuccess","VerifyPointerRequest","VerifyPointerSuccess","VerifyRunRequest","VerifyRunSuccess","ViperFailure"],"stage_kinds":["download","build","embed","train","eval","diagnostic"],"status":"ok","warnings":[]}
++{"authoring_vocabulary":["config","outputs","workspace","repository"],"execution_backends":["trusted_local"],"operation":"get_capabilities","operations":["validate_stage","validate_resolved_stage","validate_run_spec","freeze_run","preflight","execute_stage","run","run_many","retry","execute_benchmark","export_run","restore","plan_diff","lineage","status","compare_runs","verify_run","verify_benchmark","verify_pointer","get_schema","get_capabilities","init_workspace","catalog_refresh","search_runs","search_artifacts","search_measurements","search_benchmarks","knowledge_refresh","search_primitives","search_assignments","search_modulations","search_effects","search_impacts","search_diagnostics","search_assertions","search_retrieval_judgments","search_similar","publish_ontology","publish_assignment","publish_modulation","publish_effect","publish_impact_policy","publish_impact","publish_diagnostic","publish_assertion","publish_vector","publish_retrieval_judgment"],"protocol_version":2,"schemas":["ArtifactPointer","AssertionQuery","AssignmentQuery","BenchmarkResult","CapabilitiesRequest","CapabilitiesSuccess","CatalogRefreshRequest","CatalogRefreshSuccess","CompareRunsRequest","CompareRunsSuccess","DiagnosticQuery","EffectQuery","ExecuteBenchmarkRequest","ExecuteBenchmarkSuccess","ExecuteStageRequest","ExecuteStageSuccess","ExportRunRequest","ExportRunSuccess","FreezeRunRequest","FreezeRunSuccess","ImpactQuery","InitWorkspaceRequest","InitWorkspaceSuccess","KnowledgeRefreshRequest","KnowledgeRefreshSuccess","KnowledgeSearchRequest","KnowledgeSearchSuccess","LineageRequest","LineageSuccess","ModulationQuery","PlanDiffRequest","PlanDiffSuccess","PreflightRequest","PreflightSuccess","PrimitiveQuery","PublishKnowledgeRequest","PublishKnowledgeSuccess","ResolvedRun","RestoreRequest","RestoreSuccess","RetrievalJudgmentQuery","RetryRequest","RetrySuccess","RunManyRequest","RunManySuccess","RunRequest","RunSpec","RunSuccess","SchemaRequest","SchemaSuccess","SearchArtifactsRequest","SearchArtifactsSuccess","SearchBenchmarksRequest","SearchBenchmarksSuccess","SearchMeasurementsRequest","SearchMeasurementsSuccess","SearchRunsRequest","SearchRunsSuccess","SimilarityQuery","Spec","StatusRequest","StatusSuccess","ValidateResolvedStageRequest","ValidateResolvedStageSuccess","ValidateRunSpecRequest","ValidateRunSpecSuccess","ValidateStageRequest","ValidateStageSuccess","VerifyBenchmarkRequest","VerifyBenchmarkSuccess","VerifyPointerRequest","VerifyPointerSuccess","VerifyRunRequest","VerifyRunSuccess","ViperFailure"],"stage_kinds":["download","build","embed","train","eval","diagnostic"],"status":"ok","warnings":[]}
+diff --git a/tests/test_export.py b/tests/test_export.py
+index 858138f..124b511 100644
+--- a/tests/test_export.py
++++ b/tests/test_export.py
+@@ -12,6 +12,7 @@ import pytest
+ from tests.git_repository import REPOSITORY
+ from tests.test_run_execution import _freeze_retry_plan
+ from tests.test_verification_acceptance import POLICY, build_complete_fixture
++from viper.artifacts import ArtifactPointer
+ from viper.config import Config, ConfigTypeRef
+ from viper.execution import export_run, retry, verify_run_bundle
+ from viper.execution._attempt import execute_attempt
+@@ -24,6 +25,7 @@ from viper.references import (
+     LocalStageResultSnapshotRef,
+     StorageModel,
+ )
++from viper.serialization import parse_yaml_bytes
+ from viper.verification import verify_run_result
+
+
+@@ -58,18 +60,34 @@ def test_export_traversal_reads_benchmark_pointers_before_root_attempt() -> None
+     fetcher = RecordingPlanFetcher()
+     verified = verify_run_result(resolved_run, policy=POLICY, fetcher=fetcher)
+     assert verified.plan.benchmark is not None
+-    pointer_paths = {
+-        str(verified.plan.benchmark.test.stored_at.path),
+-        *(
+-            str(reference.stored_at.path)
+-            for reference in verified.plan.benchmark.splits.values()
+-        ),
+-    }
++    references = (
++        verified.plan.benchmark.test,
++        *verified.plan.benchmark.splits.values(),
++    )
++    pointer_paths = {str(reference.stored_at.path) for reference in references}
++    pointers = tuple(
++        ArtifactPointer.model_validate(
++            parse_yaml_bytes(store.fetch(reference.stored_at))
++        )
++        for reference in references
++    )
+     root_attempt_path = str(resolved_run.attempts[0].stored_at.path)
+     root_attempt_index = fetcher.paths.index(root_attempt_path)
+
+     assert pointer_paths
+     assert all(fetcher.paths.index(path) < root_attempt_index for path in pointer_paths)
++    assert all(
++        fetcher.paths.index(str(pointer.run.stored_at.path)) < root_attempt_index
++        for pointer in pointers
++    )
++    assert all(
++        any(
++            f"/artifacts/{pointer.artifact.stage_id}/"
++            f"{pointer.artifact.artifact_name}/" in path
++            for path in fetcher.paths[:root_attempt_index]
++        )
++        for pointer in pointers
++    )
+
+
+ def test_export_run_verifies_offline(

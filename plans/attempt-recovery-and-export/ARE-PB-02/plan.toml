@@ -1,0 +1,158 @@
+schema_version = 1
+contract_id = "attempt-recovery-and-export"
+package_sha256 = "8698fa785ecb28314d3cf86eddbc450dec69c614eb0db74d2264f622660a5406"
+pair_block_id = "ARE-PB-02"
+baseline_commit = "ef05a9640e33e62c407d2f5125e76e9ceadba587"
+change_summary = [
+  "execution.export_run() verifies a successful or failed terminal run and records its complete fetched evidence graph in a portable directory.",
+  "The deterministic manifest binds every original storage locator and complete snapshot membership to a bundle path, byte count, and SHA-256 digest.",
+  "verify_run_bundle() rejects unsafe or changed inventories, then replays verification through a bundle-only fetcher with no source, store, network, or cloud fallback.",
+  "Framework source and external-executable verification use the same injectable evidence reader for live export and offline replay; typed plan traversal replaces recursive interpretation of artifact JSON or YAML.",
+  "The typed API and viper export-run CLI expose the operation with explicit source trust and an absent output destination.",
+]
+deviation_summary = "No deviation from ARE-REQ-03. The portable format is a directory rather than an archive so verification can reject symlinks and exact-inventory differences without extraction machinery."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/run-export.patch"
+target_paths = [
+  "docs/reference/api.md",
+  "src/viper/_verification/attempt.py",
+  "src/viper/_verification/plan.py",
+  "src/viper/_verification/storage.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "src/viper/execution/__init__.py",
+  "src/viper/execution/_export.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/verification.py",
+  "tests/conftest.py",
+  "tests/golden/api/success.json",
+  "tests/test_cli.py",
+  "tests/test_export.py",
+  "tests/test_public_api.py",
+]
+
+[[handoff_targets]]
+label = "Complete portable-export candidate"
+source = "plan"
+path = "patches/run-export.patch"
+line = 1
+
+[[handoff_targets]]
+label = "Typed application operation"
+source = "repository"
+path = "src/viper/api.py"
+line = 416
+
+[gate]
+source_roots = ["pyproject.toml", "src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = [
+  "pyright",
+  "src/viper/_verification/attempt.py",
+  "src/viper/_verification/plan.py",
+  "src/viper/_verification/storage.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "src/viper/execution/__init__.py",
+  "src/viper/execution/_export.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/verification.py",
+  "tests/conftest.py",
+  "tests/test_cli.py",
+  "tests/test_export.py",
+  "tests/test_public_api.py",
+]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = [
+  "python3",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_export.py",
+  "tests/test_api_json.py",
+  "tests/test_documentation.py::test_api_operation_table_matches_python_and_cli_surfaces",
+  "tests/test_cli.py::CommandLineTests::test_every_command_emits_one_json_document_and_stable_exit_status",
+  "tests/test_public_api.py",
+]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--config",
+  "pyproject.toml",
+  "--select",
+  "D",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "src/viper/_verification/attempt.py",
+  "src/viper/_verification/plan.py",
+  "src/viper/_verification/storage.py",
+  "src/viper/verification.py",
+  "src/viper/execution",
+  "tests/test_export.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "format",
+  "--check",
+  "--config",
+  "pyproject.toml",
+  "src/viper/_verification/attempt.py",
+  "src/viper/_verification/plan.py",
+  "src/viper/_verification/storage.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "src/viper/execution/__init__.py",
+  "src/viper/execution/_export.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/verification.py",
+  "tests/conftest.py",
+  "tests/test_cli.py",
+  "tests/test_export.py",
+  "tests/test_public_api.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--config",
+  "pyproject.toml",
+  "src/viper/_verification/attempt.py",
+  "src/viper/_verification/plan.py",
+  "src/viper/_verification/storage.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "src/viper/execution/__init__.py",
+  "src/viper/execution/_export.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/verification.py",
+  "tests/conftest.py",
+  "tests/test_cli.py",
+  "tests/test_export.py",
+  "tests/test_public_api.py",
+]

@@ -243,6 +243,20 @@ def build_parser() -> ArgumentParser:
     add_root(benchmark_command)
     benchmark_command.add_argument("--timeout-seconds", type=float)
 
+    export = commands.add_parser(
+        "export-run",
+        help="write one terminal run as a portable verified evidence bundle",
+    )
+    export.add_argument("resolved_run", type=Path)
+    export.add_argument("--output", type=Path, required=True)
+    add_root(export)
+    export.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
     restore = commands.add_parser(
         "restore",
         help="restore verified artifacts from one successful run",
@@ -366,6 +380,7 @@ def _operation_and_payload(
         "publish-retrieval-judgment": "publish_retrieval_judgment",
         "retry": "retry",
         "execute-benchmark": "execute_benchmark",
+        "export-run": "export_run",
         "restore": "restore",
         "plan-diff": "plan_diff",
         "lineage": "lineage",
@@ -454,6 +469,9 @@ def _human_success(result: SuccessModel) -> str:
             f"benchmark {benchmark.status}: confirmation attempt "
             f"{benchmark.confirmation.stored_at.path}"
         )
+    if result.operation == "export_run":
+        exported = getattr(result, "result")
+        return f"exported {exported.file_count} files to {exported.bundle_path}"
     if result.operation == "restore":
         restored = getattr(result, "result")
         file_count = sum(len(artifact.files) for artifact in restored.artifacts)

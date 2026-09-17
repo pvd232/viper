@@ -77,17 +77,62 @@
 
 #### <nobr><code>ARE-PB-02</code></nobr>
 
-**Status:** drafting
+**Status:** approved
 
 **Requirement contribution:** Export successful and failed terminal runs as complete, digest-verified offline bundles.
 
-**Plan:** None
+**Review handoff**
 
-**Current receipt:** None
+**What changed**
+
+- execution.export_run() verifies a successful or failed terminal run and records its complete fetched evidence graph in a portable directory.
+- The deterministic manifest binds every original storage locator and complete snapshot membership to a bundle path, byte count, and SHA-256 digest.
+- verify_run_bundle() rejects unsafe or changed inventories, then replays verification through a bundle-only fetcher with no source, store, network, or cloud fallback.
+- Framework source and external-executable verification use the same injectable evidence reader for live export and offline replay; typed plan traversal replaces recursive interpretation of artifact JSON or YAML.
+- The typed API and viper export-run CLI expose the operation with explicit source trust and an absent output destination.
+
+**Plan deviations:** No deviation from ARE-REQ-03. The portable format is a directory rather than an archive so verification can reject symlinks and exact-inventory differences without extraction machinery.
+
+**Start review:** [Open tested GitHub comparison](https://github.com/pvd232/viper/compare/ef05a9640e33e62c407d2f5125e76e9ceadba587...bfc35af755257802a51e16098e9eacd5e76a5c93)
+
+**Review these files**
+
+- [Complete portable-export candidate](../plans/attempt-recovery-and-export/ARE-PB-02/patches/run-export.patch#L1)
+- [Typed application operation](../src/viper/api.py#L416)
+
+**Evidence:** [Passing gate receipt](../evidence/gates/are-pb-02-r11.json)
+
+**Decision:** Approval is recorded for <nobr><code>ARE-PB-02</code></nobr>; review the installed commit.
+
+<details>
+<summary>Implementation details</summary>
+
+**Plan:** [plan.toml](../plans/attempt-recovery-and-export/ARE-PB-02/plan.toml)
+
+**Retained patch:** [patches/run-export.patch](../plans/attempt-recovery-and-export/ARE-PB-02/patches/run-export.patch)
+
+**Implementation roots:** [pyproject.toml](../pyproject.toml) · [src/viper](../src/viper)
+
+**Test roots:** [tests](../tests)
 
 **Dependencies:** <nobr><code>ARE-PB-01</code></nobr>
 
-**Next action:** Run the current PairBlock plan.
+**Gate steps:**
+
+```bash
+# typecheck
+(cd . && pyright src/viper/_verification/attempt.py src/viper/_verification/plan.py src/viper/_verification/storage.py src/viper/api.py src/viper/cli.py src/viper/execution/__init__.py src/viper/execution/_export.py src/viper/execution/errors.py src/viper/execution/results.py src/viper/verification.py tests/conftest.py tests/test_cli.py tests/test_export.py tests/test_public_api.py)
+# test
+(cd . && python3 -m pytest -q -p no:cacheprovider tests/test_export.py tests/test_api_json.py tests/test_documentation.py::test_api_operation_table_matches_python_and_cli_surfaces tests/test_cli.py::CommandLineTests::test_every_command_emits_one_json_document_and_stable_exit_status tests/test_public_api.py)
+# documentation
+(cd . && ruff check --config pyproject.toml --select D src/viper/api.py src/viper/cli.py src/viper/_verification/attempt.py src/viper/_verification/plan.py src/viper/_verification/storage.py src/viper/verification.py src/viper/execution tests/test_export.py)
+# lint
+(cd . && ruff format --check --config pyproject.toml src/viper/_verification/attempt.py src/viper/_verification/plan.py src/viper/_verification/storage.py src/viper/api.py src/viper/cli.py src/viper/execution/__init__.py src/viper/execution/_export.py src/viper/execution/errors.py src/viper/execution/results.py src/viper/verification.py tests/conftest.py tests/test_cli.py tests/test_export.py tests/test_public_api.py)
+# lint
+(cd . && ruff check --config pyproject.toml src/viper/_verification/attempt.py src/viper/_verification/plan.py src/viper/_verification/storage.py src/viper/api.py src/viper/cli.py src/viper/execution/__init__.py src/viper/execution/_export.py src/viper/execution/errors.py src/viper/execution/results.py src/viper/verification.py tests/conftest.py tests/test_cli.py tests/test_export.py tests/test_public_api.py)
+```
+
+</details>
 
 
 ### Requirements
