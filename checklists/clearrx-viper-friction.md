@@ -3,21 +3,21 @@
 This checklist converts the concrete friction observed in the CleaRx audio-retention runs into independently verifiable VIPER changes. It keeps GPU/CPU stage separation and stateless build or metric functions in the existing stage model; those paths did not require a new abstraction.
 
 <!-- contract-protocol:generated:start -->
-**Resume here:** [Resume at AUG-PB-01](../contracts/authoring-guardrails.md#aug-pb-01)
+**Resume here:** [Resume at ARE-PB-01](../contracts/attempt-recovery-and-export.md#are-pb-01)
 
 
 ### Phase 1: Fail invalid plans before execution
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>AUG-REQ-01</code></nobr> | in_progress | [authoring-guardrails](../contracts/authoring-guardrails.md#aug-req-01) | <nobr><code>AUG-PB-01</code></nobr> | None |
+| <nobr><code>AUG-REQ-01</code></nobr> | complete | [authoring-guardrails](../contracts/authoring-guardrails.md#aug-req-01) | <nobr><code>AUG-PB-01</code></nobr> | None |
 
 ### Phase 2: Retain and resume partial execution
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>ARE-REQ-01</code></nobr> | planned | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-01) | <nobr><code>ARE-PB-01</code></nobr> | None |
-| <nobr><code>ARE-REQ-02</code></nobr> | planned | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-02) | <nobr><code>ARE-PB-01</code></nobr> | <nobr><code>ARE-REQ-01</code></nobr> |
+| <nobr><code>ARE-REQ-01</code></nobr> | in_progress | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-01) | <nobr><code>ARE-PB-01</code></nobr> | None |
+| <nobr><code>ARE-REQ-02</code></nobr> | in_progress | [attempt-recovery-and-export](../contracts/attempt-recovery-and-export.md#are-req-02) | <nobr><code>ARE-PB-01</code></nobr> | <nobr><code>ARE-REQ-01</code></nobr> |
 
 ### Phase 3: Export complete run evidence
 

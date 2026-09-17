@@ -1,0 +1,11 @@
+{
+  "gate_receipt_ref": {
+    "path": "evidence/gates/aug-pb-01.json",
+    "sha256": "5a484b61d6b9279a74768bfd1fa86260a390eead1f24e1adbb917d40cb892a61"
+  },
+  "implementation_repository_commit": "14e305fc7fa38b5f4c5e0d7c8859a914d4a43058",
+  "pair_block_id": "AUG-PB-01",
+  "reviewed_at": "2026-09-17T09:10:26.647350Z",
+  "reviewer": "Codex independent reviewer /root/design_review",
+  "schema_version": 1
+}

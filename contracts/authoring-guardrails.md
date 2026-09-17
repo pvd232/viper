@@ -5,7 +5,7 @@
 **Contract status:** Planned in the [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md) checklist.
 
 <!-- contract-protocol:generated:start -->
-**In progress.** [Jump to current PairBlock](#aug-pb-01)
+**In progress.** [Jump to current PairBlock](#aug-pb-02)
 
 **Checklist:** [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md)
 
@@ -15,7 +15,7 @@
 
 #### <nobr><code>AUG-PB-01</code></nobr>
 
-**Status:** approved
+**Status:** complete
 
 **Requirement contribution:** Enforce the existing terminal-diagnostic rule at authoring and frozen-plan verification boundaries.
 
@@ -39,7 +39,7 @@
 
 **Evidence:** [Passing gate receipt](../evidence/gates/aug-pb-01.json)
 
-**Decision:** Approval is recorded for <nobr><code>AUG-PB-01</code></nobr>; review the installed commit.
+**Decision:** <nobr><code>AUG-PB-01</code></nobr> is complete; no further decision is required.
 
 <details>
 <summary>Implementation details</summary>
@@ -92,7 +92,7 @@
 
 | Requirement | Claim | Progress | Verifiers | PairBlocks |
 |---|---|---|---|---|
-| <nobr><code>AUG-REQ-01</code></nobr> | variant() must reject an estimator produced by a terminal diagnostic stage, and verify_plan() must reject the same invalid selection in a hand-edited frozen plan. | in_progress | <nobr><code>AUG-VR-01</code></nobr> | <nobr><code>AUG-PB-01</code></nobr> |
+| <nobr><code>AUG-REQ-01</code></nobr> | variant() must reject an estimator produced by a terminal diagnostic stage, and verify_plan() must reject the same invalid selection in a hand-edited frozen plan. | complete | <nobr><code>AUG-VR-01</code></nobr> | <nobr><code>AUG-PB-01</code></nobr> |
 | <nobr><code>AUG-REQ-02</code></nobr> | matrix() must enumerate the deterministic Cartesian product of named factor levels, invoke one variant factory for each cell in factor declaration order, and reject a missing cell, a returned variant whose levels differ from that cell, or a duplicate variant ID. | planned | <nobr><code>AUG-VR-02</code></nobr> | <nobr><code>AUG-PB-02</code></nobr> |
 
 ### Verification rules
