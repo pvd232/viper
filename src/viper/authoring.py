@@ -402,6 +402,8 @@ class VariantDraft(BaseModel):
         """Require the estimator to come from this variant's stage graph."""
         if not any(stage is self.estimator.producer for stage in self.stages.values()):
             raise ValueError("estimator producer is absent from the variant")
+        if isinstance(self.estimator.producer.spec, DiagnosticSpecDraft):
+            raise ValueError("diagnostic outputs are terminal and cannot be estimators")
         return self
 
 

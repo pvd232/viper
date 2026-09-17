@@ -404,6 +404,8 @@ def verify_run_plan_relationships(
         or run.estimator.artifact_name not in estimator_stage.outputs
     ):
         raise VerificationError("run estimator must select a declared stage artifact")
+    if isinstance(estimator_stage, DiagnosticSpec):
+        raise VerificationError("run estimator cannot select a diagnostic stage")
     if benchmark is not None and not isinstance(estimator_stage, TrainSpec):
         raise VerificationError("run estimator must select a training stage")
 

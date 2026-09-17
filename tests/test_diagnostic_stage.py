@@ -10,12 +10,10 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 import viper.authoring as authoring
-import viper.benchmark as benchmark
 import viper.config as config
 import viper.execution._resolution as resolution
 import viper.metrics as metrics
 import viper.outputs as outputs
-import viper.runs as runs
 import viper.stages as stages
 
 PAIR_BLOCK_ID = "P2-PAC-04"
@@ -61,12 +59,38 @@ def test_diagnostic_spec_has_no_optimization_objective() -> None:
     assert "objective" not in stages.DiagnosticSpec.model_fields
 
 
-def test_diagnostic_is_excluded_from_estimator_and_benchmark_selection() -> None:
-    """Prevent a terminal report stage from becoming a selected model result."""
-    run_source = inspect.getsource(runs.RunSpec)
-    benchmark_schema = benchmark.BenchmarkSpec.model_json_schema()
-    assert "model" in run_source
-    assert "diagnostic" not in str(benchmark_schema)
+def test_diagnostic_output_cannot_be_an_estimator() -> None:
+    """Reject a terminal diagnostic output selected as the run estimator."""
+
+    class DiagnosticOutputs(outputs.StageOutputs[OutputT], Generic[OutputT]):
+        report: OutputT
+
+    class DiagnosticConfig(config.DiagnosticConfig):
+        pass
+
+    @stages.diagnostic(config=DiagnosticConfig)
+    def inspect_model(context: object) -> None:
+        del context
+
+    def load_bytes(path: Path) -> bytes:
+        return path.read_bytes()
+
+    diagnostic_stage = authoring.stage(
+        inspect_model,
+        config=DiagnosticConfig(),
+        outputs=DiagnosticOutputs[outputs.OutputDraft](
+            report=outputs.output(
+                path="report.json", loader=load_bytes, data_role="eval"
+            )
+        ),
+    )
+
+    with pytest.raises(ValueError, match=r"diagnostic.+terminal.+estimators"):
+        authoring.variant(
+            "invalid",
+            stages={"diagnose": diagnostic_stage},
+            estimator=diagnostic_stage.outputs["report"],
+        )
 
 
 def test_diagnostic_output_cannot_feed_a_later_stage() -> None:

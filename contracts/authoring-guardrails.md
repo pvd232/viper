@@ -15,7 +15,7 @@
 
 #### <nobr><code>AUG-PB-01</code></nobr>
 
-**Status:** drafting
+**Status:** approved
 
 **Requirement contribution:** Enforce the existing terminal-diagnostic rule at authoring and frozen-plan verification boundaries.
 
@@ -29,7 +29,7 @@
 
 **Plan deviations:** No deviations from AUG-REQ-01. The candidate preserves exception-based validation and adds no execution behavior.
 
-**Start work:** [Open current plan](../plans/authoring-guardrails/AUG-PB-01/plan.toml)
+**Start review:** [Open tested GitHub comparison](https://github.com/pvd232/viper/compare/70b025c33b57e987a3ec3815389b60415ceb42c6...393bd35c579a5f6902eee20a69c0c46b6e5280c9)
 
 **Review these files**
 
@@ -37,9 +37,9 @@
 - [Authoring validation owner](../src/viper/authoring.py#L400)
 - [Frozen-plan verification owner](../src/viper/_verification/plan.py#L401)
 
-**Evidence:** No passing gate receipt.
+**Evidence:** [Passing gate receipt](../evidence/gates/aug-pb-01.json)
 
-**Decision:** Run the current PairBlock plan.
+**Decision:** Approval is recorded for <nobr><code>AUG-PB-01</code></nobr>; review the installed commit.
 
 <details>
 <summary>Implementation details</summary>
