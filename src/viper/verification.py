@@ -507,23 +507,73 @@ def verify_pointer_producer(
     policy: VerificationPolicy,
     fetcher: StorageFetcher | None,
 ) -> VerifiedProducerRun:
-    """Verify one producer once and retain only its structural evidence."""
+    """Verify one producer structure without restoring unrelated payloads."""
     cache = _verified_producer_cache(fetcher)
     if cache is not None:
         cached = cache.read_verified_producer(pointer.run, policy)
         if cached is not None:
             return cached
 
-    verified = verify_pointer_run(pointer, policy=policy, fetcher=fetcher)
-    producer = VerifiedProducerRun(
-        result=verified.result,
-        plan=verified.plan,
-        attempts=verified.attempts,
-        resolved_stages=verified.resolved_stages,
+    producer = _verify_pointer_producer_structure(
+        pointer,
+        policy=policy,
+        fetcher=fetcher,
     )
     if cache is not None:
         cache.remember_verified_producer(pointer.run, policy, producer)
     return producer
+
+
+def _verify_pointer_producer_structure(
+    pointer: ArtifactPointer,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+) -> VerifiedProducerRun:
+    """Verify the producer records needed to select one immutable artifact."""
+    resolved_run_raw = read_resolved_file(pointer.run, fetcher=fetcher)
+    try:
+        resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(resolved_run_raw))
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            "artifact pointer run is not a valid ResolvedRun document"
+        ) from exc
+
+    _verify_cloud_graph(resolved_run)
+    plan = verify_run_plan(resolved_run, fetcher=fetcher)
+    attempts = verify_run_attempt_references(
+        resolved_run,
+        plan.run,
+        fetcher=fetcher,
+    )
+    successful_stages: dict[StageId, ResolvedBaseSpec] = {}
+    for attempt in attempts:
+        verify_attempt_journal(attempt, plan.run, fetcher=fetcher)
+        stages = verify_attempt_stages(
+            attempt,
+            plan.run,
+            plan.stages,
+            require_complete=attempt.status == "succeeded",
+            policy=policy,
+            fetcher=fetcher,
+            verify_payloads=False,
+        )
+        if attempt.attempt_id == resolved_run.successful_attempt_id:
+            successful_stages = stages
+
+    if resolved_run.status == "succeeded":
+        estimator_stage = successful_stages.get(plan.run.estimator.stage_id)
+        if estimator_stage is None:
+            raise VerificationError("successful run has no estimator-producing stage")
+        if plan.run.estimator.artifact_name not in estimator_stage.artifacts:
+            raise VerificationError("successful run has no selected estimator artifact")
+
+    return VerifiedProducerRun(
+        result=resolved_run,
+        plan=plan,
+        attempts=attempts,
+        resolved_stages=successful_stages,
+    )
 
 
 def _verify_benchmark_plan_pointers(

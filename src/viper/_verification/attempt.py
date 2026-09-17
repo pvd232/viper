@@ -623,8 +623,15 @@ def verify_attempt_stages(
     require_complete: bool,
     policy: VerificationPolicy,
     fetcher: StorageFetcher | None = None,
+    verify_payloads: bool = True,
 ) -> dict[StageId, ResolvedBaseSpec]:
-    """Verify the ordered resolved-stage prefix retained by one attempt."""
+    """Verify the ordered resolved-stage prefix retained by one attempt.
+
+    ``verify_payloads=False`` verifies the immutable execution structure without
+    fetching every artifact body.  A consumer uses that bounded path before it
+    separately verifies and materializes the one artifact selected by its
+    pointer.
+    """
     expected_stage_ids = tuple(stage.stage_id for stage in run.stages)
     resolved_stage_ids = tuple(stage.stage_id for stage in attempt.resolved_stages)
     if resolved_stage_ids != expected_stage_ids[: len(resolved_stage_ids)]:
@@ -747,7 +754,7 @@ def verify_attempt_stages(
                 "its containing attempt"
             )
 
-        if isinstance(resolved_spec, ResolvedDownloadSpec):
+        if verify_payloads and isinstance(resolved_spec, ResolvedDownloadSpec):
             _verify_download_retrievals(
                 attempt,
                 run,
@@ -807,22 +814,23 @@ def verify_attempt_stages(
                     "the run plan"
                 )
 
-        for artifact_name, artifact in resolved_spec.artifacts.items():
-            declaration = stage_spec.outputs[artifact_name]
-            verified_artifact = storage.verify_snapshot_artifact(
-                stage_reference,
-                artifact,
-                data_role=declaration.data_role,
-                fetcher=fetcher,
-            )
-            storage.load_verified_artifact(
-                run,
-                declaration,
-                artifact_name,
-                verified_artifact,
-                policy=policy,
-                fetcher=fetcher,
-            )
+        if verify_payloads:
+            for artifact_name, artifact in resolved_spec.artifacts.items():
+                declaration = stage_spec.outputs[artifact_name]
+                verified_artifact = storage.verify_snapshot_artifact(
+                    stage_reference,
+                    artifact,
+                    data_role=declaration.data_role,
+                    fetcher=fetcher,
+                )
+                storage.load_verified_artifact(
+                    run,
+                    declaration,
+                    artifact_name,
+                    verified_artifact,
+                    policy=policy,
+                    fetcher=fetcher,
+                )
 
         verified_stages[stage_reference.stage_id] = resolved_spec
 

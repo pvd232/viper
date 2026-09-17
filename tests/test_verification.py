@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -55,7 +56,7 @@ from viper.evidence import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
-    VerifiedRunResult,
+    VerifiedProducerRun,
     VerifiedSnapshotFile,
 )
 from viper.execution._source import RunFetcher
@@ -141,6 +142,7 @@ from viper.stages import (
 )
 from viper.storage import LocalArtifactStore
 from viper.verification import (
+    _verify_pointer_producer_structure,
     verify_attempt_future_inputs,
     verify_pointer_producer,
     verify_stored_input_selections,
@@ -2591,25 +2593,24 @@ def test_pointer_producer_reuses_structural_proof_without_payloads(
     )
     pointer = ArtifactPointer.model_construct(run=run_reference)
     placeholder: Any = object()
-    verified = VerifiedRunResult(
-        result=placeholder,
-        plan=placeholder,
-        attempts=(),
-        resolved_stages={},
-        measurements=(),
-        inputs={"build": placeholder},
-        attempt_inputs={1: {"build": placeholder}},
-    )
     calls = 0
 
-    def verify_once(*args: object, **kwargs: object) -> VerifiedRunResult:
+    def verify_once(*args: object, **kwargs: object) -> VerifiedProducerRun:
         """Return one expensive producer proof and count its executions."""
         nonlocal calls
         del args, kwargs
         calls += 1
-        return verified
+        return VerifiedProducerRun(
+            result=placeholder,
+            plan=placeholder,
+            attempts=(),
+            resolved_stages={},
+        )
 
-    monkeypatch.setattr("viper.verification.verify_pointer_run", verify_once)
+    monkeypatch.setattr(
+        "viper.verification._verify_pointer_producer_structure",
+        verify_once,
+    )
     fetcher = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),
@@ -2630,3 +2631,62 @@ def test_pointer_producer_reuses_structural_proof_without_payloads(
     assert first.result is placeholder
     assert first.resolved_stages == {}
     assert not hasattr(first, "inputs")
+
+
+def test_pointer_producer_structure_skips_unselected_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify producer structure while leaving artifact bytes to the selector."""
+    resolved_raw = b"resolved run"
+    pointer = ArtifactPointer.model_construct(
+        run=ResolvedRunRef.model_construct(
+            sha256=hashlib.sha256(resolved_raw).hexdigest(),
+            bytes=len(resolved_raw),
+            stored_at=git_file(f"{RUN_ROOT}/resolved.yaml"),
+        )
+    )
+    resolved_run = SimpleNamespace(
+        status="succeeded",
+        successful_attempt_id=1,
+    )
+    run = SimpleNamespace(
+        estimator=SimpleNamespace(stage_id="build", artifact_name="dataset")
+    )
+    plan = SimpleNamespace(run=run, stages={"build": object()})
+    attempt = SimpleNamespace(attempt_id=1, status="succeeded")
+    stage = SimpleNamespace(artifacts={"dataset": object()})
+    received_payload_modes: list[bool] = []
+
+    monkeypatch.setattr(
+        "viper.verification.ResolvedRun.model_validate",
+        lambda raw: resolved_run,
+    )
+    monkeypatch.setattr("viper.verification._verify_cloud_graph", lambda run: None)
+    monkeypatch.setattr(
+        "viper.verification.verify_run_plan",
+        lambda *args, **kwargs: plan,
+    )
+    monkeypatch.setattr(
+        "viper.verification.verify_run_attempt_references",
+        lambda *args, **kwargs: (attempt,),
+    )
+    monkeypatch.setattr(
+        "viper.verification.verify_attempt_journal",
+        lambda *args, **kwargs: None,
+    )
+
+    def verify_stages(*args: object, **kwargs: object) -> dict[str, object]:
+        del args
+        received_payload_modes.append(bool(kwargs["verify_payloads"]))
+        return {"build": stage}
+
+    monkeypatch.setattr("viper.verification.verify_attempt_stages", verify_stages)
+
+    producer = _verify_pointer_producer_structure(
+        pointer,
+        policy=POLICY,
+        fetcher=lambda location: resolved_raw,
+    )
+
+    assert producer.resolved_stages == {"build": stage}
+    assert received_payload_modes == [False]
