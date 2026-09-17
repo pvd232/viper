@@ -436,6 +436,9 @@ def read_snapshot_file(
             revision=snapshot.revision,
             path=reference.path,
         )
+    snapshot_observer = getattr(fetcher, "observe_snapshot", None)
+    if snapshot_observer is not None:
+        snapshot_observer(snapshot, reference)
     try:
         raw = retrieve(location)
     except Exception as exc:
