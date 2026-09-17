@@ -9,6 +9,7 @@ from viper.authoring import (
     experiment,
     factor,
     input,
+    matrix,
     replicate,
     stage,
     variant,
@@ -60,9 +61,13 @@ def training_variant(name: str, rows: int, level: str) -> VariantDraft:
 study = experiment(
     experiment_id="training_rows",
     factors=(training_rows,),
-    variants=(
-        training_variant("two_rows", 2, "two"),
-        training_variant("three_rows", 3, "three"),
+    variants=matrix(
+        (training_rows,),
+        lambda cell: training_variant(
+            f"{cell[0].level_id}_rows",
+            2 if cell[0].level_id == "two" else 3,
+            cell[0].level_id,
+        ),
     ),
     replicates=(replicate(seed=7), replicate(seed=19)),
 )

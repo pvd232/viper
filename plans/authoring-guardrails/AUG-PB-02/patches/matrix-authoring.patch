@@ -1,0 +1,258 @@
+diff --git a/docs/how-to/variants-and-replicates.md b/docs/how-to/variants-and-replicates.md
+index b7979c8..fb1c279 100644
+--- a/docs/how-to/variants-and-replicates.md
++++ b/docs/how-to/variants-and-replicates.md
+@@ -35,6 +35,7 @@ from viper.authoring import (
+     experiment,
+     factor,
+     input,
++    matrix,
+     replicate,
+     stage,
+     variant,
+@@ -86,9 +87,13 @@ def training_variant(name: str, rows: int, level: str) -> VariantDraft:
+ study = experiment(
+     experiment_id="training_rows",
+     factors=(training_rows,),
+-    variants=(
+-        training_variant("two_rows", 2, "two"),
+-        training_variant("three_rows", 3, "three"),
++    variants=matrix(
++        (training_rows,),
++        lambda cell: training_variant(
++            f"{cell[0].level_id}_rows",
++            2 if cell[0].level_id == "two" else 3,
++            cell[0].level_id,
++        ),
+     ),
+     replicates=(replicate(seed=7), replicate(seed=19)),
+ )
+@@ -137,6 +142,11 @@ name. An unknown level is rejected. `RowLimit.rows` actually controls
+ which rows the function writes; the labels describe that choice. Every variant
+ must assign one level to every declared factor.
+
++`matrix()` enumerates every combination in the declared factor and level order.
++Its factory receives the selected `FactorLevel` objects for one cell and must
++return a uniquely named variant with exactly those levels. It rejects an
++omitted cell, changed levels, or a repeated variant ID before `experiment()`.
++
+ `expand()` creates one plan for each variant-replicate pair and generates their
+ run IDs. `run_many()` saves the plans and executes the batch. To run one pair
+ instead, call `plan()` with explicit `variant=` and `replicate=` selections.
+diff --git a/docs/reference/api.md b/docs/reference/api.md
+index d273575..5c4dc3a 100644
+--- a/docs/reference/api.md
++++ b/docs/reference/api.md
+@@ -75,6 +75,7 @@ For saved plans, retries, batch outcomes, and benchmark execution, see
+ | `stage()` | `StageDraft` | Connect a decorated function to config, inputs, outputs, metrics, and an objective. |
+ | `factor()` | `FactorDraft` | Declare the permitted levels of one experimental factor. |
+ | `FactorDraft.level()` | `FactorLevel` | Select a permitted level while retaining its factor's name. |
++| `matrix()` | `tuple[VariantDraft, ...]` | Build one variant for every factor-level combination. |
+ | `variant()` | `VariantDraft` | Declare one reusable stage graph and estimator artifact. |
+ | `replicate()` | `ReplicateDraft` | Declare one reproducible seed. |
+ | `experiment()` | `ExperimentDraft` | Group factors, variants, and replicates. |
+@@ -111,6 +112,11 @@ as a tuple to `experiment(replicates=...)`. Duplicate names are rejected.
+ Mappings are also accepted; their keys must agree with explicitly named
+ objects. See [the complete declarations](../how-to/variants-and-replicates.md).
+
++For a complete factorial experiment, pass the factors and a variant factory to
++`matrix()`. It calls the factory once per Cartesian-product cell in factor and
++level declaration order. The factory must return a named variant whose levels
++match that cell; omitted cells and duplicate variant IDs are rejected.
++
+ ## Naming conventions
+
+ | Name | Meaning | Example |
+diff --git a/examples/variants.py b/examples/variants.py
+index f03c465..10e0c60 100644
+--- a/examples/variants.py
++++ b/examples/variants.py
+@@ -9,6 +9,7 @@ from viper.authoring import (
+     experiment,
+     factor,
+     input,
++    matrix,
+     replicate,
+     stage,
+     variant,
+@@ -60,9 +61,13 @@ def training_variant(name: str, rows: int, level: str) -> VariantDraft:
+ study = experiment(
+     experiment_id="training_rows",
+     factors=(training_rows,),
+-    variants=(
+-        training_variant("two_rows", 2, "two"),
+-        training_variant("three_rows", 3, "three"),
++    variants=matrix(
++        (training_rows,),
++        lambda cell: training_variant(
++            f"{cell[0].level_id}_rows",
++            2 if cell[0].level_id == "two" else 3,
++            cell[0].level_id,
++        ),
+     ),
+     replicates=(replicate(seed=7), replicate(seed=19)),
+ )
+diff --git a/src/viper/authoring.py b/src/viper/authoring.py
+index 2e0c214..a97bc2b 100644
+--- a/src/viper/authoring.py
++++ b/src/viper/authoring.py
+@@ -12,6 +12,7 @@ import tempfile
+ import time
+ from collections.abc import Callable, Mapping
+ from dataclasses import dataclass
++from itertools import product
+ from pathlib import Path
+ from typing import Annotated, Any, Literal, Never, TypeVar, cast, overload
+ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+@@ -567,6 +568,50 @@ def factor(
+     return FactorDraft(factor_id=factor_id, levels=levels)
+
+
++MatrixCell = tuple[FactorLevel, ...]
++MatrixFactory = Callable[[MatrixCell], VariantDraft | None]
++
++
++def matrix(
++    factors: tuple[FactorDraft, ...] | dict[FactorId, FactorDraft],
++    factory: MatrixFactory,
++) -> tuple[VariantDraft, ...]:
++    """Build one variant for every factor-level cell in declaration order.
++
++    The factory receives a tuple containing one selected level per factor.
++    Returning ``None`` omits that cell and is rejected. The returned variant
++    must retain exactly the supplied levels and have a unique ID.
++    """
++    named_factors = _named_drafts(factors, "factor_id")
++    if not named_factors:
++        raise ValueError("matrix requires at least one factor")
++
++    variants: list[VariantDraft] = []
++    variant_ids: set[VariantId] = set()
++    factor_ids = tuple(named_factors)
++    for level_ids in product(*(item.levels for item in named_factors.values())):
++        cell = tuple(
++            FactorLevel(factor_id=factor_id, level_id=level_id)
++            for factor_id, level_id in zip(factor_ids, level_ids, strict=True)
++        )
++        built = factory(cell)
++        expected_levels = dict(zip(factor_ids, level_ids, strict=True))
++        if built is None:
++            raise ValueError(f"variant factory omitted matrix cell {expected_levels!r}")
++        if built.levels != expected_levels:
++            raise ValueError(
++                "variant factory returned levels that differ from matrix cell "
++                f"{expected_levels!r}"
++            )
++        if built.variant_id is None:
++            raise ValueError("variant_id is required for a matrix variant")
++        if built.variant_id in variant_ids:
++            raise ValueError(f"duplicate variant_id: {built.variant_id!r}")
++        variant_ids.add(built.variant_id)
++        variants.append(built)
++    return tuple(variants)
++
++
+ def variant(
+     variant_id: VariantId | None = None,
+     *,
+diff --git a/tests/test_authoring.py b/tests/test_authoring.py
+index ba31b4f..2740c6f 100644
+--- a/tests/test_authoring.py
++++ b/tests/test_authoring.py
+@@ -36,6 +36,7 @@ from viper.authoring import (
+     experiment,
+     factor,
+     freeze_run_plan,
++    matrix,
+     plan,
+     replicate,
+     stage,
+@@ -1453,6 +1454,76 @@ def test_named_factor_levels_preserve_identity_and_reject_ambiguous_choices() ->
+         )
+
+
++def test_matrix_builds_complete_cartesian_variants_in_order() -> None:
++    """Build every matrix cell in factor and level declaration order."""
++    model = factor("model", levels=("small", "large"))
++    precision = factor("precision", levels=("fp32", "bf16", "int8"))
++    seen: list[tuple[tuple[str, str], ...]] = []
++
++    def build(cell: tuple[authoring.FactorLevel, ...]) -> VariantDraft:
++        levels = tuple((selection.factor_id, selection.level_id) for selection in cell)
++        seen.append(levels)
++        return variant(
++            "_".join(level for _, level in levels),
++            levels=cell,
++            stages=(example_training,),
++            estimator=example_training.outputs["model"],
++        )
++
++    variants = matrix((model, precision), build)
++
++    expected = [
++        (("model", model_level), ("precision", precision_level))
++        for model_level in ("small", "large")
++        for precision_level in ("fp32", "bf16", "int8")
++    ]
++    assert seen == expected
++    assert [tuple(item.levels.items()) for item in variants] == expected
++
++
++def test_matrix_rejects_incomplete_mismatched_or_duplicate_cells() -> None:
++    """Reject every factory result that does not identify its assigned cell."""
++    model = factor("model", levels=("small", "large"))
++    precision = factor("precision", levels=("fp32", "bf16"))
++
++    def omitted(
++        cell: tuple[authoring.FactorLevel, ...],
++    ) -> VariantDraft | None:
++        if cell[0].level_id == "large" and cell[1].level_id == "bf16":
++            return None
++        return variant(
++            f"{cell[0].level_id}_{cell[1].level_id}",
++            levels=cell,
++            stages=(example_training,),
++            estimator=example_training.outputs["model"],
++        )
++
++    with pytest.raises(ValueError, match="omitted matrix cell"):
++        matrix((model, precision), omitted)
++
++    def mismatched(cell: tuple[authoring.FactorLevel, ...]) -> VariantDraft:
++        return variant(
++            f"{cell[0].level_id}_{cell[1].level_id}",
++            levels=(model.level("small"), precision.level("fp32")),
++            stages=(example_training,),
++            estimator=example_training.outputs["model"],
++        )
++
++    with pytest.raises(ValueError, match="levels that differ"):
++        matrix((model, precision), mismatched)
++
++    def duplicate(cell: tuple[authoring.FactorLevel, ...]) -> VariantDraft:
++        return variant(
++            "same_id",
++            levels=cell,
++            stages=(example_training,),
++            estimator=example_training.outputs["model"],
++        )
++
++    with pytest.raises(ValueError, match="duplicate variant_id"):
++        matrix((model, precision), duplicate)
++
++
+ def test_stage_requires_values_for_required_custom_config_fields() -> None:
+     """A missing custom setting fails during declaration, before execution."""
+     assert isinstance(example_training.spec, TrainSpecDraft)
+diff --git a/tests/test_documentation.py b/tests/test_documentation.py
+index c583a26..1e24aea 100644
+--- a/tests/test_documentation.py
++++ b/tests/test_documentation.py
+@@ -293,6 +293,7 @@ def test_current_docs_import_public_functions_from_defining_modules() -> None:
+         "freeze",
+         "input",
+         "max",
++        "matrix",
+         "measure",
+         "metric",
+         "min",

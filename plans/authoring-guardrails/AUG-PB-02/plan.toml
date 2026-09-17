@@ -1,0 +1,116 @@
+schema_version = 1
+contract_id = "authoring-guardrails"
+package_sha256 = "d65dc2f0790442ba9241cb2a5cb841d8e339f08e6898336bff7d9d33db845e95"
+pair_block_id = "AUG-PB-02"
+baseline_commit = "6641509a6f3b831d90f48432850909e50c8eef25"
+change_summary = [
+  "matrix() enumerates the Cartesian product in declared factor and level order and invokes one factory for each cell.",
+  "Each factory result must exist, retain exactly the assigned factor levels, and carry a unique variant ID.",
+  "The runnable variants guide uses matrix() while experiment() and expand() retain their existing semantics.",
+  "Acceptance tests observe six ordered cells and each required rejection before experiment construction.",
+]
+deviation_summary = "No deviation from AUG-REQ-02. matrix() constructs VariantDraft objects only and changes no plan expansion or execution behavior."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/matrix-authoring.patch"
+target_paths = [
+  "docs/how-to/variants-and-replicates.md",
+  "docs/reference/api.md",
+  "examples/variants.py",
+  "src/viper/authoring.py",
+  "tests/test_authoring.py",
+  "tests/test_documentation.py",
+]
+
+[[handoff_targets]]
+label = "Complete matrix-authoring candidate"
+source = "plan"
+path = "patches/matrix-authoring.patch"
+line = 1
+
+[[handoff_targets]]
+label = "Matrix constructor"
+source = "repository"
+path = "src/viper/authoring.py"
+line = 571
+
+[[handoff_targets]]
+label = "Acceptance tests"
+source = "repository"
+path = "tests/test_authoring.py"
+line = 1457
+
+[gate]
+source_roots = ["pyproject.toml", "README.md", "src/viper", "examples", "docs"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = [
+  "pyright",
+  "src/viper/authoring.py",
+  "examples/variants.py",
+  "tests/test_authoring.py",
+  "tests/test_documentation.py",
+]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = [
+  "python3",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_authoring.py::test_matrix_builds_complete_cartesian_variants_in_order",
+  "tests/test_authoring.py::test_matrix_rejects_incomplete_mismatched_or_duplicate_cells",
+  "tests/test_documentation.py::test_complete_documented_programs_match_executed_sources",
+]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--config",
+  "pyproject.toml",
+  "--select",
+  "D",
+  "src/viper/authoring.py",
+  "examples/variants.py",
+  "tests/test_authoring.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "format",
+  "--check",
+  "--config",
+  "pyproject.toml",
+  "src/viper/authoring.py",
+  "examples/variants.py",
+  "tests/test_authoring.py",
+  "tests/test_documentation.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--config",
+  "pyproject.toml",
+  "src/viper/authoring.py",
+  "examples/variants.py",
+  "tests/test_authoring.py",
+  "tests/test_documentation.py",
+]

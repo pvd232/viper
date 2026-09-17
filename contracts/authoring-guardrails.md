@@ -75,17 +75,62 @@
 
 #### <nobr><code>AUG-PB-02</code></nobr>
 
-**Status:** drafting
+**Status:** approved
 
 **Requirement contribution:** Add deterministic, complete factor-matrix construction without changing variant or expansion semantics.
 
-**Plan:** None
+**Review handoff**
 
-**Current receipt:** None
+**What changed**
+
+- matrix() enumerates the Cartesian product in declared factor and level order and invokes one factory for each cell.
+- Each factory result must exist, retain exactly the assigned factor levels, and carry a unique variant ID.
+- The runnable variants guide uses matrix() while experiment() and expand() retain their existing semantics.
+- Acceptance tests observe six ordered cells and each required rejection before experiment construction.
+
+**Plan deviations:** No deviation from AUG-REQ-02. matrix() constructs VariantDraft objects only and changes no plan expansion or execution behavior.
+
+**Start review:** [Open tested GitHub comparison](https://github.com/pvd232/viper/compare/6641509a6f3b831d90f48432850909e50c8eef25...b682362223a041bed74483a9020535785797ca63)
+
+**Review these files**
+
+- [Complete matrix-authoring candidate](../plans/authoring-guardrails/AUG-PB-02/patches/matrix-authoring.patch#L1)
+- [Matrix constructor](../src/viper/authoring.py#L571)
+- [Acceptance tests](../tests/test_authoring.py#L1457)
+
+**Evidence:** [Passing gate receipt](../evidence/gates/aug-pb-02-r4.json)
+
+**Decision:** Approval is recorded for <nobr><code>AUG-PB-02</code></nobr>; review the installed commit.
+
+<details>
+<summary>Implementation details</summary>
+
+**Plan:** [plan.toml](../plans/authoring-guardrails/AUG-PB-02/plan.toml)
+
+**Retained patch:** [patches/matrix-authoring.patch](../plans/authoring-guardrails/AUG-PB-02/patches/matrix-authoring.patch)
+
+**Implementation roots:** [pyproject.toml](../pyproject.toml) · [README.md](../README.md) · [src/viper](../src/viper) · [examples](../examples) · [docs](../docs)
+
+**Test roots:** [tests](../tests)
 
 **Dependencies:** <nobr><code>PED-PB-01</code></nobr>
 
-**Next action:** Run the current PairBlock plan.
+**Gate steps:**
+
+```bash
+# typecheck
+(cd . && pyright src/viper/authoring.py examples/variants.py tests/test_authoring.py tests/test_documentation.py)
+# test
+(cd . && python3 -m pytest -q -p no:cacheprovider tests/test_authoring.py::test_matrix_builds_complete_cartesian_variants_in_order tests/test_authoring.py::test_matrix_rejects_incomplete_mismatched_or_duplicate_cells tests/test_documentation.py::test_complete_documented_programs_match_executed_sources)
+# documentation
+(cd . && ruff check --config pyproject.toml --select D src/viper/authoring.py examples/variants.py tests/test_authoring.py)
+# lint
+(cd . && ruff format --check --config pyproject.toml src/viper/authoring.py examples/variants.py tests/test_authoring.py tests/test_documentation.py)
+# lint
+(cd . && ruff check --config pyproject.toml src/viper/authoring.py examples/variants.py tests/test_authoring.py tests/test_documentation.py)
+```
+
+</details>
 
 
 ### Requirements

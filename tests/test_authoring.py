@@ -36,6 +36,7 @@ from viper.authoring import (
     experiment,
     factor,
     freeze_run_plan,
+    matrix,
     plan,
     replicate,
     stage,
@@ -1451,6 +1452,76 @@ def test_named_factor_levels_preserve_identity_and_reject_ambiguous_choices() ->
             variants=(baseline,),
             replicates=(replicate(seed=7),),
         )
+
+
+def test_matrix_builds_complete_cartesian_variants_in_order() -> None:
+    """Build every matrix cell in factor and level declaration order."""
+    model = factor("model", levels=("small", "large"))
+    precision = factor("precision", levels=("fp32", "bf16", "int8"))
+    seen: list[tuple[tuple[str, str], ...]] = []
+
+    def build(cell: tuple[authoring.FactorLevel, ...]) -> VariantDraft:
+        levels = tuple((selection.factor_id, selection.level_id) for selection in cell)
+        seen.append(levels)
+        return variant(
+            "_".join(level for _, level in levels),
+            levels=cell,
+            stages=(example_training,),
+            estimator=example_training.outputs["model"],
+        )
+
+    variants = matrix((model, precision), build)
+
+    expected = [
+        (("model", model_level), ("precision", precision_level))
+        for model_level in ("small", "large")
+        for precision_level in ("fp32", "bf16", "int8")
+    ]
+    assert seen == expected
+    assert [tuple(item.levels.items()) for item in variants] == expected
+
+
+def test_matrix_rejects_incomplete_mismatched_or_duplicate_cells() -> None:
+    """Reject every factory result that does not identify its assigned cell."""
+    model = factor("model", levels=("small", "large"))
+    precision = factor("precision", levels=("fp32", "bf16"))
+
+    def omitted(
+        cell: tuple[authoring.FactorLevel, ...],
+    ) -> VariantDraft | None:
+        if cell[0].level_id == "large" and cell[1].level_id == "bf16":
+            return None
+        return variant(
+            f"{cell[0].level_id}_{cell[1].level_id}",
+            levels=cell,
+            stages=(example_training,),
+            estimator=example_training.outputs["model"],
+        )
+
+    with pytest.raises(ValueError, match="omitted matrix cell"):
+        matrix((model, precision), omitted)
+
+    def mismatched(cell: tuple[authoring.FactorLevel, ...]) -> VariantDraft:
+        return variant(
+            f"{cell[0].level_id}_{cell[1].level_id}",
+            levels=(model.level("small"), precision.level("fp32")),
+            stages=(example_training,),
+            estimator=example_training.outputs["model"],
+        )
+
+    with pytest.raises(ValueError, match="levels that differ"):
+        matrix((model, precision), mismatched)
+
+    def duplicate(cell: tuple[authoring.FactorLevel, ...]) -> VariantDraft:
+        return variant(
+            "same_id",
+            levels=cell,
+            stages=(example_training,),
+            estimator=example_training.outputs["model"],
+        )
+
+    with pytest.raises(ValueError, match="duplicate variant_id"):
+        matrix((model, precision), duplicate)
 
 
 def test_stage_requires_values_for_required_custom_config_fields() -> None:

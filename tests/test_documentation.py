@@ -293,6 +293,7 @@ def test_current_docs_import_public_functions_from_defining_modules() -> None:
         "freeze",
         "input",
         "max",
+        "matrix",
         "measure",
         "metric",
         "min",
