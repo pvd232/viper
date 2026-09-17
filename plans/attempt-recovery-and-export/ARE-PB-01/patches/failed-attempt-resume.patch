@@ -1,0 +1,1234 @@
+diff --git a/src/viper/evidence.py b/src/viper/evidence.py
+index 6293461..0c9da4b 100644
+--- a/src/viper/evidence.py
++++ b/src/viper/evidence.py
+@@ -93,6 +93,15 @@ class VerifiedRunResult:
+     measurement_references: tuple[ResolvedFileRef, ...] = ()
+     inputs: dict[StageId, dict[InputName, VerifiedInput]] = field(default_factory=dict)
+     reuse: dict[StageId, StageReuseReceipt] = field(default_factory=dict)
++    attempt_stages: dict[int, dict[StageId, ResolvedBaseSpec]] = field(
++        default_factory=dict
++    )
++    attempt_inputs: dict[int, dict[StageId, dict[InputName, VerifiedInput]]] = field(
++        default_factory=dict
++    )
++    attempt_reuse: dict[int, dict[StageId, StageReuseReceipt]] = field(
++        default_factory=dict
++    )
+ 
+ 
+ @dataclass(frozen=True)
+diff --git a/src/viper/execution/_attempt.py b/src/viper/execution/_attempt.py
+index 216144a..511b321 100644
+--- a/src/viper/execution/_attempt.py
++++ b/src/viper/execution/_attempt.py
+@@ -4,6 +4,7 @@ from __future__ import annotations
+ 
+ import hashlib
+ import signal
++from dataclasses import dataclass
+ from datetime import UTC, datetime
+ from pathlib import Path
+ from threading import current_thread, main_thread
+@@ -30,7 +31,13 @@ from ..references import (
+     ViperCloudFileRef,
+     storage_file,
+ )
+-from ..reuse import ReuseInputIdentity, build_stage_reuse_key, input_identity
++from ..reuse import (
++    ReuseInputIdentity,
++    StageReuseCandidate,
++    attempt_reuse_candidates,
++    build_stage_reuse_key,
++    input_identity,
++)
+ from ..runs import (
+     AttemptFailure,
+     AttemptPurpose,
+@@ -49,6 +56,7 @@ from ..stages import (
+ )
+ from ..storage import (
+     LocalArtifactStore,
++    StorageDestination,
+     ViperCloudClient,
+     bind_run_destination,
+     create_snapshot_publisher,
+@@ -120,6 +128,91 @@ def _verification_policy(
+     )
+ 
+ 
++@dataclass(frozen=True)
++class _AttemptAllocation:
++    """Retain state created while one run lock is held."""
++
++    lock: RunWorkspaceLock
++    terminal_path: Path
++    previous_run: ResolvedRun | None
++    previous_run_raw: bytes | None
++    previous_attempts: tuple[RunAttempt, ...]
++    attempt_id: int
++    workspace: AttemptWorkspace
++    journal: DurableJournal
++
++
++def _allocate_attempt(
++    *,
++    root: Path,
++    run_path: Path,
++    run: RunSpec,
++    run_root: str,
++    destination: StorageDestination,
++    purpose: AttemptPurpose,
++    retry: bool,
++    fetcher: RunFetcher,
++) -> _AttemptAllocation:
++    """Allocate attempt state and release the run lock if setup fails."""
++    workspace_root = root / ".viper" / "workspaces"
++    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
++    run_lock.acquire()
++    try:
++        terminal_path = run_path.parent / "resolved.yaml"
++        previous_run: ResolvedRun | None = None
++        previous_run_raw: bytes | None = None
++        if terminal_path.is_file():
++            previous_run_raw = terminal_path.read_bytes()
++            previous_run = ResolvedRun.model_validate(
++                parse_yaml_bytes(previous_run_raw)
++            )
++            if purpose == "run" and not retry:
++                raise RunError("run already has terminal attempt history; use retry")
++            if purpose == "run" and previous_run.status == "succeeded":
++                raise RunError("a successful run cannot be retried")
++        elif purpose == "benchmark_confirmation":
++            raise RunError("benchmark confirmation requires a terminal candidate run")
++        if purpose == "benchmark_confirmation" and previous_run is not None:
++            if previous_run.status != "succeeded":
++                raise RunError(
++                    "benchmark confirmation requires a successful candidate run"
++                )
++        known_attempts = (
++            ()
++            if previous_run is None
++            else tuple(
++                read_attempt_reference(reference, run, fetcher=fetcher)
++                for reference in previous_run.attempts
++            )
++        )
++        previous_attempts = reconcile_abandoned_attempts(
++            root,
++            workspace_root,
++            run,
++            run_root,
++            destination,
++            known_attempts,
++        )
++        attempt_id = max(
++            next_attempt_id(workspace_root, run.run_id),
++            max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
++        )
++        workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
++        return _AttemptAllocation(
++            lock=run_lock,
++            terminal_path=terminal_path,
++            previous_run=previous_run,
++            previous_run_raw=previous_run_raw,
++            previous_attempts=previous_attempts,
++            attempt_id=attempt_id,
++            workspace=workspace,
++            journal=DurableJournal(workspace.control / "journal.jsonl"),
++        )
++    except BaseException:
++        run_lock.release()
++        raise
++
++
+ def execute_attempt(
+     repository_root: Path,
+     run_spec_path: Path,
+@@ -202,50 +295,27 @@ def execute_attempt(
+     )
+     run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+ 
+-    workspace_root = root / ".viper" / "workspaces"
+-    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
+-    run_lock.acquire()
+-    terminal_path = run_path.parent / "resolved.yaml"
+-    previous_run: ResolvedRun | None = None
+-    if terminal_path.is_file():
+-        previous_run = ResolvedRun.model_validate(
+-            parse_yaml_bytes(terminal_path.read_bytes())
+-        )
+-        if purpose == "run" and not retry:
+-            run_lock.release()
+-            raise RunError("run already has terminal attempt history; use retry")
+-        if purpose == "run" and previous_run.status == "succeeded":
+-            run_lock.release()
+-            raise RunError("a successful run cannot be retried")
+-    elif purpose == "benchmark_confirmation":
+-        run_lock.release()
+-        raise RunError("benchmark confirmation requires a terminal candidate run")
+-    if purpose == "benchmark_confirmation" and previous_run is not None:
+-        if previous_run.status != "succeeded":
+-            run_lock.release()
+-            raise RunError("benchmark confirmation requires a successful candidate run")
+-    known_attempts = (
+-        ()
+-        if previous_run is None
+-        else tuple(
+-            read_attempt_reference(reference, run, fetcher=fetcher)
+-            for reference in previous_run.attempts
+-        )
+-    )
+-    previous_attempts = reconcile_abandoned_attempts(
+-        root,
+-        workspace_root,
+-        run,
+-        run_root,
+-        destination,
+-        known_attempts,
+-    )
+-    attempt_id = max(
+-        next_attempt_id(workspace_root, run.run_id),
+-        max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
++    owns_signals = current_thread() is main_thread()
++    previous_sigint = signal.getsignal(signal.SIGINT)
++    previous_sigterm = signal.getsignal(signal.SIGTERM)
++    allocation = _allocate_attempt(
++        root=root,
++        run_path=run_path,
++        run=run,
++        run_root=run_root,
++        destination=destination,
++        purpose=purpose,
++        retry=retry,
++        fetcher=fetcher,
+     )
+-    workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
+-    journal = DurableJournal(workspace.control / "journal.jsonl")
++    run_lock = allocation.lock
++    terminal_path = allocation.terminal_path
++    previous_run = allocation.previous_run
++    previous_run_raw = allocation.previous_run_raw
++    previous_attempts = allocation.previous_attempts
++    attempt_id = allocation.attempt_id
++    workspace = allocation.workspace
++    journal = allocation.journal
+     attempt_started = datetime.now(UTC)
+     resolved_stage_refs: list[ResolvedStageRef] = []
+     invocation_refs: list[ResolvedStageInvocationRef] = []
+@@ -256,8 +326,6 @@ def execute_attempt(
+     metric_verification_paths: list[Path] = []
+     log_files: dict[str, bytes] = {}
+     active_stage_id: StageId | None = None
+-    previous_sigint = signal.getsignal(signal.SIGINT)
+-    previous_sigterm = signal.getsignal(signal.SIGTERM)
+ 
+     def cancel_attempt(signum: int, frame: object) -> None:
+         """Convert an interrupt request into a durable cancellation outcome."""
+@@ -271,11 +339,10 @@ def execute_attempt(
+ 
+     # Batch runs execute in threads. Python permits signal-handler changes
+     # only in the main thread; those runs leave the caller's handlers intact.
+-    owns_signals = current_thread() is main_thread()
+-    if owns_signals:
+-        signal.signal(signal.SIGINT, cancel_attempt)
+-        signal.signal(signal.SIGTERM, preempt_attempt)
+     try:
++        if owns_signals:
++            signal.signal(signal.SIGINT, cancel_attempt)
++            signal.signal(signal.SIGTERM, preempt_attempt)
+         journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
+         preflight = preflight_plan(
+             root,
+@@ -302,6 +369,37 @@ def execute_attempt(
+                 check.code for check in preflight.checks if check.status == "failure"
+             )
+             raise RunError(f"plan preflight failed: {failed_codes}")
++        retry_candidates: dict[StageId, StageReuseCandidate] = {}
++        if retry and previous_run is not None and previous_run_raw is not None:
++            terminal_relative_path = terminal_path.relative_to(root).as_posix()
++            published = publish_resolved_files(
++                root,
++                destination,
++                {terminal_relative_path: previous_run_raw},
++                cloud_client=cloud_client,
++            )[terminal_relative_path]
++            previous_reference = ResolvedRunRef(
++                sha256=published.sha256,
++                bytes=published.bytes,
++                stored_at=published.stored_at,
++            )
++            try:
++                verified_previous = verify_run_result(
++                    previous_run,
++                    policy=policy,
++                    fetcher=fetcher,
++                )
++            except VerificationError as exc:
++                raise VerificationError(
++                    "prior failed run cannot be verified for retry"
++                ) from exc
++            for previous_attempt in reversed(verified_previous.attempts):
++                for candidate in attempt_reuse_candidates(
++                    previous_reference,
++                    verified_previous,
++                    previous_attempt.attempt_id,
++                ):
++                    retry_candidates.setdefault(candidate.key.stage_id, candidate)
+         for stage_reference in run.stages:
+             active_stage_id = stage_reference.stage_id
+             stage = load_stage_spec(root / stage_reference.spec)
+@@ -378,8 +476,11 @@ def execute_attempt(
+                     )
+                 if (
+                     isinstance(stage, InternalSpec)
+-                    and stage.reuse == "verified"
+                     and purpose == "run"
++                    and (
++                        stage.reuse == "verified"
++                        or stage_reference.stage_id in retry_candidates
++                    )
+                 ):
+                     metric_specs = {
+                         metric.metric_id: metric for metric in experiment.metrics
+@@ -415,6 +516,7 @@ def execute_attempt(
+                         destination=destination,
+                         cloud_client=cloud_client,
+                         metrics=metric_specs,
++                        candidate=retry_candidates.get(stage_reference.stage_id),
+                     )
+                     if reused is not None:
+                         journal.append(
+@@ -689,6 +791,7 @@ def execute_attempt(
+             ),
+             path=terminal_path,
+             journal_path=journal.path,
++            latest_attempt=attempt,
+         )
+     except (Exception, KeyboardInterrupt) as exc:
+         failed_at = datetime.now(UTC)
+@@ -803,8 +906,27 @@ def execute_attempt(
+         terminal_raw = serialize_document(failed_run)
+         replace_synchronized(terminal_path, terminal_raw)
+         replace_synchronized(workspace.terminal, terminal_raw)
++        terminal_relative_path = terminal_path.relative_to(root).as_posix()
++        terminal_reference = publish_resolved_files(
++            root,
++            destination,
++            {terminal_relative_path: terminal_raw},
++            cloud_client=cloud_client,
++        )[terminal_relative_path]
++        result = RunResult(
++            record=failed_run,
++            reference=ResolvedRunRef(
++                sha256=terminal_reference.sha256,
++                bytes=terminal_reference.bytes,
++                stored_at=terminal_reference.stored_at,
++            ),
++            path=terminal_path,
++            journal_path=journal.path,
++            latest_attempt=failed_attempt,
++        )
+         raise RunError(
+-            f"attempt {attempt_id} failed; evidence written to {terminal_path}"
++            f"attempt {attempt_id} failed; evidence written to {terminal_path}",
++            result=result,
+         ) from exc
+     finally:
+         if owns_signals:
+diff --git a/src/viper/execution/_reuse.py b/src/viper/execution/_reuse.py
+index 4249e8d..4666675 100644
+--- a/src/viper/execution/_reuse.py
++++ b/src/viper/execution/_reuse.py
+@@ -33,9 +33,10 @@ from ..reuse import (
+     ReusedMetricEvidence,
+     ReusedStageCompletion,
+     ReusedStageFile,
++    StageReuseCandidate,
+     StageReuseKey,
+     StageReuseReceipt,
+-    catalog_reuse_candidates,
++    attempt_reuse_candidates,
+ )
+ from ..runs import ResolvedRun
+ from ..serialization import parse_yaml_bytes, serialize_document
+@@ -223,11 +224,14 @@ def reuse_stage(
+     destination: StorageDestination,
+     cloud_client: ViperCloudClient | None,
+     metrics: dict[MetricId, MetricSpec],
++    candidate: StageReuseCandidate | None = None,
+ ) -> ReuseStageResult | None:
+     """Verify one catalog hit and materialize it without running a worker."""
+-    candidate = catalog.reuse_candidate(key)
++    candidate = catalog.reuse_candidate(key) if candidate is None else candidate
+     if candidate is None:
+         return None
++    if candidate.key != key:
++        return None
+     try:
+         raw = fetcher(cast(StorageModel, candidate.source_run.stored_at))
+         source_run = ResolvedRun.model_validate(parse_yaml_bytes(raw))
+@@ -235,17 +239,24 @@ def reuse_stage(
+         rebuilt = next(
+             (
+                 item
+-                for item in catalog_reuse_candidates(candidate.source_run, verified)
++                for item in attempt_reuse_candidates(
++                    candidate.source_run,
++                    verified,
++                    candidate.attempt_id,
++                )
+                 if item.source_stage == candidate.source_stage
+             ),
+             None,
+         )
+         if rebuilt is None or rebuilt.key != key:
+             return None
+-        source = verified.resolved_stages.get(key.stage_id)
++        source = verified.attempt_stages.get(candidate.attempt_id, {}).get(key.stage_id)
+         if not isinstance(source, ResolvedParameterizedSpec):
+             return None
+-        if not isinstance(source.completion, ExecutedStageCompletion):
++        if not isinstance(
++            source.completion,
++            (ExecutedStageCompletion, ReusedStageCompletion),
++        ):
+             return None
+         artifacts, receipt_files, publication_files = _remap_artifacts(source, stage)
+         attempt = next(
+@@ -253,13 +264,21 @@ def reuse_stage(
+             for item in verified.attempts
+             if item.attempt_id == candidate.attempt_id
+         )
+-        metric_evidence = _metric_evidence(
+-            key.stage_id,
+-            {metric_id: metrics[metric_id] for metric_id in stage.metric_ids},
+-            attempt.measurement_files,
+-            attempt.metric_verification_files,
+-            fetcher,
+-        )
++        if isinstance(source.completion, ReusedStageCompletion):
++            source_receipt = verified.attempt_reuse.get(candidate.attempt_id, {}).get(
++                key.stage_id
++            )
++            if source_receipt is None:
++                return None
++            metric_evidence = source_receipt.metrics
++        else:
++            metric_evidence = _metric_evidence(
++                key.stage_id,
++                {metric_id: metrics[metric_id] for metric_id in stage.metric_ids},
++                attempt.measurement_files,
++                attempt.metric_verification_files,
++                fetcher,
++            )
+         source_bytes = {
+             target_path: read_snapshot_file(
+                 candidate.source_stage.snapshot,
+diff --git a/src/viper/execution/errors.py b/src/viper/execution/errors.py
+index 3e10971..2da646a 100644
+--- a/src/viper/execution/errors.py
++++ b/src/viper/execution/errors.py
+@@ -1,8 +1,17 @@
+-"""Define the error raised when complete run execution fails."""
++"""Define errors raised by run and benchmark execution."""
++
++from __future__ import annotations
++
++from .results import RunResult
+ 
+ 
+ class RunError(RuntimeError):
+-    """Report a local plan, source, materialization, or execution failure."""
++    """Report a run failure and retain its terminal result when available."""
++
++    def __init__(self, message: str, *, result: RunResult | None = None) -> None:
++        """Attach the failed terminal result without suppressing the exception."""
++        super().__init__(message)
++        self.result = result
+ 
+ 
+ class BenchmarkExecutionError(RuntimeError):
+diff --git a/src/viper/execution/results.py b/src/viper/execution/results.py
+index 516dfc1..eea4102 100644
+--- a/src/viper/execution/results.py
++++ b/src/viper/execution/results.py
+@@ -6,13 +6,13 @@ from typing import Literal
+ from pydantic import BaseModel, ConfigDict, Field, model_validator
+ 
+ from ..benchmark import BenchmarkResult
+-from ..ids import ReplicateId, RunId, VariantId
++from ..ids import ReplicateId, RunId, StageId, VariantId
+ from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
+ from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
+ 
+ 
+ class RunResult(BaseModel):
+-    """Return one verified terminal run and its local output path."""
++    """Return one terminal run, its latest attempt, and local output path."""
+ 
+     model_config = ConfigDict(extra="forbid", frozen=True)
+ 
+@@ -24,12 +24,26 @@ class RunResult(BaseModel):
+     )
+     path: Path = Field(description="Local path of the terminal record.")
+     journal_path: Path = Field(description="Local journal for the completed attempt.")
++    latest_attempt: RunAttempt = Field(
++        description="Latest attempt recorded by this terminal run."
++    )
+ 
+     @property
+     def status(self) -> Literal["succeeded", "failed", "cancelled"]:
+         """Return the terminal status recorded for this run."""
+         return self.record.status
+ 
++    @property
++    def completed_stage_ids(self) -> tuple[StageId, ...]:
++        """Return stages published before the latest attempt ended."""
++        return tuple(stage.stage_id for stage in self.latest_attempt.resolved_stages)
++
++    @property
++    def failed_stage_id(self) -> StageId | None:
++        """Return the stage active when the latest attempt failed, if any."""
++        failure = self.latest_attempt.failure
++        return None if failure is None else failure.stage_id
++
+ 
+ class ConfirmationRunResult(BaseModel):
+     """Return one independently executed benchmark-confirmation attempt."""
+diff --git a/src/viper/reuse.py b/src/viper/reuse.py
+index 8177340..733f98e 100644
+--- a/src/viper/reuse.py
++++ b/src/viper/reuse.py
+@@ -115,6 +115,17 @@ class _VerifiedRun(Protocol):
+     @property
+     def inputs(self) -> Mapping[StageId, Mapping[InputName, _VerifiedInput]]: ...
+ 
++    @property
++    def attempt_stages(self) -> Mapping[int, Mapping[StageId, _ResolvedStage]]: ...
++
++    @property
++    def attempt_inputs(
++        self,
++    ) -> Mapping[int, Mapping[StageId, Mapping[InputName, _VerifiedInput]]]: ...
++
++    @property
++    def attempt_reuse(self) -> Mapping[int, Mapping[StageId, StageReuseReceipt]]: ...
++
+ 
+ class ReuseFileIdentity(FileIdentity):
+     """Identify one input file independently of its run-specific path."""
+@@ -340,40 +351,43 @@ def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:
+     return _canonical_sha256(key)
+ 
+ 
+-def catalog_reuse_candidates(
++def attempt_reuse_candidates(
+     source_run: ResolvedRunRef,
+     verified: _VerifiedRun,
++    attempt_id: int,
+ ) -> tuple[StageReuseCandidate, ...]:
+-    """Build catalog candidates from one fully verified successful run."""
+-    successful_id = verified.result.successful_attempt_id
+-    if successful_id is None:
+-        return ()
++    """Build reuse candidates from one verified attempt, successful or failed."""
+     attempt_pairs = tuple(zip(verified.attempts, verified.result.attempts, strict=True))
+     selected = next(
+         (
+             (attempt, reference)
+             for attempt, reference in attempt_pairs
+-            if attempt.attempt_id == successful_id
++            if attempt.attempt_id == attempt_id
+         ),
+         None,
+     )
+     if selected is None:
+-        raise ValueError("verified run has no successful attempt reference")
++        raise ValueError("verified run has no selected attempt reference")
+     attempt, attempt_reference = selected
+     stage_references = {item.stage_id: item for item in attempt.resolved_stages}
++    resolved_stages = verified.attempt_stages.get(attempt_id, {})
++    attempt_inputs = verified.attempt_inputs.get(attempt_id, {})
+     metrics = {item.metric_id: item for item in verified.plan.experiment.metrics}
+     candidates = []
+-    for stage_id, resolved in verified.resolved_stages.items():
++    for stage_id, resolved in resolved_stages.items():
+         completion = getattr(resolved, "completion", None)
+-        if not isinstance(completion, ExecutedStageCompletion):
++        if not isinstance(
++            completion,
++            (ExecutedStageCompletion, ReusedStageCompletion),
++        ):
+             continue
+         stage = cast("_ParameterizedStage", resolved.spec)
+         source_stage = stage_references.get(stage_id)
+         if source_stage is None:
+-            raise ValueError("verified stage has no successful attempt reference")
++            raise ValueError("verified stage has no selected attempt reference")
+         inputs = tuple(
+             verified_input_identity(name, value)
+-            for name, value in sorted(verified.inputs.get(stage_id, {}).items())
++            for name, value in sorted(attempt_inputs.get(stage_id, {}).items())
+         )
+         declared_inputs = getattr(stage, "inputs", {})
+         if len(inputs) != len(declared_inputs):
+@@ -400,6 +414,17 @@ def catalog_reuse_candidates(
+     return tuple(candidates)
+ 
+ 
++def catalog_reuse_candidates(
++    source_run: ResolvedRunRef,
++    verified: _VerifiedRun,
++) -> tuple[StageReuseCandidate, ...]:
++    """Build catalog candidates from one fully verified successful run."""
++    successful_id = verified.result.successful_attempt_id
++    if successful_id is None:
++        return ()
++    return attempt_reuse_candidates(source_run, verified, successful_id)
++
++
+ __all__ = [
+     "ExecutedStageCompletion",
+     "ResolvedStageReuseRef",
+@@ -413,6 +438,7 @@ __all__ = [
+     "StageReuseKey",
+     "StageReuseMode",
+     "StageReuseReceipt",
++    "attempt_reuse_candidates",
+     "build_stage_reuse_key",
+     "catalog_reuse_candidates",
+     "input_identity",
+diff --git a/src/viper/verification.py b/src/viper/verification.py
+index f53679b..b7e2f99 100644
+--- a/src/viper/verification.py
++++ b/src/viper/verification.py
+@@ -212,23 +212,15 @@ def verify_stage_reuse(
+         raise VerificationError("reuse receipt and target stage IDs differ")
+     if receipt.source_run != source_reference:
+         raise VerificationError("reuse receipt selects a different source run")
+-    if source.result.status != "succeeded":
+-        raise VerificationError("reused source run did not succeed")
+     expected_source_path = f"{run_root(source.plan.run)}/resolved.yaml"
+     if source_reference.stored_at.path != expected_source_path:
+         raise VerificationError("reuse receipt source run path differs")
+ 
+     try:
+-        attempt_index = next(
+-            index
+-            for index, attempt in enumerate(source.attempts)
+-            if attempt.attempt_id == source.result.successful_attempt_id
+-        )
+-    except StopIteration as exc:
+-        raise VerificationError("reused source run has no successful attempt") from exc
++        attempt_index = source.result.attempts.index(receipt.source_attempt)
++    except ValueError as exc:
++        raise VerificationError("reuse receipt source attempt is absent") from exc
+     source_attempt = source.attempts[attempt_index]
+-    if receipt.source_attempt != source.result.attempts[attempt_index]:
+-        raise VerificationError("reuse receipt selects a different source attempt")
+ 
+     source_stage = next(
+         (
+@@ -240,11 +232,24 @@ def verify_stage_reuse(
+     )
+     if source_stage is None or receipt.source_stage != source_stage:
+         raise VerificationError("reuse receipt selects a different source stage")
+-    source_result = source.resolved_stages.get(receipt.stage_id)
++    source_results = source.attempt_stages.get(source_attempt.attempt_id)
++    if source_results is None and (
++        source_attempt.attempt_id == source.result.successful_attempt_id
++    ):
++        source_results = source.resolved_stages
++    source_result = (
++        None if source_results is None else source_results.get(receipt.stage_id)
++    )
+     if source_result is None:
+         raise VerificationError("reused source stage has no verified result")
+-    if isinstance(getattr(source_result, "completion", None), ReusedStageCompletion):
+-        raise VerificationError("a reused stage cannot be another reuse source")
++    source_reuse = source.attempt_reuse.get(source_attempt.attempt_id, {}).get(
++        receipt.stage_id
++    )
++    if (
++        isinstance(getattr(source_result, "completion", None), ReusedStageCompletion)
++        and source_reuse is None
++    ):
++        raise VerificationError("reused source stage has no verified reuse receipt")
+ 
+     source_key = _rebuilt_reuse_key(source.plan, receipt.stage_id, source_inputs)
+     target_key = _rebuilt_reuse_key(target_plan, receipt.stage_id, target_inputs)
+@@ -264,6 +269,13 @@ def verify_stage_reuse(
+     received_metric_ids = tuple(metric.metric_id for metric in receipt.metrics)
+     if received_metric_ids != expected_metric_ids:
+         raise VerificationError("reuse receipt metric coverage differs")
++    if source_reuse is not None:
++        if receipt.metrics != source_reuse.metrics:
++            raise VerificationError(
++                "reuse receipt metric evidence differs from source reuse"
++            )
++        return receipt
++
+     measurements = _metric_references(
+         source_attempt.measurement_files,
+         stage_id=receipt.stage_id,
+@@ -332,58 +344,76 @@ def _verify_reused_stages(
+     result: ResolvedRun,
+     plan: VerifiedRunPlan,
+     attempts: tuple[RunAttempt, ...],
+-    stages: Mapping[StageId, ResolvedBaseSpec],
+-    inputs: Mapping[StageId, Mapping[InputName, VerifiedInput]],
++    stages: Mapping[int, Mapping[StageId, ResolvedBaseSpec]],
++    inputs: Mapping[int, Mapping[StageId, Mapping[InputName, VerifiedInput]]],
+     policy: VerificationPolicy,
+     fetcher: StorageFetcher | None,
+     ancestors: frozenset[str],
+-) -> dict[StageId, StageReuseReceipt]:
+-    """Follow and verify each reuse receipt in the successful attempt."""
+-    if result.successful_attempt_id is None:
+-        return {}
+-    attempt = next(
+-        item for item in attempts if item.attempt_id == result.successful_attempt_id
+-    )
+-    receipts: dict[StageId, StageReuseReceipt] = {}
+-    for stage_reference in attempt.resolved_stages:
+-        target = stages[stage_reference.stage_id]
+-        if not isinstance(target, ResolvedParameterizedSpec) or not isinstance(
+-            target.completion, ReusedStageCompletion
+-        ):
+-            continue
+-        raw = read_resolved_file(target.completion.receipt, fetcher=fetcher)
+-        try:
+-            receipt = StageReuseReceipt.model_validate(parse_yaml_bytes(raw))
+-        except (yaml.YAMLError, ValueError) as exc:
+-            raise VerificationError("stage reuse receipt is invalid") from exc
+-        source_id = receipt.source_run.sha256
+-        if source_id in ancestors:
+-            raise VerificationError("stage reuse sources form a cycle")
+-        source_raw = read_resolved_file(receipt.source_run, fetcher=fetcher)
+-        try:
+-            source_run = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
+-        except (yaml.YAMLError, ValueError) as exc:
+-            raise VerificationError("stage reuse source run is invalid") from exc
+-        source = _verify_run_result(
+-            source_run,
+-            policy=policy,
+-            fetcher=fetcher,
+-            ancestors=ancestors | {source_id},
+-        )
+-        verify_stage_reuse(
+-            receipt,
+-            source_reference=receipt.source_run,
+-            source=source,
+-            source_inputs=_input_identities(
+-                source.inputs.get(stage_reference.stage_id, {})
+-            ),
+-            target_plan=plan,
+-            target_stage=stage_reference,
+-            target_result=target,
+-            target_inputs=_input_identities(inputs.get(stage_reference.stage_id, {})),
+-        )
+-        receipts[stage_reference.stage_id] = receipt
+-    return receipts
++) -> dict[int, dict[StageId, StageReuseReceipt]]:
++    """Follow and verify every reuse receipt in every recorded attempt."""
++    receipts_by_attempt: dict[int, dict[StageId, StageReuseReceipt]] = {}
++    for attempt in attempts:
++        attempt_stages = stages.get(attempt.attempt_id, {})
++        attempt_inputs = inputs.get(attempt.attempt_id, {})
++        receipts: dict[StageId, StageReuseReceipt] = {}
++        for stage_reference in attempt.resolved_stages:
++            target = attempt_stages[stage_reference.stage_id]
++            if not isinstance(target, ResolvedParameterizedSpec) or not isinstance(
++                target.completion, ReusedStageCompletion
++            ):
++                continue
++            raw = read_resolved_file(target.completion.receipt, fetcher=fetcher)
++            try:
++                receipt = StageReuseReceipt.model_validate(parse_yaml_bytes(raw))
++            except (yaml.YAMLError, ValueError) as exc:
++                raise VerificationError("stage reuse receipt is invalid") from exc
++            source_id = receipt.source_run.sha256
++            if source_id in ancestors:
++                raise VerificationError("stage reuse sources form a cycle")
++            source_raw = read_resolved_file(receipt.source_run, fetcher=fetcher)
++            try:
++                source_run = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
++            except (yaml.YAMLError, ValueError) as exc:
++                raise VerificationError("stage reuse source run is invalid") from exc
++            source = _verify_run_result(
++                source_run,
++                policy=policy,
++                fetcher=fetcher,
++                ancestors=ancestors | {source_id},
++            )
++            source_attempt_id = next(
++                (
++                    source_attempt.attempt_id
++                    for source_attempt, reference in zip(
++                        source.attempts,
++                        source.result.attempts,
++                        strict=True,
++                    )
++                    if reference == receipt.source_attempt
++                ),
++                None,
++            )
++            if source_attempt_id is None:
++                raise VerificationError("reuse receipt source attempt is absent")
++            verify_stage_reuse(
++                receipt,
++                source_reference=receipt.source_run,
++                source=source,
++                source_inputs=_input_identities(
++                    source.attempt_inputs.get(source_attempt_id, {}).get(
++                        stage_reference.stage_id, {}
++                    )
++                ),
++                target_plan=plan,
++                target_stage=stage_reference,
++                target_result=target,
++                target_inputs=_input_identities(
++                    attempt_inputs.get(stage_reference.stage_id, {})
++                ),
++            )
++            receipts[stage_reference.stage_id] = receipt
++        receipts_by_attempt[attempt.attempt_id] = receipts
++    return receipts_by_attempt
+ 
+ 
+ def verify_run_result(
+@@ -1221,6 +1251,8 @@ def _verify_run_result(
+     measurement_references: list[ResolvedFileRef] = []
+     successful_stages: dict[StageId, ResolvedBaseSpec] = {}
+     successful_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
++    attempt_stages: dict[int, dict[StageId, ResolvedBaseSpec]] = {}
++    all_attempt_inputs: dict[int, dict[StageId, dict[InputName, VerifiedInput]]] = {}
+     stage_result_snapshots: set[tuple[str, ...]] = set()
+     attempt_file_snapshots: set[tuple[str, ...]] = set()
+ 
+@@ -1292,11 +1324,13 @@ def _verify_run_result(
+             )
+             if verified_external:
+                 external_inputs[stage_id] = verified_external
+-        attempt_inputs = _merge_stage_inputs(
++        current_inputs = _merge_stage_inputs(
+             stored_inputs,
+             future_inputs,
+             external_inputs,
+         )
++        attempt_stages[attempt.attempt_id] = verified_stages
++        all_attempt_inputs[attempt.attempt_id] = current_inputs
+         attempt_measurements = verify_attempt_files(
+             attempt,
+             plan.run,
+@@ -1323,7 +1357,7 @@ def _verify_run_result(
+         all_measurements.extend(attempt_measurements)
+         if attempt.attempt_id == resolved_run.successful_attempt_id:
+             successful_stages = verified_stages
+-            successful_inputs = attempt_inputs
++            successful_inputs = current_inputs
+ 
+     if resolved_run.status == "succeeded":
+         estimator_stage = successful_stages.get(plan.run.estimator.stage_id)
+@@ -1332,16 +1366,21 @@ def _verify_run_result(
+         if plan.run.estimator.artifact_name not in estimator_stage.artifacts:
+             raise VerificationError("successful run has no selected estimator artifact")
+ 
+-    reuse = _verify_reused_stages(
++    attempt_reuse = _verify_reused_stages(
+         result=resolved_run,
+         plan=plan,
+         attempts=attempts,
+-        stages=successful_stages,
+-        inputs=successful_inputs,
++        stages=attempt_stages,
++        inputs=all_attempt_inputs,
+         policy=policy,
+         fetcher=fetcher,
+         ancestors=ancestors,
+     )
++    reuse = (
++        attempt_reuse.get(resolved_run.successful_attempt_id, {})
++        if resolved_run.successful_attempt_id is not None
++        else {}
++    )
+ 
+     return VerifiedRunResult(
+         result=resolved_run,
+@@ -1352,4 +1391,7 @@ def _verify_run_result(
+         measurement_references=tuple(measurement_references),
+         inputs=successful_inputs,
+         reuse=reuse,
++        attempt_stages=attempt_stages,
++        attempt_inputs=all_attempt_inputs,
++        attempt_reuse=attempt_reuse,
+     )
+diff --git a/tests/test_retention.py b/tests/test_retention.py
+index 9e412cf..2d07f4e 100644
+--- a/tests/test_retention.py
++++ b/tests/test_retention.py
+@@ -161,6 +161,7 @@ def _successful_result(
+             ),
+             path=terminal_path,
+             journal_path=root / journal_path,
++            latest_attempt=attempt,
+         ),
+         (artifact, history),
+     )
+diff --git a/tests/test_run_execution.py b/tests/test_run_execution.py
+index 58dda0c..7a021fd 100644
+--- a/tests/test_run_execution.py
++++ b/tests/test_run_execution.py
+@@ -141,6 +141,7 @@ from viper.runtime import LocalEnvSpec as LocalEnvironmentSpec
+ from viper.serialization import parse_yaml_bytes, serialize_document
+ from viper.stages import (
+     DownloadSpec,
++    ResolvedBuildSpec,
+     ResolvedTrainSpec,
+     StageImplementationRef,
+     StageInvocationReceipt,
+@@ -765,8 +766,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
+     )
+     original_verify_run_result = verify_run_result
+ 
+-    def reject_provisional_result(*args, **kwargs):
++    def reject_provisional_result(resolved_run, *args, **kwargs):
+         """Reject the result after its provisional successful attempt is written."""
++        if resolved_run.status == "failed":
++            return original_verify_run_result(resolved_run, *args, **kwargs)
+         raise VerificationError("artifact.loadability: loader invocation failed")
+ 
+     monkeypatch.setattr(
+@@ -805,8 +808,15 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
+     assert (root / RUN_ROOT / "attempts/4/resolved.yaml").is_file()
+     successful_attempt = attempts[3]
+     assert len(successful_attempt.resolved_stages) == 2
+-    assert len(successful_attempt.measurement_files) == 2
+-    assert len(successful_attempt.metric_verification_files) == 1
++    assert successful_attempt.measurement_files == ()
++    assert successful_attempt.metric_verification_files == ()
++    verified_result = verify_run_result(
++        result.record,
++        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
++        fetcher=fetcher,
++    )
++    retry_reuse = verified_result.reuse["train"]
++    assert retry_reuse.source_attempt == result.record.attempts[2]
+     assert result.journal_path.is_file()
+     assert (result.journal_path.parent / "preflight.json").is_file()
+     metric_runtime = root / ".viper" / "runtime"
+@@ -832,9 +842,9 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
+     )
+ 
+     live_reference = next(
+-        reference
+-        for reference in successful_attempt.measurement_files
+-        if str(reference.stored_at.path).endswith("train.epoch_mean.jsonl")
++        evidence.measurement
++        for evidence in retry_reuse.metrics
++        if evidence.metric_id == "epoch_mean"
+     )
+     live_measurement = Measurement.model_validate_json(
+         fetcher(live_reference.stored_at)
+@@ -1545,6 +1555,299 @@ def test_run_many_retains_one_result_per_plan(
+     assert paths[2] not in executed
+ 
+ 
++def _freeze_retry_plan(root: Path) -> FrozenPlanFiles:
++    """Freeze a two-stage plan whose second stage has a configurable failure budget."""
++    root.mkdir()
++    run_git(root, "init", "--quiet")
++    run_git(root, "config", "user.email", "viper@example.com")
++    run_git(root, "config", "user.name", "VIPER Test")
++    run_git(root, "remote", "add", "origin", REPOSITORY)
++    source = root / "project/retry_pipeline.py"
++    source.parent.mkdir()
++    source.write_text(
++        "from pathlib import Path\n"
++        "from viper import config\n"
++        "from viper.stages import StageContext, build, embed\n\n"
++        "@build(config=config.BuildConfig)\n"
++        "def prepare(context: StageContext[config.BuildConfig]):\n"
++        "    marker = Path('build_calls.txt')\n"
++        "    prior = marker.read_text() if marker.exists() else ''\n"
++        "    marker.write_text(prior + '1\\n')\n"
++        "    target = context.outputs['features']\n"
++        "    target.parent.mkdir(parents=True, exist_ok=True)\n"
++        "    target.write_bytes(b'features')\n\n"
++        "@embed(config=config.EmbedConfig)\n"
++        "def encode(context: StageContext[config.EmbedConfig]):\n"
++        "    marker = Path('embed_calls.txt')\n"
++        "    prior = marker.read_text() if marker.exists() else ''\n"
++        "    marker.write_text(prior + '1\\n')\n"
++        "    budget = Path('embed_failures_remaining.txt')\n"
++        "    remaining = int(budget.read_text()) if budget.exists() else 1\n"
++        "    if remaining > 0:\n"
++        "        budget.write_text(f'{remaining - 1}\\n')\n"
++        "        raise RuntimeError('planned transient failure')\n"
++        "    target = context.outputs['embedding']\n"
++        "    target.parent.mkdir(parents=True, exist_ok=True)\n"
++        "    target.write_bytes(context.inputs['features'].read_bytes())\n\n"
++        "def load(path):\n"
++        "    return path.read_bytes()\n",
++        encoding="utf-8",
++    )
++    (root / "environment.yml").write_text("name: viper-test\n", encoding="utf-8")
++    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
++    run_git(root, "add", ".")
++    run_git(root, "commit", "--quiet", "-m", "source")
++    source_commit = run_git(root, "rev-parse", "HEAD")
++
++    module_spec = importlib.util.spec_from_file_location(
++        f"retry_pipeline_{root.parent.name}", source
++    )
++    assert module_spec is not None and module_spec.loader is not None
++    module = importlib.util.module_from_spec(module_spec)
++    module_spec.loader.exec_module(module)
++    prepared = stage(
++        module.prepare,
++        outputs={  # pyright: ignore[reportArgumentType]
++            "features": output(
++                path="features.bin",
++                loader=module.load,
++                data_role="training",
++            )
++        },
++    )
++    embedded = stage(
++        module.encode,
++        inputs={"features": prepared.outputs["features"]},
++        outputs={  # pyright: ignore[reportArgumentType]
++            "embedding": output(
++                path="embedding.bin",
++                loader=module.load,
++                data_role="training",
++            )
++        },
++    )
++    authored = experiment(
++        experiment_id="retry",
++        variants={
++            "baseline": variant(
++                levels={},
++                stages={"prepare": prepared, "embed": embedded},
++                estimator=embedded.outputs["embedding"],
++            )
++        },
++        replicates={"r1": replicate("r1", seed=7)},
++    )
++    source_ref = GitSource.model_validate(
++        {"repository": REPOSITORY, "commit": source_commit}
++    )
++    environment = LocalEnvSpec(
++        lockfile=GitFileRef(
++            repository=source_ref.repository,
++            commit=source_commit,
++            path="environment.yml",
++        ),
++        python_env=python_environment(),
++    )
++    frozen = freeze_run_plan(
++        root,
++        plan(
++            experiment=authored,
++            variant="baseline",
++            replicate="r1",
++            source=source_ref,
++            env=environment,
++            reproducibility=reproducibility(),
++        ),
++    )
++    run_git(root, "add", "experiments/retry")
++    run_git(root, "commit", "--quiet", "-m", "plan")
++    return frozen
++
++
++def test_run_error_exposes_partial_attempt_result(tmp_path: Path) -> None:
++    """Expose completed and failed stages without converting failure to success."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++
++    with pytest.raises(RunError, match="attempt 1 failed") as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++
++    result = caught.value.result
++    assert result is not None
++    assert result.status == "failed"
++    assert result.latest_attempt.status == "failed"
++    assert result.completed_stage_ids == ("prepare",)
++    assert result.failed_stage_id == "embed"
++
++
++def test_preflight_failure_exposes_no_completed_stage(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Expose an allocated preflight failure without inventing stage progress."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    report = SimpleNamespace(
++        ready=False,
++        checks=(SimpleNamespace(code="source_changed", status="failure"),),
++    )
++    monkeypatch.setattr(
++        "viper.execution._attempt.preflight_plan", lambda *a, **k: report
++    )
++
++    with pytest.raises(RunError, match="attempt 1 failed") as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++
++    result = caught.value.result
++    assert result is not None
++    assert result.completed_stage_ids == ()
++    assert result.failed_stage_id is None
++
++
++def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> None:
++    """Republish a verified completed stage and execute only unfinished work."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError) as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    failed = caught.value.result
++    assert failed is not None
++
++    result = execute_retry(root, frozen.files[-1])
++    store = LocalArtifactStore(root)
++    verified = verify_run_result(
++        result.record,
++        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
++        fetcher=RunFetcher(root, store, REPOSITORY),
++    )
++    resolved_prepare = verified.resolved_stages["prepare"]
++    assert isinstance(resolved_prepare, ResolvedBuildSpec)
++    completion = resolved_prepare.completion
++
++    assert isinstance(completion, ReusedStageCompletion)
++    assert verified.reuse["prepare"].source_attempt == failed.record.attempts[-1]
++    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
++    assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
++
++
++def test_retry_rejects_tampered_completed_stage(tmp_path: Path) -> None:
++    """Reject a prior failed attempt whose completed snapshot changed."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError) as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    failed = caught.value.result
++    assert failed is not None
++    snapshot = failed.latest_attempt.resolved_stages[0].snapshot
++    assert isinstance(snapshot, LocalStageResultSnapshotRef)
++    stored = root / snapshot.store / snapshot.commit
++    artifact = next(stored.glob("**/artifacts/prepare/features/features.bin"))
++    artifact.write_bytes(b"tampered")
++
++    with pytest.raises(RunError) as retried:
++        execute_retry(root, frozen.files[-1])
++    result = retried.value.result
++    assert result is not None
++    assert result.completed_stage_ids == ()
++    assert result.failed_stage_id is None
++    assert result.latest_attempt.failure is not None
++    assert result.latest_attempt.failure.code == "verification_failed"
++    assert result.latest_attempt.failure.message == (
++        "prior failed run cannot be verified for retry"
++    )
++
++
++def test_retry_setup_failure_releases_run_lock(tmp_path: Path) -> None:
++    """Release the run lock when prior-attempt verification fails during setup."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError) as caught:
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    failed = caught.value.result
++    assert failed is not None
++    stored_at = failed.record.attempts[-1].stored_at
++    assert isinstance(stored_at, LocalFileRef)
++    stored_attempt = root / stored_at.store / stored_at.commit / stored_at.path
++    stored_attempt.write_bytes(stored_attempt.read_bytes() + b"\n")
++
++    for _ in range(2):
++        with pytest.raises(VerificationError, match="attempt.identity"):
++            execute_attempt(
++                root,
++                frozen.files[-1],
++                plan=frozen.reference,
++                retry=True,
++            )
++
++
++def test_retry_reuses_completed_stage_across_repeated_failures(tmp_path: Path) -> None:
++    """Carry a verified reused stage through more than one failed retry."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    (root / "embed_failures_remaining.txt").write_text("2\n", encoding="utf-8")
++
++    with pytest.raises(RunError):
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    with pytest.raises(RunError) as first_retry:
++        execute_retry(root, frozen.files[-1])
++    first_retry_result = first_retry.value.result
++    assert first_retry_result is not None
++
++    store = LocalArtifactStore(root)
++    failed_verified = verify_run_result(
++        first_retry_result.record,
++        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
++        fetcher=RunFetcher(root, store, REPOSITORY),
++    )
++    assert "prepare" in failed_verified.attempt_reuse[2]
++
++    result = execute_retry(root, frozen.files[-1])
++    verified = verify_run_result(
++        result.record,
++        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
++        fetcher=RunFetcher(root, store, REPOSITORY),
++    )
++    assert (
++        verified.reuse["prepare"].source_attempt
++        == first_retry_result.record.attempts[-1]
++    )
++    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
++    assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n1\n"
++
++
++def test_retry_finds_completed_stage_before_empty_failed_retry(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Reuse earlier work when an intervening retry completed no stages."""
++    root = tmp_path / "project"
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError):
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++
++    report = SimpleNamespace(
++        ready=False,
++        checks=(SimpleNamespace(code="source_changed", status="failure"),),
++    )
++    with monkeypatch.context() as context:
++        context.setattr(
++            "viper.execution._attempt.preflight_plan", lambda *a, **k: report
++        )
++        with pytest.raises(RunError):
++            execute_retry(root, frozen.files[-1])
++
++    result = execute_retry(root, frozen.files[-1])
++    store = LocalArtifactStore(root)
++    verified = verify_run_result(
++        result.record,
++        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
++        fetcher=RunFetcher(root, store, REPOSITORY),
++    )
++    assert verified.reuse["prepare"].source_attempt == result.record.attempts[0]
++    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
++    assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
++
++
+ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
+     """Reuse verified output without invoking the project stage a second time."""
+     root = tmp_path / "project"
+

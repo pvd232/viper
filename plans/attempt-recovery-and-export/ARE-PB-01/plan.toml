@@ -1,0 +1,144 @@
+schema_version = 1
+contract_id = "attempt-recovery-and-export"
+package_sha256 = "8698fa785ecb28314d3cf86eddbc450dec69c614eb0db74d2264f622660a5406"
+pair_block_id = "ARE-PB-01"
+baseline_commit = "b235b821b786e4f3fb84665cbc3291234df07775"
+change_summary = [
+  "RunError retains the failed terminal RunResult, whose latest attempt exposes completed and failed stage IDs.",
+  "retry() verifies the prior failed terminal record, searches attempts newest-to-oldest for each eligible completed stage, and republishes those stages through the existing StageReuseReceipt path.",
+  "Verification retains per-attempt stages, inputs, and reuse receipts so repeated retries preserve a fully verified provenance chain without weakening byte, plan, input, metric, or snapshot checks.",
+  "Attempt allocation releases the run lock on every setup failure, including invalid prior-attempt evidence.",
+  "Acceptance tests cover partial results, preflight failure, process skipping, earlier-attempt recovery, repeated retries, lock release, tamper rejection, and the existing reuse and retention paths.",
+]
+deviation_summary = "No deviations from ARE-REQ-01 or ARE-REQ-02. Run failure remains exception-based; retry reuses existing stage and metric evidence without changing stage placement or stateless function interfaces."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/failed-attempt-resume.patch"
+target_paths = [
+  "src/viper/evidence.py",
+  "src/viper/execution/_attempt.py",
+  "src/viper/execution/_reuse.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/reuse.py",
+  "src/viper/verification.py",
+  "tests/test_retention.py",
+  "tests/test_run_execution.py",
+]
+
+[[handoff_targets]]
+label = "Complete failed-attempt resume candidate"
+source = "plan"
+path = "patches/failed-attempt-resume.patch"
+line = 1
+
+[[handoff_targets]]
+label = "Attempt execution owner"
+source = "repository"
+path = "src/viper/execution/_attempt.py"
+line = 120
+
+[[handoff_targets]]
+label = "Reuse verification owner"
+source = "repository"
+path = "src/viper/verification.py"
+line = 199
+
+[gate]
+source_roots = ["pyproject.toml", "src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = [
+  "pyright",
+  "src/viper/evidence.py",
+  "src/viper/execution/_attempt.py",
+  "src/viper/execution/_reuse.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/reuse.py",
+  "src/viper/verification.py",
+  "tests/test_retention.py",
+  "tests/test_run_execution.py",
+]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = [
+  "python3",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_run_execution.py::test_run_error_exposes_partial_attempt_result",
+  "tests/test_run_execution.py::test_preflight_failure_exposes_no_completed_stage",
+  "tests/test_run_execution.py::test_retry_reuses_completed_stage_from_failed_attempt",
+  "tests/test_run_execution.py::test_retry_rejects_tampered_completed_stage",
+  "tests/test_run_execution.py::test_retry_setup_failure_releases_run_lock",
+  "tests/test_run_execution.py::test_retry_reuses_completed_stage_across_repeated_failures",
+  "tests/test_run_execution.py::test_retry_finds_completed_stage_before_empty_failed_retry",
+  "tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result",
+  "tests/test_run_execution.py::test_verified_reuse_skips_stage_process",
+  "tests/test_verification_acceptance.py::test_stage_reuse_rejects_each_severed_relationship",
+  "tests/test_protocol.py::test_stage_reuse_models_form_valid_completion_union",
+  "tests/test_retention.py",
+]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--select",
+  "D",
+  "src/viper/evidence.py",
+  "src/viper/execution/_attempt.py",
+  "src/viper/execution/_reuse.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/reuse.py",
+  "src/viper/verification.py",
+  "tests/test_retention.py",
+  "tests/test_run_execution.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "format",
+  "--check",
+  "src/viper/evidence.py",
+  "src/viper/execution/_attempt.py",
+  "src/viper/execution/_reuse.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/reuse.py",
+  "src/viper/verification.py",
+  "tests/test_retention.py",
+  "tests/test_run_execution.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "src/viper/evidence.py",
+  "src/viper/execution/_attempt.py",
+  "src/viper/execution/_reuse.py",
+  "src/viper/execution/errors.py",
+  "src/viper/execution/results.py",
+  "src/viper/reuse.py",
+  "src/viper/verification.py",
+  "tests/test_retention.py",
+  "tests/test_run_execution.py",
+]

@@ -15,17 +15,63 @@
 
 #### <nobr><code>ARE-PB-01</code></nobr>
 
-**Status:** drafting
+**Status:** approved
 
 **Requirement contribution:** Expose structured failed-attempt results and reuse verified completed stages when the same immutable run is retried.
 
-**Plan:** None
+**Review handoff**
 
-**Current receipt:** None
+**What changed**
+
+- RunError retains the failed terminal RunResult, whose latest attempt exposes completed and failed stage IDs.
+- retry() verifies the prior failed terminal record, searches attempts newest-to-oldest for each eligible completed stage, and republishes those stages through the existing StageReuseReceipt path.
+- Verification retains per-attempt stages, inputs, and reuse receipts so repeated retries preserve a fully verified provenance chain without weakening byte, plan, input, metric, or snapshot checks.
+- Attempt allocation releases the run lock on every setup failure, including invalid prior-attempt evidence.
+- Acceptance tests cover partial results, preflight failure, process skipping, earlier-attempt recovery, repeated retries, lock release, tamper rejection, and the existing reuse and retention paths.
+
+**Plan deviations:** No deviations from ARE-REQ-01 or ARE-REQ-02. Run failure remains exception-based; retry reuses existing stage and metric evidence without changing stage placement or stateless function interfaces.
+
+**Start review:** [Open tested GitHub comparison](https://github.com/pvd232/viper/compare/b235b821b786e4f3fb84665cbc3291234df07775...471cb4a413172f6cfe3be3811ffb9b757274482c)
+
+**Review these files**
+
+- [Complete failed-attempt resume candidate](../plans/attempt-recovery-and-export/ARE-PB-01/patches/failed-attempt-resume.patch#L1)
+- [Attempt execution owner](../src/viper/execution/_attempt.py#L120)
+- [Reuse verification owner](../src/viper/verification.py#L199)
+
+**Evidence:** [Passing gate receipt](../evidence/gates/are-pb-01-v3.json)
+
+**Decision:** Approval is recorded for <nobr><code>ARE-PB-01</code></nobr>; review the installed commit.
+
+<details>
+<summary>Implementation details</summary>
+
+**Plan:** [plan.toml](../plans/attempt-recovery-and-export/ARE-PB-01/plan.toml)
+
+**Retained patch:** [patches/failed-attempt-resume.patch](../plans/attempt-recovery-and-export/ARE-PB-01/patches/failed-attempt-resume.patch)
+
+**Implementation roots:** [pyproject.toml](../pyproject.toml) · [src/viper](../src/viper)
+
+**Test roots:** [tests](../tests)
 
 **Dependencies:** <nobr><code>AUG-PB-01</code></nobr>
 
-**Next action:** Run the current PairBlock plan.
+**Gate steps:**
+
+```bash
+# typecheck
+(cd . && pyright src/viper/evidence.py src/viper/execution/_attempt.py src/viper/execution/_reuse.py src/viper/execution/errors.py src/viper/execution/results.py src/viper/reuse.py src/viper/verification.py tests/test_retention.py tests/test_run_execution.py)
+# test
+(cd . && python3 -m pytest -q -p no:cacheprovider tests/test_run_execution.py::test_run_error_exposes_partial_attempt_result tests/test_run_execution.py::test_preflight_failure_exposes_no_completed_stage tests/test_run_execution.py::test_retry_reuses_completed_stage_from_failed_attempt tests/test_run_execution.py::test_retry_rejects_tampered_completed_stage tests/test_run_execution.py::test_retry_setup_failure_releases_run_lock tests/test_run_execution.py::test_retry_reuses_completed_stage_across_repeated_failures tests/test_run_execution.py::test_retry_finds_completed_stage_before_empty_failed_retry tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result tests/test_run_execution.py::test_verified_reuse_skips_stage_process tests/test_verification_acceptance.py::test_stage_reuse_rejects_each_severed_relationship tests/test_protocol.py::test_stage_reuse_models_form_valid_completion_union tests/test_retention.py)
+# documentation
+(cd . && ruff check --select D src/viper/evidence.py src/viper/execution/_attempt.py src/viper/execution/_reuse.py src/viper/execution/errors.py src/viper/execution/results.py src/viper/reuse.py src/viper/verification.py tests/test_retention.py tests/test_run_execution.py)
+# lint
+(cd . && ruff format --check src/viper/evidence.py src/viper/execution/_attempt.py src/viper/execution/_reuse.py src/viper/execution/errors.py src/viper/execution/results.py src/viper/reuse.py src/viper/verification.py tests/test_retention.py tests/test_run_execution.py)
+# lint
+(cd . && ruff check src/viper/evidence.py src/viper/execution/_attempt.py src/viper/execution/_reuse.py src/viper/execution/errors.py src/viper/execution/results.py src/viper/reuse.py src/viper/verification.py tests/test_retention.py tests/test_run_execution.py)
+```
+
+</details>
 
 <a id="are-pb-02"></a>
 

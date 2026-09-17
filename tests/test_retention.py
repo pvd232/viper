@@ -161,6 +161,7 @@ def _successful_result(
             ),
             path=terminal_path,
             journal_path=root / journal_path,
+            latest_attempt=attempt,
         ),
         (artifact, history),
     )
