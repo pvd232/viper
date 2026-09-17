@@ -3,9 +3,6 @@
 This checklist converts the concrete friction observed in the CleaRx audio-retention runs into independently verifiable VIPER changes. It keeps GPU/CPU stage separation and stateless build or metric functions in the existing stage model; those paths did not require a new abstraction.
 
 <!-- contract-protocol:generated:start -->
-**Resume here:** [Resume at AUG-PB-02](../contracts/authoring-guardrails.md#aug-pb-02)
-
-
 ### Phase 1: Fail invalid plans before execution
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
@@ -36,7 +33,7 @@ This checklist converts the concrete friction observed in the CleaRx audio-reten
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>AUG-REQ-02</code></nobr> | in_progress | [authoring-guardrails](../contracts/authoring-guardrails.md#aug-req-02) | <nobr><code>AUG-PB-02</code></nobr> | None |
+| <nobr><code>AUG-REQ-02</code></nobr> | complete | [authoring-guardrails](../contracts/authoring-guardrails.md#aug-req-02) | <nobr><code>AUG-PB-02</code></nobr> | None |
 <!-- contract-protocol:generated:end -->
 
 The execution order front-loads invalid-plan rejection, then protects completed computation, packages provenance, improves environment diagnosis, and finishes with authoring ergonomics. Each PairBlock is independently reviewable and may stop without weakening later acceptance criteria.

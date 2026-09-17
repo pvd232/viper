@@ -1,0 +1,11 @@
+{
+  "gate_receipt_ref": {
+    "path": "evidence/gates/aug-pb-02-r4.json",
+    "sha256": "edd43e8944895e9fefbb54e25e862245d3508dbbc50f8648ed3bb3ce2dab1ab6"
+  },
+  "implementation_repository_commit": "4d3d7c4697bbb0f308b15fd550414a0be44d5f06",
+  "pair_block_id": "AUG-PB-02",
+  "reviewed_at": "2026-09-17T13:03:15.001723Z",
+  "reviewer": "matrix:design_review,evidence_review,implementation_review",
+  "schema_version": 1
+}
