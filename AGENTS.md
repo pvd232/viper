@@ -52,6 +52,8 @@ For agents using VIPER to run or inspect experiments, start with the
 
 - Keep edits within the requested scope and preserve unrelated working-tree
   changes.
+- Reserve Git in PairBlock workflows for contract-protocol repository
+  operations. A declared gate step must not invoke `git` directly.
 - Change source files that own generated caches, package metadata, and compiled
   artifacts.
 - Run targeted tests for changed behavior, followed by broader validation when
