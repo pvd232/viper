@@ -129,7 +129,9 @@ def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
     assert cli_mapping is not None
     expected = {operation: command for command, operation in cli_mapping.items()}
     for operation in expected:
-        if operation == "knowledge_refresh":
+        if operation == "env_doctor":
+            expected[operation] = "env doctor"
+        elif operation == "knowledge_refresh":
             expected[operation] = "knowledge refresh"
         elif operation.startswith("publish_"):
             expected[operation] = f"knowledge publish {operation}"
