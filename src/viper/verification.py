@@ -14,6 +14,7 @@ from ._verification.attempt import (
     verify_attempt_files,
     verify_attempt_journal,
     verify_attempt_stages,
+    verify_download_retrieval,
     verify_external_inputs,
     verify_measurement_stage_times,
 )
@@ -87,6 +88,7 @@ from .stages import (
     EvalSpec,
     InternalSpec,
     ResolvedBaseSpec,
+    ResolvedDownloadSpec,
     ResolvedInternalSpec,
     ResolvedParameterizedSpec,
     TrainSpec,
@@ -698,6 +700,16 @@ def verify_artifact_in_run(
         data_role=declaration.data_role,
         fetcher=fetcher,
     )
+    if isinstance(producer_spec, ResolvedDownloadSpec):
+        verify_download_retrieval(
+            successful_attempt,
+            verified_run.plan.run,
+            producer_spec,
+            producer_stage.snapshot,
+            pointer.artifact.artifact_name,
+            body_raw=verified_artifact.files[0].content,
+            fetcher=fetcher,
+        )
     if (
         expected_data_role is not None
         and verified_artifact.data_role != expected_data_role

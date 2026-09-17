@@ -19,6 +19,8 @@ from tests.fixtures import (
     artifact_loader_ref,
     config_type_ref,
     config_type_source,
+    http_policy,
+    http_request,
     metric_spec,
     python_environment,
     resume_state,
@@ -28,7 +30,10 @@ from tests.fixtures import (
 from viper import _subprocess as subprocess
 from viper import config
 from viper._schema import NonEmptyStr
-from viper._verification.attempt import verify_attempt_files
+from viper._verification.attempt import (
+    verify_attempt_files,
+    verify_download_retrieval,
+)
 from viper._verification.plan import (
     verify_config_type_references,
     verify_run_plan_relationships,
@@ -2690,3 +2695,29 @@ def test_pointer_producer_structure_skips_unselected_payloads(
 
     assert producer.resolved_stages == {"build": stage}
     assert received_payload_modes == [False]
+
+
+def test_selected_download_retrieval_rejects_unaccepted_status() -> None:
+    """Keep selected download artifacts bound to their frozen HTTP policy."""
+    request = http_request()
+    retrieval = SimpleNamespace(
+        request=request,
+        response=SimpleNamespace(response_url=request.url, status=404),
+    )
+    resolved: Any = SimpleNamespace(
+        spec=SimpleNamespace(policy=http_policy()),
+        retrievals={"dataset": retrieval},
+    )
+    attempt: Any = SimpleNamespace()
+    run: Any = SimpleNamespace()
+    snapshot: Any = SimpleNamespace()
+
+    with pytest.raises(VerificationError, match="unaccepted status"):
+        verify_download_retrieval(
+            attempt,
+            run,
+            resolved,
+            snapshot,
+            "dataset",
+            fetcher=None,
+        )

@@ -502,6 +502,116 @@ def _verify_unresolved_stage_invocation(
         )
 
 
+def verify_download_retrieval(
+    attempt: RunAttempt,
+    run: RunSpec,
+    resolved: ResolvedDownloadSpec,
+    snapshot: StageResultSnapshot,
+    input_name: InputName,
+    *,
+    body_raw: bytes | None = None,
+    fetcher: StorageFetcher | None,
+) -> None:
+    """Verify one selected HTTP retrieval and its exact artifact body."""
+    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
+    retrieval = resolved.retrievals[input_name]
+    try:
+        validate_request_policy(retrieval.request, resolved.spec.policy)
+        terminal_request = retrieval.request.model_copy(
+            update={"url": retrieval.response.response_url}
+        )
+        validate_request_policy(terminal_request, resolved.spec.policy)
+    except HttpRetrievalError as exc:
+        raise VerificationError(
+            f"HTTP retrieval {input_name!r} violates its frozen policy"
+        ) from exc
+    if retrieval.response.status not in resolved.spec.policy.accepted_statuses:
+        raise VerificationError(
+            f"HTTP retrieval {input_name!r} has an unaccepted status"
+        )
+    expected_path = resolved.spec.outputs[input_name].path
+    if retrieval.body.path != expected_path:
+        raise VerificationError(f"HTTP retrieval {input_name!r} body uses another path")
+    if body_raw is None:
+        body_raw = storage.read_snapshot_file(
+            snapshot,
+            retrieval.body,
+            fetcher=fetcher,
+        )
+    artifact = resolved.artifacts[input_name]
+    if artifact.kind != "file" or artifact.file != retrieval.body:
+        raise VerificationError(
+            f"HTTP retrieval {input_name!r} differs from its artifact"
+        )
+    if (
+        hashlib.sha256(body_raw).hexdigest() != retrieval.request.expected_body_sha256
+        or len(body_raw) != retrieval.request.expected_body_bytes
+    ):
+        raise VerificationError(
+            f"HTTP retrieval {input_name!r} body differs from its request"
+        )
+    if not (
+        attempt.started_at
+        <= retrieval.started_at
+        < retrieval.completed_at
+        <= resolved.completed_at
+    ):
+        raise VerificationError(
+            f"HTTP retrieval {input_name!r} timing falls outside its stage"
+        )
+
+    http = retrieval.http
+    if isinstance(http.spec, WorkspaceHttpImplementationSpec):
+        implementation = http.spec.implementation
+        implementation_raw = retrieve(
+            GitFileRef(
+                repository=run.source.repository,
+                commit=run.source.commit,
+                path=implementation.path,
+            )
+        )
+        if (
+            len(implementation_raw) != implementation.bytes
+            or hashlib.sha256(implementation_raw).hexdigest() != implementation.sha256
+        ):
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} implementation source differs"
+            )
+        config_reference = http.spec.config_type
+        config_raw = retrieve(
+            GitFileRef(
+                repository=run.source.repository,
+                commit=run.source.commit,
+                path=config_reference.path,
+            )
+        )
+        try:
+            verify_config_type_bytes(config_reference, config_raw)
+        except ConfigValidationError as exc:
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} HTTP config type differs"
+            ) from exc
+        for executable in http.external_executables:
+            try:
+                bundle_reader = getattr(fetcher, "read_external_executable", None)
+                executable_raw = (
+                    bundle_reader(executable)
+                    if bundle_reader is not None
+                    else executable.path.read_bytes()
+                )
+            except OSError as exc:
+                raise VerificationError(
+                    f"HTTP retrieval {input_name!r} executable is unavailable"
+                ) from exc
+            if (
+                len(executable_raw) != executable.spec.bytes
+                or hashlib.sha256(executable_raw).hexdigest() != executable.spec.sha256
+            ):
+                raise VerificationError(
+                    f"HTTP retrieval {input_name!r} executable identity differs"
+                )
+
+
 def _verify_download_retrievals(
     attempt: RunAttempt,
     run: RunSpec,
@@ -512,107 +622,15 @@ def _verify_download_retrievals(
     fetcher: StorageFetcher | None,
 ) -> None:
     """Verify each HTTP request, response, implementation, and artifact body."""
-    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
-    for input_name, retrieval in resolved.retrievals.items():
-        try:
-            validate_request_policy(retrieval.request, resolved.spec.policy)
-            terminal_request = retrieval.request.model_copy(
-                update={"url": retrieval.response.response_url}
-            )
-            validate_request_policy(terminal_request, resolved.spec.policy)
-        except HttpRetrievalError as exc:
-            raise VerificationError(
-                f"HTTP retrieval {input_name!r} violates its frozen policy"
-            ) from exc
-        if retrieval.response.status not in resolved.spec.policy.accepted_statuses:
-            raise VerificationError(
-                f"HTTP retrieval {input_name!r} has an unaccepted status"
-            )
-        expected_path = resolved.spec.outputs[input_name].path
-        if retrieval.body.path != expected_path:
-            raise VerificationError(
-                f"HTTP retrieval {input_name!r} body uses another path"
-            )
-        body_raw = storage.read_snapshot_file(
+    for input_name in resolved.retrievals:
+        verify_download_retrieval(
+            attempt,
+            run,
+            resolved,
             snapshot,
-            retrieval.body,
+            input_name,
             fetcher=fetcher,
         )
-        artifact = resolved.artifacts[input_name]
-        if artifact.kind != "file" or artifact.file != retrieval.body:
-            raise VerificationError(
-                f"HTTP retrieval {input_name!r} differs from its artifact"
-            )
-        if (
-            hashlib.sha256(body_raw).hexdigest()
-            != retrieval.request.expected_body_sha256
-            or len(body_raw) != retrieval.request.expected_body_bytes
-        ):
-            raise VerificationError(
-                f"HTTP retrieval {input_name!r} body differs from its request"
-            )
-        if not (
-            attempt.started_at
-            <= retrieval.started_at
-            < retrieval.completed_at
-            <= resolved.completed_at
-        ):
-            raise VerificationError(
-                f"HTTP retrieval {input_name!r} timing falls outside its stage"
-            )
-
-        http = retrieval.http
-        if isinstance(http.spec, WorkspaceHttpImplementationSpec):
-            implementation = http.spec.implementation
-            implementation_raw = retrieve(
-                GitFileRef(
-                    repository=run.source.repository,
-                    commit=run.source.commit,
-                    path=implementation.path,
-                )
-            )
-            if (
-                len(implementation_raw) != implementation.bytes
-                or hashlib.sha256(implementation_raw).hexdigest()
-                != implementation.sha256
-            ):
-                raise VerificationError(
-                    f"HTTP retrieval {input_name!r} implementation source differs"
-                )
-            config_reference = http.spec.config_type
-            config_raw = retrieve(
-                GitFileRef(
-                    repository=run.source.repository,
-                    commit=run.source.commit,
-                    path=config_reference.path,
-                )
-            )
-            try:
-                verify_config_type_bytes(config_reference, config_raw)
-            except ConfigValidationError as exc:
-                raise VerificationError(
-                    f"HTTP retrieval {input_name!r} HTTP config type differs"
-                ) from exc
-            for executable in http.external_executables:
-                try:
-                    bundle_reader = getattr(fetcher, "read_external_executable", None)
-                    executable_raw = (
-                        bundle_reader(executable)
-                        if bundle_reader is not None
-                        else executable.path.read_bytes()
-                    )
-                except OSError as exc:
-                    raise VerificationError(
-                        f"HTTP retrieval {input_name!r} executable is unavailable"
-                    ) from exc
-                if (
-                    len(executable_raw) != executable.spec.bytes
-                    or hashlib.sha256(executable_raw).hexdigest()
-                    != executable.spec.sha256
-                ):
-                    raise VerificationError(
-                        f"HTTP retrieval {input_name!r} executable identity differs"
-                    )
 
 
 def verify_attempt_stages(
