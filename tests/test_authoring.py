@@ -1371,6 +1371,21 @@ def test_named_inputs_preserve_paths_roles_and_reject_name_conflicts() -> None:
         )
 
 
+def test_download_input_roots_require_an_input_at_authoring() -> None:
+    """Reject a closure policy that has no provenance branch to prove."""
+    assert isinstance(example_training.spec, TrainSpecDraft)
+
+    with pytest.raises(ValueError, match="require at least one input"):
+        stage(
+            example_training.spec.implementation,
+            inputs={},
+            outputs=example_training.spec.outputs,
+            metrics=example_training.spec.metrics,
+            objective=example_training.spec.objective,
+            input_roots="download",
+        )
+
+
 def test_stage_uses_the_decorators_config_defaults() -> None:
     """Omitting config preserves the decorator's config class and defaults."""
     assert isinstance(example_training.spec, TrainSpecDraft)

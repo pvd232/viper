@@ -19,7 +19,7 @@ from ..artifacts import (
 from ..catalog import Catalog
 from ..evidence import StorageFetcher, VerificationPolicy
 from ..ids import InputName, MetricId, StageId
-from ..inputs import ResolvedInputRef
+from ..inputs import DownloadSourceClosureReceipt, ResolvedInputRef
 from ..metrics import Measurement, MetricSpec, is_recomputed_metric
 from ..references import (
     ResolvedFileRef,
@@ -186,6 +186,7 @@ def _resolved_stage(
     artifacts: dict[ArtifactName, ResolvedArtifact],
     inputs: dict[InputName, ResolvedInputRef],
     completed_at: datetime,
+    download_source_closure: DownloadSourceClosureReceipt | None,
 ) -> ResolvedInternalSpec:
     """Construct the resolved subtype selected by the target stage kind."""
     values = {
@@ -194,6 +195,7 @@ def _resolved_stage(
         "artifacts": artifacts,
         "inputs": inputs,
         "completed_at": completed_at,
+        "download_source_closure": download_source_closure,
     }
     if stage.kind == "build":
         return ResolvedBuildSpec(**values)
@@ -224,6 +226,7 @@ def reuse_stage(
     destination: StorageDestination,
     cloud_client: ViperCloudClient | None,
     metrics: dict[MetricId, MetricSpec],
+    download_source_closure: DownloadSourceClosureReceipt | None = None,
     candidate: StageReuseCandidate | None = None,
 ) -> ReuseStageResult | None:
     """Verify one catalog hit and materialize it without running a worker."""
@@ -331,6 +334,7 @@ def reuse_stage(
         artifacts=artifacts,
         inputs=inputs,
         completed_at=completed_at,
+        download_source_closure=download_source_closure,
     )
     snapshot = publisher.publish_reuse(
         resolved_stage_path=resolved_stage_path,

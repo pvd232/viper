@@ -149,7 +149,7 @@ from viper.stages import (
     load_stage_callable,
 )
 from viper.storage import LocalArtifactStore, LocalStorageDestination
-from viper.verification import verify_run_result
+from viper.verification import verify_download_source_closure, verify_run_result
 from viper.workspace import (
     AttemptWorkspace,
     captured_input_path,
@@ -627,6 +627,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
                 name="prior",
             )
         },
+        input_roots="download",
         config=train_config,
         outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: OutputSpec(
@@ -815,6 +816,30 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
         fetcher=fetcher,
     )
+    verified_train = verified_result.resolved_stages["train"]
+    assert isinstance(verified_train, ResolvedTrainSpec)
+    assert verified_train.download_source_closure is not None
+    assert tuple(verified_train.download_source_closure.roots) == ("prior",)
+    assert verified_train.download_source_closure.roots["prior"][0].stage_id == (
+        "download"
+    )
+    rebuilt_closure = verify_download_source_closure(
+        "train",
+        verified_train.spec,
+        run=verified_result.plan.run,
+        attempt_id=successful_attempt.attempt_id,
+        resolved_inputs=verified_train.inputs,
+        stage_specs=verified_result.plan.stages,
+        completed_stages={
+            item.stage_id: item for item in successful_attempt.resolved_stages
+        },
+        completed_results=verified_result.resolved_stages,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=lambda _location: pytest.fail(
+            "same-run closure traversal fetched immutable bytes"
+        ),
+    )
+    assert rebuilt_closure == verified_train.download_source_closure
     retry_reuse = verified_result.reuse["train"]
     assert retry_reuse.source_attempt == result.record.attempts[2]
     assert result.journal_path.is_file()
@@ -1458,6 +1483,25 @@ def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
     assert "for reference in captured_inputs.values()" in source
 
 
+def test_download_source_closure_runs_before_reuse_or_stage_process() -> None:
+    """Keep source closure on the fail-fast path before any consumer execution."""
+    source = inspect.getsource(execute_attempt)
+    tree = ast.parse(source)
+    call_lines: dict[str, list[int]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            call_lines.setdefault(node.func.id, []).append(node.lineno)
+
+    resolution = min(call_lines["resolve_inputs"])
+    closure = min(call_lines["verify_download_source_closure"])
+    reuse = min(call_lines["reuse_stage"])
+    process = min(call_lines["execute_stage_process"])
+
+    assert resolution < closure < reuse < process
+
+
 def test_run_many_retains_one_result_per_plan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1563,7 +1607,11 @@ def test_run_many_retains_one_result_per_plan(
     assert paths[2] not in executed
 
 
-def _freeze_retry_plan(root: Path) -> FrozenPlanFiles:
+def _freeze_retry_plan(
+    root: Path,
+    *,
+    download_rooted: bool = False,
+) -> FrozenPlanFiles:
     """Freeze a two-stage plan whose second stage has a configurable failure budget."""
     root.mkdir()
     run_git(root, "init", "--quiet")
@@ -1633,6 +1681,7 @@ def _freeze_retry_plan(root: Path) -> FrozenPlanFiles:
                 data_role="training",
             )
         },
+        input_roots="download" if download_rooted else "any",
     )
     authored = experiment(
         experiment_id="retry",
@@ -1670,6 +1719,20 @@ def _freeze_retry_plan(root: Path) -> FrozenPlanFiles:
     run_git(root, "add", "experiments/retry")
     run_git(root, "commit", "--quiet", "-m", "plan")
     return frozen
+
+
+def test_download_source_failure_prevents_consumer_process_start(
+    tmp_path: Path,
+) -> None:
+    """Reject an unrooted producer before starting the consuming worker."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root, download_rooted=True)
+
+    with pytest.raises(RunError, match="attempt 1 failed"):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+
+    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
+    assert not (root / "embed_calls.txt").exists()
 
 
 def test_run_error_exposes_partial_attempt_result(tmp_path: Path) -> None:

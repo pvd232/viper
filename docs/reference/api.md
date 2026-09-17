@@ -72,7 +72,7 @@ For saved plans, retries, batch outcomes, and benchmark execution, see
 | `input()` | `ExternalInputDraft` or `InputBinding` | Name a local file with `path=`, or an upstream artifact with `source=`. |
 | `download()` | `StageDraft` | Declare a runner-owned HTTP retrieval stage. |
 | `run_artifact()` | `RunArtifactDraft` | Select an artifact from a verified prior run. |
-| `stage()` | `StageDraft` | Connect a decorated function to config, inputs, outputs, metrics, and an objective. |
+| `stage()` | `StageDraft` | Connect a decorated function to config, inputs, outputs, metrics, an objective, and an optional input-root policy. |
 | `factor()` | `FactorDraft` | Declare the permitted levels of one experimental factor. |
 | `FactorDraft.level()` | `FactorLevel` | Select a permitted level while retaining its factor's name. |
 | `matrix()` | `tuple[VariantDraft, ...]` | Build one variant for every factor-level combination. |
@@ -160,6 +160,11 @@ lists each field, its value, and the declaration that supplies it.
 
 `stage()` uses the decorated config class's defaults when `config` is omitted.
 A custom config with required fields still requires an instance supplying them.
+Set `input_roots="download"` when every transitive input must originate in a VIPER
+Download stage. Execution calls `verify_download_source_closure()` before stage reuse
+or process startup and retains its `DownloadSourceClosureReceipt` in the resolved stage
+record. The walk reads only immutable provenance receipts; it does not retrieve artifact
+bodies again.
 `measure()` defaults to `MetricConfig()`; supply a custom instance when the
 calculation has settings.
 

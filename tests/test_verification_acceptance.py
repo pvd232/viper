@@ -56,7 +56,11 @@ from viper.benchmark import (
     MetricCriterionResult,
 )
 from viper.config import ConfigTypeRef as CurrentConfigTypeRef
-from viper.evidence import VerificationError, VerifiedRunPlan, VerifiedRunResult
+from viper.evidence import (
+    VerificationError,
+    VerifiedRunPlan,
+    VerifiedRunResult,
+)
 from viper.experiments import (
     BuildVariantStageConfig,
     EvalVariantStageConfig,
@@ -71,6 +75,9 @@ from viper.http import (
     ResolvedHttpRetrieval,
 )
 from viper.inputs import (
+    DownloadSourceClosureReceipt,
+    DownloadSourceEdge,
+    DownloadSourceNode,
     ExternalInputRef,
     FutureInputRef,
     LocalSource,
@@ -79,6 +86,7 @@ from viper.inputs import (
     ResolvedStoredInputRef,
     StoredInputMaterialization,
     StoredInputRef,
+    VerifiedDownloadSource,
 )
 from viper.keys import Eval as EvalKeys
 from viper.keys import Train as TrainKeys
@@ -136,6 +144,7 @@ from viper.reuse import (
     ReusedStageFile,
     ReuseFileIdentity,
     ReuseInputIdentity,
+    StageReuseKey,
     StageReuseReceipt,
     build_stage_reuse_key,
     verified_input_identity,
@@ -953,6 +962,8 @@ def publish_producer_run(
     store: DocumentStore,
     *,
     evaluation_role: DataRole = "eval",
+    download_rooted: bool = False,
+    forged_closure: bool = False,
 ) -> tuple[ResolvedRunRef, dict[str, Any]]:
     """Publish a complete upstream run for stored-input verification."""
     run_root = "experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA"
@@ -1021,6 +1032,7 @@ def publish_producer_run(
                 name="dataset",
             )
         },
+        input_roots="download" if download_rooted else "any",
         config=config.TrainConfig.model_validate(
             {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
         ),
@@ -1151,6 +1163,42 @@ def publish_producer_run(
         resolved_spec=resolved_download,
     )
 
+    download_source_closure = None
+    if download_rooted:
+        train_input_node = (
+            "run:01ARZ3NDEKTSV4RRFFQ69G5FAA/attempt:1/"
+            "stage:train/receipt:current/input:training_dataset"
+        )
+        download_output_node = (
+            "run:01ARZ3NDEKTSV4RRFFQ69G5FAA/attempt:1/stage:download/"
+            f"receipt:{download_stage.resolved_spec.sha256}/output:dataset"
+        )
+        root = VerifiedDownloadSource(
+            run_id="01ARZ3NDEKTSV4RRFFQ69G5FAA",
+            attempt_id=1,
+            stage_id="download",
+            stage_receipt=download_stage,
+            input_name="dataset",
+            request=download.inputs["dataset"],
+            body=retrievals["dataset"].body,
+        )
+        if forged_closure:
+            root = root.model_copy(update={"attempt_id": 2})
+        download_source_closure = DownloadSourceClosureReceipt(
+            roots={"training_dataset": (root,)},
+            nodes=(
+                DownloadSourceNode(node_id=download_output_node, kind="stage_output"),
+                DownloadSourceNode(node_id=train_input_node, kind="stage_input"),
+            ),
+            edges=(
+                DownloadSourceEdge(
+                    source=train_input_node,
+                    target=download_output_node,
+                    relation="future",
+                ),
+            ),
+        )
+
     train_commit = "8" * 40
     train_invocation = publish_invocation(
         store,
@@ -1177,6 +1225,7 @@ def publish_producer_run(
         inputs={
             "training_dataset": ResolvedFutureInputRef(producer=download_stage),
         },
+        download_source_closure=download_source_closure,
         artifacts={
             TrainKeys.MODEL: add_single_artifact(
                 store,
@@ -2099,6 +2148,625 @@ def test_download_verification_binds_receipt_to_artifact() -> None:
     artifact = download.artifacts["dataset"]
     assert isinstance(artifact, ResolvedSingleFileArtifact)
     assert download.retrievals["dataset"].body == artifact.file
+
+
+def test_download_source_closure_follows_future_input_to_download_receipt() -> None:
+    """Accept a same-run Future input through its immutable Download receipt."""
+    store = DocumentStore()
+    _, records = publish_producer_run(store)
+    verified = verify_run_result(
+        records["run"],
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+    attempt = verified.attempts[0]
+    train = verified.resolved_stages["train"]
+    assert isinstance(train, ResolvedTrainSpec)
+    receipt = verification.verify_download_source_closure(
+        "train",
+        train.spec,
+        run=verified.plan.run,
+        attempt_id=attempt.attempt_id,
+        resolved_inputs=train.inputs,
+        stage_specs=verified.plan.stages,
+        completed_stages={stage.stage_id: stage for stage in attempt.resolved_stages},
+        completed_results=verified.resolved_stages,
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+
+    assert tuple(receipt.roots) == ("training_dataset",)
+    root = receipt.roots["training_dataset"][0]
+    assert root.stage_id == "download"
+    assert root.input_name == "dataset"
+    assert root.body.sha256 == sha256(records["dataset"])
+
+
+def test_terminal_verification_rebuilds_download_source_closure() -> None:
+    """Accept the retained receipt only when an independent graph walk matches it."""
+    store = DocumentStore()
+    _, records = publish_producer_run(store, download_rooted=True)
+
+    verified = verify_run_result(
+        records["run"],
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+
+    train = verified.resolved_stages["train"]
+    assert isinstance(train, ResolvedTrainSpec)
+    assert train.download_source_closure is not None
+
+
+def test_terminal_verification_rejects_forged_download_source_closure() -> None:
+    """Reject a retained root identity that the resolved graph cannot reproduce."""
+    store = DocumentStore()
+    _, records = publish_producer_run(
+        store,
+        download_rooted=True,
+        forged_closure=True,
+    )
+
+    with pytest.raises(VerificationError, match="closure receipt differs"):
+        verify_run_result(
+            records["run"],
+            policy=POLICY,
+            fetcher=store.fetch,
+        )
+
+
+def test_download_roots_keep_distinct_stage_receipts_with_shared_ids() -> None:
+    """Do not collapse distinct producer receipts that reuse semantic IDs."""
+    store = DocumentStore()
+    _, records = publish_producer_run(store)
+    verified = verify_run_result(records["run"], policy=POLICY, fetcher=store.fetch)
+    download = verified.resolved_stages["download"]
+    assert isinstance(download, ResolvedDownloadSpec)
+    stage = verified.attempts[0].resolved_stages[0]
+    alternate = stage.model_copy(
+        update={
+            "resolved_spec": stage.resolved_spec.model_copy(update={"sha256": "f" * 64})
+        }
+    )
+    retrieval = download.retrievals["dataset"]
+    roots = tuple(
+        sorted(
+            (
+                VerifiedDownloadSource(
+                    run_id=verified.plan.run.run_id,
+                    attempt_id=1,
+                    stage_id="download",
+                    stage_receipt=receipt,
+                    input_name="dataset",
+                    request=retrieval.request,
+                    body=retrieval.body,
+                )
+                for receipt in (stage, alternate)
+            ),
+            key=lambda root: root.stage_receipt.resolved_spec.sha256,
+        )
+    )
+    node_ids = tuple(
+        f"receipt:{root.stage_receipt.resolved_spec.sha256}" for root in roots
+    )
+    receipt = DownloadSourceClosureReceipt(
+        roots={"dataset": roots},
+        nodes=tuple(
+            DownloadSourceNode(node_id=node_id, kind="stage_output")
+            for node_id in node_ids
+        ),
+        edges=(
+            DownloadSourceEdge(
+                source=node_ids[0],
+                target=node_ids[1],
+                relation="selects",
+            ),
+        ),
+    )
+
+    assert len(receipt.roots["dataset"]) == 2
+
+
+def test_download_source_closure_rejects_external_input() -> None:
+    """Reject a local input even when its bytes were captured immutably."""
+    stage = TrainSpec.model_construct(
+        inputs={
+            "training_dataset": ExternalInputRef(
+                source=LocalSource(path="inputs/raw/dataset.bin"),
+                data_role="training",
+            )
+        }
+    )
+    resolved = ResolvedExternalInputRef(
+        source=LocalSource(path="inputs/raw/dataset.bin"),
+        file=SnapshotFileRef(path="inputs/raw/dataset.bin", sha256="a" * 64, bytes=1),
+        data_role="training",
+    )
+
+    with pytest.raises(VerificationError, match="external local file"):
+        verification.verify_download_source_closure(
+            "train",
+            stage,
+            run=RunSpec.model_construct(run_id="01ARZ3NDEKTSV4RRFFQ69G5FAA"),
+            attempt_id=1,
+            resolved_inputs={"training_dataset": resolved},
+            stage_specs={},
+            completed_stages={},
+            completed_results={},
+            policy=POLICY,
+        )
+
+
+def test_download_source_closure_follows_stored_input_to_producer_download() -> None:
+    """Follow stored provenance without rereading an intermediate payload."""
+    store = DocumentStore()
+    producer_run, records = publish_producer_run(store, download_rooted=True)
+    unrelated_attempt = ResolvedAttemptRef(
+        sha256="0" * 64,
+        bytes=999,
+        stored_at=hf_file(
+            PRODUCER_RESULT_COMMIT,
+            (
+                "experiments/source_data/runs/baseline/"
+                "01ARZ3NDEKTSV4RRFFQ69G5FAA/attempts/2/resolved.yaml"
+            ),
+        ),
+    )
+    producer_result = records["run"].model_copy(
+        update={"attempts": (unrelated_attempt, *records["run"].attempts)}
+    )
+    producer_raw = yaml_bytes(producer_result)
+    store.put(producer_run.stored_at, producer_raw)
+    producer_run = producer_run.model_copy(
+        update={"sha256": sha256(producer_raw), "bytes": len(producer_raw)}
+    )
+    pointer = ArtifactPointer(
+        run=producer_run,
+        artifact=StageArtifactRef(
+            stage_id="train",
+            artifact_name=TrainKeys.MODEL,
+        ),
+    )
+    resolved = resolved_pointer(
+        store,
+        MAIN_SOURCE_COMMIT,
+        (f".viper/pointers/{producer_run.sha256}/train/{TrainKeys.MODEL}.pointer.yaml"),
+        pointer,
+    )
+    stage = BuildSpec.model_construct(
+        inputs={
+            "prior": StoredInputRef(
+                pointer=resolved,
+                path="inputs/prior.bin",
+                data_role="training",
+            )
+        }
+    )
+    fetched_paths: list[str] = []
+
+    def observe_fetch(location: StorageModel) -> bytes:
+        fetched_paths.append(str(location.path))
+        return store.fetch(location)
+
+    observe_fetch.list_snapshot_files = store.list_snapshot_files  # type: ignore[attr-defined]
+
+    receipt = verification.verify_download_source_closure(
+        "consumer",
+        stage,
+        run=RunSpec.model_construct(run_id="01ARZ3NDEKTSV4RRFFQ69G5FAF"),
+        attempt_id=1,
+        resolved_inputs={"prior": ResolvedStoredInputRef(pointer=resolved)},
+        stage_specs={},
+        completed_stages={},
+        completed_results={},
+        policy=POLICY,
+        fetcher=observe_fetch,
+    )
+
+    root = receipt.roots["prior"][0]
+    assert root.stage_id == "download"
+    assert root.input_name == "dataset"
+    assert fetched_paths
+    assert all(path.endswith(".yaml") for path in fetched_paths)
+    assert not any("/artifacts/" in path for path in fetched_paths)
+    assert not any("/attempts/2/" in path for path in fetched_paths)
+
+
+def test_download_source_closure_follows_reused_stage_source() -> None:
+    """Follow a reused output through its exact source attempt to Download."""
+    store = DocumentStore()
+    source_run_ref, records = publish_producer_run(store)
+    verified_source = verify_run_result(
+        records["run"],
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+    source_attempt = verified_source.attempts[0]
+    source_stage = next(
+        stage for stage in source_attempt.resolved_stages if stage.stage_id == "train"
+    )
+    source_train = verified_source.resolved_stages["train"]
+    source_model = source_train.artifacts[TrainKeys.MODEL]
+    source_state = source_train.artifacts[TrainKeys.RESUME_STATE]
+    assert isinstance(source_model, ResolvedSingleFileArtifact)
+    assert isinstance(source_state, ResolvedSingleFileArtifact)
+    reuse_receipt = StageReuseReceipt(
+        stage_id="train",
+        key=StageReuseKey(
+            stage_id="train",
+            stage_sha256="1" * 64,
+            inputs=(),
+            seed=42,
+            env_sha256="4" * 64,
+            reproducibility_sha256="5" * 64,
+            metric_sha256s=(),
+        ),
+        source_run=source_run_ref,
+        source_attempt=verified_source.result.attempts[0],
+        source_stage=source_stage,
+        files=(
+            ReusedStageFile(
+                artifact_name=TrainKeys.MODEL,
+                source=source_model.file,
+                target=source_model.file,
+            ),
+            ReusedStageFile(
+                artifact_name=TrainKeys.RESUME_STATE,
+                source=source_state.file,
+                target=source_state.file,
+            ),
+        ),
+        metrics=(),
+        completed_at=datetime(2026, 8, 20, 20, 40, tzinfo=UTC),
+    )
+    reuse_raw = yaml_bytes(reuse_receipt)
+    reuse_location = hf_file(
+        PRODUCER_RESULT_COMMIT,
+        "experiments/reuse/runs/baseline/reuse/stages/train/reuse.yaml",
+    )
+    store.put(reuse_location, reuse_raw)
+    reuse_reference = ResolvedStageReuseRef(
+        sha256=sha256(reuse_raw),
+        bytes=len(reuse_raw),
+        stored_at=reuse_location,
+    )
+    current_run = verified_source.plan.run.model_copy(
+        update={"run_id": "01ARZ3NDEKTSV4RRFFQ69G5FAC"}
+    )
+    producer_spec = BuildSpec.model_construct(
+        inputs={},
+        outputs=source_train.spec.outputs,
+    )
+    producer_result = ResolvedBuildSpec.model_construct(
+        spec=producer_spec,
+        completion=ReusedStageCompletion(receipt=reuse_reference),
+        inputs={},
+        artifacts=source_train.artifacts,
+    )
+    producer_reference = ResolvedStageRef(
+        stage_id="train",
+        snapshot=source_stage.snapshot,
+        resolved_spec=source_stage.resolved_spec,
+    )
+    consumer_spec = BuildSpec.model_construct(
+        inputs={
+            "model": FutureInputRef(
+                producer_stage_id="train",
+                name=TrainKeys.MODEL,
+            )
+        }
+    )
+    receipt = verification.verify_download_source_closure(
+        "consumer",
+        consumer_spec,
+        run=current_run,
+        attempt_id=1,
+        resolved_inputs={"model": ResolvedFutureInputRef(producer=producer_reference)},
+        stage_specs={"train": producer_spec},
+        completed_stages={"train": producer_reference},
+        completed_results={"train": producer_result},
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+
+    assert receipt.roots["model"][0].stage_id == "download"
+    assert any(edge.relation == "reuse" for edge in receipt.edges)
+
+
+def test_download_source_closure_rejects_future_cycle() -> None:
+    """Reject a same-run dependency cycle without reading artifact payloads."""
+    store = DocumentStore()
+    _, records = publish_producer_run(store)
+    verified = verify_run_result(
+        records["run"],
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+    template_run = verified.plan.run
+    template_attempt = verified.attempts[0]
+    template_stage_ref = next(
+        stage for stage in template_attempt.resolved_stages if stage.stage_id == "train"
+    )
+    template_result = verified.resolved_stages["train"]
+    assert isinstance(template_result, ResolvedTrainSpec)
+    template_artifact = template_result.artifacts[TrainKeys.MODEL]
+    template_output = template_result.spec.outputs[TrainKeys.MODEL]
+    stage_a_ref = template_stage_ref.model_copy(update={"stage_id": "stage_a"})
+    stage_b_ref = template_stage_ref.model_copy(update={"stage_id": "stage_b"})
+    stage_a = BuildSpec.model_construct(
+        inputs={
+            "source": FutureInputRef(
+                producer_stage_id="stage_b",
+                name="out",
+            )
+        },
+        outputs={"out": template_output},
+    )
+    stage_b = BuildSpec.model_construct(
+        inputs={
+            "source": FutureInputRef(
+                producer_stage_id="stage_a",
+                name="out",
+            )
+        },
+        outputs={"out": template_output},
+    )
+    result_a = ResolvedBuildSpec.model_construct(
+        spec=stage_a,
+        completion=template_result.completion,
+        inputs={"source": ResolvedFutureInputRef(producer=stage_b_ref)},
+        artifacts={"out": template_artifact},
+    )
+    result_b = ResolvedBuildSpec.model_construct(
+        spec=stage_b,
+        completion=template_result.completion,
+        inputs={"source": ResolvedFutureInputRef(producer=stage_a_ref)},
+        artifacts={"out": template_artifact},
+    )
+    consumer = BuildSpec.model_construct(
+        inputs={
+            "source": FutureInputRef(
+                producer_stage_id="stage_a",
+                name="out",
+            )
+        },
+    )
+
+    with pytest.raises(VerificationError, match="contains a cycle"):
+        verification.verify_download_source_closure(
+            "consumer",
+            consumer,
+            run=template_run,
+            attempt_id=1,
+            resolved_inputs={"source": ResolvedFutureInputRef(producer=stage_a_ref)},
+            stage_specs={"stage_a": stage_a, "stage_b": stage_b},
+            completed_stages={"stage_a": stage_a_ref, "stage_b": stage_b_ref},
+            completed_results={"stage_a": result_a, "stage_b": result_b},
+            policy=POLICY,
+            fetcher=lambda _location: pytest.fail("closure fetched a payload"),
+        )
+
+
+def test_download_source_closure_rejects_cross_run_stored_cycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject a selected cross-run receipt cycle without fetching payloads."""
+    store = DocumentStore()
+    _, records = publish_producer_run(store)
+    verified = verify_run_result(records["run"], policy=POLICY, fetcher=store.fetch)
+    template_run = verified.plan.run
+    template_train = verified.resolved_stages["train"]
+    assert isinstance(template_train, ResolvedTrainSpec)
+    template_stage = next(
+        stage
+        for stage in verified.attempts[0].resolved_stages
+        if stage.stage_id == "train"
+    )
+
+    run_ids = {
+        "a": "01ARZ3NDEKTSV4RRFFQ69G5FAD",
+        "b": "01ARZ3NDEKTSV4RRFFQ69G5FAE",
+    }
+    run_refs = {
+        suffix: ResolvedRunRef(
+            sha256=("a" if suffix == "a" else "b") * 64,
+            bytes=1,
+            stored_at=hf_file(
+                PRODUCER_RESULT_COMMIT,
+                (f"experiments/cycle_{suffix}/runs/baseline/{run_id}/resolved.yaml"),
+            ),
+        )
+        for suffix, run_id in run_ids.items()
+    }
+    pointers = {
+        suffix: resolved_pointer(
+            store,
+            MAIN_SOURCE_COMMIT,
+            f".viper/pointers/{run_refs[suffix].sha256}/build/out.pointer.yaml",
+            ArtifactPointer(
+                run=run_refs[suffix],
+                artifact=StageArtifactRef(stage_id="build", artifact_name="out"),
+            ),
+        )
+        for suffix in ("a", "b")
+    }
+
+    runs: dict[str, RunSpec] = {}
+    results: dict[str, ResolvedRun] = {}
+    attempts: dict[str, RunAttempt] = {}
+    stage_specs: dict[str, BuildSpec] = {}
+    stage_results: dict[str, ResolvedBuildSpec] = {}
+    stage_refs: dict[str, ResolvedStageRef] = {}
+    stage_raw: dict[str, bytes] = {}
+    resolved_raw: dict[str, bytes] = {}
+    for suffix, next_suffix in (("a", "b"), ("b", "a")):
+        run_root_path = f"experiments/cycle_{suffix}/runs/baseline/{run_ids[suffix]}"
+        output = template_train.spec.outputs[TrainKeys.MODEL].model_copy(
+            update={
+                "path": f"{run_root_path}/artifacts/build/out/model.pt",
+                "relative_path": "model.pt",
+            }
+        )
+        template_artifact = template_train.artifacts[TrainKeys.MODEL]
+        assert isinstance(template_artifact, ResolvedSingleFileArtifact)
+        artifact = template_artifact.model_copy(
+            update={
+                "relative_path": "model.pt",
+                "file": template_artifact.file.model_copy(update={"path": output.path}),
+            }
+        )
+        stage_spec = BuildSpec(
+            implementation=template_train.spec.implementation,
+            config_type=config_type_ref("build"),
+            inputs={
+                "source": StoredInputRef(
+                    pointer=pointers[next_suffix],
+                    path=f"inputs/cycle_{suffix}.bin",
+                    data_role="training",
+                )
+            },
+            config=config.BuildConfig(),
+            outputs={"out": output},  # pyright: ignore[reportArgumentType]
+        )
+        stage_spec_raw = yaml_bytes(stage_spec)
+        planned_stage = RunStageRef(
+            stage_id="build",
+            spec=f"{run_root_path}/stages/build/spec.yaml",
+            sha256=sha256(stage_spec_raw),
+            bytes=len(stage_spec_raw),
+        )
+        selected_run = template_run.model_copy(
+            update={
+                "run_id": run_ids[suffix],
+                "experiment_id": f"cycle_{suffix}",
+                "stages": (planned_stage,),
+                "estimator": StageArtifactRef(stage_id="build", artifact_name="out"),
+            }
+        )
+        stage_result = ResolvedBuildSpec.model_construct(
+            spec=stage_spec,
+            completion=template_train.completion,
+            inputs={"source": ResolvedStoredInputRef(pointer=pointers[next_suffix])},
+            artifacts={"out": artifact},
+            completed_at=template_train.completed_at,
+        )
+        stage_result_raw = yaml_bytes(stage_result)
+        stage_reference = ResolvedStageRef(
+            stage_id="build",
+            snapshot=template_stage.snapshot.model_copy(
+                update={"commit": ("c" if suffix == "a" else "d") * 40}
+            ),
+            resolved_spec=SnapshotFileRef(
+                path=f"{run_root_path}/stages/build/resolved.yaml",
+                sha256=sha256(stage_result_raw),
+                bytes=len(stage_result_raw),
+            ),
+        )
+        attempt_reference = ResolvedAttemptRef(
+            sha256=("e" if suffix == "a" else "f") * 64,
+            bytes=1,
+            stored_at=hf_file(
+                PRODUCER_RESULT_COMMIT,
+                f"{run_root_path}/attempts/1/resolved.yaml",
+            ),
+        )
+        run_spec_reference = ResolvedRunSpecRef(
+            sha256="1" * 64,
+            bytes=1,
+            stored_at=hf_file(
+                PRODUCER_RESULT_COMMIT,
+                f"{run_root_path}/spec.yaml",
+            ),
+        )
+        runs[suffix] = selected_run
+        stage_specs[suffix] = stage_spec
+        stage_results[suffix] = stage_result
+        stage_refs[suffix] = stage_reference
+        stage_raw[suffix] = stage_spec_raw
+        resolved_raw[suffix] = stage_result_raw
+        attempts[suffix] = RunAttempt.model_construct(
+            attempt_id=1,
+            status="succeeded",
+            resolved_stages=(stage_reference,),
+        )
+        results[suffix] = ResolvedRun.model_construct(
+            spec=run_spec_reference,
+            status="succeeded",
+            attempts=(attempt_reference,),
+            successful_attempt_id=1,
+            completed_at=records["run"].completed_at,
+        )
+
+    original_read = verification.read_resolved_file
+
+    def read_selected(reference, *, fetcher=None):
+        if isinstance(reference, ResolvedRunRef):
+            suffix = "a" if reference == run_refs["a"] else "b"
+            return yaml_bytes(results[suffix])
+        if isinstance(reference, ResolvedArtifactPointerRef):
+            return original_read(reference, fetcher=fetcher)
+        path = str(reference.stored_at.path)
+        suffix = "a" if "/cycle_a/" in path else "b"
+        if path.endswith("/stages/build/spec.yaml"):
+            return stage_raw[suffix]
+        raise AssertionError(f"unexpected receipt read: {path}")
+
+    monkeypatch.setattr(verification, "read_resolved_file", read_selected)
+    monkeypatch.setattr(
+        verification,
+        "verify_run_spec",
+        lambda result, **_kwargs: (
+            runs["a"] if "/cycle_a/" in str(result.spec.stored_at.path) else runs["b"]
+        ),
+    )
+    monkeypatch.setattr(
+        verification,
+        "read_attempt_reference",
+        lambda reference, _run, **_kwargs: (
+            attempts["a"]
+            if "/cycle_a/" in str(reference.stored_at.path)
+            else attempts["b"]
+        ),
+    )
+    monkeypatch.setattr(
+        verification,
+        "read_snapshot_file",
+        lambda snapshot, _file, **_kwargs: (
+            resolved_raw["a"]
+            if snapshot == stage_refs["a"].snapshot
+            else resolved_raw["b"]
+        ),
+    )
+    consumer = BuildSpec.model_construct(
+        inputs={
+            "source": StoredInputRef(
+                pointer=pointers["a"],
+                path="inputs/cycle.bin",
+                data_role="training",
+            )
+        }
+    )
+    fetched_paths: list[str] = []
+
+    def observe_fetch(location: StorageModel) -> bytes:
+        fetched_paths.append(str(location.path))
+        return store.fetch(location)
+
+    with pytest.raises(VerificationError, match="contains a cycle"):
+        verification.verify_download_source_closure(
+            "consumer",
+            consumer,
+            run=template_run,
+            attempt_id=1,
+            resolved_inputs={"source": ResolvedStoredInputRef(pointer=pointers["a"])},
+            stage_specs={},
+            completed_stages={},
+            completed_results={},
+            policy=POLICY,
+            fetcher=observe_fetch,
+        )
+
+    assert not any("/artifacts/" in path for path in fetched_paths)
 
 
 def test_external_input_identity_survives_execution() -> None:

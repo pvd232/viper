@@ -660,6 +660,15 @@ class RuntimeInvariantTests(unittest.TestCase):
 class TrainingCheckpointTests(unittest.TestCase):
     """Verify canonical checkpoint artifacts, inputs, and paths."""
 
+    def test_download_input_roots_require_an_input_in_protocol(self) -> None:
+        """Reject a frozen closure policy with no input branch to prove."""
+        payload = train_payload()
+        payload["inputs"] = {}
+        payload["input_roots"] = "download"
+
+        with self.assertRaisesRegex(ValidationError, "require at least one input"):
+            TrainSpec.model_validate(payload)
+
     def test_repository_paths_reject_control_characters(self) -> None:
         """Verify that repository paths reject control characters."""
         payload = train_payload()

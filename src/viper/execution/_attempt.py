@@ -16,7 +16,13 @@ from ..evidence import VerificationError, VerificationPolicy
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
-from ..inputs import ExternalInputRef, FutureInputRef, ResolvedInputRef, StoredInputRef
+from ..inputs import (
+    DownloadSourceClosureReceipt,
+    ExternalInputRef,
+    FutureInputRef,
+    ResolvedInputRef,
+    StoredInputRef,
+)
 from ..journal import DurableJournal
 from ..metrics import is_recomputed_metric
 from ..preflight import preflight_plan
@@ -64,7 +70,7 @@ from ..storage import (
     publish_resolved_files,
     snapshot_file,
 )
-from ..verification import verify_run_result
+from ..verification import verify_download_source_closure, verify_run_result
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
 from ._materialization import (
     resolve_inputs,
@@ -410,6 +416,7 @@ def execute_attempt(
             captured_inputs: dict[InputName, SnapshotFileRef] = {}
             stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
             input_paths: dict[str, Path] = {}
+            download_source_closure: DownloadSourceClosureReceipt | None = None
             process = None
             journal.append(
                 "running_stage",
@@ -474,6 +481,19 @@ def execute_attempt(
                         fetcher,
                         policy,
                     )
+                    if stage.input_roots == "download":
+                        download_source_closure = verify_download_source_closure(
+                            stage_reference.stage_id,
+                            stage,
+                            run=run,
+                            attempt_id=attempt_id,
+                            resolved_inputs=resolved_inputs,
+                            stage_specs=loaded_stages,
+                            completed_stages=completed,
+                            completed_results=completed_results,
+                            policy=policy,
+                            fetcher=fetcher,
+                        )
                 if (
                     isinstance(stage, InternalSpec)
                     and purpose == "run"
@@ -516,6 +536,7 @@ def execute_attempt(
                         destination=destination,
                         cloud_client=cloud_client,
                         metrics=metric_specs,
+                        download_source_closure=download_source_closure,
                         candidate=retry_candidates.get(stage_reference.stage_id),
                     )
                     if reused is not None:
@@ -593,6 +614,7 @@ def execute_attempt(
                     process=process,
                     invocation=invocation_ref,
                     inputs=resolved_inputs,
+                    download_source_closure=download_source_closure,
                     completed_at=stage_completed,
                 )
                 resolved_artifacts = process.artifacts

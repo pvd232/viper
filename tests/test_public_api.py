@@ -250,6 +250,7 @@ def test_api_operations_are_locally_defined() -> None:
 def test_verification_operations_depend_on_independent_evidence() -> None:
     """Keep verification operations separate from independent evidence records."""
     operations = (
+        verification.verify_download_source_closure,
         verification.verify_run_result,
         verification.verify_promoted_artifact,
         verification.verify_stage_reuse,
@@ -271,6 +272,7 @@ def test_verification_operations_depend_on_independent_evidence() -> None:
     assert all(value.__module__ == "viper.verification" for value in operations)
     assert all(value.__module__ == "viper.evidence" for value in models)
     assert set(verification.__all__) == {
+        "verify_download_source_closure",
         "verify_promoted_artifact",
         "verify_stored_input_selections",
         "verify_attempt_future_inputs",

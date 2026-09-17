@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from . import keys
 from ._schema import DataRole, RepoRelPath
@@ -19,13 +19,14 @@ from ._verification.attempt import (
     verify_measurement_stage_times,
 )
 from ._verification.metrics import verify_recomputed_metrics
-from ._verification.paths import run_root
-from ._verification.plan import verify_run_plan
+from ._verification.paths import resolved_stage_spec_path, run_root
+from ._verification.plan import verify_run_plan, verify_run_spec
 from ._verification.storage import (
     artifact_revision_identity,
     load_verified_artifact,
     read_attempt_reference,
     read_resolved_file,
+    read_snapshot_file,
     snapshot_identity,
     verify_run_attempt_references,
     verify_snapshot_artifact,
@@ -50,10 +51,17 @@ from .evidence import (
 )
 from .ids import InputName, MetricId, StageId
 from .inputs import (
+    DownloadSourceClosureReceipt,
+    DownloadSourceEdge,
+    DownloadSourceNode,
+    ExternalInputRef,
     FutureInputRef,
+    InputRef,
     ResolvedFutureInputRef,
+    ResolvedInputRef,
     ResolvedStoredInputRef,
     StoredInputRef,
+    VerifiedDownloadSource,
     pointer_location_matches,
 )
 from .metrics import (
@@ -82,19 +90,23 @@ from .reuse import (
     build_stage_reuse_key,
     verified_input_identity,
 )
-from .runs import ResolvedRun, RunAttempt, RunSpec
+from .runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from .serialization import document_digest, parse_yaml_bytes
 from .stages import (
+    BaseSpec,
     EvalSpec,
     InternalSpec,
     ResolvedBaseSpec,
     ResolvedDownloadSpec,
     ResolvedInternalSpec,
     ResolvedParameterizedSpec,
+    ResolvedSpec,
+    Spec,
     TrainSpec,
 )
 
 __all__ = [
+    "verify_download_source_closure",
     "verify_attempt_future_inputs",
     "verify_benchmark_result",
     "verify_promoted_artifact",
@@ -103,6 +115,560 @@ __all__ = [
     "verify_stored_input_selections",
     "verify_stored_inputs",
 ]
+
+
+def verify_download_source_closure(
+    stage_id: StageId,
+    stage: InternalSpec,
+    *,
+    run: RunSpec,
+    attempt_id: int,
+    resolved_inputs: Mapping[InputName, ResolvedInputRef],
+    stage_specs: Mapping[StageId, BaseSpec],
+    completed_stages: Mapping[StageId, ResolvedStageRef],
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> DownloadSourceClosureReceipt:
+    """Prove that every transitive input ends at an immutable Download receipt."""
+    if not stage.inputs:
+        raise VerificationError(
+            f"stage {stage_id!r} has no inputs to prove download-rooted"
+        )
+    if set(resolved_inputs) != set(stage.inputs):
+        raise VerificationError("download source closure inputs differ from the stage")
+
+    spec_adapter = TypeAdapter(Spec)
+    resolved_spec_adapter = TypeAdapter(ResolvedSpec)
+    selected_runs: dict[ResolvedRunRef, tuple[ResolvedRun, RunSpec]] = {}
+    selected_attempts: dict[tuple[ResolvedRunRef, ResolvedAttemptRef], RunAttempt] = {}
+    selected_contexts: dict[
+        tuple[ResolvedRunRef, ResolvedAttemptRef, StageId],
+        tuple[
+            RunSpec,
+            RunAttempt,
+            dict[StageId, BaseSpec],
+            dict[StageId, ResolvedStageRef],
+            dict[StageId, ResolvedBaseSpec],
+        ],
+    ] = {}
+    active: set[tuple[str, int, StageId, str, str]] = set()
+    nodes: dict[str, DownloadSourceNode] = {}
+    edges: dict[tuple[str, str, str], DownloadSourceEdge] = {}
+
+    def stage_node(
+        selected_run: RunSpec,
+        selected_attempt: int,
+        selected_stage: StageId,
+        direction: str,
+        name: str,
+        receipt: ResolvedStageRef | None = None,
+    ) -> str:
+        receipt_id = "current" if receipt is None else receipt.resolved_spec.sha256
+        node_id = (
+            f"run:{selected_run.run_id}/attempt:{selected_attempt}/"
+            f"stage:{selected_stage}/receipt:{receipt_id}/{direction}:{name}"
+        )
+        kind = "stage_input" if direction == "input" else "stage_output"
+        nodes[node_id] = DownloadSourceNode(node_id=node_id, kind=kind)
+        return node_id
+
+    def reference_node(kind: Literal["pointer", "reuse"], sha256: str) -> str:
+        node_id = f"{kind}:{sha256}"
+        nodes[node_id] = DownloadSourceNode(node_id=node_id, kind=kind)
+        return node_id
+
+    def connect(
+        source: str,
+        target: str,
+        relation: Literal["future", "stored", "selects", "produced_from", "reuse"],
+    ) -> None:
+        identity = (source, target, relation)
+        edges[identity] = DownloadSourceEdge(
+            source=source,
+            target=target,
+            relation=relation,
+        )
+
+    def selected_context(
+        reference: ResolvedRunRef,
+        selected_stage_id: StageId,
+        *,
+        attempt_reference: ResolvedAttemptRef | None = None,
+    ) -> tuple[
+        RunSpec,
+        RunAttempt,
+        dict[StageId, BaseSpec],
+        dict[StageId, ResolvedStageRef],
+        dict[StageId, ResolvedBaseSpec],
+    ]:
+        """Load only the receipts on one selected producer branch."""
+        loaded_run = selected_runs.get(reference)
+        if loaded_run is None:
+            try:
+                result = ResolvedRun.model_validate(
+                    parse_yaml_bytes(read_resolved_file(reference, fetcher=fetcher))
+                )
+            except (yaml.YAMLError, ValueError) as exc:
+                raise VerificationError(
+                    "download source run receipt is invalid"
+                ) from exc
+            selected_run = verify_run_spec(result, fetcher=fetcher)
+            if reference.stored_at.path != f"{run_root(selected_run)}/resolved.yaml":
+                raise VerificationError(
+                    "download source run receipt is outside its canonical path"
+                )
+            if not policy.permits_source(selected_run.source.repository):
+                raise VerificationError("download source run repository is not trusted")
+            if result.status != "succeeded" or result.successful_attempt_id is None:
+                raise VerificationError("download source run did not succeed")
+            selected_runs[reference] = (result, selected_run)
+        else:
+            result, selected_run = loaded_run
+        if attempt_reference is None:
+            expected_path = (
+                f"{run_root(selected_run)}/attempts/"
+                f"{result.successful_attempt_id}/resolved.yaml"
+            )
+            matching = tuple(
+                candidate
+                for candidate in result.attempts
+                if candidate.stored_at.path == expected_path
+            )
+            if len(matching) != 1:
+                raise VerificationError(
+                    "download source successful attempt receipt is unavailable"
+                )
+            attempt_reference = matching[0]
+        elif attempt_reference not in result.attempts:
+            raise VerificationError("download source reuse attempt is unavailable")
+        assert attempt_reference is not None
+        cache_key = (reference, attempt_reference, selected_stage_id)
+        cached = selected_contexts.get(cache_key)
+        if cached is not None:
+            return cached
+        attempt_key = (reference, attempt_reference)
+        source_attempt = selected_attempts.get(attempt_key)
+        if source_attempt is None:
+            source_attempt = read_attempt_reference(
+                attempt_reference,
+                selected_run,
+                fetcher=fetcher,
+            )
+            if (
+                attempt_reference.stored_at.path.endswith(
+                    f"/{result.successful_attempt_id}/resolved.yaml"
+                )
+                and source_attempt.status != "succeeded"
+            ):
+                raise VerificationError("download source successful attempt differs")
+            planned_ids = tuple(item.stage_id for item in selected_run.stages)
+            completed_ids = tuple(
+                item.stage_id for item in source_attempt.resolved_stages
+            )
+            if completed_ids != planned_ids[: len(completed_ids)]:
+                raise VerificationError(
+                    "download source attempt stages do not form a plan prefix"
+                )
+            selected_attempts[attempt_key] = source_attempt
+        selected_specs: dict[StageId, BaseSpec] = {}
+        selected_refs: dict[StageId, ResolvedStageRef] = {}
+        selected_results: dict[StageId, ResolvedBaseSpec] = {}
+
+        def load_stage(branch_stage_id: StageId) -> None:
+            if branch_stage_id in selected_results:
+                return
+            planned = next(
+                (
+                    item
+                    for item in selected_run.stages
+                    if item.stage_id == branch_stage_id
+                ),
+                None,
+            )
+            resolved = next(
+                (
+                    item
+                    for item in source_attempt.resolved_stages
+                    if item.stage_id == branch_stage_id
+                ),
+                None,
+            )
+            if planned is None or resolved is None:
+                raise VerificationError("download source producer is unavailable")
+            if resolved.resolved_spec.path != resolved_stage_spec_path(
+                selected_run, branch_stage_id
+            ):
+                raise VerificationError(
+                    "download source stage receipt is outside its canonical path"
+                )
+            planned_reference = ResolvedFileRef(
+                sha256=planned.sha256,
+                bytes=planned.bytes,
+                stored_at=storage_file(result.spec.stored_at, planned.spec),
+            )
+            try:
+                stage_spec = spec_adapter.validate_python(
+                    parse_yaml_bytes(
+                        read_resolved_file(planned_reference, fetcher=fetcher)
+                    )
+                )
+                stage_result = resolved_spec_adapter.validate_python(
+                    parse_yaml_bytes(
+                        read_snapshot_file(
+                            resolved.snapshot,
+                            resolved.resolved_spec,
+                            fetcher=fetcher,
+                        )
+                    )
+                )
+            except (yaml.YAMLError, ValueError) as exc:
+                raise VerificationError(
+                    "download source stage receipt is invalid"
+                ) from exc
+            if stage_result.spec != stage_spec:
+                raise VerificationError(
+                    "download source resolved stage differs from its plan"
+                )
+            selected_specs[branch_stage_id] = stage_spec
+            selected_refs[branch_stage_id] = resolved
+            selected_results[branch_stage_id] = stage_result
+            if isinstance(stage_result, ResolvedInternalSpec) and not isinstance(
+                stage_result.completion, ReusedStageCompletion
+            ):
+                for input_ref in stage_spec.inputs.values():
+                    if isinstance(input_ref, FutureInputRef):
+                        load_stage(input_ref.producer_stage_id)
+
+        load_stage(selected_stage_id)
+        context = (
+            selected_run,
+            source_attempt,
+            selected_specs,
+            selected_refs,
+            selected_results,
+        )
+        selected_contexts[cache_key] = context
+        return context
+
+    def walk_stage(
+        selected_output: str,
+        *,
+        selected_run: RunSpec,
+        selected_attempt: int,
+        selected_specs: Mapping[StageId, BaseSpec],
+        selected_refs: Mapping[StageId, ResolvedStageRef],
+        selected_results: Mapping[StageId, ResolvedBaseSpec],
+        producer_stage_id: StageId,
+    ) -> tuple[VerifiedDownloadSource, ...]:
+        reference = selected_refs.get(producer_stage_id)
+        if reference is None:
+            raise VerificationError("download source producer is unavailable")
+        key = (
+            str(selected_run.run_id),
+            selected_attempt,
+            producer_stage_id,
+            selected_output,
+            reference.resolved_spec.sha256,
+        )
+        if key in active:
+            raise VerificationError("download source graph contains a cycle")
+        active.add(key)
+        try:
+            result = selected_results.get(producer_stage_id)
+            spec = selected_specs.get(producer_stage_id)
+            if result is None or spec is None:
+                raise VerificationError("download source producer is unavailable")
+            if selected_output not in result.artifacts:
+                raise VerificationError("download source output is unavailable")
+
+            if isinstance(result, ResolvedDownloadSpec):
+                if selected_output not in result.retrievals:
+                    raise VerificationError(
+                        "download source output has no HTTP retrieval evidence"
+                    )
+                retrieval = result.retrievals[selected_output]
+                if (
+                    selected_output not in result.spec.inputs
+                    or retrieval.request != result.spec.inputs[selected_output]
+                ):
+                    raise VerificationError(
+                        "download source retrieval differs from its request"
+                    )
+                artifact = result.artifacts[selected_output]
+                if not isinstance(artifact, ResolvedSingleFileArtifact) or (
+                    retrieval.body != artifact.file
+                ):
+                    raise VerificationError(
+                        "download source body differs from its artifact receipt"
+                    )
+                return (
+                    VerifiedDownloadSource(
+                        run_id=selected_run.run_id,
+                        attempt_id=selected_attempt,
+                        stage_id=producer_stage_id,
+                        stage_receipt=reference,
+                        input_name=selected_output,
+                        request=retrieval.request,
+                        body=retrieval.body,
+                    ),
+                )
+
+            if not isinstance(result, ResolvedInternalSpec) or not isinstance(
+                spec, InternalSpec
+            ):
+                raise VerificationError("download source producer is not traversable")
+            if isinstance(result.completion, ReusedStageCompletion):
+                output_node = stage_node(
+                    selected_run,
+                    selected_attempt,
+                    producer_stage_id,
+                    "output",
+                    selected_output,
+                    reference,
+                )
+                reuse_node = reference_node("reuse", result.completion.receipt.sha256)
+                connect(output_node, reuse_node, "reuse")
+                raw = read_resolved_file(
+                    result.completion.receipt,
+                    fetcher=fetcher,
+                )
+                try:
+                    receipt = StageReuseReceipt.model_validate(parse_yaml_bytes(raw))
+                except (yaml.YAMLError, ValueError) as exc:
+                    raise VerificationError(
+                        "download source reuse receipt is invalid"
+                    ) from exc
+                (
+                    source_run,
+                    source_attempt,
+                    source_specs,
+                    source_refs,
+                    source_results,
+                ) = selected_context(
+                    receipt.source_run,
+                    producer_stage_id,
+                    attempt_reference=receipt.source_attempt,
+                )
+                source_attempt_id = source_attempt.attempt_id
+                source_reference = source_refs[producer_stage_id]
+                source_result = source_results[producer_stage_id]
+                if (
+                    receipt.stage_id != producer_stage_id
+                    or receipt.source_stage != source_reference
+                ):
+                    raise VerificationError(
+                        "download source reuse receipt selects another stage"
+                    )
+                expected_files = _expected_reused_files(source_result, result)
+                received_files = tuple(
+                    (file.artifact_name, file.source, file.target)
+                    for file in receipt.files
+                )
+                if received_files != expected_files:
+                    raise VerificationError(
+                        "download source reuse files differ from their source"
+                    )
+                source_output = stage_node(
+                    source_run,
+                    source_attempt_id,
+                    producer_stage_id,
+                    "output",
+                    selected_output,
+                    source_reference,
+                )
+                connect(reuse_node, source_output, "selects")
+                return walk_stage(
+                    selected_output,
+                    selected_run=source_run,
+                    selected_attempt=source_attempt_id,
+                    selected_specs=source_specs,
+                    selected_refs=source_refs,
+                    selected_results=source_results,
+                    producer_stage_id=producer_stage_id,
+                )
+            if not result.inputs:
+                raise VerificationError(
+                    "download source internal producer has no transitive inputs"
+                )
+            roots: list[VerifiedDownloadSource] = []
+            for input_name, input_ref in spec.inputs.items():
+                output_node = stage_node(
+                    selected_run,
+                    selected_attempt,
+                    producer_stage_id,
+                    "output",
+                    selected_output,
+                    reference,
+                )
+                input_node = stage_node(
+                    selected_run,
+                    selected_attempt,
+                    producer_stage_id,
+                    "input",
+                    input_name,
+                    reference,
+                )
+                connect(output_node, input_node, "produced_from")
+                roots.extend(
+                    walk_input(
+                        input_name,
+                        input_ref,
+                        result.inputs[input_name],
+                        selected_run=selected_run,
+                        selected_attempt=selected_attempt,
+                        selected_specs=selected_specs,
+                        selected_refs=selected_refs,
+                        selected_results=selected_results,
+                        consumer_stage_id=producer_stage_id,
+                    )
+                )
+            return tuple(roots)
+        finally:
+            active.remove(key)
+
+    def walk_input(
+        input_name: InputName,
+        input_ref: InputRef,
+        resolved_input: ResolvedInputRef,
+        *,
+        selected_run: RunSpec,
+        selected_attempt: int,
+        selected_specs: Mapping[StageId, BaseSpec],
+        selected_refs: Mapping[StageId, ResolvedStageRef],
+        selected_results: Mapping[StageId, ResolvedBaseSpec],
+        consumer_stage_id: StageId,
+    ) -> tuple[VerifiedDownloadSource, ...]:
+        input_node = stage_node(
+            selected_run,
+            selected_attempt,
+            consumer_stage_id,
+            "input",
+            input_name,
+        )
+        if isinstance(input_ref, ExternalInputRef):
+            raise VerificationError(
+                f"input {input_name!r} originates from an external local file"
+            )
+        if isinstance(input_ref, FutureInputRef):
+            if not isinstance(resolved_input, ResolvedFutureInputRef):
+                raise VerificationError("future input resolved as another input kind")
+            producer_result = selected_results.get(input_ref.producer_stage_id)
+            producer_ref = selected_refs.get(input_ref.producer_stage_id)
+            if producer_result is None or producer_ref is None:
+                raise VerificationError("future input producer is unavailable")
+            producer_spec = selected_specs.get(input_ref.producer_stage_id)
+            if producer_spec is None or input_ref.name not in producer_spec.outputs:
+                raise VerificationError("future input output is unavailable")
+            if resolved_input.producer != producer_ref:
+                raise VerificationError(
+                    "future input resolves a different producer stage"
+                )
+            output_node = stage_node(
+                selected_run,
+                selected_attempt,
+                input_ref.producer_stage_id,
+                "output",
+                input_ref.name,
+                producer_ref,
+            )
+            connect(input_node, output_node, "future")
+            return walk_stage(
+                str(input_ref.name),
+                selected_run=selected_run,
+                selected_attempt=selected_attempt,
+                selected_specs=selected_specs,
+                selected_refs=selected_refs,
+                selected_results=selected_results,
+                producer_stage_id=input_ref.producer_stage_id,
+            )
+        if not isinstance(input_ref, StoredInputRef) or not isinstance(
+            resolved_input, ResolvedStoredInputRef
+        ):
+            raise VerificationError("stored input resolved as another input kind")
+        pointer_raw = read_resolved_file(resolved_input.pointer, fetcher=fetcher)
+        pointer_node = reference_node("pointer", resolved_input.pointer.sha256)
+        connect(input_node, pointer_node, "stored")
+        try:
+            pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError("download source pointer is invalid") from exc
+        if not pointer_location_matches(
+            input_ref.pointer,
+            resolved_input.pointer.stored_at,
+        ):
+            raise VerificationError(
+                f"input {input_name!r} resolved a different pointer location"
+            )
+        (
+            source_run,
+            source_attempt,
+            source_specs,
+            source_refs,
+            source_results,
+        ) = selected_context(
+            pointer.run,
+            pointer.artifact.stage_id,
+        )
+        producer = source_results[pointer.artifact.stage_id]
+        artifact_name = pointer.artifact.artifact_name
+        if artifact_name not in producer.artifacts:
+            raise VerificationError(
+                "download source pointer selects an undeclared artifact"
+            )
+        declaration = source_specs[pointer.artifact.stage_id].outputs[artifact_name]
+        if declaration.data_role != input_ref.data_role:
+            raise VerificationError(
+                "download source pointer selects an incompatible data role"
+            )
+        output_node = stage_node(
+            source_run,
+            source_attempt.attempt_id,
+            pointer.artifact.stage_id,
+            "output",
+            pointer.artifact.artifact_name,
+            source_refs[pointer.artifact.stage_id],
+        )
+        connect(pointer_node, output_node, "selects")
+        return walk_stage(
+            str(pointer.artifact.artifact_name),
+            selected_run=source_run,
+            selected_attempt=source_attempt.attempt_id,
+            selected_specs=source_specs,
+            selected_refs=source_refs,
+            selected_results=source_results,
+            producer_stage_id=pointer.artifact.stage_id,
+        )
+
+    roots_by_input: dict[InputName, tuple[VerifiedDownloadSource, ...]] = {}
+    for input_name, input_ref in stage.inputs.items():
+        roots = walk_input(
+            input_name,
+            input_ref,
+            resolved_inputs[input_name],
+            selected_run=run,
+            selected_attempt=attempt_id,
+            selected_specs=stage_specs,
+            selected_refs=completed_stages,
+            selected_results=completed_results,
+            consumer_stage_id=stage_id,
+        )
+        unique = {
+            (
+                root.run_id,
+                root.attempt_id,
+                root.stage_id,
+                root.input_name,
+                root.stage_receipt.resolved_spec.sha256,
+            ): root
+            for root in roots
+        }
+        roots_by_input[input_name] = tuple(unique[key] for key in sorted(unique))
+    return DownloadSourceClosureReceipt(
+        roots=roots_by_input,
+        nodes=tuple(nodes[key] for key in sorted(nodes)),
+        edges=tuple(edges[key] for key in sorted(edges)),
+    )
 
 
 def _stage_artifact_files(
@@ -1484,6 +2050,28 @@ def _verify_run_result(
             future_inputs,
             external_inputs,
         )
+        for stage_id, resolved_stage in verified_stages.items():
+            if (
+                not isinstance(resolved_stage, ResolvedInternalSpec)
+                or resolved_stage.spec.input_roots != "download"
+            ):
+                continue
+            rebuilt_closure = verify_download_source_closure(
+                stage_id,
+                resolved_stage.spec,
+                run=plan.run,
+                attempt_id=attempt.attempt_id,
+                resolved_inputs=resolved_stage.inputs,
+                stage_specs=plan.stages,
+                completed_stages=stage_references,
+                completed_results=verified_stages,
+                policy=policy,
+                fetcher=fetcher,
+            )
+            if rebuilt_closure != resolved_stage.download_source_closure:
+                raise VerificationError(
+                    f"stage {stage_id!r} download source closure receipt differs"
+                )
         attempt_stages[attempt.attempt_id] = verified_stages
         all_attempt_inputs[attempt.attempt_id] = current_inputs
         attempt_measurements = verify_attempt_files(

@@ -11,8 +11,8 @@ fields.
 | `ExperimentSpec` | Defines factors, variants, replicates, and metrics. |
 | `VariantSpec` | Selects the stage graph and config for each stage. |
 | `RunSpec` | Selects one variant and replicate, the source revision, runtime, reproducibility settings, estimator, optional benchmark, and ordered stages. |
-| `Spec` | Declares one stage's function, config, inputs, outputs, metrics, objective, runtime override, reuse policy, and file-access mode. |
-| `ResolvedSpec` | Records the artifacts and runtime evidence produced by one stage attempt. |
+| `Spec` | Declares one stage's function, config, inputs, outputs, metrics, objective, runtime override, reuse policy, file-access mode, and input-root policy. |
+| `ResolvedSpec` | Records the artifacts, runtime evidence, and any required download-source closure produced by one stage attempt. |
 | `StageInvocationReceipt` | Records the executed callable, bound context, timing, outcome, and any governed workspace file accesses. |
 | `RunAttempt` | Records status, timing, completed stages, measurements, logs, and failure evidence for one attempt. |
 | `ResolvedRun` | Records a run's terminal status and the attempt that supports it. |
@@ -42,6 +42,16 @@ and catalog queries consume artifact records.
 
 Download stages use `HttpRequestSpec` instead. The request stores the expected response
 size and SHA-256 digest; the resolved retrieval records the observed response.
+
+An internal stage may set `input_roots="download"`. Before VIPER reuses or starts that
+stage, `verify_download_source_closure()` follows same-run `FutureInputRef` producers,
+prior-run `StoredInputRef` producers, and exact stage-reuse sources. It rejects
+`ExternalInputRef` leaves and accepts the stage only when every terminal leaf is a
+`ResolvedDownloadSpec` receipt whose request, body reference, and artifact reference
+agree. The walk reads only the selected receipt branch; it does not read artifact bodies,
+other attempts, or unrelated stages. The retained `DownloadSourceClosureReceipt` records
+every visited node and edge plus the Download roots for each direct consumer input.
+Terminal run verification repeats the receipt walk and rejects a substituted receipt.
 
 ## File references
 

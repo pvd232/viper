@@ -7,7 +7,7 @@ from datetime import datetime
 from ..artifacts import ResolvedArtifact
 from ..http import ResolvedHttpRetrieval
 from ..ids import InputName
-from ..inputs import ResolvedInputRef
+from ..inputs import DownloadSourceClosureReceipt, ResolvedInputRef
 from ..references import ResolvedGitFileRef, ResolvedStageInvocationRef
 from ..reuse import ExecutedStageCompletion
 from ..runtime import (
@@ -98,6 +98,7 @@ def resolve_stage(
     invocation: ResolvedStageInvocationRef,
     inputs: dict[InputName, ResolvedInputRef] | None,
     completed_at: datetime,
+    download_source_closure: DownloadSourceClosureReceipt | None = None,
 ) -> ResolvedSpec:
     """Construct the resolved subtype for one completed workspace stage."""
     result = process
@@ -116,15 +117,35 @@ def resolve_stage(
     }
     assert inputs is not None
     if stage.kind == "build":
-        return ResolvedBuildSpec(**common, inputs=inputs)
+        return ResolvedBuildSpec(
+            **common,
+            inputs=inputs,
+            download_source_closure=download_source_closure,
+        )
     elif stage.kind == "embed":
-        return ResolvedEmbedSpec(**common, inputs=inputs)
+        return ResolvedEmbedSpec(
+            **common,
+            inputs=inputs,
+            download_source_closure=download_source_closure,
+        )
     elif stage.kind == "diagnostic":
-        return ResolvedDiagnosticSpec(**common, inputs=inputs)
+        return ResolvedDiagnosticSpec(
+            **common,
+            inputs=inputs,
+            download_source_closure=download_source_closure,
+        )
     elif stage.kind == "train":
-        return ResolvedTrainSpec(**common, inputs=inputs)
+        return ResolvedTrainSpec(
+            **common,
+            inputs=inputs,
+            download_source_closure=download_source_closure,
+        )
     elif stage.kind == "eval":
-        return ResolvedEvalSpec(**common, inputs=inputs)
+        return ResolvedEvalSpec(
+            **common,
+            inputs=inputs,
+            download_source_closure=download_source_closure,
+        )
     else:
         raise ValueError(f"unsupported stage kind: {stage.kind}")
 

@@ -49,6 +49,7 @@ from .http import (
 )
 from .ids import EvalId, HumanId, InputName, MetricId, OutputName, RunId, StageId
 from .inputs import (
+    DownloadSourceClosureReceipt,
     InputRef,
     ResolvedInputRef,
     pointer_location_matches,
@@ -259,10 +260,18 @@ class InternalSpec(ParameterizedSpec):
     """Request a workspace stage with zero or more declared inputs."""
 
     inputs: dict[InputName, InputRef] = Field(default_factory=dict)
+    input_roots: Literal["any", "download"] = Field(
+        default="any",
+        description=(
+            "Required terminal provenance root kind for every transitive stage input."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_local_path_collisions(self) -> InternalSpec:
         """Keep stored inputs, scripts, and artifact paths disjoint."""
+        if self.input_roots == "download" and not self.inputs:
+            raise ValueError("download input roots require at least one input")
         stored_inputs = {
             name: ref for name, ref in self.inputs.items() if ref.kind == "stored"
         }
@@ -658,6 +667,13 @@ class ResolvedInternalSpec(ResolvedParameterizedSpec):
 
     spec: InternalSpec  # pyright: ignore[reportIncompatibleVariableOverride]
     inputs: dict[InputName, ResolvedInputRef]
+    download_source_closure: DownloadSourceClosureReceipt | None = Field(
+        default=None,
+        description=(
+            "Pre-execution proof that every transitive input terminates at an "
+            "immutable Download receipt."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_internal_inputs(self) -> ResolvedInternalSpec:
@@ -687,6 +703,18 @@ class ResolvedInternalSpec(ResolvedParameterizedSpec):
                     f"resolved input {name!r} pointer location must match "
                     "the stage spec pointer location"
                 )
+
+        if self.spec.input_roots == "download":
+            if self.download_source_closure is None:
+                raise ValueError("download-rooted stage omitted its closure receipt")
+            if set(self.download_source_closure.roots) != set(self.inputs):
+                raise ValueError(
+                    "download source closure must cover every resolved input"
+                )
+        elif self.download_source_closure is not None:
+            raise ValueError(
+                "unrestricted stage cannot retain a download closure receipt"
+            )
 
         return self
 

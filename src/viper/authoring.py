@@ -261,6 +261,14 @@ class InternalSpecDraft(ParameterizedSpecDraft):
     """Hold a workspace stage with zero or more authored inputs."""
 
     inputs: dict[InputName, StageInputDraft] = Field(default_factory=dict)
+    input_roots: Literal["any", "download"] = "any"
+
+    @model_validator(mode="after")
+    def validate_input_roots(self) -> InternalSpecDraft:
+        """Require a declared input when Download-root closure is requested."""
+        if self.input_roots == "download" and not self.inputs:
+            raise ValueError("download input roots require at least one input")
+        return self
 
 
 class BuildSpecDraft(InternalSpecDraft):
@@ -1116,6 +1124,7 @@ def _freeze_stage(
         "config": draft.config.model_dump(mode="json"),
         "reuse": draft.reuse,
         "file_access": draft.file_access,
+        "input_roots": draft.input_roots,
         "inputs": {
             name: _freeze_input(
                 root,
@@ -1281,6 +1290,7 @@ def stage(
     split_inputs: tuple[InputName, ...] = (),
     reuse: StageReuseMode = "never",
     file_access: StageFileAccessMode = "unrestricted",
+    input_roots: Literal["any", "download"] = "any",
 ) -> StageDraft:
     """Connect a decorated workspace function to its inputs and outputs.
 
@@ -1297,6 +1307,8 @@ def stage(
     the run environment; reuse="verified" permits a verified catalog candidate.
     file_access="declared" requires a successful Python read-open for every
     input and checks CPython-visible open attempts against the declared paths.
+    input_roots="download" requires every transitive input to end at an immutable
+    VIPER Download receipt.
     """
     selected_inputs = _stage_inputs(inputs)
     for input_name, value in selected_inputs.items():
@@ -1318,6 +1330,7 @@ def stage(
         "env": env,
         "reuse": reuse,
         "file_access": file_access,
+        "input_roots": input_roots,
     }
     spec: StageSpecDraft
     if definition.kind == "build":
