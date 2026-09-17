@@ -595,7 +595,12 @@ def _verify_download_retrievals(
                 ) from exc
             for executable in http.external_executables:
                 try:
-                    executable_raw = executable.path.read_bytes()
+                    bundle_reader = getattr(fetcher, "read_external_executable", None)
+                    executable_raw = (
+                        bundle_reader(executable)
+                        if bundle_reader is not None
+                        else executable.path.read_bytes()
+                    )
                 except OSError as exc:
                     raise VerificationError(
                         f"HTTP retrieval {input_name!r} executable is unavailable"
