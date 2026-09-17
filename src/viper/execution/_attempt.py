@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import signal
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import current_thread, main_thread
@@ -30,7 +31,13 @@ from ..references import (
     ViperCloudFileRef,
     storage_file,
 )
-from ..reuse import ReuseInputIdentity, build_stage_reuse_key, input_identity
+from ..reuse import (
+    ReuseInputIdentity,
+    StageReuseCandidate,
+    attempt_reuse_candidates,
+    build_stage_reuse_key,
+    input_identity,
+)
 from ..runs import (
     AttemptFailure,
     AttemptPurpose,
@@ -49,6 +56,7 @@ from ..stages import (
 )
 from ..storage import (
     LocalArtifactStore,
+    StorageDestination,
     ViperCloudClient,
     bind_run_destination,
     create_snapshot_publisher,
@@ -118,6 +126,91 @@ def _verification_policy(
             frozenset({source_repository}) | trusted_source_repositories
         )
     )
+
+
+@dataclass(frozen=True)
+class _AttemptAllocation:
+    """Retain state created while one run lock is held."""
+
+    lock: RunWorkspaceLock
+    terminal_path: Path
+    previous_run: ResolvedRun | None
+    previous_run_raw: bytes | None
+    previous_attempts: tuple[RunAttempt, ...]
+    attempt_id: int
+    workspace: AttemptWorkspace
+    journal: DurableJournal
+
+
+def _allocate_attempt(
+    *,
+    root: Path,
+    run_path: Path,
+    run: RunSpec,
+    run_root: str,
+    destination: StorageDestination,
+    purpose: AttemptPurpose,
+    retry: bool,
+    fetcher: RunFetcher,
+) -> _AttemptAllocation:
+    """Allocate attempt state and release the run lock if setup fails."""
+    workspace_root = root / ".viper" / "workspaces"
+    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
+    run_lock.acquire()
+    try:
+        terminal_path = run_path.parent / "resolved.yaml"
+        previous_run: ResolvedRun | None = None
+        previous_run_raw: bytes | None = None
+        if terminal_path.is_file():
+            previous_run_raw = terminal_path.read_bytes()
+            previous_run = ResolvedRun.model_validate(
+                parse_yaml_bytes(previous_run_raw)
+            )
+            if purpose == "run" and not retry:
+                raise RunError("run already has terminal attempt history; use retry")
+            if purpose == "run" and previous_run.status == "succeeded":
+                raise RunError("a successful run cannot be retried")
+        elif purpose == "benchmark_confirmation":
+            raise RunError("benchmark confirmation requires a terminal candidate run")
+        if purpose == "benchmark_confirmation" and previous_run is not None:
+            if previous_run.status != "succeeded":
+                raise RunError(
+                    "benchmark confirmation requires a successful candidate run"
+                )
+        known_attempts = (
+            ()
+            if previous_run is None
+            else tuple(
+                read_attempt_reference(reference, run, fetcher=fetcher)
+                for reference in previous_run.attempts
+            )
+        )
+        previous_attempts = reconcile_abandoned_attempts(
+            root,
+            workspace_root,
+            run,
+            run_root,
+            destination,
+            known_attempts,
+        )
+        attempt_id = max(
+            next_attempt_id(workspace_root, run.run_id),
+            max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
+        )
+        workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
+        return _AttemptAllocation(
+            lock=run_lock,
+            terminal_path=terminal_path,
+            previous_run=previous_run,
+            previous_run_raw=previous_run_raw,
+            previous_attempts=previous_attempts,
+            attempt_id=attempt_id,
+            workspace=workspace,
+            journal=DurableJournal(workspace.control / "journal.jsonl"),
+        )
+    except BaseException:
+        run_lock.release()
+        raise
 
 
 def execute_attempt(
@@ -202,50 +295,27 @@ def execute_attempt(
     )
     run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
 
-    workspace_root = root / ".viper" / "workspaces"
-    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
-    run_lock.acquire()
-    terminal_path = run_path.parent / "resolved.yaml"
-    previous_run: ResolvedRun | None = None
-    if terminal_path.is_file():
-        previous_run = ResolvedRun.model_validate(
-            parse_yaml_bytes(terminal_path.read_bytes())
-        )
-        if purpose == "run" and not retry:
-            run_lock.release()
-            raise RunError("run already has terminal attempt history; use retry")
-        if purpose == "run" and previous_run.status == "succeeded":
-            run_lock.release()
-            raise RunError("a successful run cannot be retried")
-    elif purpose == "benchmark_confirmation":
-        run_lock.release()
-        raise RunError("benchmark confirmation requires a terminal candidate run")
-    if purpose == "benchmark_confirmation" and previous_run is not None:
-        if previous_run.status != "succeeded":
-            run_lock.release()
-            raise RunError("benchmark confirmation requires a successful candidate run")
-    known_attempts = (
-        ()
-        if previous_run is None
-        else tuple(
-            read_attempt_reference(reference, run, fetcher=fetcher)
-            for reference in previous_run.attempts
-        )
+    owns_signals = current_thread() is main_thread()
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    allocation = _allocate_attempt(
+        root=root,
+        run_path=run_path,
+        run=run,
+        run_root=run_root,
+        destination=destination,
+        purpose=purpose,
+        retry=retry,
+        fetcher=fetcher,
     )
-    previous_attempts = reconcile_abandoned_attempts(
-        root,
-        workspace_root,
-        run,
-        run_root,
-        destination,
-        known_attempts,
-    )
-    attempt_id = max(
-        next_attempt_id(workspace_root, run.run_id),
-        max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
-    )
-    workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
-    journal = DurableJournal(workspace.control / "journal.jsonl")
+    run_lock = allocation.lock
+    terminal_path = allocation.terminal_path
+    previous_run = allocation.previous_run
+    previous_run_raw = allocation.previous_run_raw
+    previous_attempts = allocation.previous_attempts
+    attempt_id = allocation.attempt_id
+    workspace = allocation.workspace
+    journal = allocation.journal
     attempt_started = datetime.now(UTC)
     resolved_stage_refs: list[ResolvedStageRef] = []
     invocation_refs: list[ResolvedStageInvocationRef] = []
@@ -256,8 +326,6 @@ def execute_attempt(
     metric_verification_paths: list[Path] = []
     log_files: dict[str, bytes] = {}
     active_stage_id: StageId | None = None
-    previous_sigint = signal.getsignal(signal.SIGINT)
-    previous_sigterm = signal.getsignal(signal.SIGTERM)
 
     def cancel_attempt(signum: int, frame: object) -> None:
         """Convert an interrupt request into a durable cancellation outcome."""
@@ -271,11 +339,10 @@ def execute_attempt(
 
     # Batch runs execute in threads. Python permits signal-handler changes
     # only in the main thread; those runs leave the caller's handlers intact.
-    owns_signals = current_thread() is main_thread()
-    if owns_signals:
-        signal.signal(signal.SIGINT, cancel_attempt)
-        signal.signal(signal.SIGTERM, preempt_attempt)
     try:
+        if owns_signals:
+            signal.signal(signal.SIGINT, cancel_attempt)
+            signal.signal(signal.SIGTERM, preempt_attempt)
         journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
         preflight = preflight_plan(
             root,
@@ -302,6 +369,37 @@ def execute_attempt(
                 check.code for check in preflight.checks if check.status == "failure"
             )
             raise RunError(f"plan preflight failed: {failed_codes}")
+        retry_candidates: dict[StageId, StageReuseCandidate] = {}
+        if retry and previous_run is not None and previous_run_raw is not None:
+            terminal_relative_path = terminal_path.relative_to(root).as_posix()
+            published = publish_resolved_files(
+                root,
+                destination,
+                {terminal_relative_path: previous_run_raw},
+                cloud_client=cloud_client,
+            )[terminal_relative_path]
+            previous_reference = ResolvedRunRef(
+                sha256=published.sha256,
+                bytes=published.bytes,
+                stored_at=published.stored_at,
+            )
+            try:
+                verified_previous = verify_run_result(
+                    previous_run,
+                    policy=policy,
+                    fetcher=fetcher,
+                )
+            except VerificationError as exc:
+                raise VerificationError(
+                    "prior failed run cannot be verified for retry"
+                ) from exc
+            for previous_attempt in reversed(verified_previous.attempts):
+                for candidate in attempt_reuse_candidates(
+                    previous_reference,
+                    verified_previous,
+                    previous_attempt.attempt_id,
+                ):
+                    retry_candidates.setdefault(candidate.key.stage_id, candidate)
         for stage_reference in run.stages:
             active_stage_id = stage_reference.stage_id
             stage = load_stage_spec(root / stage_reference.spec)
@@ -378,8 +476,11 @@ def execute_attempt(
                     )
                 if (
                     isinstance(stage, InternalSpec)
-                    and stage.reuse == "verified"
                     and purpose == "run"
+                    and (
+                        stage.reuse == "verified"
+                        or stage_reference.stage_id in retry_candidates
+                    )
                 ):
                     metric_specs = {
                         metric.metric_id: metric for metric in experiment.metrics
@@ -415,6 +516,7 @@ def execute_attempt(
                         destination=destination,
                         cloud_client=cloud_client,
                         metrics=metric_specs,
+                        candidate=retry_candidates.get(stage_reference.stage_id),
                     )
                     if reused is not None:
                         journal.append(
@@ -689,6 +791,7 @@ def execute_attempt(
             ),
             path=terminal_path,
             journal_path=journal.path,
+            latest_attempt=attempt,
         )
     except (Exception, KeyboardInterrupt) as exc:
         failed_at = datetime.now(UTC)
@@ -803,8 +906,27 @@ def execute_attempt(
         terminal_raw = serialize_document(failed_run)
         replace_synchronized(terminal_path, terminal_raw)
         replace_synchronized(workspace.terminal, terminal_raw)
+        terminal_relative_path = terminal_path.relative_to(root).as_posix()
+        terminal_reference = publish_resolved_files(
+            root,
+            destination,
+            {terminal_relative_path: terminal_raw},
+            cloud_client=cloud_client,
+        )[terminal_relative_path]
+        result = RunResult(
+            record=failed_run,
+            reference=ResolvedRunRef(
+                sha256=terminal_reference.sha256,
+                bytes=terminal_reference.bytes,
+                stored_at=terminal_reference.stored_at,
+            ),
+            path=terminal_path,
+            journal_path=journal.path,
+            latest_attempt=failed_attempt,
+        )
         raise RunError(
-            f"attempt {attempt_id} failed; evidence written to {terminal_path}"
+            f"attempt {attempt_id} failed; evidence written to {terminal_path}",
+            result=result,
         ) from exc
     finally:
         if owns_signals:

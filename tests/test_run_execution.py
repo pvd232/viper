@@ -141,6 +141,7 @@ from viper.runtime import LocalEnvSpec as LocalEnvironmentSpec
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     DownloadSpec,
+    ResolvedBuildSpec,
     ResolvedTrainSpec,
     StageImplementationRef,
     StageInvocationReceipt,
@@ -765,8 +766,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
     original_verify_run_result = verify_run_result
 
-    def reject_provisional_result(*args, **kwargs):
+    def reject_provisional_result(resolved_run, *args, **kwargs):
         """Reject the result after its provisional successful attempt is written."""
+        if resolved_run.status == "failed":
+            return original_verify_run_result(resolved_run, *args, **kwargs)
         raise VerificationError("artifact.loadability: loader invocation failed")
 
     monkeypatch.setattr(
@@ -805,8 +808,15 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert (root / RUN_ROOT / "attempts/4/resolved.yaml").is_file()
     successful_attempt = attempts[3]
     assert len(successful_attempt.resolved_stages) == 2
-    assert len(successful_attempt.measurement_files) == 2
-    assert len(successful_attempt.metric_verification_files) == 1
+    assert successful_attempt.measurement_files == ()
+    assert successful_attempt.metric_verification_files == ()
+    verified_result = verify_run_result(
+        result.record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=fetcher,
+    )
+    retry_reuse = verified_result.reuse["train"]
+    assert retry_reuse.source_attempt == result.record.attempts[2]
     assert result.journal_path.is_file()
     assert (result.journal_path.parent / "preflight.json").is_file()
     metric_runtime = root / ".viper" / "runtime"
@@ -832,9 +842,9 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
 
     live_reference = next(
-        reference
-        for reference in successful_attempt.measurement_files
-        if str(reference.stored_at.path).endswith("train.epoch_mean.jsonl")
+        evidence.measurement
+        for evidence in retry_reuse.metrics
+        if evidence.metric_id == "epoch_mean"
     )
     live_measurement = Measurement.model_validate_json(
         fetcher(live_reference.stored_at)
@@ -1543,6 +1553,299 @@ def test_run_many_retains_one_result_per_plan(
         "skipped",
     )
     assert paths[2] not in executed
+
+
+def _freeze_retry_plan(root: Path) -> FrozenPlanFiles:
+    """Freeze a two-stage plan whose second stage has a configurable failure budget."""
+    root.mkdir()
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
+    source = root / "project/retry_pipeline.py"
+    source.parent.mkdir()
+    source.write_text(
+        "from pathlib import Path\n"
+        "from viper import config\n"
+        "from viper.stages import StageContext, build, embed\n\n"
+        "@build(config=config.BuildConfig)\n"
+        "def prepare(context: StageContext[config.BuildConfig]):\n"
+        "    marker = Path('build_calls.txt')\n"
+        "    prior = marker.read_text() if marker.exists() else ''\n"
+        "    marker.write_text(prior + '1\\n')\n"
+        "    target = context.outputs['features']\n"
+        "    target.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    target.write_bytes(b'features')\n\n"
+        "@embed(config=config.EmbedConfig)\n"
+        "def encode(context: StageContext[config.EmbedConfig]):\n"
+        "    marker = Path('embed_calls.txt')\n"
+        "    prior = marker.read_text() if marker.exists() else ''\n"
+        "    marker.write_text(prior + '1\\n')\n"
+        "    budget = Path('embed_failures_remaining.txt')\n"
+        "    remaining = int(budget.read_text()) if budget.exists() else 1\n"
+        "    if remaining > 0:\n"
+        "        budget.write_text(f'{remaining - 1}\\n')\n"
+        "        raise RuntimeError('planned transient failure')\n"
+        "    target = context.outputs['embedding']\n"
+        "    target.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    target.write_bytes(context.inputs['features'].read_bytes())\n\n"
+        "def load(path):\n"
+        "    return path.read_bytes()\n",
+        encoding="utf-8",
+    )
+    (root / "environment.yml").write_text("name: viper-test\n", encoding="utf-8")
+    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "source")
+    source_commit = run_git(root, "rev-parse", "HEAD")
+
+    module_spec = importlib.util.spec_from_file_location(
+        f"retry_pipeline_{root.parent.name}", source
+    )
+    assert module_spec is not None and module_spec.loader is not None
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    prepared = stage(
+        module.prepare,
+        outputs={  # pyright: ignore[reportArgumentType]
+            "features": output(
+                path="features.bin",
+                loader=module.load,
+                data_role="training",
+            )
+        },
+    )
+    embedded = stage(
+        module.encode,
+        inputs={"features": prepared.outputs["features"]},
+        outputs={  # pyright: ignore[reportArgumentType]
+            "embedding": output(
+                path="embedding.bin",
+                loader=module.load,
+                data_role="training",
+            )
+        },
+    )
+    authored = experiment(
+        experiment_id="retry",
+        variants={
+            "baseline": variant(
+                levels={},
+                stages={"prepare": prepared, "embed": embedded},
+                estimator=embedded.outputs["embedding"],
+            )
+        },
+        replicates={"r1": replicate("r1", seed=7)},
+    )
+    source_ref = GitSource.model_validate(
+        {"repository": REPOSITORY, "commit": source_commit}
+    )
+    environment = LocalEnvSpec(
+        lockfile=GitFileRef(
+            repository=source_ref.repository,
+            commit=source_commit,
+            path="environment.yml",
+        ),
+        python_env=python_environment(),
+    )
+    frozen = freeze_run_plan(
+        root,
+        plan(
+            experiment=authored,
+            variant="baseline",
+            replicate="r1",
+            source=source_ref,
+            env=environment,
+            reproducibility=reproducibility(),
+        ),
+    )
+    run_git(root, "add", "experiments/retry")
+    run_git(root, "commit", "--quiet", "-m", "plan")
+    return frozen
+
+
+def test_run_error_exposes_partial_attempt_result(tmp_path: Path) -> None:
+    """Expose completed and failed stages without converting failure to success."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+
+    with pytest.raises(RunError, match="attempt 1 failed") as caught:
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+
+    result = caught.value.result
+    assert result is not None
+    assert result.status == "failed"
+    assert result.latest_attempt.status == "failed"
+    assert result.completed_stage_ids == ("prepare",)
+    assert result.failed_stage_id == "embed"
+
+
+def test_preflight_failure_exposes_no_completed_stage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expose an allocated preflight failure without inventing stage progress."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    report = SimpleNamespace(
+        ready=False,
+        checks=(SimpleNamespace(code="source_changed", status="failure"),),
+    )
+    monkeypatch.setattr(
+        "viper.execution._attempt.preflight_plan", lambda *a, **k: report
+    )
+
+    with pytest.raises(RunError, match="attempt 1 failed") as caught:
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+
+    result = caught.value.result
+    assert result is not None
+    assert result.completed_stage_ids == ()
+    assert result.failed_stage_id is None
+
+
+def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> None:
+    """Republish a verified completed stage and execute only unfinished work."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    with pytest.raises(RunError) as caught:
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+    failed = caught.value.result
+    assert failed is not None
+
+    result = execute_retry(root, frozen.files[-1])
+    store = LocalArtifactStore(root)
+    verified = verify_run_result(
+        result.record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, store, REPOSITORY),
+    )
+    resolved_prepare = verified.resolved_stages["prepare"]
+    assert isinstance(resolved_prepare, ResolvedBuildSpec)
+    completion = resolved_prepare.completion
+
+    assert isinstance(completion, ReusedStageCompletion)
+    assert verified.reuse["prepare"].source_attempt == failed.record.attempts[-1]
+    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
+    assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
+
+
+def test_retry_rejects_tampered_completed_stage(tmp_path: Path) -> None:
+    """Reject a prior failed attempt whose completed snapshot changed."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    with pytest.raises(RunError) as caught:
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+    failed = caught.value.result
+    assert failed is not None
+    snapshot = failed.latest_attempt.resolved_stages[0].snapshot
+    assert isinstance(snapshot, LocalStageResultSnapshotRef)
+    stored = root / snapshot.store / snapshot.commit
+    artifact = next(stored.glob("**/artifacts/prepare/features/features.bin"))
+    artifact.write_bytes(b"tampered")
+
+    with pytest.raises(RunError) as retried:
+        execute_retry(root, frozen.files[-1])
+    result = retried.value.result
+    assert result is not None
+    assert result.completed_stage_ids == ()
+    assert result.failed_stage_id is None
+    assert result.latest_attempt.failure is not None
+    assert result.latest_attempt.failure.code == "verification_failed"
+    assert result.latest_attempt.failure.message == (
+        "prior failed run cannot be verified for retry"
+    )
+
+
+def test_retry_setup_failure_releases_run_lock(tmp_path: Path) -> None:
+    """Release the run lock when prior-attempt verification fails during setup."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    with pytest.raises(RunError) as caught:
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+    failed = caught.value.result
+    assert failed is not None
+    stored_at = failed.record.attempts[-1].stored_at
+    assert isinstance(stored_at, LocalFileRef)
+    stored_attempt = root / stored_at.store / stored_at.commit / stored_at.path
+    stored_attempt.write_bytes(stored_attempt.read_bytes() + b"\n")
+
+    for _ in range(2):
+        with pytest.raises(VerificationError, match="attempt.identity"):
+            execute_attempt(
+                root,
+                frozen.files[-1],
+                plan=frozen.reference,
+                retry=True,
+            )
+
+
+def test_retry_reuses_completed_stage_across_repeated_failures(tmp_path: Path) -> None:
+    """Carry a verified reused stage through more than one failed retry."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    (root / "embed_failures_remaining.txt").write_text("2\n", encoding="utf-8")
+
+    with pytest.raises(RunError):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+    with pytest.raises(RunError) as first_retry:
+        execute_retry(root, frozen.files[-1])
+    first_retry_result = first_retry.value.result
+    assert first_retry_result is not None
+
+    store = LocalArtifactStore(root)
+    failed_verified = verify_run_result(
+        first_retry_result.record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, store, REPOSITORY),
+    )
+    assert "prepare" in failed_verified.attempt_reuse[2]
+
+    result = execute_retry(root, frozen.files[-1])
+    verified = verify_run_result(
+        result.record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, store, REPOSITORY),
+    )
+    assert (
+        verified.reuse["prepare"].source_attempt
+        == first_retry_result.record.attempts[-1]
+    )
+    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
+    assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n1\n"
+
+
+def test_retry_finds_completed_stage_before_empty_failed_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse earlier work when an intervening retry completed no stages."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    with pytest.raises(RunError):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+
+    report = SimpleNamespace(
+        ready=False,
+        checks=(SimpleNamespace(code="source_changed", status="failure"),),
+    )
+    with monkeypatch.context() as context:
+        context.setattr(
+            "viper.execution._attempt.preflight_plan", lambda *a, **k: report
+        )
+        with pytest.raises(RunError):
+            execute_retry(root, frozen.files[-1])
+
+    result = execute_retry(root, frozen.files[-1])
+    store = LocalArtifactStore(root)
+    verified = verify_run_result(
+        result.record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, store, REPOSITORY),
+    )
+    assert verified.reuse["prepare"].source_attempt == result.record.attempts[0]
+    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
+    assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
 
 
 def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:

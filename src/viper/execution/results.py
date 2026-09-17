@@ -6,13 +6,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..benchmark import BenchmarkResult
-from ..ids import ReplicateId, RunId, VariantId
+from ..ids import ReplicateId, RunId, StageId, VariantId
 from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
 
 
 class RunResult(BaseModel):
-    """Return one verified terminal run and its local output path."""
+    """Return one terminal run, its latest attempt, and local output path."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -24,11 +24,25 @@ class RunResult(BaseModel):
     )
     path: Path = Field(description="Local path of the terminal record.")
     journal_path: Path = Field(description="Local journal for the completed attempt.")
+    latest_attempt: RunAttempt = Field(
+        description="Latest attempt recorded by this terminal run."
+    )
 
     @property
     def status(self) -> Literal["succeeded", "failed", "cancelled"]:
         """Return the terminal status recorded for this run."""
         return self.record.status
+
+    @property
+    def completed_stage_ids(self) -> tuple[StageId, ...]:
+        """Return stages published before the latest attempt ended."""
+        return tuple(stage.stage_id for stage in self.latest_attempt.resolved_stages)
+
+    @property
+    def failed_stage_id(self) -> StageId | None:
+        """Return the stage active when the latest attempt failed, if any."""
+        failure = self.latest_attempt.failure
+        return None if failure is None else failure.stage_id
 
 
 class ConfirmationRunResult(BaseModel):
