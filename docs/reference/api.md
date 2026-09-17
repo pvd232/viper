@@ -253,6 +253,7 @@ operations.
 | `retry` | `RetryRequest` | `RetrySuccess` | `retry` |
 | `execute_benchmark` | `ExecuteBenchmarkRequest` | `ExecuteBenchmarkSuccess` | `execute-benchmark` |
 | `export_run` | `ExportRunRequest` | `ExportRunSuccess` | `export-run` |
+| `env_doctor` | `EnvDoctorRequest` | `EnvDoctorSuccess` | `env doctor` |
 | `restore` | `RestoreRequest` | `RestoreSuccess` | `restore` |
 | `plan_diff` | `PlanDiffRequest` | `PlanDiffSuccess` | `plan-diff` |
 | `lineage` | `LineageRequest` | `LineageSuccess` | `lineage` |

@@ -10,10 +10,12 @@ import pickle
 import platform
 import random
 import re
+import sys
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
 import numpy as np
@@ -63,6 +65,72 @@ class PythonDistributionSpec(ProtocolModel):
 
     name: NormalizedDistributionName
     version: NonEmptyStr
+
+
+class PythonDistributionObservation(ProtocolModel):
+    """Locate one installed Python distribution version on disk."""
+
+    name: NormalizedDistributionName
+    version: NonEmptyStr
+    root: Path
+
+
+class PythonDistributionConflict(ProtocolModel):
+    """Record every installation for one name with conflicting versions."""
+
+    name: NormalizedDistributionName
+    installations: tuple[PythonDistributionObservation, ...] = Field(min_length=2)
+
+
+PythonEnvironmentViolation = Literal["no_distributions", "conflicting_versions"]
+
+
+class PythonEnvironmentDiagnosis(ProtocolModel):
+    """Describe the active interpreter and strict distribution conflicts."""
+
+    interpreter: Path
+    python_version: NonEmptyStr
+    search_paths: tuple[str, ...]
+    distributions: tuple[PythonDistributionObservation, ...]
+    conflicts: tuple[PythonDistributionConflict, ...]
+    violations: tuple[PythonEnvironmentViolation, ...]
+    healthy: bool
+
+    @model_validator(mode="after")
+    def validate_health(self) -> PythonEnvironmentDiagnosis:
+        """Bind health and violation kinds to the observed distribution set."""
+        expected: list[PythonEnvironmentViolation] = []
+        if not self.distributions:
+            expected.append("no_distributions")
+        if self.conflicts:
+            expected.append("conflicting_versions")
+        if self.violations != tuple(expected):
+            raise ValueError("violations do not match the observed distribution set")
+        if self.healthy != (not self.violations):
+            raise ValueError("healthy must be true exactly when violations are absent")
+        return self
+
+
+class PythonEnvironmentError(RuntimeError):
+    """Carry an actionable diagnosis for one rejected Python environment."""
+
+    def __init__(self, diagnosis: PythonEnvironmentDiagnosis) -> None:
+        """Format every conflict location into the exception message."""
+        conflicts = "; ".join(
+            f"{conflict.name}: "
+            + ", ".join(
+                f"{item.version} at {item.root}" for item in conflict.installations
+            )
+            for conflict in diagnosis.conflicts
+        )
+        search_paths = ", ".join(diagnosis.search_paths)
+        detail = conflicts or "no installed distributions"
+        super().__init__(
+            "active Python environment is ambiguous: "
+            f"interpreter={diagnosis.interpreter}; "
+            f"sys.path=[{search_paths}]; violations=[{detail}]"
+        )
+        self.diagnosis = diagnosis
 
 
 class CPUComputeSpec(ProtocolModel):
@@ -694,24 +762,62 @@ def _startup_environment() -> dict[StartupVariable, str]:
     }
 
 
-def observe_python_env() -> PythonEnvSpec:
-    """Record the interpreter and every installed Python distribution."""
-    versions: dict[str, str] = {}
+def diagnose_python_env() -> PythonEnvironmentDiagnosis:
+    """Inspect the active interpreter without accepting an ambiguous package set."""
+    installations: list[PythonDistributionObservation] = []
     for distribution in importlib.metadata.distributions():
         try:
             raw_name = distribution.metadata["Name"]
         except KeyError:
             continue
+        if not raw_name:
+            continue
         name = re.sub(r"[-_.]+", "-", raw_name).lower()
-        version = distribution.version
-        previous = versions.get(name)
-        if previous is not None and previous != version:
-            raise RuntimeError(f"installed distribution {name!r} has multiple versions")
-        versions[name] = version
-    if not versions:
-        raise RuntimeError("the active Python env has no distributions")
-    return PythonEnvSpec(
+        installations.append(
+            PythonDistributionObservation(
+                name=name,
+                version=distribution.version,
+                root=Path(os.path.abspath(str(distribution.locate_file("")))),
+            )
+        )
+    ordered = tuple(
+        sorted(
+            installations,
+            key=lambda item: (item.name, item.version, item.root.as_posix()),
+        )
+    )
+    grouped: dict[str, list[PythonDistributionObservation]] = {}
+    for installation in ordered:
+        grouped.setdefault(installation.name, []).append(installation)
+    conflicts = tuple(
+        PythonDistributionConflict(name=name, installations=tuple(grouped[name]))
+        for name in sorted(grouped)
+        if len({item.version for item in grouped[name]}) > 1
+    )
+    violations: list[PythonEnvironmentViolation] = []
+    if not ordered:
+        violations.append("no_distributions")
+    if conflicts:
+        violations.append("conflicting_versions")
+    return PythonEnvironmentDiagnosis(
+        interpreter=Path(os.path.abspath(sys.executable)),
         python_version=platform.python_version(),
+        search_paths=tuple(sys.path),
+        distributions=ordered,
+        conflicts=conflicts,
+        violations=tuple(violations),
+        healthy=not violations,
+    )
+
+
+def observe_python_env() -> PythonEnvSpec:
+    """Record one unambiguous interpreter and installed distribution set."""
+    diagnosis = diagnose_python_env()
+    if not diagnosis.healthy:
+        raise PythonEnvironmentError(diagnosis)
+    versions = {item.name: item.version for item in diagnosis.distributions}
+    return PythonEnvSpec(
+        python_version=diagnosis.python_version,
         distributions=tuple(
             PythonDistributionSpec(name=name, version=versions[name])
             for name in sorted(versions)

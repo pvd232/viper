@@ -1,0 +1,791 @@
+diff --git a/docs/reference/api.md b/docs/reference/api.md
+index f8c565a..d273575 100644
+--- a/docs/reference/api.md
++++ b/docs/reference/api.md
+@@ -253,6 +253,7 @@ operations.
+ | `retry` | `RetryRequest` | `RetrySuccess` | `retry` |
+ | `execute_benchmark` | `ExecuteBenchmarkRequest` | `ExecuteBenchmarkSuccess` | `execute-benchmark` |
+ | `export_run` | `ExportRunRequest` | `ExportRunSuccess` | `export-run` |
++| `env_doctor` | `EnvDoctorRequest` | `EnvDoctorSuccess` | `env doctor` |
+ | `restore` | `RestoreRequest` | `RestoreSuccess` | `restore` |
+ | `plan_diff` | `PlanDiffRequest` | `PlanDiffSuccess` | `plan-diff` |
+ | `lineage` | `LineageRequest` | `LineageSuccess` | `lineage` |
+diff --git a/docs/reference/configuration.md b/docs/reference/configuration.md
+index f3bff2d..5343801 100644
+--- a/docs/reference/configuration.md
++++ b/docs/reference/configuration.md
+@@ -79,7 +79,9 @@ declaration, outside `EvalConfig`.
+ `LocalEnvSpec` selects CPU compute by default. Its `lockfile` identifies a committed
+ dependency file, and `python_env` records the installed Python and package versions.
+ Install the required packages before calling `observe_python_env()` to capture the
+-environment.
++environment. Run `viper env doctor` first when observation reports conflicting
++distributions; its JSON output names the interpreter, search paths, versions, and
++installation roots used to locate the conflict.
+
+ The [CPU example](../../examples/cpu_quickstart.py) uses its committed `pyproject.toml`
+ as the dependency-file reference. That file contains version ranges. For your own
+diff --git a/src/viper/api.py b/src/viper/api.py
+index a461736..9cb8041 100644
+--- a/src/viper/api.py
++++ b/src/viper/api.py
+@@ -121,6 +121,7 @@ from .runs import (
+     ResolvedRun,
+     RunSpec,
+ )
++from .runtime import PythonEnvironmentDiagnosis, diagnose_python_env
+ from .serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
+ from .stages import (
+     ParameterizedSpec,
+@@ -147,6 +148,7 @@ OperationName = Literal[
+     "retry",
+     "execute_benchmark",
+     "export_run",
++    "env_doctor",
+     "restore",
+     "plan_diff",
+     "lineage",
+@@ -560,6 +562,17 @@ class SchemaSuccess(SuccessModel):
+     json_schema: dict[str, Any]
+
+
++class EnvDoctorRequest(APIModel):
++    """Request a diagnosis of the active Python interpreter."""
++
++
++class EnvDoctorSuccess(SuccessModel):
++    """Return one healthy active Python-environment diagnosis."""
++
++    operation: Literal["env_doctor"] = "env_doctor"  # pyright: ignore[reportIncompatibleVariableOverride]
++    diagnosis: PythonEnvironmentDiagnosis
++
++
+ class CapabilitiesRequest(APIModel):
+     """Request the installed operation and backend inventory."""
+
+@@ -806,6 +819,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
+     "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
+     "ExportRunRequest": ExportRunRequest,
+     "ExportRunSuccess": ExportRunSuccess,
++    "EnvDoctorRequest": EnvDoctorRequest,
++    "EnvDoctorSuccess": EnvDoctorSuccess,
+     "RestoreRequest": RestoreRequest,
+     "RestoreSuccess": RestoreSuccess,
+     "FreezeRunRequest": FreezeRunRequest,
+@@ -872,6 +887,7 @@ OPERATIONS: tuple[OperationName, ...] = (
+     "retry",
+     "execute_benchmark",
+     "export_run",
++    "env_doctor",
+     "restore",
+     "plan_diff",
+     "lineage",
+@@ -1513,6 +1529,23 @@ def get_schema(request: SchemaRequest) -> SchemaSuccess:
+     )
+
+
++def env_doctor(request: EnvDoctorRequest) -> EnvDoctorSuccess:
++    """Diagnose the active Python environment without starting a run."""
++    del request
++    diagnosis = diagnose_python_env()
++    if not diagnosis.healthy:
++        raise ViperError(
++            ViperFailure(
++                operation="env_doctor",
++                origin="application",
++                code="execution_failed",
++                message="active Python environment violates strict requirements",
++                details={"diagnosis": diagnosis.model_dump(mode="json")},
++            )
++        )
++    return EnvDoctorSuccess(diagnosis=diagnosis)
++
++
+ def get_capabilities(request: CapabilitiesRequest) -> CapabilitiesSuccess:
+     """Return installed operations and available execution backends."""
+     del request
+@@ -1909,6 +1942,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
+     "retry": RetryRequest,
+     "execute_benchmark": ExecuteBenchmarkRequest,
+     "export_run": ExportRunRequest,
++    "env_doctor": EnvDoctorRequest,
+     "restore": RestoreRequest,
+     "plan_diff": PlanDiffRequest,
+     "lineage": LineageRequest,
+@@ -1959,6 +1993,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
+     "retry": retry_request,
+     "execute_benchmark": execute_benchmark,
+     "export_run": export_run,
++    "env_doctor": env_doctor,
+     "restore": restore_artifacts,
+     "plan_diff": plan_diff,
+     "lineage": lineage,
+diff --git a/src/viper/cli.py b/src/viper/cli.py
+index 4dc276f..1aa51a7 100644
+--- a/src/viper/cli.py
++++ b/src/viper/cli.py
+@@ -257,6 +257,19 @@ def build_parser() -> ArgumentParser:
+         help="source repository URL approved to supply executable loaders",
+     )
+
++    environment = commands.add_parser(
++        "env",
++        help="inspect the active execution environment",
++    )
++    environment_commands = environment.add_subparsers(
++        dest="environment_command",
++        required=True,
++    )
++    environment_commands.add_parser(
++        "doctor",
++        help="diagnose strict Python-environment violations",
++    )
++
+     restore = commands.add_parser(
+         "restore",
+         help="restore verified artifacts from one successful run",
+@@ -337,6 +350,8 @@ def _operation_and_payload(
+     values = vars(arguments).copy()
+     command = values.pop("command")
+     values.pop("json_output")
++    if command == "env":
++        command = f"env-{values.pop('environment_command')}"
+     if command == "knowledge":
+         knowledge_command = values.pop("knowledge_command")
+         if knowledge_command == "refresh":
+@@ -381,6 +396,7 @@ def _operation_and_payload(
+         "retry": "retry",
+         "execute-benchmark": "execute_benchmark",
+         "export-run": "export_run",
++        "env-doctor": "env_doctor",
+         "restore": "restore",
+         "plan-diff": "plan_diff",
+         "lineage": "lineage",
+@@ -472,6 +488,9 @@ def _human_success(result: SuccessModel) -> str:
+     if result.operation == "export_run":
+         exported = getattr(result, "result")
+         return f"exported {exported.file_count} files to {exported.bundle_path}"
++    if result.operation == "env_doctor":
++        diagnosis = getattr(result, "diagnosis")
++        return f"Python environment is healthy: {diagnosis.interpreter}"
+     if result.operation == "restore":
+         restored = getattr(result, "result")
+         file_count = sum(len(artifact.files) for artifact in restored.artifacts)
+diff --git a/src/viper/runtime.py b/src/viper/runtime.py
+index 59b5e81..2b09ab6 100644
+--- a/src/viper/runtime.py
++++ b/src/viper/runtime.py
+@@ -10,10 +10,12 @@ import pickle
+ import platform
+ import random
+ import re
++import sys
+ import urllib.parse
+ import urllib.request
+ from collections.abc import Callable, Mapping
+ from dataclasses import dataclass
++from pathlib import Path
+ from typing import Annotated, Any, Literal, cast
+
+ import numpy as np
+@@ -65,6 +67,60 @@ class PythonDistributionSpec(ProtocolModel):
+     version: NonEmptyStr
+
+
++class PythonDistributionObservation(ProtocolModel):
++    """Locate one installed Python distribution version on disk."""
++
++    name: NormalizedDistributionName
++    version: NonEmptyStr
++    root: Path
++
++
++class PythonDistributionConflict(ProtocolModel):
++    """Record every installation for one name with conflicting versions."""
++
++    name: NormalizedDistributionName
++    installations: tuple[PythonDistributionObservation, ...] = Field(min_length=2)
++
++
++class PythonEnvironmentDiagnosis(ProtocolModel):
++    """Describe the active interpreter and strict distribution conflicts."""
++
++    interpreter: Path
++    python_version: NonEmptyStr
++    search_paths: tuple[str, ...]
++    distributions: tuple[PythonDistributionObservation, ...]
++    conflicts: tuple[PythonDistributionConflict, ...]
++    healthy: bool
++
++    @model_validator(mode="after")
++    def validate_health(self) -> PythonEnvironmentDiagnosis:
++        """Bind health to the absence of strict distribution conflicts."""
++        if self.healthy == bool(self.conflicts):
++            raise ValueError("healthy must be true exactly when conflicts are absent")
++        return self
++
++
++class PythonEnvironmentError(RuntimeError):
++    """Carry an actionable diagnosis for one rejected Python environment."""
++
++    def __init__(self, diagnosis: PythonEnvironmentDiagnosis) -> None:
++        """Format every conflict location into the exception message."""
++        conflicts = "; ".join(
++            f"{conflict.name}: "
++            + ", ".join(
++                f"{item.version} at {item.root}" for item in conflict.installations
++            )
++            for conflict in diagnosis.conflicts
++        )
++        search_paths = ", ".join(diagnosis.search_paths)
++        super().__init__(
++            "active Python environment is ambiguous: "
++            f"interpreter={diagnosis.interpreter}; "
++            f"sys.path=[{search_paths}]; conflicts=[{conflicts}]"
++        )
++        self.diagnosis = diagnosis
++
++
+ class CPUComputeSpec(ProtocolModel):
+     """Request CPU execution for a stage."""
+
+@@ -694,24 +750,58 @@ def _startup_environment() -> dict[StartupVariable, str]:
+     }
+
+
+-def observe_python_env() -> PythonEnvSpec:
+-    """Record the interpreter and every installed Python distribution."""
+-    versions: dict[str, str] = {}
++def diagnose_python_env() -> PythonEnvironmentDiagnosis:
++    """Inspect the active interpreter without accepting an ambiguous package set."""
++    installations: list[PythonDistributionObservation] = []
+     for distribution in importlib.metadata.distributions():
+         try:
+             raw_name = distribution.metadata["Name"]
+         except KeyError:
+             continue
++        if not raw_name:
++            continue
+         name = re.sub(r"[-_.]+", "-", raw_name).lower()
+-        version = distribution.version
+-        previous = versions.get(name)
+-        if previous is not None and previous != version:
+-            raise RuntimeError(f"installed distribution {name!r} has multiple versions")
+-        versions[name] = version
+-    if not versions:
++        installations.append(
++            PythonDistributionObservation(
++                name=name,
++                version=distribution.version,
++                root=Path(str(distribution.locate_file(""))).resolve(),
++            )
++        )
++    ordered = tuple(
++        sorted(
++            installations,
++            key=lambda item: (item.name, item.version, item.root.as_posix()),
++        )
++    )
++    grouped: dict[str, list[PythonDistributionObservation]] = {}
++    for installation in ordered:
++        grouped.setdefault(installation.name, []).append(installation)
++    conflicts = tuple(
++        PythonDistributionConflict(name=name, installations=tuple(grouped[name]))
++        for name in sorted(grouped)
++        if len({item.version for item in grouped[name]}) > 1
++    )
++    return PythonEnvironmentDiagnosis(
++        interpreter=Path(sys.executable).resolve(),
++        python_version=platform.python_version(),
++        search_paths=tuple(sys.path),
++        distributions=ordered,
++        conflicts=conflicts,
++        healthy=not conflicts,
++    )
++
++
++def observe_python_env() -> PythonEnvSpec:
++    """Record one unambiguous interpreter and installed distribution set."""
++    diagnosis = diagnose_python_env()
++    if diagnosis.conflicts:
++        raise PythonEnvironmentError(diagnosis)
++    if not diagnosis.distributions:
+         raise RuntimeError("the active Python env has no distributions")
++    versions = {item.name: item.version for item in diagnosis.distributions}
+     return PythonEnvSpec(
+-        python_version=platform.python_version(),
++        python_version=diagnosis.python_version,
+         distributions=tuple(
+             PythonDistributionSpec(name=name, version=versions[name])
+             for name in sorted(versions)
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 0dd66a5..3519387 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -36,6 +36,7 @@ TIER_BY_MODULE = {
+     "test_workspace_vocabulary": "contract",
+     "test_dispatch_migration": "contract",
+     "test_runtime_boundary": "contract",
++    "test_runtime": "unit",
+     "test_public_inventory": "contract",
+     "test_config_validation": "contract",
+     "test_plan_execution": "contract",
+@@ -97,6 +98,7 @@ DOMAIN_BY_MODULE = {
+     "test_workspace_vocabulary": "domain_application",
+     "test_dispatch_migration": "domain_protocol",
+     "test_runtime_boundary": "domain_execution",
++    "test_runtime": "domain_execution",
+     "test_public_inventory": "domain_release",
+     "test_config_validation": "domain_parameters",
+     "test_plan_execution": "domain_execution",
+diff --git a/tests/golden/api/success.json b/tests/golden/api/success.json
+index 7d1485b..9b1083d 100644
+--- a/tests/golden/api/success.json
++++ b/tests/golden/api/success.json
+@@ -1 +1 @@
+-{"authoring_vocabulary":["config","outputs","workspace","repository"],"execution_backends":["trusted_local"],"operation":"get_capabilities","operations":["validate_stage","validate_resolved_stage","validate_run_spec","freeze_run","preflight","execute_stage","run","run_many","retry","execute_benchmark","export_run","restore","plan_diff","lineage","status","compare_runs","verify_run","verify_benchmark","verify_pointer","get_schema","get_capabilities","init_workspace","catalog_refresh","search_runs","search_artifacts","search_measurements","search_benchmarks","knowledge_refresh","search_primitives","search_assignments","search_modulations","search_effects","search_impacts","search_diagnostics","search_assertions","search_retrieval_judgments","search_similar","publish_ontology","publish_assignment","publish_modulation","publish_effect","publish_impact_policy","publish_impact","publish_diagnostic","publish_assertion","publish_vector","publish_retrieval_judgment"],"protocol_version":2,"schemas":["ArtifactPointer","AssertionQuery","AssignmentQuery","BenchmarkResult","CapabilitiesRequest","CapabilitiesSuccess","CatalogRefreshRequest","CatalogRefreshSuccess","CompareRunsRequest","CompareRunsSuccess","DiagnosticQuery","EffectQuery","ExecuteBenchmarkRequest","ExecuteBenchmarkSuccess","ExecuteStageRequest","ExecuteStageSuccess","ExportRunRequest","ExportRunSuccess","FreezeRunRequest","FreezeRunSuccess","ImpactQuery","InitWorkspaceRequest","InitWorkspaceSuccess","KnowledgeRefreshRequest","KnowledgeRefreshSuccess","KnowledgeSearchRequest","KnowledgeSearchSuccess","LineageRequest","LineageSuccess","ModulationQuery","PlanDiffRequest","PlanDiffSuccess","PreflightRequest","PreflightSuccess","PrimitiveQuery","PublishKnowledgeRequest","PublishKnowledgeSuccess","ResolvedRun","RestoreRequest","RestoreSuccess","RetrievalJudgmentQuery","RetryRequest","RetrySuccess","RunManyRequest","RunManySuccess","RunRequest","RunSpec","RunSuccess","SchemaRequest","SchemaSuccess","SearchArtifactsRequest","SearchArtifactsSuccess","SearchBenchmarksRequest","SearchBenchmarksSuccess","SearchMeasurementsRequest","SearchMeasurementsSuccess","SearchRunsRequest","SearchRunsSuccess","SimilarityQuery","Spec","StatusRequest","StatusSuccess","ValidateResolvedStageRequest","ValidateResolvedStageSuccess","ValidateRunSpecRequest","ValidateRunSpecSuccess","ValidateStageRequest","ValidateStageSuccess","VerifyBenchmarkRequest","VerifyBenchmarkSuccess","VerifyPointerRequest","VerifyPointerSuccess","VerifyRunRequest","VerifyRunSuccess","ViperFailure"],"stage_kinds":["download","build","embed","train","eval","diagnostic"],"status":"ok","warnings":[]}
++{"authoring_vocabulary":["config","outputs","workspace","repository"],"execution_backends":["trusted_local"],"operation":"get_capabilities","operations":["validate_stage","validate_resolved_stage","validate_run_spec","freeze_run","preflight","execute_stage","run","run_many","retry","execute_benchmark","export_run","env_doctor","restore","plan_diff","lineage","status","compare_runs","verify_run","verify_benchmark","verify_pointer","get_schema","get_capabilities","init_workspace","catalog_refresh","search_runs","search_artifacts","search_measurements","search_benchmarks","knowledge_refresh","search_primitives","search_assignments","search_modulations","search_effects","search_impacts","search_diagnostics","search_assertions","search_retrieval_judgments","search_similar","publish_ontology","publish_assignment","publish_modulation","publish_effect","publish_impact_policy","publish_impact","publish_diagnostic","publish_assertion","publish_vector","publish_retrieval_judgment"],"protocol_version":2,"schemas":["ArtifactPointer","AssertionQuery","AssignmentQuery","BenchmarkResult","CapabilitiesRequest","CapabilitiesSuccess","CatalogRefreshRequest","CatalogRefreshSuccess","CompareRunsRequest","CompareRunsSuccess","DiagnosticQuery","EffectQuery","EnvDoctorRequest","EnvDoctorSuccess","ExecuteBenchmarkRequest","ExecuteBenchmarkSuccess","ExecuteStageRequest","ExecuteStageSuccess","ExportRunRequest","ExportRunSuccess","FreezeRunRequest","FreezeRunSuccess","ImpactQuery","InitWorkspaceRequest","InitWorkspaceSuccess","KnowledgeRefreshRequest","KnowledgeRefreshSuccess","KnowledgeSearchRequest","KnowledgeSearchSuccess","LineageRequest","LineageSuccess","ModulationQuery","PlanDiffRequest","PlanDiffSuccess","PreflightRequest","PreflightSuccess","PrimitiveQuery","PublishKnowledgeRequest","PublishKnowledgeSuccess","ResolvedRun","RestoreRequest","RestoreSuccess","RetrievalJudgmentQuery","RetryRequest","RetrySuccess","RunManyRequest","RunManySuccess","RunRequest","RunSpec","RunSuccess","SchemaRequest","SchemaSuccess","SearchArtifactsRequest","SearchArtifactsSuccess","SearchBenchmarksRequest","SearchBenchmarksSuccess","SearchMeasurementsRequest","SearchMeasurementsSuccess","SearchRunsRequest","SearchRunsSuccess","SimilarityQuery","Spec","StatusRequest","StatusSuccess","ValidateResolvedStageRequest","ValidateResolvedStageSuccess","ValidateRunSpecRequest","ValidateRunSpecSuccess","ValidateStageRequest","ValidateStageSuccess","VerifyBenchmarkRequest","VerifyBenchmarkSuccess","VerifyPointerRequest","VerifyPointerSuccess","VerifyRunRequest","VerifyRunSuccess","ViperFailure"],"stage_kinds":["download","build","embed","train","eval","diagnostic"],"status":"ok","warnings":[]}
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index a9431fa..312c65c 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -9,11 +9,83 @@ from datetime import UTC, datetime
+ from io import StringIO
+ from pathlib import Path
+
++import viper.runtime as runtime
+ from viper import _subprocess as subprocess
+ from viper.cli import main
+ from viper.journal import DurableJournal
+
+
++class _Distribution:
++    """Supply installed-distribution metadata for CLI diagnosis tests."""
++
++    def __init__(self, version: str, root: Path) -> None:
++        self.metadata = {"Name": "cffi"}
++        self.version = version
++        self.root = root
++
++    def locate_file(self, path: str) -> Path:
++        """Resolve a package-relative path below the test installation root."""
++        return self.root / path
++
++
++def test_env_doctor_reports_active_interpreter(
++    monkeypatch,
++    capsys,
++    tmp_path: Path,
++) -> None:
++    """Return a structured healthy report without starting a run."""
++    root = tmp_path / "site-packages"
++    monkeypatch.setattr(
++        runtime.importlib.metadata,
++        "distributions",
++        lambda: (_Distribution("1.17.0", root),),
++    )
++    monkeypatch.setattr(runtime.sys, "executable", str(tmp_path / "bin/python"))
++    monkeypatch.setattr(runtime.sys, "path", [str(root)])
++
++    status = main(["--json", "env", "doctor"])
++    result = json.loads(capsys.readouterr().out)
++
++    assert status == 0
++    assert result["operation"] == "env_doctor"
++    assert result["diagnosis"]["healthy"] is True
++    assert result["diagnosis"]["interpreter"] == str(tmp_path / "bin/python")
++
++
++def test_env_doctor_fails_with_duplicate_distribution_evidence(
++    monkeypatch,
++    capsys,
++    tmp_path: Path,
++) -> None:
++    """Return every conflicting installation and a nonzero CLI status."""
++    roots = (tmp_path / "first-site", tmp_path / "second-site")
++    monkeypatch.setattr(
++        runtime.importlib.metadata,
++        "distributions",
++        lambda: (
++            _Distribution("1.16.0", roots[0]),
++            _Distribution("1.17.0", roots[1]),
++        ),
++    )
++    monkeypatch.setattr(runtime.sys, "executable", str(tmp_path / "bin/python"))
++    monkeypatch.setattr(runtime.sys, "path", [str(root) for root in roots])
++
++    status = main(["--json", "env", "doctor"])
++    result = json.loads(capsys.readouterr().out)
++    diagnosis = result["details"]["diagnosis"]
++
++    assert status == 1
++    assert result["operation"] == "env_doctor"
++    assert diagnosis["healthy"] is False
++    assert {item["version"] for item in diagnosis["conflicts"][0]["installations"]} == {
++        "1.16.0",
++        "1.17.0",
++    }
++    assert {item["root"] for item in diagnosis["conflicts"][0]["installations"]} == {
++        str(root) for root in roots
++    }
++
++
+ def test_mcp_stdio_requires_explicit_execution_access(
+     monkeypatch, tmp_path: Path
+ ) -> None:
+@@ -200,6 +272,7 @@ class CommandLineTests(unittest.TestCase):
+                 "--trust-source",
+                 "https://example.test/repository",
+             ],
++            "env doctor": ["env", "doctor"],
+             "plan-diff": ["plan-diff", "left.yaml", "right.yaml"],
+             "lineage": [
+                 "lineage",
+diff --git a/tests/test_documentation.py b/tests/test_documentation.py
+index fec58db..c583a26 100644
+--- a/tests/test_documentation.py
++++ b/tests/test_documentation.py
+@@ -129,7 +129,9 @@ def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
+     assert cli_mapping is not None
+     expected = {operation: command for command, operation in cli_mapping.items()}
+     for operation in expected:
+-        if operation == "knowledge_refresh":
++        if operation == "env_doctor":
++            expected[operation] = "env doctor"
++        elif operation == "knowledge_refresh":
+             expected[operation] = "knowledge refresh"
+         elif operation.startswith("publish_"):
+             expected[operation] = f"knowledge publish {operation}"
+diff --git a/tests/test_public_api.py b/tests/test_public_api.py
+index 6552100..ffd9d7f 100644
+--- a/tests/test_public_api.py
++++ b/tests/test_public_api.py
+@@ -334,6 +334,9 @@ def test_env_vocabulary_is_complete() -> None:
+     assert runtime.PythonEnvSpec.__name__ == "PythonEnvSpec"
+     assert runtime.EnvSpec is not None
+     assert runtime.ResolvedEnv is not None
++    assert runtime.PythonEnvironmentDiagnosis.__name__ == "PythonEnvironmentDiagnosis"
++    assert runtime.PythonEnvironmentError.__name__ == "PythonEnvironmentError"
++    assert callable(runtime.diagnose_python_env)
+     assert callable(runtime.observe_python_env)
+     assert not hasattr(runtime, "PythonEnvironmentSpec")
+     assert not hasattr(runtime, "EnvironmentSpec")
+diff --git a/tests/test_runtime.py b/tests/test_runtime.py
+new file mode 100644
+index 0000000..815be00
+--- /dev/null
++++ b/tests/test_runtime.py
+@@ -0,0 +1,72 @@
++"""Tests for active Python-environment observation and diagnosis."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++
++import viper.runtime as runtime
++
++
++class _Distribution:
++    """Supply the metadata interface used by importlib.metadata distributions."""
++
++    def __init__(self, name: str, version: str, root: Path) -> None:
++        self.metadata = {"Name": name}
++        self.version = version
++        self.root = root
++
++    def locate_file(self, path: str) -> Path:
++        """Resolve a package-relative path below the test installation root."""
++        return self.root / path
++
++
++def _install_conflict(
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> tuple[Path, ...]:
++    """Install two synthetic cffi versions at distinct search roots."""
++    roots = (tmp_path / "first-site", tmp_path / "second-site")
++    distributions = (
++        _Distribution("cffi", "1.16.0", roots[0]),
++        _Distribution("CFFI", "1.17.0", roots[1]),
++    )
++    monkeypatch.setattr(
++        runtime.importlib.metadata,
++        "distributions",
++        lambda: distributions,
++    )
++    monkeypatch.setattr(runtime.sys, "executable", str(tmp_path / "bin/python"))
++    monkeypatch.setattr(runtime.sys, "path", [str(root) for root in roots])
++    return roots
++
++
++def test_python_env_conflict_reports_actionable_locations(
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """Name every conflicting version, root, interpreter, and search path."""
++    roots = _install_conflict(monkeypatch, tmp_path)
++
++    with pytest.raises(runtime.PythonEnvironmentError) as caught:
++        runtime.observe_python_env()
++
++    message = str(caught.value)
++    assert "1.16.0" in message
++    assert "1.17.0" in message
++    assert all(str(root) in message for root in roots)
++    assert str(tmp_path / "bin/python") in message
++    assert "sys.path" in message
++    assert caught.value.diagnosis.conflicts[0].name == "cffi"
++
++
++def test_python_env_still_rejects_duplicate_versions(
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """Preserve strict rejection when normalized names have two versions."""
++    _install_conflict(monkeypatch, tmp_path)
++
++    with pytest.raises(runtime.PythonEnvironmentError):
++        runtime.observe_python_env()
++diff --git a/src/viper/runtime.py b/src/viper/runtime.py
+index 2b09ab6..6ffd995 100644
+--- a/src/viper/runtime.py
++++ b/src/viper/runtime.py
+@@ -82,6 +82,9 @@ class PythonDistributionConflict(ProtocolModel):
+     installations: tuple[PythonDistributionObservation, ...] = Field(min_length=2)
+
+
++PythonEnvironmentViolation = Literal["no_distributions", "conflicting_versions"]
++
++
+ class PythonEnvironmentDiagnosis(ProtocolModel):
+     """Describe the active interpreter and strict distribution conflicts."""
+
+@@ -90,13 +93,21 @@ class PythonEnvironmentDiagnosis(ProtocolModel):
+     search_paths: tuple[str, ...]
+     distributions: tuple[PythonDistributionObservation, ...]
+     conflicts: tuple[PythonDistributionConflict, ...]
++    violations: tuple[PythonEnvironmentViolation, ...]
+     healthy: bool
+
+     @model_validator(mode="after")
+     def validate_health(self) -> PythonEnvironmentDiagnosis:
+-        """Bind health to the absence of strict distribution conflicts."""
+-        if self.healthy == bool(self.conflicts):
+-            raise ValueError("healthy must be true exactly when conflicts are absent")
++        """Bind health and violation kinds to the observed distribution set."""
++        expected: list[PythonEnvironmentViolation] = []
++        if not self.distributions:
++            expected.append("no_distributions")
++        if self.conflicts:
++            expected.append("conflicting_versions")
++        if self.violations != tuple(expected):
++            raise ValueError("violations do not match the observed distribution set")
++        if self.healthy != (not self.violations):
++            raise ValueError("healthy must be true exactly when violations are absent")
+         return self
+
+
+@@ -113,10 +124,11 @@ class PythonEnvironmentError(RuntimeError):
+             for conflict in diagnosis.conflicts
+         )
+         search_paths = ", ".join(diagnosis.search_paths)
++        detail = conflicts or "no installed distributions"
+         super().__init__(
+             "active Python environment is ambiguous: "
+             f"interpreter={diagnosis.interpreter}; "
+-            f"sys.path=[{search_paths}]; conflicts=[{conflicts}]"
++            f"sys.path=[{search_paths}]; violations=[{detail}]"
+         )
+         self.diagnosis = diagnosis
+
+@@ -765,7 +777,7 @@ def diagnose_python_env() -> PythonEnvironmentDiagnosis:
+             PythonDistributionObservation(
+                 name=name,
+                 version=distribution.version,
+-                root=Path(str(distribution.locate_file(""))).resolve(),
++                root=Path(os.path.abspath(str(distribution.locate_file("")))),
+             )
+         )
+     ordered = tuple(
+@@ -782,23 +794,27 @@ def diagnose_python_env() -> PythonEnvironmentDiagnosis:
+         for name in sorted(grouped)
+         if len({item.version for item in grouped[name]}) > 1
+     )
++    violations: list[PythonEnvironmentViolation] = []
++    if not ordered:
++        violations.append("no_distributions")
++    if conflicts:
++        violations.append("conflicting_versions")
+     return PythonEnvironmentDiagnosis(
+-        interpreter=Path(sys.executable).resolve(),
++        interpreter=Path(os.path.abspath(sys.executable)),
+         python_version=platform.python_version(),
+         search_paths=tuple(sys.path),
+         distributions=ordered,
+         conflicts=conflicts,
+-        healthy=not conflicts,
++        violations=tuple(violations),
++        healthy=not violations,
+     )
+
+
+ def observe_python_env() -> PythonEnvSpec:
+     """Record one unambiguous interpreter and installed distribution set."""
+     diagnosis = diagnose_python_env()
+-    if diagnosis.conflicts:
++    if not diagnosis.healthy:
+         raise PythonEnvironmentError(diagnosis)
+-    if not diagnosis.distributions:
+-        raise RuntimeError("the active Python env has no distributions")
+     versions = {item.name: item.version for item in diagnosis.distributions}
+     return PythonEnvSpec(
+         python_version=diagnosis.python_version,
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 312c65c..be8e4f4 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -47,6 +47,7 @@ def test_env_doctor_reports_active_interpreter(
+     result = json.loads(capsys.readouterr().out)
+
+     assert status == 0
++    assert result["status"] == "ok"
+     assert result["operation"] == "env_doctor"
+     assert result["diagnosis"]["healthy"] is True
+     assert result["diagnosis"]["interpreter"] == str(tmp_path / "bin/python")
+@@ -69,14 +70,21 @@ def test_env_doctor_fails_with_duplicate_distribution_evidence(
+     )
+     monkeypatch.setattr(runtime.sys, "executable", str(tmp_path / "bin/python"))
+     monkeypatch.setattr(runtime.sys, "path", [str(root) for root in roots])
++    expected = runtime.diagnose_python_env().model_dump(mode="json")
+
+     status = main(["--json", "env", "doctor"])
+     result = json.loads(capsys.readouterr().out)
+     diagnosis = result["details"]["diagnosis"]
+
+     assert status == 1
++    assert result["status"] == "error"
++    assert result["code"] == "execution_failed"
+     assert result["operation"] == "env_doctor"
++    assert diagnosis == expected
+     assert diagnosis["healthy"] is False
++    assert diagnosis["interpreter"] == str(tmp_path / "bin/python")
++    assert diagnosis["search_paths"] == [str(root) for root in roots]
++    assert diagnosis["conflicts"][0]["name"] == "cffi"
+     assert {item["version"] for item in diagnosis["conflicts"][0]["installations"]} == {
+         "1.16.0",
+         "1.17.0",
+@@ -86,6 +94,20 @@ def test_env_doctor_fails_with_duplicate_distribution_evidence(
+     }
+
+
++def test_env_doctor_fails_when_no_distributions_are_installed(
++    monkeypatch,
++    capsys,
++) -> None:
++    """Expose the existing empty-environment rejection through the doctor."""
++    monkeypatch.setattr(runtime.importlib.metadata, "distributions", lambda: ())
++
++    status = main(["--json", "env", "doctor"])
++    result = json.loads(capsys.readouterr().out)
++
++    assert status == 1
++    assert result["details"]["diagnosis"]["violations"] == ["no_distributions"]
++
++
+ def test_mcp_stdio_requires_explicit_execution_access(
+     monkeypatch, tmp_path: Path
+ ) -> None:
+diff --git a/tests/test_runtime.py b/tests/test_runtime.py
+index 815be00..9faf2f4 100644
+--- a/tests/test_runtime.py
++++ b/tests/test_runtime.py
+@@ -58,7 +58,11 @@ def test_python_env_conflict_reports_actionable_locations(
+     assert all(str(root) in message for root in roots)
+     assert str(tmp_path / "bin/python") in message
+     assert "sys.path" in message
+-    assert caught.value.diagnosis.conflicts[0].name == "cffi"
++    diagnosis = caught.value.diagnosis
++    assert diagnosis.interpreter == tmp_path / "bin/python"
++    assert diagnosis.search_paths == tuple(str(root) for root in roots)
++    assert diagnosis.conflicts[0].name == "cffi"
++    assert diagnosis.violations == ("conflicting_versions",)
+
+
+ def test_python_env_still_rejects_duplicate_versions(
+@@ -70,3 +74,41 @@ def test_python_env_still_rejects_duplicate_versions(
+
+     with pytest.raises(runtime.PythonEnvironmentError):
+         runtime.observe_python_env()
++
++
++def test_python_env_rejects_an_empty_distribution_set(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Report the existing no-distributions rule through the shared diagnosis."""
++    monkeypatch.setattr(runtime.importlib.metadata, "distributions", lambda: ())
++
++    diagnosis = runtime.diagnose_python_env()
++
++    assert diagnosis.healthy is False
++    assert diagnosis.violations == ("no_distributions",)
++    with pytest.raises(runtime.PythonEnvironmentError) as caught:
++        runtime.observe_python_env()
++    assert caught.value.diagnosis == diagnosis
++
++
++def test_python_env_preserves_the_active_interpreter_symlink(
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """Report the active venv entrypoint rather than its base-runtime target."""
++    target = tmp_path / "base/python"
++    target.parent.mkdir()
++    target.touch()
++    executable = tmp_path / "venv/bin/python"
++    executable.parent.mkdir(parents=True)
++    executable.symlink_to(target)
++    monkeypatch.setattr(runtime.sys, "executable", str(executable))
++    monkeypatch.setattr(
++        runtime.importlib.metadata,
++        "distributions",
++        lambda: (_Distribution("example", "1.0", tmp_path / "site-packages"),),
++    )
++
++    diagnosis = runtime.diagnose_python_env()
++
++    assert diagnosis.interpreter == executable
++diff --git a/src/viper/api.py b/src/viper/api.py
+index 9cb8041..7406625 100644
+--- a/src/viper/api.py
++++ b/src/viper/api.py
+@@ -2255,6 +2255,8 @@ __all__ = [
+     "ExecuteStageSuccess",
+     "ExecuteBenchmarkRequest",
+     "ExecuteBenchmarkSuccess",
++    "EnvDoctorRequest",
++    "EnvDoctorSuccess",
+     "ExportRunRequest",
+     "ExportRunSuccess",
+     "ErrorCode",
+@@ -2318,6 +2320,7 @@ __all__ = [
+     "catalog_refresh",
+     "compare_runs",
+     "dispatch",
++    "env_doctor",
+     "execute_stage",
+     "execute_benchmark",
+     "restore_artifacts",
+diff --git a/tests/test_public_api.py b/tests/test_public_api.py
+index ffd9d7f..243ac6b 100644
+--- a/tests/test_public_api.py
++++ b/tests/test_public_api.py
+@@ -235,6 +235,7 @@ def test_api_exports_and_registries_are_complete() -> None:
+         assert getattr(api, name) is not None
+     assert tuple(api.REQUEST_REGISTRY) == api.OPERATIONS
+     assert tuple(api.HANDLER_REGISTRY) == api.OPERATIONS
++    assert {"EnvDoctorRequest", "EnvDoctorSuccess", "env_doctor"} <= set(api.__all__)
+
+
+ def test_api_operations_are_locally_defined() -> None:

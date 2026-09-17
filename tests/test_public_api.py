@@ -235,6 +235,7 @@ def test_api_exports_and_registries_are_complete() -> None:
         assert getattr(api, name) is not None
     assert tuple(api.REQUEST_REGISTRY) == api.OPERATIONS
     assert tuple(api.HANDLER_REGISTRY) == api.OPERATIONS
+    assert {"EnvDoctorRequest", "EnvDoctorSuccess", "env_doctor"} <= set(api.__all__)
 
 
 def test_api_operations_are_locally_defined() -> None:
@@ -334,6 +335,9 @@ def test_env_vocabulary_is_complete() -> None:
     assert runtime.PythonEnvSpec.__name__ == "PythonEnvSpec"
     assert runtime.EnvSpec is not None
     assert runtime.ResolvedEnv is not None
+    assert runtime.PythonEnvironmentDiagnosis.__name__ == "PythonEnvironmentDiagnosis"
+    assert runtime.PythonEnvironmentError.__name__ == "PythonEnvironmentError"
+    assert callable(runtime.diagnose_python_env)
     assert callable(runtime.observe_python_env)
     assert not hasattr(runtime, "PythonEnvironmentSpec")
     assert not hasattr(runtime, "EnvironmentSpec")

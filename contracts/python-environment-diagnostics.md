@@ -15,17 +15,62 @@
 
 #### <nobr><code>PED-PB-01</code></nobr>
 
-**Status:** drafting
+**Status:** approved
 
 **Requirement contribution:** Retain strict Python-environment rejection while exposing enough evidence to diagnose it before execution.
 
-**Plan:** None
+**Review handoff**
 
-**Current receipt:** None
+**What changed**
+
+- diagnose_python_env() retains the active interpreter spelling, sys.path entries, every normalized distribution version and installation root, and typed strict violations in one diagnosis.
+- observe_python_env() returns the existing PythonEnvSpec for a healthy environment and raises PythonEnvironmentError carrying the same diagnosis for conflicting versions.
+- The typed env_doctor operation and nested viper env doctor command expose the diagnosis without starting a run and fail for strict violations.
+- Runtime, CLI, public API, capability, and documentation tests observe the accepted and rejected paths.
+
+**Plan deviations:** No deviation from PED-REQ-01 or PED-REQ-02. Duplicate installations with the same version remain acceptable because the contract rejects conflicting versions, not redundant identical metadata.
+
+**Start review:** [Open tested GitHub comparison](https://github.com/pvd232/viper/compare/06673105ad59aec6142618bed4accd6eaaed9eed...baf27866494e65eee2fea0ba569093ef208f04a6)
+
+**Review these files**
+
+- [Shared environment diagnosis](../src/viper/runtime.py#L64)
+- [Typed doctor operation](../src/viper/api.py#L565)
+- [Acceptance tests](../plans/python-environment-diagnostics/PED-PB-01/patches/python-environment-diagnostics.patch#L1)
+
+**Evidence:** [Passing gate receipt](../evidence/gates/ped-pb-01-r5.json)
+
+**Decision:** Approval is recorded for <nobr><code>PED-PB-01</code></nobr>; review the installed commit.
+
+<details>
+<summary>Implementation details</summary>
+
+**Plan:** [plan.toml](../plans/python-environment-diagnostics/PED-PB-01/plan.toml)
+
+**Retained patch:** [patches/python-environment-diagnostics.patch](../plans/python-environment-diagnostics/PED-PB-01/patches/python-environment-diagnostics.patch)
+
+**Implementation roots:** [pyproject.toml](../pyproject.toml) · [src/viper](../src/viper)
+
+**Test roots:** [tests](../tests)
 
 **Dependencies:** <nobr><code>ARE-PB-02</code></nobr>
 
-**Next action:** Run the current PairBlock plan.
+**Gate steps:**
+
+```bash
+# typecheck
+(cd . && pyright src/viper/runtime.py src/viper/api.py src/viper/cli.py tests/conftest.py tests/test_runtime.py tests/test_cli.py tests/test_documentation.py tests/test_public_api.py)
+# test
+(cd . && python3 -m pytest -q -p no:cacheprovider tests/test_runtime.py tests/test_cli.py::test_env_doctor_reports_active_interpreter tests/test_cli.py::test_env_doctor_fails_with_duplicate_distribution_evidence tests/test_cli.py::test_env_doctor_fails_when_no_distributions_are_installed tests/test_cli.py::CommandLineTests::test_every_command_emits_one_json_document_and_stable_exit_status tests/test_api_json.py tests/test_documentation.py::test_api_operation_table_matches_python_and_cli_surfaces tests/test_public_api.py)
+# documentation
+(cd . && ruff check --config pyproject.toml --select D src/viper/runtime.py src/viper/api.py src/viper/cli.py tests/test_runtime.py tests/test_cli.py)
+# lint
+(cd . && ruff format --check --config pyproject.toml src/viper/runtime.py src/viper/api.py src/viper/cli.py tests/conftest.py tests/test_runtime.py tests/test_cli.py tests/test_documentation.py tests/test_public_api.py)
+# lint
+(cd . && ruff check --config pyproject.toml src/viper/runtime.py src/viper/api.py src/viper/cli.py tests/conftest.py tests/test_runtime.py tests/test_cli.py tests/test_documentation.py tests/test_public_api.py)
+```
+
+</details>
 
 
 ### Requirements

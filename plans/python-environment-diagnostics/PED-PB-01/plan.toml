@@ -1,0 +1,140 @@
+schema_version = 1
+contract_id = "python-environment-diagnostics"
+package_sha256 = "f2a6a46587fbce3327849626083a8bc595e951277dc88dd4ac22f85770fa68ef"
+pair_block_id = "PED-PB-01"
+baseline_commit = "06673105ad59aec6142618bed4accd6eaaed9eed"
+change_summary = [
+  "diagnose_python_env() retains the active interpreter spelling, sys.path entries, every normalized distribution version and installation root, and typed strict violations in one diagnosis.",
+  "observe_python_env() returns the existing PythonEnvSpec for a healthy environment and raises PythonEnvironmentError carrying the same diagnosis for conflicting versions.",
+  "The typed env_doctor operation and nested viper env doctor command expose the diagnosis without starting a run and fail for strict violations.",
+  "Runtime, CLI, public API, capability, and documentation tests observe the accepted and rejected paths.",
+]
+deviation_summary = "No deviation from PED-REQ-01 or PED-REQ-02. Duplicate installations with the same version remain acceptable because the contract rejects conflicting versions, not redundant identical metadata."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/python-environment-diagnostics.patch"
+target_paths = [
+  "docs/reference/api.md",
+  "docs/reference/configuration.md",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "src/viper/runtime.py",
+  "tests/conftest.py",
+  "tests/golden/api/success.json",
+  "tests/test_cli.py",
+  "tests/test_documentation.py",
+  "tests/test_public_api.py",
+  "tests/test_runtime.py",
+]
+
+[[handoff_targets]]
+label = "Shared environment diagnosis"
+source = "repository"
+path = "src/viper/runtime.py"
+line = 64
+
+[[handoff_targets]]
+label = "Typed doctor operation"
+source = "repository"
+path = "src/viper/api.py"
+line = 565
+
+[[handoff_targets]]
+label = "Acceptance tests"
+source = "plan"
+path = "patches/python-environment-diagnostics.patch"
+line = 1
+
+[gate]
+source_roots = ["pyproject.toml", "src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = [
+  "pyright",
+  "src/viper/runtime.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "tests/conftest.py",
+  "tests/test_runtime.py",
+  "tests/test_cli.py",
+  "tests/test_documentation.py",
+  "tests/test_public_api.py",
+]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = [
+  "python3",
+  "-m",
+  "pytest",
+  "-q",
+  "-p",
+  "no:cacheprovider",
+  "tests/test_runtime.py",
+  "tests/test_cli.py::test_env_doctor_reports_active_interpreter",
+  "tests/test_cli.py::test_env_doctor_fails_with_duplicate_distribution_evidence",
+  "tests/test_cli.py::test_env_doctor_fails_when_no_distributions_are_installed",
+  "tests/test_cli.py::CommandLineTests::test_every_command_emits_one_json_document_and_stable_exit_status",
+  "tests/test_api_json.py",
+  "tests/test_documentation.py::test_api_operation_table_matches_python_and_cli_surfaces",
+  "tests/test_public_api.py",
+]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--config",
+  "pyproject.toml",
+  "--select",
+  "D",
+  "src/viper/runtime.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "tests/test_runtime.py",
+  "tests/test_cli.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "format",
+  "--check",
+  "--config",
+  "pyproject.toml",
+  "src/viper/runtime.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "tests/conftest.py",
+  "tests/test_runtime.py",
+  "tests/test_cli.py",
+  "tests/test_documentation.py",
+  "tests/test_public_api.py",
+]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = [
+  "ruff",
+  "check",
+  "--config",
+  "pyproject.toml",
+  "src/viper/runtime.py",
+  "src/viper/api.py",
+  "src/viper/cli.py",
+  "tests/conftest.py",
+  "tests/test_runtime.py",
+  "tests/test_cli.py",
+  "tests/test_documentation.py",
+  "tests/test_public_api.py",
+]
