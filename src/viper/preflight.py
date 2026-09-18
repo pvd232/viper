@@ -22,9 +22,10 @@ from ._verification.plan import (
     verify_experiment_and_variant,
     verify_run_plan_relationships,
 )
-from ._verification.storage import fetch_storage_bytes
+from ._verification.storage import fetch_storage_bytes, verify_resolved_file_bytes
+from .artifacts import ArtifactPointer
 from .cloud import ViperCloud
-from .evidence import VerificationError
+from .evidence import VerificationError, VerificationPolicy
 from .http import (
     HttpRetrievalError,
     WorkspaceHttpImplementationSpec,
@@ -32,13 +33,14 @@ from .http import (
     validate_request_policy,
 )
 from .ids import StageId
-from .inputs import FutureInputRef
+from .inputs import FutureInputRef, StoredInputRef, pointer_location
 from .metrics import MetricError, validate_metric_definition
 from .references import (
     GcsFileRef,
     GitFileRef,
     HuggingFaceFileRef,
     LocalFileRef,
+    ResolvedArtifactPointerRef,
     ResolvedRunSpecRef,
     StorageModel,
     ViperCloudFileRef,
@@ -62,6 +64,7 @@ from .stages import (
     verify_stage_implementation_bytes,
 )
 from .storage import local_artifact_store, viper_cloud
+from .verification import verify_artifact_in_run, verify_pointer_producer
 
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[
@@ -72,6 +75,7 @@ PreflightCheckCode = Literal[
     "http.request",
     "http.implementation",
     "input.future",
+    "input.stored",
     "metric.implementation",
     "config_type.identity",
     "config_type.validation",
@@ -516,6 +520,47 @@ def preflight_plan(
                 reference.stage_id,
                 valid_future_inputs,
                 "future input lacks an earlier declared producer artifact",
+            )
+        )
+        valid_stored_inputs = True
+        if isinstance(stage, InternalSpec):
+            policy = VerificationPolicy(
+                trusted_source_repositories=frozenset({str(run.source.repository)})
+            )
+            for input_ref in stage.inputs.values():
+                if not isinstance(input_ref, StoredInputRef):
+                    continue
+                try:
+                    pointer_raw = fetch(pointer_location(input_ref.pointer))
+                    if isinstance(input_ref.pointer, ResolvedArtifactPointerRef):
+                        pointer_raw = verify_resolved_file_bytes(
+                            input_ref.pointer,
+                            pointer_raw,
+                        )
+                    pointer = ArtifactPointer.model_validate(
+                        parse_yaml_bytes(pointer_raw)
+                    )
+                    producer = verify_pointer_producer(
+                        pointer,
+                        policy=policy,
+                        fetcher=fetch,
+                    )
+                    verify_artifact_in_run(
+                        pointer,
+                        verified_run=producer,
+                        policy=policy,
+                        expected_data_role=input_ref.data_role,
+                        materialization_path=None,
+                        fetcher=fetch,
+                    )
+                except (OSError, RuntimeError, ValueError):
+                    valid_stored_inputs = False
+        checks.append(
+            _check(
+                "input.stored",
+                reference.stage_id,
+                valid_stored_inputs,
+                "stored input lacks a verified successful producer artifact",
             )
         )
         prior.add(reference.stage_id)
