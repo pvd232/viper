@@ -632,7 +632,7 @@ def _httpx_request(
                     temporary_path = Path(temporary_name)
                     size = 0
                     with os.fdopen(descriptor, "wb") as body:
-                        for chunk in response.iter_raw():
+                        for chunk in response.iter_bytes():
                             size += len(chunk)
                             if size > context.policy.max_body_bytes:
                                 raise HttpRetrievalError(
