@@ -505,6 +505,27 @@ def promote_run_to_cloud(
     result = ResolvedRunRef.model_validate(promoted.model_dump(mode="python"))
     if not isinstance(result.stored_at, (GcsFileRef, HuggingFaceFileRef)):
         raise RunPromotionError("promoted run graph is not cloud-backed")
+    try:
+        promoted_raw = promoter.cloud.fetch(result.stored_at)
+        if (
+            len(promoted_raw) != result.bytes
+            or hashlib.sha256(promoted_raw).hexdigest() != result.sha256
+        ):
+            raise RunPromotionError("promoted run reference identity changed")
+        promoted_record = ResolvedRun.model_validate(parse_yaml_bytes(promoted_raw))
+        verify_run_result(
+            promoted_record,
+            policy=VerificationPolicy(
+                trusted_source_repositories=frozenset({source_repository})
+            ),
+            fetcher=RunFetcher(
+                root,
+                LocalArtifactStore(root),
+                source_repository,
+            ),
+        )
+    except Exception as error:
+        raise RunPromotionError("promoted run graph failed verification") from error
     return result
 
 
