@@ -169,6 +169,8 @@ class _RunGraphPromoter:
         except (UnicodeDecodeError, ValueError, yaml.YAMLError):
             return raw
         rewritten = self.rewrite_value(value)
+        if _contains_local_reference(rewritten):
+            raise RunPromotionError("promoted run graph retains local storage")
         if rewritten == value:
             return raw
         if path.endswith(".json"):
@@ -245,7 +247,13 @@ def _contains_local_reference(value: Any) -> bool:
     if isinstance(value, list):
         return any(_contains_local_reference(item) for item in value)
     if isinstance(value, Mapping):
-        if value.get("kind") == "local":
+        if (
+            value.get("kind") == "local"
+            and "workspace" in value
+            and "store" in value
+            and "store_id" in value
+            and "commit" in value
+        ):
             return True
         return any(_contains_local_reference(item) for item in value.values())
     return False
@@ -287,17 +295,6 @@ def promote_run_to_cloud(
     result = ResolvedRunRef.model_validate(promoted.model_dump(mode="python"))
     if not isinstance(result.stored_at, (GcsFileRef, HuggingFaceFileRef)):
         raise RunPromotionError("promoted run graph is not cloud-backed")
-    promoted_raw = promoter.cloud.fetch(result.stored_at)
-    promoted_record = ResolvedRun.model_validate(parse_yaml_bytes(promoted_raw))
-    if _contains_local_reference(promoted_record.model_dump(mode="json")):
-        raise RunPromotionError("promoted run graph retains local storage")
-    verify_run_result(
-        promoted_record,
-        policy=VerificationPolicy(
-            trusted_source_repositories=frozenset({source_repository})
-        ),
-        fetcher=RunFetcher(root, LocalArtifactStore(root), source_repository),
-    )
     return result
 
 

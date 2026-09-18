@@ -11,8 +11,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Literal
 
-from huggingface_hub import CommitOperationAdd, HfApi, RepoFile, hf_hub_download
-from pydantic import ValidationError
+from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
 
 from ._cloud import (
     PublicationSource,
@@ -195,41 +194,14 @@ class HuggingFaceProvider(ViperCloudProvider):
         self,
         snapshot: CloudStageResultSnapshotRef,
     ) -> tuple[SnapshotFileRef, ...]:
-        """Read a VIPER seal or list a legacy external Hugging Face snapshot."""
+        """Read the exact file identities from a sealed VIPER revision."""
         if not isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
             raise TypeError(
                 "HuggingFaceProvider requires a HuggingFaceStageResultSnapshotRef"
             )
         manifest_ref = self.file_ref(snapshot, _MANIFEST_PATH)
-        try:
-            manifest = RevisionManifest.model_validate_json(self.fetch(manifest_ref))
-            return manifest.files
-        except (ViperCloudError, ValidationError):
-            try:
-                entries = self.api.list_repo_tree(
-                    repo_id=snapshot.repository,
-                    recursive=True,
-                    revision=snapshot.commit,
-                    repo_type=(
-                        None if snapshot.repo_type == "model" else snapshot.repo_type
-                    ),
-                )
-            except (OSError, ValueError) as error:
-                raise ViperCloudError("Hugging Face snapshot listing failed") from error
-            paths = tuple(
-                sorted(entry.path for entry in entries if isinstance(entry, RepoFile))
-            )
-            identities = []
-            for path in paths:
-                raw = self.fetch(self.file_ref(snapshot, path))
-                identities.append(
-                    SnapshotFileRef(
-                        path=path,
-                        sha256=hashlib.sha256(raw).hexdigest(),
-                        bytes=len(raw),
-                    )
-                )
-            return tuple(identities)
+        manifest = RevisionManifest.model_validate_json(self.fetch(manifest_ref))
+        return manifest.files
 
 
 __all__ = ["HuggingFaceProvider"]
