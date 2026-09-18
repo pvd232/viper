@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import hashlib
-import json
-from collections.abc import Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import yaml
+from pydantic import BaseModel, TypeAdapter
 
+from ..artifacts import ArtifactPointer
+from ..benchmark import BenchmarkResult, BenchmarkSpec
 from ..cloud import ViperCloud
 from ..evidence import VerificationPolicy
+from ..metrics import MetricVerificationReceipt
 from ..references import (
     CloudStageResultSnapshotRef,
     GcsFileRef,
@@ -19,12 +21,19 @@ from ..references import (
     HuggingFaceFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
+    ResolvedArtifactPointerRef,
+    ResolvedBenchmarkResultRef,
+    ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
     ResolvedRunRef,
+    ResolvedRunSpecRef,
+    ResolvedStageRef,
     SnapshotFileRef,
 )
-from ..runs import ResolvedRun, RunSpec
-from ..serialization import parse_yaml_bytes
+from ..reuse import ResolvedStageReuseRef, StageReuseReceipt
+from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
+from ..serialization import parse_yaml_bytes, serialize_document
+from ..stages import ResolvedSpec, Spec
 from ..storage import (
     LocalArtifactStore,
     ViperCloudDestination,
@@ -36,6 +45,10 @@ from ..verification import verify_run_result
 from ._restore import resolve_run_reference
 from ._source import RunFetcher
 from .errors import RunPromotionError
+
+_SPEC_ADAPTER = TypeAdapter(Spec)
+_RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
+_DocumentDecoder = Callable[[object], BaseModel]
 
 
 class _RunGraphPromoter:
@@ -59,15 +72,29 @@ class _RunGraphPromoter:
             LocalStageResultSnapshotRef,
             tuple[SnapshotFileRef, ...],
         ] = {}
+        self.documents: dict[
+            LocalStageResultSnapshotRef,
+            dict[str, BaseModel],
+        ] = {}
+        self.local_bytes: dict[LocalFileRef, bytes] = {}
+        self.promoting: set[LocalStageResultSnapshotRef] = set()
 
-    def promote_reference(self, reference: ResolvedFileRef) -> ResolvedFileRef:
-        """Promote one local file after rewriting its referenced descendants."""
+    @staticmethod
+    def snapshot_for(location: LocalFileRef) -> LocalStageResultSnapshotRef:
+        """Return the local snapshot containing one local file."""
+        return LocalStageResultSnapshotRef(
+            workspace=location.workspace,
+            store=location.store,
+            store_id=location.store_id,
+            commit=location.commit,
+        )
+
+    def read_local(self, reference: ResolvedFileRef) -> bytes:
+        """Read and verify one immutable local file once."""
         location = reference.stored_at
-        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
-            return reference
         if not isinstance(location, LocalFileRef):
-            return reference
-        remembered = self.files.get(location)
+            raise RunPromotionError("source run graph is unavailable")
+        remembered = self.local_bytes.get(location)
         if remembered is not None:
             return remembered
         try:
@@ -79,12 +106,187 @@ class _RunGraphPromoter:
             or hashlib.sha256(raw).hexdigest() != reference.sha256
         ):
             raise RunPromotionError("source run graph is unavailable")
-        snapshot = LocalStageResultSnapshotRef(
-            workspace=location.workspace,
-            store=location.store,
-            store_id=location.store_id,
-            commit=location.commit,
+        self.local_bytes[location] = raw
+        return raw
+
+    @staticmethod
+    def document_decoder(reference: ResolvedFileRef) -> _DocumentDecoder | None:
+        """Select a document schema from the reference's protocol role."""
+        if isinstance(reference, ResolvedRunRef):
+            return ResolvedRun.model_validate
+        if isinstance(reference, ResolvedRunSpecRef):
+            return RunSpec.model_validate
+        if isinstance(reference, ResolvedAttemptRef):
+            return RunAttempt.model_validate
+        if isinstance(reference, ResolvedArtifactPointerRef):
+            return ArtifactPointer.model_validate
+        if isinstance(reference, ResolvedStageReuseRef):
+            return StageReuseReceipt.model_validate
+        if isinstance(reference, ResolvedBenchmarkSpecRef):
+            return BenchmarkSpec.model_validate
+        if isinstance(reference, ResolvedBenchmarkResultRef):
+            return BenchmarkResult.model_validate
+        return None
+
+    def discover_reference(
+        self,
+        reference: ResolvedFileRef,
+        decoder: _DocumentDecoder | None = None,
+    ) -> None:
+        """Register the typed document selected by one immutable reference."""
+        location = reference.stored_at
+        if not isinstance(location, LocalFileRef):
+            return
+        selected_decoder = decoder or self.document_decoder(reference)
+        if selected_decoder is None:
+            return
+        snapshot = self.snapshot_for(location)
+        documents = self.documents.setdefault(snapshot, {})
+        if location.path in documents:
+            return
+        raw = self.read_local(reference)
+        try:
+            document = selected_decoder(parse_yaml_bytes(raw))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise RunPromotionError("source run graph is unavailable") from error
+        documents[location.path] = document
+        if isinstance(document, RunSpec):
+            self.discover_plan_members(snapshot, document)
+        if isinstance(document, RunAttempt):
+            for metric in document.metric_verification_files:
+                self.discover_reference(
+                    metric, MetricVerificationReceipt.model_validate
+                )
+        if isinstance(document, BenchmarkResult):
+            for metric in document.metrics:
+                self.discover_reference(
+                    metric.candidate_verification,
+                    MetricVerificationReceipt.model_validate,
+                )
+                self.discover_reference(
+                    metric.confirmation_verification,
+                    MetricVerificationReceipt.model_validate,
+                )
+        if isinstance(document, StageReuseReceipt):
+            for metric in document.metrics:
+                if metric.verification is not None:
+                    self.discover_reference(
+                        metric.verification,
+                        MetricVerificationReceipt.model_validate,
+                    )
+        self.discover_typed(document)
+
+    def discover_snapshot_document(
+        self,
+        snapshot: LocalStageResultSnapshotRef,
+        identity: SnapshotFileRef,
+        decoder: _DocumentDecoder,
+    ) -> None:
+        """Register a typed member selected inside one immutable snapshot."""
+        reference = ResolvedFileRef(
+            sha256=identity.sha256,
+            bytes=identity.bytes,
+            stored_at=LocalFileRef(
+                workspace=snapshot.workspace,
+                store=snapshot.store,
+                store_id=snapshot.store_id,
+                commit=snapshot.commit,
+                path=identity.path,
+            ),
         )
+        self.discover_reference(reference, decoder)
+
+    def discover_plan_document(
+        self,
+        snapshot: LocalStageResultSnapshotRef,
+        path: str,
+        decoder: _DocumentDecoder,
+    ) -> None:
+        """Register a canonical plan member sealed by the plan snapshot."""
+        location = LocalFileRef(
+            workspace=snapshot.workspace,
+            store=snapshot.store,
+            store_id=snapshot.store_id,
+            commit=snapshot.commit,
+            path=path,
+        )
+        try:
+            raw = local_artifact_store(location).fetch(location)
+        except (OSError, RuntimeError) as error:
+            raise RunPromotionError("source run graph is unavailable") from error
+        reference = ResolvedFileRef(
+            sha256=hashlib.sha256(raw).hexdigest(),
+            bytes=len(raw),
+            stored_at=location,
+        )
+        self.discover_reference(reference, decoder)
+
+    def discover_plan_members(
+        self,
+        snapshot: LocalStageResultSnapshotRef,
+        run: RunSpec,
+    ) -> None:
+        """Register every typed document selected by one frozen run plan."""
+        for stage in run.stages:
+            self.discover_snapshot_document(
+                snapshot,
+                SnapshotFileRef(
+                    path=stage.spec,
+                    sha256=stage.sha256,
+                    bytes=stage.bytes,
+                ),
+                _SPEC_ADAPTER.validate_python,
+            )
+        if run.benchmark_id is not None:
+            self.discover_plan_document(
+                snapshot,
+                f"benchmarks/{run.benchmark_id}.spec.yaml",
+                BenchmarkSpec.model_validate,
+            )
+
+    def discover_stage_reference(self, reference: ResolvedStageRef) -> None:
+        """Register the resolved stage document selected by a stage reference."""
+        if isinstance(reference.snapshot, LocalStageResultSnapshotRef):
+            self.discover_snapshot_document(
+                reference.snapshot,
+                reference.resolved_spec,
+                _RESOLVED_SPEC_ADAPTER.validate_python,
+            )
+
+    def discover_typed(self, value: Any) -> None:
+        """Walk typed objects and register every referenced protocol document."""
+        if isinstance(value, ResolvedStageRef):
+            self.discover_stage_reference(value)
+            return
+        if isinstance(value, ResolvedFileRef):
+            self.discover_reference(value)
+            return
+        if isinstance(value, BaseModel):
+            for item in value.__dict__.values():
+                self.discover_typed(item)
+            for item in (value.model_extra or {}).values():
+                self.discover_typed(item)
+            return
+        if isinstance(value, dict):
+            for item in value.values():
+                self.discover_typed(item)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                self.discover_typed(item)
+
+    def promote_reference(self, reference: ResolvedFileRef) -> ResolvedFileRef:
+        """Promote one local file after rewriting its referenced descendants."""
+        location = reference.stored_at
+        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+            return reference
+        if not isinstance(location, LocalFileRef):
+            return reference
+        remembered = self.files.get(location)
+        if remembered is not None:
+            return remembered
+        self.read_local(reference)
+        snapshot = self.snapshot_for(location)
         promoted_snapshot = self.promote_snapshot(snapshot)
         matches = tuple(
             file for file in self.snapshot_files[snapshot] if file.path == location.path
@@ -108,6 +310,9 @@ class _RunGraphPromoter:
         remembered = self.snapshots.get(snapshot)
         if remembered is not None:
             return remembered
+        if snapshot in self.promoting:
+            raise RunPromotionError("source run graph contains a storage cycle")
+        self.promoting.add(snapshot)
         store = local_artifact_store(snapshot)
         try:
             paths = store.list_snapshot_files(snapshot)
@@ -125,109 +330,69 @@ class _RunGraphPromoter:
             }
             if content_revision(original) != snapshot.commit:
                 raise RunPromotionError("source run graph is unavailable")
-            sources = {
-                path: self.rewrite_payload(path, raw) for path, raw in original.items()
-            }
+            sources = dict(original)
+            for path, document in self.documents.get(snapshot, {}).items():
+                rewritten = self.rewrite_typed(document)
+                if _contains_local_reference(rewritten):
+                    raise RunPromotionError("promoted run graph retains local storage")
+                sources[path] = serialize_document(rewritten)
         except (OSError, RuntimeError) as error:
             raise RunPromotionError("source run graph is unavailable") from error
+        finally:
+            self.promoting.remove(snapshot)
         promoted, files = self.cloud.publish(self.destination, sources)
         self.snapshots[snapshot] = promoted
         self.snapshot_files[snapshot] = files
         return promoted
 
-    def rewrite_stage_reference(self, value: Mapping[str, Any]) -> dict[str, Any]:
-        """Rewrite one stage snapshot and the identity of its resolved record."""
-        try:
-            snapshot = LocalStageResultSnapshotRef.model_validate(value["snapshot"])
-            resolved_spec = dict(value["resolved_spec"])
-            path = resolved_spec["path"]
-        except (KeyError, TypeError, ValueError) as error:
-            raise RunPromotionError("source run graph is unavailable") from error
-        promoted_snapshot = self.promote_snapshot(snapshot)
+    def promote_stage_reference(self, value: ResolvedStageRef) -> ResolvedStageRef:
+        """Promote one stage snapshot and bind its rewritten resolved record."""
+        if not isinstance(value.snapshot, LocalStageResultSnapshotRef):
+            return value
+        promoted_snapshot = self.promote_snapshot(value.snapshot)
         matches = tuple(
-            file for file in self.snapshot_files[snapshot] if file.path == path
+            file
+            for file in self.snapshot_files[value.snapshot]
+            if file.path == value.resolved_spec.path
         )
         if len(matches) != 1:
             raise RunPromotionError("source run graph is unavailable")
-        identity = matches[0]
-        rewritten = {
-            key: self.rewrite_value(item)
-            for key, item in value.items()
-            if key not in {"snapshot", "resolved_spec"}
-        }
-        rewritten["snapshot"] = promoted_snapshot.model_dump(mode="json")
-        resolved_spec.update(sha256=identity.sha256, bytes=identity.bytes)
-        rewritten["resolved_spec"] = resolved_spec
-        return rewritten
+        return ResolvedStageRef(
+            stage_id=value.stage_id,
+            snapshot=promoted_snapshot,
+            resolved_spec=matches[0],
+        )
 
-    def rewrite_payload(self, path: str, raw: bytes) -> bytes:
-        """Rewrite local references inside one structured protocol document."""
-        if not path.endswith((".yaml", ".yml", ".json")):
-            return raw
-        try:
-            value = parse_yaml_bytes(raw)
-        except (UnicodeDecodeError, ValueError, yaml.YAMLError):
-            return raw
-        rewritten = self.rewrite_value(value)
-        if _contains_local_reference(rewritten):
-            raise RunPromotionError("promoted run graph retains local storage")
-        if rewritten == value:
-            return raw
-        if path.endswith(".json"):
-            return (
-                json.dumps(rewritten, sort_keys=True, separators=(",", ":")) + "\n"
-            ).encode("utf-8")
-        rendered = yaml.safe_dump(rewritten, allow_unicode=True, sort_keys=False)
-        return rendered.encode("utf-8")
-
-    def rewrite_value(self, value: Any) -> Any:
-        """Replace local file and snapshot nodes while preserving other values."""
-        if isinstance(value, list):
-            return [self.rewrite_value(item) for item in value]
-        if not isinstance(value, dict):
-            return value
-        if (
-            isinstance(value.get("snapshot"), Mapping)
-            and value["snapshot"].get("kind") == "local"
-            and isinstance(value.get("resolved_spec"), Mapping)
-        ):
-            return self.rewrite_stage_reference(value)
-        stored_at = value.get("stored_at")
-        if (
-            isinstance(stored_at, dict)
-            and stored_at.get("kind") == "local"
-            and "path" in stored_at
-            and "sha256" in value
-            and "bytes" in value
-        ):
-            try:
-                reference = ResolvedFileRef(
-                    sha256=value["sha256"],
-                    bytes=value["bytes"],
-                    stored_at=LocalFileRef.model_validate(stored_at),
-                )
-            except ValueError as error:
-                raise RunPromotionError("source run graph is unavailable") from error
-            promoted = self.promote_reference(reference)
-            rewritten = dict(value)
-            rewritten.update(
-                sha256=promoted.sha256,
-                bytes=promoted.bytes,
-                stored_at=promoted.stored_at.model_dump(mode="json"),
+    def rewrite_typed(self, value: Any) -> Any:
+        """Promote storage references while preserving protocol model types."""
+        if isinstance(value, ResolvedStageRef):
+            return self.promote_stage_reference(value)
+        if isinstance(value, ResolvedFileRef):
+            promoted = self.promote_reference(value)
+            payload = value.model_dump(mode="python")
+            payload.update(promoted.model_dump(mode="python"))
+            return type(value).model_validate(payload)
+        if isinstance(value, LocalStageResultSnapshotRef):
+            return self.promote_snapshot(value)
+        if isinstance(value, BaseModel):
+            updates = {
+                name: self.rewrite_typed(getattr(value, name))
+                for name in type(value).model_fields
+            }
+            updates.update(
+                {
+                    name: self.rewrite_typed(item)
+                    for name, item in (value.model_extra or {}).items()
+                }
             )
-            return rewritten
-        if (
-            value.get("kind") == "local"
-            and "commit" in value
-            and "path" not in value
-            and "workspace" in value
-        ):
-            try:
-                snapshot = LocalStageResultSnapshotRef.model_validate(value)
-            except ValueError as error:
-                raise RunPromotionError("source run graph is unavailable") from error
-            return self.promote_snapshot(snapshot).model_dump(mode="json")
-        return {key: self.rewrite_value(item) for key, item in value.items()}
+            return value.model_copy(update=updates)
+        if isinstance(value, tuple):
+            return tuple(self.rewrite_typed(item) for item in value)
+        if isinstance(value, list):
+            return [self.rewrite_typed(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self.rewrite_typed(item) for key, item in value.items()}
+        return value
 
 
 def _source_repository(root: Path, run: ResolvedRun) -> str:
@@ -243,18 +408,20 @@ def _source_repository(root: Path, run: ResolvedRun) -> str:
 
 
 def _contains_local_reference(value: Any) -> bool:
-    """Return whether a serialized promoted graph still names local storage."""
-    if isinstance(value, list):
+    """Return whether a typed protocol graph still names local storage."""
+    if isinstance(value, (LocalFileRef, LocalStageResultSnapshotRef)):
+        return True
+    if isinstance(value, BaseModel):
+        return any(
+            _contains_local_reference(item)
+            for item in (
+                *value.__dict__.values(),
+                *(value.model_extra or {}).values(),
+            )
+        )
+    if isinstance(value, (list, tuple)):
         return any(_contains_local_reference(item) for item in value)
-    if isinstance(value, Mapping):
-        if (
-            value.get("kind") == "local"
-            and "workspace" in value
-            and "store" in value
-            and "store_id" in value
-            and "commit" in value
-        ):
-            return True
+    if isinstance(value, dict):
         return any(_contains_local_reference(item) for item in value.values())
     return False
 
@@ -291,6 +458,7 @@ def promote_run_to_cloud(
         ViperCloud(root, settings.repository),
         destination,
     )
+    promoter.discover_reference(reference, ResolvedRun.model_validate)
     promoted = promoter.promote_reference(reference)
     result = ResolvedRunRef.model_validate(promoted.model_dump(mode="python"))
     if not isinstance(result.stored_at, (GcsFileRef, HuggingFaceFileRef)):
