@@ -2372,8 +2372,8 @@ def test_download_source_closure_follows_stored_input_to_producer_download() -> 
     assert not any("/attempts/2/" in path for path in fetched_paths)
 
 
-def test_download_source_closure_follows_reused_stage_source() -> None:
-    """Follow a reused output through its exact source attempt to Download."""
+def test_download_source_closure_follows_failed_run_completed_stage() -> None:
+    """Follow reuse through a completed stage in a failed source run."""
     store = DocumentStore()
     source_run_ref, records = publish_producer_run(store)
     verified_source = verify_run_result(
@@ -2382,6 +2382,46 @@ def test_download_source_closure_follows_reused_stage_source() -> None:
         fetcher=store.fetch,
     )
     source_attempt = verified_source.attempts[0]
+    failed_at = source_attempt.completed_at + timedelta(minutes=1)
+    failed_attempt = source_attempt.model_copy(
+        update={
+            "status": "failed",
+            "completed_at": failed_at,
+            "failure": AttemptFailure(
+                code="verification_failed",
+                stage_id=None,
+                message="terminal verification failed after stage completion",
+                occurred_at=failed_at,
+            ),
+        }
+    )
+    failed_attempt_reference = publish_attempt(
+        store,
+        run_root_path=(
+            str(source_run_ref.stored_at.path).removesuffix("/resolved.yaml")
+        ),
+        attempt=failed_attempt,
+        commit="6" * 40,
+    )
+    failed_run = records["run"].model_copy(
+        update={
+            "status": "failed",
+            "attempts": (failed_attempt_reference,),
+            "successful_attempt_id": None,
+            "completed_at": failed_at + timedelta(minutes=1),
+        }
+    )
+    failed_run_raw = yaml_bytes(failed_run)
+    failed_run_location = hf_file(
+        "5" * 40,
+        str(source_run_ref.stored_at.path),
+    )
+    store.put(failed_run_location, failed_run_raw)
+    failed_run_reference = ResolvedRunRef(
+        sha256=sha256(failed_run_raw),
+        bytes=len(failed_run_raw),
+        stored_at=failed_run_location,
+    )
     source_stage = next(
         stage for stage in source_attempt.resolved_stages if stage.stage_id == "train"
     )
@@ -2401,8 +2441,8 @@ def test_download_source_closure_follows_reused_stage_source() -> None:
             reproducibility_sha256="5" * 64,
             metric_sha256s=(),
         ),
-        source_run=source_run_ref,
-        source_attempt=verified_source.result.attempts[0],
+        source_run=failed_run_reference,
+        source_attempt=failed_attempt_reference,
         source_stage=source_stage,
         files=(
             ReusedStageFile(

@@ -220,12 +220,12 @@ def verify_download_source_closure(
                 )
             if not policy.permits_source(selected_run.source.repository):
                 raise VerificationError("download source run repository is not trusted")
-            if result.status != "succeeded" or result.successful_attempt_id is None:
-                raise VerificationError("download source run did not succeed")
             selected_runs[reference] = (result, selected_run)
         else:
             result, selected_run = loaded_run
         if attempt_reference is None:
+            if result.status != "succeeded" or result.successful_attempt_id is None:
+                raise VerificationError("download source run did not succeed")
             expected_path = (
                 f"{run_root(selected_run)}/attempts/"
                 f"{result.successful_attempt_id}/resolved.yaml"
