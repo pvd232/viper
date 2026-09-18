@@ -155,11 +155,12 @@ def _allocate_attempt(
                 raise RunError("a successful run cannot be retried")
         elif purpose == "benchmark_confirmation":
             raise RunError("benchmark confirmation requires a terminal candidate run")
-        if purpose == "benchmark_confirmation" and previous_run is not None:
-            if previous_run.status != "succeeded":
-                raise RunError(
-                    "benchmark confirmation requires a successful candidate run"
-                )
+        if (
+            purpose == "benchmark_confirmation"
+            and previous_run is not None
+            and previous_run.status != "succeeded"
+        ):
+            raise RunError("benchmark confirmation requires a successful candidate run")
         known_attempts = (
             ()
             if previous_run is None
