@@ -178,8 +178,8 @@ def test_fresh_workspace_materializes_each_provider_reference(
         provider=hf_provider,
     )
 
-    gcs_path = gcs_cloud.fetch_to_path(gcs_reference, Path("inputs/gcs.bin"))
-    hf_path = hf_cloud.fetch_to_path(hf_reference, Path("inputs/hf.bin"))
+    gcs_path = gcs_cloud.fetch_to_path(gcs_reference, fresh / "inputs/gcs.bin")
+    hf_path = hf_cloud.fetch_to_path(hf_reference, fresh / "inputs/hf.bin")
     assert gcs_path.read_bytes() == raw
     assert hf_path.read_bytes() == raw
     assert not (fresh / ".viper/store").exists()
