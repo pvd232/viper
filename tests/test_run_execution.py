@@ -77,7 +77,7 @@ from viper.execution._stage import (
     _resolve_artifact,
     execute_stage_process,
 )
-from viper.execution.errors import RunError
+from viper.execution.errors import RunError, RunPromotionError
 from viper.execution.results import RunResult
 from viper.experiments import (
     ExperimentSpec,
@@ -1853,6 +1853,40 @@ def test_explicit_cloud_promotion_preserves_local_run_mode(
         (root / "build_calls.txt").read_text(encoding="utf-8"),
         (root / "embed_calls.txt").read_text(encoding="utf-8"),
     ) == calls_before
+
+
+def test_explicit_cloud_promotion_rejects_missing_source_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject a local graph whose immutable terminal bytes are unavailable."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    with pytest.raises(RunError, match="attempt 1 failed"):
+        execute_run(frozen.files[-1], repository_root=root)
+    result = execute_retry(root, frozen.files[-1])
+    assert isinstance(result.reference.stored_at, LocalFileRef)
+    LocalArtifactStore(root).path(result.reference.stored_at).unlink()
+    (root / "viper.toml").write_text(
+        "[workspace]\nschema_version = 2\n"
+        '[viper_cloud]\nprovider = "gcs"\nbucket = "test-bucket"\n',
+        encoding="utf-8",
+    )
+    provider = InMemoryViperCloudProvider(root)
+    cloud = install_in_memory_cloud(monkeypatch, root, provider)
+    monkeypatch.setattr(
+        "viper.execution._promotion.ViperCloud",
+        lambda selected_root, repository: cloud,
+    )
+
+    with pytest.raises(RunPromotionError, match="source run graph is unavailable"):
+        execution_module.promote_run_to_cloud(
+            root,
+            result.reference,
+            ViperCloudDestination(owner="machina", workspace="models"),
+        )
+
+    assert provider.upload_calls == []
 
 
 def test_download_source_failure_prevents_consumer_process_start(
