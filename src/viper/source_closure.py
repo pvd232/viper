@@ -14,6 +14,21 @@ from typing import Any
 from .stages import StageDependencyRef
 
 
+def _source_file(value: object) -> Path | None:
+    if not (
+        inspect.ismodule(value)
+        or inspect.isclass(value)
+        or inspect.ismethod(value)
+        or inspect.isfunction(value)
+    ):
+        return None
+    try:
+        source = inspect.getsourcefile(value)
+    except TypeError:
+        return None
+    return None if source is None else Path(source).resolve()
+
+
 def workspace_dependency_refs(
     root: Path,
     implementation: Callable[..., Any],
@@ -42,16 +57,8 @@ def workspace_dependency_refs(
         if identity in visited_objects:
             continue
         visited_objects.add(identity)
-        source = (
-            inspect.getsourcefile(value)
-            if inspect.ismodule(value)
-            or inspect.isclass(value)
-            or inspect.ismethod(value)
-            or inspect.isfunction(value)
-            else None
-        )
-        if source is not None:
-            path = Path(source).resolve()
+        path = _source_file(value)
+        if path is not None:
             if path in tracked and path not in excluded:
                 raw = path.read_bytes()
                 files[path] = StageDependencyRef(

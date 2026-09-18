@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import unittest
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -85,6 +86,7 @@ from viper.runtime import (
     resolve_execution_policy,
 )
 from viper.serialization import parse_yaml_bytes, serialize_document
+from viper.source_closure import workspace_dependency_refs
 from viper.stages import (
     StageContext,
     StageFileAccessMode,
@@ -98,6 +100,12 @@ from viper.storage import LocalArtifactStore
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_strand/runs/baseline/{RUN_ID}"
 COMMIT = "a" * 40
+
+
+def _uses_builtin_class() -> BytesIO:
+    return BytesIO()
+
+
 LOADER_RAW = b"def load(path):\n    return path.read_bytes()\n"
 
 
@@ -1558,3 +1566,12 @@ def test_stage_requires_values_for_required_custom_config_fields() -> None:
             metrics=example_training.spec.metrics,
             objective=example_training.spec.objective,
         )
+
+
+def test_workspace_dependency_refs_skips_builtin_classes() -> None:
+    """Ignore built-in globals while retaining the callable's workspace module."""
+    root = Path(__file__).resolve().parents[1]
+
+    dependencies = workspace_dependency_refs(root, _uses_builtin_class)
+
+    assert "tests/test_authoring.py" in {item.path for item in dependencies}
