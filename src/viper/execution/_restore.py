@@ -10,12 +10,15 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .._schema import RepoRelPath, repo_file_paths_overlap
 from ..artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
+from ..cloud import ViperCloud
 from ..evidence import StorageFetcher
 from ..references import (
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
+    HuggingFaceFileRef,
     LocalFileRef,
     ResolvedFileRef,
     ResolvedRunRef,
-    ViperCloudFileRef,
     resolve_snapshot_file_ref,
 )
 from ..repository import PathError, resolve_path
@@ -30,7 +33,7 @@ from ..restoration import (
 from ..runs import ResolvedRun, RunAttempt
 from ..serialization import parse_yaml_bytes
 from ..stages import ResolvedSpec
-from ..storage import LocalArtifactStore, ViperCloudClient, content_revision
+from ..storage import LocalArtifactStore, content_revision, load_storage_settings
 from ._source import RunFetcher
 from .errors import RestoreError
 
@@ -80,6 +83,24 @@ def _local_run_reference(root: Path, path: Path) -> ResolvedRunRef:
     except (OSError, ValueError, PathError) as error:
         raise RestoreError("local terminal run path is invalid") from error
     raw = terminal.read_bytes()
+    sidecar = terminal.with_name("resolved.ref.yaml")
+    if sidecar.exists():
+        try:
+            reference = ResolvedRunRef.model_validate(
+                parse_yaml_bytes(sidecar.read_bytes())
+            )
+        except (OSError, ValueError) as error:
+            raise RestoreError(
+                "stored run reference differs from terminal identity"
+            ) from error
+        if (
+            not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef))
+            or reference.stored_at.path != relative
+            or reference.bytes != len(raw)
+            or reference.sha256 != hashlib.sha256(raw).hexdigest()
+        ):
+            raise RestoreError("stored run reference differs from terminal identity")
+        return reference
     revision = content_revision({relative: raw})
     store = LocalArtifactStore(root)
     return ResolvedRunRef(
@@ -94,34 +115,34 @@ def _local_run_reference(root: Path, path: Path) -> ResolvedRunRef:
     )
 
 
-def _cloud_run_reference(
-    uri: str,
-    client: ViperCloudClient | None,
-) -> ResolvedRunRef:
+def _cloud_run_reference(root: Path, uri: str) -> ResolvedRunRef:
     """Resolve one cloud URI through its sealed manifest entry."""
     validate_viper_cloud_run_uri(uri)
-    if client is None:
-        raise RestoreError("Viper Cloud restore requires a client")
     address = uri.removeprefix("viper://")
     owner, remainder = address.split("/", maxsplit=1)
     workspace_revision, path = remainder.split("/", maxsplit=1)
     workspace, revision = workspace_revision.split("@", maxsplit=1)
-    files = tuple(
-        file
-        for file in client.list_files(
-            owner=owner,
-            workspace=workspace,
-            revision=revision,
-        )
-        if file.path == path
+    settings = load_storage_settings(root)
+    if settings.repository is None or settings.repository.provider != "gcs":
+        raise RestoreError("Viper Cloud URI requires a configured GCS repository")
+    snapshot = GcsStageResultSnapshotRef(
+        bucket=settings.repository.bucket,
+        prefix=settings.repository.prefix,
+        owner=owner,
+        workspace=workspace,
+        revision=revision,
     )
+    cloud = ViperCloud(root, settings.repository)
+    files = tuple(file for file in cloud.list_files(snapshot) if file.path == path)
     if len(files) != 1:
         raise RestoreError("Viper Cloud URI does not identify one terminal run")
     file = files[0]
     return ResolvedRunRef(
         sha256=file.sha256,
         bytes=file.bytes,
-        stored_at=ViperCloudFileRef(
+        stored_at=GcsFileRef(
+            bucket=settings.repository.bucket,
+            prefix=settings.repository.prefix,
             owner=owner,
             workspace=workspace,
             revision=revision,
@@ -133,8 +154,6 @@ def _cloud_run_reference(
 def resolve_run_reference(
     root: Path,
     selected: RestoreRunReference,
-    *,
-    cloud_client: ViperCloudClient | None = None,
 ) -> ResolvedRunRef:
     """Resolve a local path or cloud URI to an immutable terminal-run reference.
 
@@ -146,7 +165,7 @@ def resolve_run_reference(
         return selected
     if isinstance(selected, Path):
         return _local_run_reference(root, selected)
-    return _cloud_run_reference(selected, cloud_client)
+    return _cloud_run_reference(root, selected)
 
 
 def _successful_attempt(
@@ -324,16 +343,14 @@ def restore(
     *,
     artifacts: tuple[ArtifactRestoreSelector, ...] = (),
     output: Path | None = None,
-    cloud_client: ViperCloudClient | None = None,
 ) -> RestoreResult:
     """Restore selected verified artifacts from one successful immutable run."""
     root = repository_root.resolve(strict=True)
     reference = resolve_run_reference(
         root,
         run_reference,
-        cloud_client=cloud_client,
     )
-    fetcher = RunFetcher(root, LocalArtifactStore(root), "", cloud_client)
+    fetcher = RunFetcher(root, LocalArtifactStore(root), "")
     terminal_raw = _verified_bytes(fetcher, reference)
     run = ResolvedRun.model_validate(parse_yaml_bytes(terminal_raw))
     attempt = _successful_attempt(run, fetcher)

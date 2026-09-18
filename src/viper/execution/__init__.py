@@ -7,11 +7,11 @@ from pathlib import Path
 from .._schema import SHA256
 from ..authoring import RunPlanDraft, freeze_run_plan
 from ..repository import resolve_root
-from ..storage import ViperCloudClient
 from ._batch import run_many as _run_many
 from ._benchmark import benchmark as _benchmark
 from ._export import export_run as _export_run
 from ._export import verify_run_bundle as _verify_run_bundle
+from ._promotion import promote_run_to_cloud
 from ._restore import resolve_run_reference, restore
 from ._run import retry as _retry
 from ._run import run as _run
@@ -29,7 +29,6 @@ def export_run(
     output: Path,
     *,
     trusted_source_repositories: frozenset[str],
-    cloud_client: ViperCloudClient | None = None,
 ) -> RunExportResult:
     """Write a complete verified-run evidence graph to a portable directory."""
     return _export_run(
@@ -37,7 +36,6 @@ def export_run(
         resolved_run_path,
         output,
         trusted_source_repositories=trusted_source_repositories,
-        cloud_client=cloud_client,
     )
 
 
@@ -60,7 +58,6 @@ def run(
     *,
     repository_root: Path | None = None,
     timeout_seconds: float | None = None,
-    cloud_client: ViperCloudClient | None = None,
     trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult:
     """Execute a Python draft or a saved run specification.
@@ -79,13 +76,11 @@ def run(
             repository_root,
             plan,
             timeout_seconds=timeout_seconds,
-            cloud_client=cloud_client,
             trusted_source_repositories=trusted_source_repositories,
         )
     frozen = freeze_run_plan(
         repository_root,
         plan,
-        cloud_client=cloud_client,
     )
     run_path = repository_root.resolve() / frozen.reference.stored_at.path
     return _run(
@@ -93,7 +88,6 @@ def run(
         run_path,
         plan=frozen.reference,
         timeout_seconds=timeout_seconds,
-        cloud_client=cloud_client,
         trusted_source_repositories=trusted_source_repositories,
     )
 
@@ -103,7 +97,6 @@ def retry(
     run_spec_path: Path,
     *,
     timeout_seconds: float | None = None,
-    cloud_client: ViperCloudClient | None = None,
     trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult:
     """Append an attempt to the same frozen plan and verify its result.
@@ -116,7 +109,6 @@ def retry(
         repository_root,
         run_spec_path,
         timeout_seconds=timeout_seconds,
-        cloud_client=cloud_client,
         trusted_source_repositories=trusted_source_repositories,
     )
 
@@ -127,7 +119,6 @@ def benchmark(
     benchmark_spec_path: Path,
     *,
     timeout_seconds: float | None = None,
-    cloud_client: ViperCloudClient | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute an independent confirmation and compare it with a completed run.
 
@@ -140,7 +131,6 @@ def benchmark(
         resolved_run_path,
         benchmark_spec_path,
         timeout_seconds=timeout_seconds,
-        cloud_client=cloud_client,
     )
 
 
@@ -174,6 +164,7 @@ def run_many(
 __all__ = [
     "benchmark",
     "export_run",
+    "promote_run_to_cloud",
     "resolve_run_reference",
     "retry",
     "restore",

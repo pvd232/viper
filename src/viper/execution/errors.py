@@ -14,6 +14,10 @@ class RunError(RuntimeError):
         self.result = result
 
 
+class RunPromotionError(RuntimeError):
+    """Report a local run graph that cannot be promoted without execution."""
+
+
 class BenchmarkExecutionError(RuntimeError):
     """Report a benchmark request, execution, or publication failure."""
 
@@ -26,4 +30,10 @@ class RestoreError(RuntimeError):
     """Report an invalid restore reference, selection, or destination."""
 
 
-__all__ = ["BenchmarkExecutionError", "RestoreError", "RunError", "RunExportError"]
+__all__ = [
+    "BenchmarkExecutionError",
+    "RestoreError",
+    "RunError",
+    "RunExportError",
+    "RunPromotionError",
+]

@@ -36,7 +36,6 @@ from ..serialization import document_digest, parse_yaml_bytes, serialize_documen
 from ..stages import EvalSpec
 from ..storage import (
     LocalArtifactStore,
-    ViperCloudClient,
     bind_run_destination,
     load_storage_settings,
     local_artifact_store,
@@ -167,7 +166,6 @@ def benchmark(
     benchmark_spec_path: Path,
     *,
     timeout_seconds: float | None = None,
-    cloud_client: ViperCloudClient | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute, assemble, verify, and publish one benchmark confirmation."""
     root = repository_root.resolve()
@@ -195,7 +193,6 @@ def benchmark(
         root,
         store,
         source_repository,
-        cloud_client=cloud_client,
     )
     policy = VerificationPolicy(
         trusted_source_repositories=frozenset({source_repository})
@@ -240,7 +237,6 @@ def benchmark(
         # Confirm the same stored plan even when its files were never Git-committed.
         plan=candidate.spec,
         timeout_seconds=timeout_seconds,
-        cloud_client=cloud_client,
     )
     confirmation = confirmation_result.attempt
     confirmation_stages = verify_attempt_stages(
@@ -316,7 +312,6 @@ def benchmark(
         root,
         destination,
         {candidate_relative_path: candidate_raw},
-        cloud_client=cloud_client,
     )[candidate_relative_path]
     result = BenchmarkResult(
         benchmark=ResolvedBenchmarkSpecRef(
@@ -343,7 +338,6 @@ def benchmark(
         root,
         destination,
         {result_relative_path: result_raw},
-        cloud_client=cloud_client,
     )[result_relative_path]
     return BenchmarkExecutionResult(
         record=result,

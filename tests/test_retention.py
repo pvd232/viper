@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_storage import InMemoryViperCloudClient
+from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper.execution.results import RunResult
 from viper.references import (
     ResolvedRunRef,
@@ -28,7 +28,7 @@ from viper.storage import (
 
 def _cloud_file(
     root: Path,
-    client: InMemoryViperCloudClient,
+    client: InMemoryViperCloudProvider,
     path: str,
     raw: bytes,
 ):
@@ -37,13 +37,12 @@ def _cloud_file(
         root,
         ViperCloudDestination(owner="machina", workspace="retention"),
         {path: raw},
-        cloud_client=client,
     )[path]
 
 
 def _successful_result(
     root: Path,
-    client: InMemoryViperCloudClient,
+    client: InMemoryViperCloudProvider,
 ) -> tuple[RunResult, tuple[Path, Path]]:
     """Create one cloud-backed terminal result with a local artifact copy."""
     artifact_path = (
@@ -68,7 +67,6 @@ def _successful_result(
     snapshot = ViperCloudSnapshotPublisher(
         root,
         ViperCloudDestination(owner="machina", workspace="retention"),
-        client,
     ).publish(
         resolved_stage_path=resolved_path,
         resolved_stage=b"schema_version: 2\n",
@@ -167,15 +165,17 @@ def _successful_result(
     )
 
 
-def test_evicts_only_verified_cloud_backed_run_artifacts(tmp_path: Path) -> None:
+def test_evicts_only_verified_cloud_backed_run_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Release artifact bytes while retaining the local terminal record."""
-    client = InMemoryViperCloudClient()
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
     result, artifacts = _successful_result(tmp_path, client)
 
     eviction = evict_cloud_backed_run_files(
         tmp_path,
         result,
-        cloud_client=client,
     )
 
     assert all(not artifact.exists() for artifact in artifacts)
@@ -194,7 +194,6 @@ def test_evicts_only_verified_cloud_backed_run_artifacts(tmp_path: Path) -> None
     repeated = evict_cloud_backed_run_files(
         tmp_path,
         result.reference,
-        cloud_client=client,
     )
     assert repeated.bytes_released == 0
     assert repeated.attempt_workspace_bytes_released == 0
@@ -202,10 +201,11 @@ def test_evicts_only_verified_cloud_backed_run_artifacts(tmp_path: Path) -> None
 
 
 def test_rejects_changed_local_artifact_before_removing_any_file(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Keep every local artifact when one candidate no longer matches its seal."""
-    client = InMemoryViperCloudClient()
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
     result, artifacts = _successful_result(tmp_path, client)
     artifacts[1].write_bytes(b"substitute")
 
@@ -213,7 +213,6 @@ def test_rejects_changed_local_artifact_before_removing_any_file(
         evict_cloud_backed_run_files(
             tmp_path,
             result,
-            cloud_client=client,
         )
 
     assert artifacts[0].read_bytes() == b"parameters"

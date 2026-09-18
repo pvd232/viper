@@ -8,14 +8,12 @@ from pathlib import Path
 import viper._subprocess as subprocess
 
 from .._schema import RepoRelPath
-from .._verification.storage import (
-    fetch_git_file_bytes,
-    fetch_huggingface_file_bytes,
-    list_huggingface_snapshot_files,
-    verify_resolved_file_bytes,
-)
+from .._verification.storage import fetch_git_file_bytes, verify_resolved_file_bytes
+from ..cloud import ViperCloud
 from ..evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
 from ..references import (
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
     GitFileRef,
     HuggingFaceFileRef,
     HuggingFaceStageResultSnapshotRef,
@@ -25,10 +23,8 @@ from ..references import (
     ResolvedRunRef,
     StageResultSnapshot,
     StorageModel,
-    ViperCloudFileRef,
-    ViperCloudStageResultSnapshotRef,
 )
-from ..storage import LocalArtifactStore, ViperCloudClient, local_artifact_store
+from ..storage import LocalArtifactStore, local_artifact_store
 from ._verified_cache import VerifiedObjectCache
 from .errors import RunError
 
@@ -50,26 +46,22 @@ def run_git(repository_root: Path, *arguments: str) -> bytes:
 class RunFetcher:
     """Retrieve frozen Git source and repository-local immutable outputs."""
 
+    _verify_local_content = True
+
     def __init__(
         self,
         repository_root: Path,
         store: LocalArtifactStore,
         source_repository: str,
-        cloud_client: ViperCloudClient | None = None,
-        *,
-        trust_immutable_payloads: bool = False,
     ) -> None:
         """Bind retrieval to one local Git checkout and output store.
 
-        Execution may trust payloads already sealed beneath immutable storage
-        references. Independent verification leaves this disabled and hashes
-        the selected bytes again.
+        Immutable references determine when a previously verified local path may
+        be reused. Callers cannot weaken that rule with a trust switch.
         """
         self.repository_root = repository_root.resolve()
         self.store = store
         self.source_repository = source_repository
-        self.cloud_client = cloud_client
-        self.trust_immutable_payloads = trust_immutable_payloads
         self._external_git_files: dict[GitFileRef, bytes] = {}
         self._external_git_cache_bytes = 0
         self._external_git_checkout_root = (
@@ -108,16 +100,9 @@ class RunFetcher:
                 "show",
                 f"{location.commit}:{location.path}",
             )
-        if isinstance(location, HuggingFaceFileRef):
-            return fetch_huggingface_file_bytes(location)
-        if isinstance(location, ViperCloudFileRef):
-            if self.cloud_client is None:
-                raise RunError("Viper Cloud retrieval requires a client")
-            return self.cloud_client.fetch(
-                owner=location.owner,
-                workspace=location.workspace,
-                revision=location.revision,
-                path=location.path,
+        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+            return ViperCloud.for_reference(self.repository_root, location).fetch(
+                location
             )
         if isinstance(location, LocalFileRef):
             return local_artifact_store(location).fetch(location)
@@ -144,44 +129,42 @@ class RunFetcher:
         if remembered is not None:
             return remembered
 
-        if self.trust_immutable_payloads and isinstance(
-            reference.stored_at, LocalFileRef
-        ):
+        if isinstance(reference.stored_at, LocalFileRef):
             path = local_artifact_store(reference.stored_at).path(reference.stored_at)
             if path.stat().st_size != reference.bytes:
                 raise VerificationError(
-                    "retrieved file size differs from its resolved reference"
+                    f"byte-count mismatch: expected {reference.bytes}, "
+                    f"received {path.stat().st_size}"
                 )
+            if self._verify_local_content:
+                with path.open("rb") as stream:
+                    digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                if digest != reference.sha256:
+                    raise VerificationError(
+                        f"SHA-256 mismatch: expected {reference.sha256}, "
+                        f"received {digest}"
+                    )
             self._verified_paths[reference] = path
             return path
 
-        if not isinstance(reference.stored_at, ViperCloudFileRef):
+        if not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef)):
             raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
             self._verified_objects.write(reference, raw)
             path = self._verified_objects.path(reference)
             self._verified_paths[reference] = path
             return path
 
-        cached = (
-            self._verified_objects.trusted_path(reference)
-            if self.trust_immutable_payloads
-            else self._verified_objects.verified_path(reference)
-        )
+        cached = self._verified_objects.trusted_path(reference)
         if cached is not None:
             self._verified_paths[reference] = cached
             return cached
 
-        if self.cloud_client is None:
-            raise RunError("Viper Cloud retrieval requires a client")
         temporary = self._verified_objects.temporary_path(reference)
         try:
-            restored = self.cloud_client.fetch_to_path(
-                owner=reference.stored_at.owner,
-                workspace=reference.stored_at.workspace,
-                revision=reference.stored_at.revision,
-                path=reference.stored_at.path,
-                destination=temporary,
-            )
+            restored = ViperCloud.for_reference(
+                self.repository_root,
+                reference.stored_at,
+            ).fetch_to_path(reference, temporary)
             cached = self._verified_objects.adopt_verified_path(reference, restored)
         finally:
             temporary.unlink(missing_ok=True)
@@ -211,20 +194,24 @@ class RunFetcher:
         snapshot: StageResultSnapshot,
     ) -> tuple[RepoRelPath, ...]:
         """List every regular file in one immutable stage snapshot."""
-        if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
-            return list_huggingface_snapshot_files(snapshot)
-        if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
-            if self.cloud_client is None:
-                raise RunError("Viper Cloud snapshot listing requires a client")
+        if isinstance(
+            snapshot,
+            (GcsStageResultSnapshotRef, HuggingFaceStageResultSnapshotRef),
+        ):
             return tuple(
                 file.path
-                for file in self.cloud_client.list_files(
-                    owner=snapshot.owner,
-                    workspace=snapshot.workspace,
-                    revision=snapshot.revision,
-                )
+                for file in ViperCloud.for_snapshot(
+                    self.repository_root,
+                    snapshot,
+                ).list_files(snapshot)
             )
         return local_artifact_store(snapshot).list_snapshot_files(snapshot)
+
+
+class ExecutionRunFetcher(RunFetcher):
+    """Trust locally sealed store payloads only inside one active execution."""
+
+    _verify_local_content = False
 
 
 def resolve_git_file(

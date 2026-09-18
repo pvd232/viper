@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
@@ -13,17 +13,24 @@ from google.api_core.exceptions import GoogleAPIError, PreconditionFailed
 from google.cloud import storage
 from pydantic import Field, ValidationError, model_validator
 
+from ._cloud import (
+    PublicationSource,
+    RevisionManifest,
+    ViperCloudDestination,
+    ViperCloudError,
+    ViperCloudProvider,
+    canonical_json_bytes,
+    manifest_revision,
+    resolve_publication_source,
+)
 from ._schema import SHA256, ProtocolModel, RepoRelPath
 from .ids import HumanId
-from .references import SnapshotFileRef, ViperCloudFileRef
-from .storage import (
-    PublicationSource,
-    StorageConfigurationError,
-    ViperCloudClient,
-    ViperCloudDestination,
-    manifest_revision,
-    publish_resolved_files,
-    resolve_publication_source,
+from .references import (
+    CloudFileRef,
+    CloudStageResultSnapshotRef,
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
+    SnapshotFileRef,
 )
 
 
@@ -57,45 +64,8 @@ class GcsStorageProbeReceipt(ProtocolModel):
         return self
 
 
-class _GcsRevisionManifest(ProtocolModel):
-    """Describe every file exposed by one sealed cloud revision."""
-
-    schema_version: Literal[1] = Field(
-        default=1,
-        description="GCS revision-manifest schema version.",
-    )
-    owner: HumanId = Field(description="Account owning the cloud revision.")
-    workspace: HumanId = Field(description="Workspace owning the cloud revision.")
-    revision: SHA256 = Field(description="Content-derived revision identifier.")
-    files: tuple[SnapshotFileRef, ...] = Field(
-        description="Files exposed by the sealed revision in path order."
-    )
-
-    @model_validator(mode="after")
-    def require_revision_identity(self) -> _GcsRevisionManifest:
-        """Bind the manifest revision to its sorted, unique file identities."""
-        paths = tuple(file.path for file in self.files)
-        if paths != tuple(sorted(paths)) or len(paths) != len(set(paths)):
-            raise ValueError("GCS manifest files must have unique sorted paths")
-        if manifest_revision(self.files) != self.revision:
-            raise ValueError("GCS manifest content does not match its revision")
-        return self
-
-
-def _canonical_json(record: ProtocolModel) -> bytes:
-    """Serialize one protocol record into stable UTF-8 JSON bytes."""
-    return (
-        json.dumps(
-            record.model_dump(mode="json"),
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        + b"\n"
-    )
-
-
-class GcsViperCloudClient(ViperCloudClient):
-    """Implement VIPER's immutable cloud protocol in one GCS bucket."""
+class GcsProvider(ViperCloudProvider):
+    """Store sealed VIPER revisions in one Google Cloud Storage bucket."""
 
     def __init__(
         self,
@@ -106,7 +76,7 @@ class GcsViperCloudClient(ViperCloudClient):
         client: storage.Client | None = None,
     ) -> None:
         """Bind publication sources and object keys to one workspace and bucket."""
-        self.root = root.resolve(strict=True)
+        super().__init__(root)
         prefix_path = PurePosixPath(prefix)
         if (
             prefix_path.is_absolute()
@@ -116,6 +86,7 @@ class GcsViperCloudClient(ViperCloudClient):
             raise ValueError("GCS prefix must be a non-empty relative path")
         self.prefix = prefix_path.as_posix()
         self.client = client or storage.Client()
+        self.bucket_name = bucket
         self.bucket = self.client.bucket(bucket)
 
     def _revision_prefix(
@@ -164,7 +135,7 @@ class GcsViperCloudClient(ViperCloudClient):
             with resolved.open("rb") as stream:
                 observed_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
         if observed_size != size or observed_sha256 != sha256:
-            raise StorageConfigurationError("GCS upload source identity changed")
+            raise ViperCloudError("GCS upload source identity changed")
         blob = self.bucket.blob(key)
         blob.metadata = {"sha256": sha256, "bytes": str(size)}
         try:
@@ -185,7 +156,7 @@ class GcsViperCloudClient(ViperCloudClient):
         except PreconditionFailed:
             existing = blob.download_as_bytes(checksum="auto")
             if len(existing) != size or hashlib.sha256(existing).hexdigest() != sha256:
-                raise StorageConfigurationError(
+                raise ViperCloudError(
                     "GCS object already contains different bytes"
                 ) from None
 
@@ -194,21 +165,21 @@ class GcsViperCloudClient(ViperCloudClient):
         owner: HumanId,
         workspace: HumanId,
         revision: SHA256,
-    ) -> _GcsRevisionManifest:
+    ) -> RevisionManifest:
         """Load and validate the seal before exposing any revision member."""
         try:
             raw = self.bucket.blob(
                 self._manifest_key(owner, workspace, revision)
             ).download_as_bytes(checksum="auto")
-            manifest = _GcsRevisionManifest.model_validate_json(raw)
+            manifest = RevisionManifest.model_validate_json(raw)
         except (GoogleAPIError, KeyError, ValidationError) as error:
-            raise StorageConfigurationError("GCS revision is not sealed") from error
+            raise ViperCloudError("GCS revision is not sealed") from error
         if (
             manifest.owner != owner
             or manifest.workspace != workspace
             or manifest.revision != revision
         ):
-            raise StorageConfigurationError("GCS manifest names another revision")
+            raise ViperCloudError("GCS manifest names another revision")
         return manifest
 
     def upload(
@@ -233,8 +204,8 @@ class GcsViperCloudClient(ViperCloudClient):
     def copy(
         self,
         *,
-        source: ViperCloudFileRef,
-        target: ViperCloudFileRef,
+        source: GcsFileRef,
+        target: GcsFileRef,
         sha256: SHA256,
         bytes: int,
     ) -> None:
@@ -252,7 +223,7 @@ class GcsViperCloudClient(ViperCloudClient):
             sha256=sha256,
             bytes=bytes,
         ):
-            raise StorageConfigurationError("GCS copy source identity changed")
+            raise ViperCloudError("GCS copy source identity changed")
         source_blob = self.bucket.blob(
             self._file_key(
                 source.owner,
@@ -263,7 +234,7 @@ class GcsViperCloudClient(ViperCloudClient):
         )
         source_blob.reload()
         if source_blob.generation is None:
-            raise StorageConfigurationError("GCS copy source has no generation")
+            raise ViperCloudError("GCS copy source has no generation")
         target_key = self._file_key(
             target.owner,
             target.workspace,
@@ -281,7 +252,7 @@ class GcsViperCloudClient(ViperCloudClient):
         except PreconditionFailed:
             existing = self.bucket.blob(target_key).download_as_bytes(checksum="auto")
             if len(existing) != bytes or hashlib.sha256(existing).hexdigest() != sha256:
-                raise StorageConfigurationError(
+                raise ViperCloudError(
                     "GCS copy target already contains different bytes"
                 ) from None
 
@@ -294,7 +265,7 @@ class GcsViperCloudClient(ViperCloudClient):
         files: tuple[SnapshotFileRef, ...],
     ) -> None:
         """Publish an immutable manifest after every declared object is present."""
-        manifest = _GcsRevisionManifest(
+        manifest = RevisionManifest(
             owner=owner,
             workspace=workspace,
             revision=revision,
@@ -309,10 +280,10 @@ class GcsViperCloudClient(ViperCloudClient):
             if metadata.get("sha256") != file.sha256 or metadata.get("bytes") != str(
                 file.bytes
             ):
-                raise StorageConfigurationError(
+                raise ViperCloudError(
                     f"GCS file identity is missing or changed: {file.path}"
                 )
-        raw = _canonical_json(manifest)
+        raw = canonical_json_bytes(manifest)
         self._upload_exact(
             self._manifest_key(owner, workspace, revision),
             raw,
@@ -320,7 +291,132 @@ class GcsViperCloudClient(ViperCloudClient):
             size=len(raw),
         )
 
-    def fetch(
+    def publish_revision(
+        self,
+        *,
+        destination: ViperCloudDestination,
+        revision: SHA256,
+        sources: Mapping[RepoRelPath, PublicationSource],
+        files: tuple[SnapshotFileRef, ...],
+    ) -> GcsStageResultSnapshotRef:
+        """Upload all revision members and expose them through one manifest."""
+        identities = {file.path: file for file in files}
+        for path, source in sorted(sources.items()):
+            identity = identities[path]
+            self.upload(
+                owner=destination.owner,
+                workspace=destination.workspace,
+                revision=revision,
+                path=path,
+                source=source,
+                sha256=identity.sha256,
+                bytes=identity.bytes,
+            )
+        self.seal(
+            owner=destination.owner,
+            workspace=destination.workspace,
+            revision=revision,
+            files=files,
+        )
+        return GcsStageResultSnapshotRef(
+            bucket=self.bucket_name,
+            prefix=self.prefix,
+            owner=destination.owner,
+            workspace=destination.workspace,
+            revision=revision,
+        )
+
+    def file_ref(
+        self,
+        snapshot: CloudStageResultSnapshotRef,
+        path: RepoRelPath,
+    ) -> GcsFileRef:
+        """Address one canonical path in a GCS snapshot."""
+        if not isinstance(snapshot, GcsStageResultSnapshotRef):
+            raise TypeError("GcsProvider requires a GcsStageResultSnapshotRef")
+        return GcsFileRef(
+            bucket=snapshot.bucket,
+            prefix=snapshot.prefix,
+            owner=snapshot.owner,
+            workspace=snapshot.workspace,
+            revision=snapshot.revision,
+            path=path,
+        )
+
+    def publish_reuse(
+        self,
+        *,
+        destination: ViperCloudDestination,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        source_snapshot: CloudStageResultSnapshotRef,
+        files: Mapping[RepoRelPath, SnapshotFileRef],
+        source_bytes: Mapping[RepoRelPath, bytes],
+    ) -> GcsStageResultSnapshotRef:
+        """Copy sealed GCS payloads server-side and upload only the new stage record."""
+        del source_bytes
+        if not isinstance(source_snapshot, GcsStageResultSnapshotRef):
+            raise TypeError("GcsProvider requires a GcsStageResultSnapshotRef")
+        stage_file = SnapshotFileRef(
+            path=resolved_stage_path,
+            sha256=hashlib.sha256(resolved_stage).hexdigest(),
+            bytes=len(resolved_stage),
+        )
+        target_files = tuple(
+            [stage_file]
+            + [
+                SnapshotFileRef(
+                    path=target_path,
+                    sha256=source_file.sha256,
+                    bytes=source_file.bytes,
+                )
+                for target_path, source_file in sorted(files.items())
+            ]
+        )
+        revision = manifest_revision(target_files)
+        self.upload(
+            owner=destination.owner,
+            workspace=destination.workspace,
+            revision=revision,
+            path=resolved_stage_path,
+            source=resolved_stage,
+            sha256=stage_file.sha256,
+            bytes=stage_file.bytes,
+        )
+        target_snapshot = GcsStageResultSnapshotRef(
+            bucket=self.bucket_name,
+            prefix=self.prefix,
+            owner=destination.owner,
+            workspace=destination.workspace,
+            revision=revision,
+        )
+        for target_path, source_file in sorted(files.items()):
+            self.copy(
+                source=self.file_ref(source_snapshot, source_file.path),
+                target=self.file_ref(target_snapshot, target_path),
+                sha256=source_file.sha256,
+                bytes=source_file.bytes,
+            )
+        self.seal(
+            owner=destination.owner,
+            workspace=destination.workspace,
+            revision=revision,
+            files=target_files,
+        )
+        return target_snapshot
+
+    def fetch(self, location: CloudFileRef) -> bytes:
+        """Restore one sealed GCS file and verify its exact byte identity."""
+        if not isinstance(location, GcsFileRef):
+            raise TypeError("GcsProvider requires a GcsFileRef")
+        return self._fetch(
+            owner=location.owner,
+            workspace=location.workspace,
+            revision=location.revision,
+            path=location.path,
+        )
+
+    def _fetch(
         self,
         *,
         owner: HumanId,
@@ -335,7 +431,7 @@ class GcsViperCloudClient(ViperCloudClient):
         }
         identity = files.get(path)
         if identity is None:
-            raise StorageConfigurationError("GCS sealed revision has no requested file")
+            raise ViperCloudError("GCS sealed revision has no requested file")
         raw = self.bucket.blob(
             self._file_key(owner, workspace, revision, path)
         ).download_as_bytes(checksum="auto")
@@ -343,16 +439,37 @@ class GcsViperCloudClient(ViperCloudClient):
             len(raw) != identity.bytes
             or hashlib.sha256(raw).hexdigest() != identity.sha256
         ):
-            raise StorageConfigurationError("GCS restored file identity changed")
+            raise ViperCloudError("GCS restored file identity changed")
         return raw
 
     def fetch_to_path(
+        self,
+        location: CloudFileRef,
+        identity: SnapshotFileRef,
+        destination: Path,
+    ) -> Path:
+        """Stream one sealed GCS file to a verified local path."""
+        if not isinstance(location, GcsFileRef):
+            raise TypeError("GcsProvider requires a GcsFileRef")
+        if identity.path != location.path:
+            raise ViperCloudError("GCS materialization identity names another path")
+        return self._fetch_to_path(
+            owner=location.owner,
+            workspace=location.workspace,
+            revision=location.revision,
+            path=location.path,
+            expected=identity,
+            destination=destination,
+        )
+
+    def _fetch_to_path(
         self,
         *,
         owner: HumanId,
         workspace: HumanId,
         revision: SHA256,
         path: RepoRelPath,
+        expected: SnapshotFileRef,
         destination: Path,
     ) -> Path:
         """Stream one sealed file to a new root-confined path and verify it."""
@@ -362,13 +479,15 @@ class GcsViperCloudClient(ViperCloudClient):
         }
         identity = files.get(path)
         if identity is None:
-            raise StorageConfigurationError("GCS sealed revision has no requested file")
+            raise ViperCloudError("GCS sealed revision has no requested file")
+        if identity != expected:
+            raise ViperCloudError("GCS file differs from its resolved reference")
         target = destination if destination.is_absolute() else self.root / destination
         target = target.resolve()
         if not target.is_relative_to(self.root):
-            raise StorageConfigurationError("GCS restore destination escapes root")
+            raise ViperCloudError("GCS restore destination escapes root")
         if target.exists():
-            raise StorageConfigurationError("GCS restore destination already exists")
+            raise ViperCloudError("GCS restore destination already exists")
         target.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(
             dir=target.parent,
@@ -386,13 +505,26 @@ class GcsViperCloudClient(ViperCloudClient):
                 temporary.stat().st_size != identity.bytes
                 or observed_sha256 != identity.sha256
             ):
-                raise StorageConfigurationError("GCS restored file identity changed")
+                raise ViperCloudError("GCS restored file identity changed")
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
         return target
 
     def list_files(
+        self,
+        snapshot: CloudStageResultSnapshotRef,
+    ) -> tuple[SnapshotFileRef, ...]:
+        """List the exact files exposed by one GCS snapshot."""
+        if not isinstance(snapshot, GcsStageResultSnapshotRef):
+            raise TypeError("GcsProvider requires a GcsStageResultSnapshotRef")
+        return self._list_files(
+            owner=snapshot.owner,
+            workspace=snapshot.workspace,
+            revision=snapshot.revision,
+        )
+
+    def _list_files(
         self,
         *,
         owner: HumanId,
@@ -402,7 +534,20 @@ class GcsViperCloudClient(ViperCloudClient):
         """List the exact files exposed by one sealed revision."""
         return self._load_manifest(owner, workspace, revision).files
 
-    def verify_file(
+    def verify_file(self, reference: CloudFileRef, identity: SnapshotFileRef) -> None:
+        """Stream and hash one sealed GCS file without retaining a local copy."""
+        if not isinstance(reference, GcsFileRef):
+            raise TypeError("GcsProvider requires a GcsFileRef")
+        self._verify_file(
+            owner=reference.owner,
+            workspace=reference.workspace,
+            revision=reference.revision,
+            path=reference.path,
+            sha256=identity.sha256,
+            bytes=identity.bytes,
+        )
+
+    def _verify_file(
         self,
         *,
         owner: HumanId,
@@ -415,7 +560,7 @@ class GcsViperCloudClient(ViperCloudClient):
         """Stream and hash one sealed object without creating a local copy."""
         expected = SnapshotFileRef(path=path, sha256=sha256, bytes=bytes)
         if expected not in self._load_manifest(owner, workspace, revision).files:
-            raise StorageConfigurationError("GCS file differs from its sealed manifest")
+            raise ViperCloudError("GCS file differs from its sealed manifest")
 
         class DigestWriter:
             """Count and hash chunks written by the GCS downloader."""
@@ -434,7 +579,7 @@ class GcsViperCloudClient(ViperCloudClient):
         try:
             blob.reload()
             if blob.generation is None:
-                raise StorageConfigurationError("GCS file has no immutable generation")
+                raise ViperCloudError("GCS file has no immutable generation")
             observed = DigestWriter()
             blob.download_to_file(
                 observed,
@@ -442,55 +587,46 @@ class GcsViperCloudClient(ViperCloudClient):
                 checksum="auto",
             )
         except GoogleAPIError as error:
-            raise StorageConfigurationError("GCS file could not be verified") from error
+            raise ViperCloudError("GCS file could not be verified") from error
         if observed.bytes != bytes or observed.digest.hexdigest() != sha256:
-            raise StorageConfigurationError("GCS file identity changed")
+            raise ViperCloudError("GCS file identity changed")
 
 
 def probe_gcs_storage(
     root: Path,
     destination: ViperCloudDestination,
-    client: GcsViperCloudClient,
+    provider: GcsProvider,
     receipt_path: Path,
     *,
     artifact_path: RepoRelPath = ".viper/probes/gcs-storage.bin",
 ) -> GcsStorageProbeReceipt:
     """Publish, restore, verify, and record one deterministic GCS probe."""
     payload = b"VIPER GCS storage probe\n"
-    references = publish_resolved_files(
-        root,
+    snapshot, identities = provider.publish(
         destination,
         {artifact_path: payload},
-        cloud_client=client,
     )
-    reference = references[artifact_path]
-    location = reference.stored_at
-    if not isinstance(location, ViperCloudFileRef):
-        raise StorageConfigurationError("GCS probe produced a non-cloud reference")
-    restored = client.fetch(
-        owner=location.owner,
-        workspace=location.workspace,
-        revision=location.revision,
-        path=location.path,
-    )
+    identity = identities[0]
+    location = provider.file_ref(snapshot, artifact_path)
+    restored = provider.fetch(location)
     restored_sha256 = hashlib.sha256(restored).hexdigest()
     receipt = GcsStorageProbeReceipt(
         artifact_uri=(
             f"viper://{location.owner}/{location.workspace}@"
             f"{location.revision}/{location.path}"
         ),
-        sha256=reference.sha256,
+        sha256=identity.sha256,
         restored_sha256=restored_sha256,
     )
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = receipt_path.with_suffix(receipt_path.suffix + ".tmp")
-    temporary.write_bytes(_canonical_json(receipt))
+    temporary.write_bytes(canonical_json_bytes(receipt))
     temporary.replace(receipt_path)
     return receipt
 
 
 __all__ = [
     "GcsStorageProbeReceipt",
-    "GcsViperCloudClient",
+    "GcsProvider",
     "probe_gcs_storage",
 ]

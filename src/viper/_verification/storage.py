@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Protocol, cast, runtime_checkable
 
 import yaml
-from huggingface_hub import HfApi, RepoFile, hf_hub_download
 
 import viper._subprocess as subprocess
 
@@ -29,6 +28,7 @@ from ..artifacts import (
     ResolvedBundleArtifact,
     ResolvedSingleFileArtifact,
 )
+from ..cloud import ViperCloud
 from ..evidence import (
     StageSnapshot,
     StorageFetcher,
@@ -39,6 +39,8 @@ from ..evidence import (
 )
 from ..outputs import OutputSpec
 from ..references import (
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
     GitFileRef,
     HuggingFaceFileRef,
     HuggingFaceStageResultSnapshotRef,
@@ -49,7 +51,6 @@ from ..references import (
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
-    ViperCloudFileRef,
     resolve_snapshot_file_ref,
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
@@ -190,18 +191,10 @@ def fetch_git_file_bytes(
 
 
 def fetch_huggingface_file_bytes(location: HuggingFaceFileRef) -> bytes:
-    """Read one file from the exact Hugging Face commit in the reference."""
-    repo_type = None if location.repo_type == "model" else location.repo_type
-
+    """Read one file through the provider-neutral cloud service."""
     try:
-        downloaded_path = hf_hub_download(
-            repo_id=location.repository,
-            filename=location.path,
-            repo_type=repo_type,
-            revision=location.commit,
-        )
-        return Path(downloaded_path).read_bytes()
-    except (OSError, ValueError) as exc:
+        return ViperCloud.for_reference(Path.cwd(), location).fetch(location)
+    except (OSError, ValueError, RuntimeError) as exc:
         raise VerificationError(
             "Hugging Face could not retrieve the referenced file"
         ) from exc
@@ -221,31 +214,28 @@ def fetch_storage_bytes(location: StorageModel) -> bytes:
     """Dispatch an immutable storage reference to its retrieval backend."""
     if isinstance(location, GitFileRef):
         return fetch_git_file_bytes(location)
-    if isinstance(location, HuggingFaceFileRef):
-        return fetch_huggingface_file_bytes(location)
+    if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+        try:
+            return ViperCloud.for_reference(Path.cwd(), location).fetch(location)
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise VerificationError("cloud file could not be retrieved") from exc
     if isinstance(location, LocalFileRef):
         return fetch_local_file_bytes(location)
-    if isinstance(location, ViperCloudFileRef):
-        raise VerificationError("Viper Cloud retrieval requires a client")
     raise TypeError(f"unsupported storage reference: {type(location).__name__}")
 
 
 def list_huggingface_snapshot_files(
     snapshot: HuggingFaceStageResultSnapshotRef,
 ) -> tuple[RepoRelPath, ...]:
-    """List every regular file in one immutable Hugging Face snapshot."""
-    repo_type = None if snapshot.repo_type == "model" else snapshot.repo_type
+    """List one Hugging Face snapshot through the cloud service."""
     try:
-        entries = HfApi().list_repo_tree(
-            repo_id=snapshot.repository,
-            recursive=True,
-            revision=snapshot.commit,
-            repo_type=repo_type,
-        )
         return tuple(
-            sorted(entry.path for entry in entries if isinstance(entry, RepoFile))
+            file.path
+            for file in ViperCloud.for_snapshot(Path.cwd(), snapshot).list_files(
+                snapshot
+            )
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         raise VerificationError("artifact.bundle: snapshot listing failed") from exc
 
 
@@ -440,7 +430,10 @@ def read_snapshot_file(
             path=reference.path,
         )
     else:
-        location = ViperCloudFileRef(
+        assert isinstance(snapshot, GcsStageResultSnapshotRef)
+        location = GcsFileRef(
+            bucket=snapshot.bucket,
+            prefix=snapshot.prefix,
             owner=snapshot.owner,
             workspace=snapshot.workspace,
             revision=snapshot.revision,
@@ -483,7 +476,14 @@ def snapshot_identity(
             snapshot.store_id,
             snapshot.commit,
         )
-    return (snapshot.kind, snapshot.owner, snapshot.workspace, snapshot.revision)
+    return (
+        snapshot.kind,
+        snapshot.bucket,
+        snapshot.prefix,
+        snapshot.owner,
+        snapshot.workspace,
+        snapshot.revision,
+    )
 
 
 def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None:
@@ -503,9 +503,11 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
             location.store_id,
             location.commit,
         )
-    if isinstance(location, ViperCloudFileRef):
+    if isinstance(location, GcsFileRef):
         return (
             location.kind,
+            location.bucket,
+            location.prefix,
             location.owner,
             location.workspace,
             location.revision,

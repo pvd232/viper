@@ -24,6 +24,7 @@ from ..journal import DurableJournal
 from ..metrics import is_recomputed_metric
 from ..preflight import preflight_plan
 from ..references import (
+    GcsFileRef,
     GitFileRef,
     ResolvedFileRef,
     ResolvedRunRef,
@@ -31,7 +32,6 @@ from ..references import (
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     SnapshotFileRef,
-    ViperCloudFileRef,
     storage_file,
 )
 from ..reuse import (
@@ -59,7 +59,6 @@ from ..stages import (
 from ..storage import (
     LocalArtifactStore,
     StorageDestination,
-    ViperCloudClient,
     bind_run_destination,
     create_snapshot_publisher,
     load_storage_settings,
@@ -75,6 +74,7 @@ from ._materialization import (
 )
 from ._metric import MetricExecutionError, run_after_stage_metrics
 from ._publication import (
+    persist_terminal_reference,
     publish_attempt_files,
     publish_invocation_receipt,
     replace_synchronized,
@@ -89,7 +89,7 @@ from ._resolution import (
     resolve_stage,
 )
 from ._reuse import reuse_stage
-from ._source import RunFetcher, resolve_git_file, run_git
+from ._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
 from ._stage import (
     StageExecutionError,
     StageProcessInterrupted,
@@ -205,7 +205,6 @@ def execute_attempt(
     timeout_seconds: float | None = None,
     retry: bool = False,
     purpose: AttemptPurpose = "run",
-    cloud_client: ViperCloudClient | None = None,
     trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> RunResult | ConfirmationRunResult:
     """Execute one ordinary or benchmark-confirmation attempt."""
@@ -214,12 +213,10 @@ def execute_attempt(
     run_raw = run_path.read_bytes()
     run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
     store = LocalArtifactStore(root)
-    fetcher = RunFetcher(
+    fetcher = ExecutionRunFetcher(
         root,
         store,
         str(run.source.repository),
-        cloud_client=cloud_client,
-        trust_immutable_payloads=True,
     )
     origin = run_git(root, "remote", "get-url", "origin").decode().strip()
     if origin != str(run.source.repository):
@@ -250,7 +247,7 @@ def execute_attempt(
         plan_location = plan.stored_at
     plan_revision = (
         plan_location.revision
-        if isinstance(plan_location, ViperCloudFileRef)
+        if isinstance(plan_location, GcsFileRef)
         else plan_location.commit
     )
 
@@ -262,7 +259,6 @@ def execute_attempt(
     snapshot_publisher = create_snapshot_publisher(
         root,
         destination,
-        cloud_client=cloud_client,
     )
     policy = _verification_policy(
         str(run.source.repository),
@@ -333,7 +329,6 @@ def execute_attempt(
             root,
             run_path,
             plan=plan,
-            cloud_client=cloud_client,
         )
         preflight_path = workspace.control / "preflight.json"
         write_synchronized(
@@ -362,7 +357,6 @@ def execute_attempt(
                 root,
                 destination,
                 {terminal_relative_path: previous_run_raw},
-                cloud_client=cloud_client,
             )[terminal_relative_path]
             previous_reference = ResolvedRunRef(
                 sha256=published.sha256,
@@ -375,17 +369,16 @@ def execute_attempt(
                     policy=policy,
                     fetcher=fetcher,
                 )
-            except VerificationError as exc:
-                raise VerificationError(
-                    "prior failed run cannot be verified for retry"
-                ) from exc
-            for previous_attempt in reversed(verified_previous.attempts):
-                for candidate in attempt_reuse_candidates(
-                    previous_reference,
-                    verified_previous,
-                    previous_attempt.attempt_id,
-                ):
-                    retry_candidates.setdefault(candidate.key.stage_id, candidate)
+            except VerificationError:
+                verified_previous = None
+            if verified_previous is not None:
+                for previous_attempt in reversed(verified_previous.attempts):
+                    for candidate in attempt_reuse_candidates(
+                        previous_reference,
+                        verified_previous,
+                        previous_attempt.attempt_id,
+                    ):
+                        retry_candidates.setdefault(candidate.key.stage_id, candidate)
         for stage_reference in run.stages:
             active_stage_id = stage_reference.stage_id
             stage = load_stage_spec(root / stage_reference.spec)
@@ -512,7 +505,6 @@ def execute_attempt(
                         policy=policy,
                         publisher=snapshot_publisher,
                         destination=destination,
-                        cloud_client=cloud_client,
                         metrics=metric_specs,
                         download_source_closure=download_source_closure,
                         candidate=retry_candidates.get(stage_reference.stage_id),
@@ -569,7 +561,6 @@ def execute_attempt(
                                 destination,
                                 invocation_path,
                                 exc.invocation,
-                                cloud_client=cloud_client,
                             )
                         )
                     raise
@@ -582,7 +573,6 @@ def execute_attempt(
                     destination,
                     invocation_path,
                     process.invocation,
-                    cloud_client=cloud_client,
                 )
                 invocation_refs.append(invocation_ref)
                 stage_completed = datetime.now(UTC)
@@ -723,7 +713,6 @@ def execute_attempt(
             log_files,
             measurement_paths,
             metric_verification_paths,
-            cloud_client=cloud_client,
         )
         attempt_completed = datetime.now(UTC)
         attempt = RunAttempt(
@@ -745,7 +734,6 @@ def execute_attempt(
             run_root,
             attempt,
             destination,
-            cloud_client=cloud_client,
         )
         if purpose == "benchmark_confirmation":
             return ConfirmationRunResult(
@@ -762,7 +750,6 @@ def execute_attempt(
                 run_root,
                 value,
                 destination,
-                cloud_client=cloud_client,
             )
             for value in previous_attempts
         ) + (attempt_reference,)
@@ -785,15 +772,16 @@ def execute_attempt(
             root,
             destination,
             {terminal_path.relative_to(root).as_posix(): terminal_raw},
-            cloud_client=cloud_client,
         )[terminal_path.relative_to(root).as_posix()]
+        run_reference = ResolvedRunRef(
+            sha256=terminal_reference.sha256,
+            bytes=terminal_reference.bytes,
+            stored_at=terminal_reference.stored_at,
+        )
+        persist_terminal_reference(terminal_path, run_reference)
         return RunResult(
             record=resolved_run,
-            reference=ResolvedRunRef(
-                sha256=terminal_reference.sha256,
-                bytes=terminal_reference.bytes,
-                stored_at=terminal_reference.stored_at,
-            ),
+            reference=run_reference,
             path=terminal_path,
             journal_path=journal.path,
             latest_attempt=attempt,
@@ -849,7 +837,6 @@ def execute_attempt(
             log_files,
             measurement_paths,
             metric_verification_paths,
-            cloud_client=cloud_client,
         )
         completed_at = datetime.now(UTC)
         failed_attempt = RunAttempt(
@@ -876,7 +863,6 @@ def execute_attempt(
             run_root,
             failed_attempt,
             destination,
-            cloud_client=cloud_client,
             replace_existing=True,
         )
         if purpose == "benchmark_confirmation":
@@ -893,7 +879,6 @@ def execute_attempt(
                 run_root,
                 value,
                 destination,
-                cloud_client=cloud_client,
             )
             for value in previous_attempts
         ) + (failed_attempt_reference,)
@@ -916,15 +901,16 @@ def execute_attempt(
             root,
             destination,
             {terminal_relative_path: terminal_raw},
-            cloud_client=cloud_client,
         )[terminal_relative_path]
+        run_reference = ResolvedRunRef(
+            sha256=terminal_reference.sha256,
+            bytes=terminal_reference.bytes,
+            stored_at=terminal_reference.stored_at,
+        )
+        persist_terminal_reference(terminal_path, run_reference)
         result = RunResult(
             record=failed_run,
-            reference=ResolvedRunRef(
-                sha256=terminal_reference.sha256,
-                bytes=terminal_reference.bytes,
-                stored_at=terminal_reference.stored_at,
-            ),
+            reference=run_reference,
             path=terminal_path,
             journal_path=journal.path,
             latest_attempt=failed_attempt,

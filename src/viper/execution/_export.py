@@ -21,6 +21,8 @@ from ..config import Config, ConfigTypeRef
 from ..evidence import VerificationError, VerificationPolicy
 from ..http import ExternalExecutableSpec, ResolvedExternalExecutable
 from ..references import (
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
     GitFileRef,
     HuggingFaceFileRef,
     HuggingFaceStageResultSnapshotRef,
@@ -31,11 +33,10 @@ from ..references import (
     StageResultSnapshot,
     StorageModel,
     StorageRef,
-    ViperCloudFileRef,
 )
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import parse_yaml_bytes
-from ..storage import LocalArtifactStore, ViperCloudClient
+from ..storage import LocalArtifactStore
 from ..verification import verify_run_result
 from ._source import RunFetcher
 from .errors import RunExportError
@@ -80,7 +81,10 @@ def _snapshot_location(
             commit=snapshot.commit,
             path=path,
         )
-    return ViperCloudFileRef(
+    assert isinstance(snapshot, GcsStageResultSnapshotRef)
+    return GcsFileRef(
+        bucket=snapshot.bucket,
+        prefix=snapshot.prefix,
         owner=snapshot.owner,
         workspace=snapshot.workspace,
         revision=snapshot.revision,
@@ -294,7 +298,7 @@ class _BundleFetcher:
             location = _model_or_none(_STORAGE_ADAPTER, entry.source)
             if not isinstance(
                 location,
-                (GitFileRef, HuggingFaceFileRef, LocalFileRef, ViperCloudFileRef),
+                (GitFileRef, HuggingFaceFileRef, LocalFileRef, GcsFileRef),
             ):
                 raise RunExportError("snapshot member has no storage binding")
             if location != _snapshot_location(snapshot, location.path):
@@ -356,7 +360,6 @@ def _source_repository(
     *,
     repository_root: Path,
     store: LocalArtifactStore,
-    cloud_client: ViperCloudClient | None,
 ) -> str:
     """Read the run's own frozen source identity without guessing from trust."""
     if isinstance(resolved_run.spec.stored_at, GitFileRef):
@@ -365,7 +368,6 @@ def _source_repository(
         repository_root,
         store,
         "",
-        cloud_client=cloud_client,
     )
     try:
         raw = verify_resolved_file_bytes(
@@ -384,7 +386,6 @@ def export_run(
     output: Path,
     *,
     trusted_source_repositories: frozenset[str],
-    cloud_client: ViperCloudClient | None = None,
 ) -> RunExportResult:
     """Verify and export one complete terminal run evidence graph."""
     root = repository_root.resolve()
@@ -404,13 +405,11 @@ def export_run(
         resolved_run,
         repository_root=root,
         store=store,
-        cloud_client=cloud_client,
     )
     delegate = RunFetcher(
         root,
         store,
         source_repository,
-        cloud_client=cloud_client,
     )
     recording = _RecordingFetcher(delegate)
     verify_run_result(

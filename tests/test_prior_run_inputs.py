@@ -5,17 +5,17 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_storage import InMemoryViperCloudClient
+from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper._verification.storage import fetch_local_file_bytes
 from viper.artifacts import ArtifactPointer, StageArtifactRef
 from viper.authoring import RunArtifactDraft, _freeze_input, run_artifact
 from viper.execution._source import RunFetcher
 from viper.inputs import StoredInputMaterialization, StoredInputRef
 from viper.references import (
+    GcsFileRef,
     LocalFileRef,
     ResolvedArtifactPointerRef,
     ResolvedRunRef,
-    ViperCloudFileRef,
 )
 from viper.serialization import parse_yaml_bytes
 from viper.storage import LocalArtifactStore, ViperCloudDestination
@@ -76,12 +76,16 @@ def test_prior_run_input_rejects_non_input_destination_before_pointer_publicatio
     assert not (tmp_path / ".viper/pointers").exists()
 
 
-def test_prior_run_pointer_uses_the_selected_cloud_destination(tmp_path) -> None:
+def test_prior_run_pointer_uses_the_selected_cloud_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Publish a generated pointer directly to the bound cloud project."""
     run = ResolvedRunRef(
         sha256="a" * 64,
         bytes=10,
-        stored_at=ViperCloudFileRef(
+        stored_at=GcsFileRef(
+            bucket="test-bucket",
+            prefix="viper",
             owner="machina",
             workspace="source_models",
             revision="b" * 64,
@@ -95,25 +99,27 @@ def test_prior_run_pointer_uses_the_selected_cloud_destination(tmp_path) -> None
         data_role="training",
     )
     destination = ViperCloudDestination(owner="machina", workspace="weekend_models")
-    client = InMemoryViperCloudClient()
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
 
     frozen = _freeze_input(
         tmp_path,
         {},
         draft,
         destination=destination,
-        cloud_client=client,
     )
 
     assert isinstance(frozen, StoredInputRef)
     pointer = frozen.pointer
     assert isinstance(pointer, ResolvedArtifactPointerRef)
-    assert isinstance(pointer.stored_at, ViperCloudFileRef)
+    assert isinstance(pointer.stored_at, GcsFileRef)
     assert pointer.stored_at.owner == destination.owner
     assert pointer.stored_at.workspace == destination.workspace
 
 
-def test_cloud_pointer_rejects_a_local_producer(tmp_path) -> None:
+def test_cloud_pointer_rejects_a_local_producer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Stop before publishing a pointer that cannot work off-machine."""
     draft = RunArtifactDraft(
         run=ResolvedRunRef(
@@ -131,6 +137,8 @@ def test_cloud_pointer_rejects_a_local_producer(tmp_path) -> None:
         data_role="training",
     )
 
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
     with pytest.raises(ValueError, match="storage_graph_unreachable"):
         _freeze_input(
             tmp_path,
@@ -140,7 +148,6 @@ def test_cloud_pointer_rejects_a_local_producer(tmp_path) -> None:
                 owner="machina",
                 workspace="weekend_models",
             ),
-            cloud_client=InMemoryViperCloudClient(),
         )
 
 

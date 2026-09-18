@@ -134,7 +134,6 @@ from .storage import (
     LocalStorageDestination,
     LocalStoreError,
     StorageDestination,
-    ViperCloudClient,
     ViperCloudDestination,
     bind_run_destination,
     load_storage_settings,
@@ -946,7 +945,6 @@ def _freeze_input(
     cache: dict[int, InputRef] | None = None,
     *,
     destination: StorageDestination | None = None,
-    cloud_client: ViperCloudClient | None = None,
 ) -> InputRef:
     """Compile one input draft into its frozen reference."""
     selected_destination = destination or LocalStorageDestination()
@@ -995,7 +993,6 @@ def _freeze_input(
         root,
         selected_destination,
         {pointer_path: raw},
-        cloud_client=cloud_client,
     )[pointer_path]
     reference = ResolvedArtifactPointerRef(
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -1076,7 +1073,6 @@ def _freeze_stage(
     input_cache: dict[int, InputRef] | None = None,
     *,
     destination: StorageDestination | None = None,
-    cloud_client: ViperCloudClient | None = None,
 ) -> Spec:
     """Freeze one Python stage draft into its protocol declaration."""
     outputs = _freeze_declared_outputs(root, run_root, stage_id, draft.outputs)
@@ -1132,7 +1128,6 @@ def _freeze_stage(
                 value,
                 input_cache,
                 destination=destination,
-                cloud_client=cloud_client,
             )
             for name, value in draft.inputs.items()
         },
@@ -1492,7 +1487,6 @@ def _compile_plan(
     draft: RunPlanDraft,
     *,
     destination: StorageDestination | None = None,
-    cloud_client: ViperCloudClient | None = None,
 ) -> _CompiledPlan:
     """Compile one immutable draft into a complete in-memory protocol graph."""
     repository_root = resolve_root(root)
@@ -1545,7 +1539,6 @@ def _compile_plan(
             stage_draft.spec,
             input_cache,
             destination=destination,
-            cloud_client=cloud_client,
         )
         stage_specs[stage_id] = stage_spec
         raw = serialize_document(stage_spec)
@@ -1578,7 +1571,6 @@ def _compile_plan(
             benchmark_draft.test,
             input_cache,
             destination=destination,
-            cloud_client=cloud_client,
         )
         splits = {
             name: _freeze_input(
@@ -1587,7 +1579,6 @@ def _compile_plan(
                 split,
                 input_cache,
                 destination=destination,
-                cloud_client=cloud_client,
             )
             for name, split in benchmark_draft.splits.items()
         }
@@ -1674,8 +1665,6 @@ def _compile_plan(
 def freeze_run_plan(
     root: Path,
     draft: RunPlanDraft,
-    *,
-    cloud_client: ViperCloudClient | None = None,
 ) -> FrozenPlanFiles:
     """Compile a draft, publish its immutable files, and write local copies.
 
@@ -1693,7 +1682,6 @@ def freeze_run_plan(
         repository_root,
         draft,
         destination=destination,
-        cloud_client=cloud_client,
     )
     store = LocalArtifactStore(repository_root)
     commit = store.publish(compiled.files)
@@ -1706,7 +1694,6 @@ def freeze_run_plan(
             repository_root,
             destination,
             compiled.files,
-            cloud_client=cloud_client,
         )
         published_run = published[compiled.run_path]
         reference = ResolvedRunSpecRef(

@@ -123,33 +123,42 @@ class HuggingFaceStageResultSnapshotRef(ProtocolModel):
     repo_type: Literal["model", "dataset", "space"]
 
 
-class ViperCloudFileRef(ProtocolModel):
-    """A file in one sealed Viper Cloud revision."""
+class GcsFileRef(ProtocolModel):
+    """A file in one sealed Google Cloud Storage revision."""
 
-    kind: Literal["viper_cloud"] = "viper_cloud"
+    kind: Literal["gcs"] = "gcs"
+    bucket: NonEmptyStr
+    prefix: RepoRelPath = "viper"
     owner: HumanId
     workspace: HumanId
     revision: SHA256
     path: RepoRelPath
 
 
-class ViperCloudStageResultSnapshotRef(ProtocolModel):
-    """One sealed stage snapshot in Viper Cloud."""
+class GcsStageResultSnapshotRef(ProtocolModel):
+    """One sealed stage snapshot in Google Cloud Storage."""
 
-    kind: Literal["viper_cloud"] = "viper_cloud"
+    kind: Literal["gcs"] = "gcs"
+    bucket: NonEmptyStr
+    prefix: RepoRelPath = "viper"
     owner: HumanId
     workspace: HumanId
     revision: SHA256
 
 
 StageResultSnapshot = Annotated[
-    HuggingFaceStageResultSnapshotRef
-    | LocalStageResultSnapshotRef
-    | ViperCloudStageResultSnapshotRef,
+    GcsStageResultSnapshotRef
+    | HuggingFaceStageResultSnapshotRef
+    | LocalStageResultSnapshotRef,
     Field(discriminator="kind"),
 ]
 
-StorageModel = GitFileRef | HuggingFaceFileRef | LocalFileRef | ViperCloudFileRef
+CloudFileRef = GcsFileRef | HuggingFaceFileRef
+CloudStageResultSnapshotRef = (
+    GcsStageResultSnapshotRef | HuggingFaceStageResultSnapshotRef
+)
+
+StorageModel = GitFileRef | GcsFileRef | HuggingFaceFileRef | LocalFileRef
 
 StorageRef = Annotated[
     StorageModel,
@@ -234,7 +243,11 @@ class ResolvedBenchmarkResultRef(ResolvedFileRef):
 
 __all__ = [
     "ArtifactPointerRef",
+    "CloudFileRef",
+    "CloudStageResultSnapshotRef",
     "FileIdentity",
+    "GcsFileRef",
+    "GcsStageResultSnapshotRef",
     "GitFileRef",
     "GitSource",
     "HuggingFaceFileRef",
@@ -254,8 +267,6 @@ __all__ = [
     "StageResultSnapshot",
     "StorageModel",
     "StorageRef",
-    "ViperCloudFileRef",
-    "ViperCloudStageResultSnapshotRef",
     "storage_file",
 ]
 
@@ -289,7 +300,9 @@ def resolve_snapshot_file_ref(
             repo_type=snapshot.repo_type,
         )
     else:
-        stored_at = ViperCloudFileRef(
+        stored_at = GcsFileRef(
+            bucket=snapshot.bucket,
+            prefix=snapshot.prefix,
             owner=snapshot.owner,
             workspace=snapshot.workspace,
             revision=snapshot.revision,

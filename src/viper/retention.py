@@ -8,20 +8,24 @@ from pathlib import Path
 
 from pydantic import Field, TypeAdapter, ValidationError
 
+from ._cloud import ViperCloudError
 from ._schema import ProtocolModel, RepoRelPath
+from .cloud import ViperCloud
 from .execution.results import RunResult
 from .ids import RunId
 from .references import (
+    CloudStageResultSnapshotRef,
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
     ResolvedFileRef,
     ResolvedRunRef,
     SnapshotFileRef,
-    ViperCloudFileRef,
-    ViperCloudStageResultSnapshotRef,
 )
 from .repository import PathError, resolve_path
 from .runs import ResolvedRun, RunAttempt
 from .serialization import parse_yaml_bytes
-from .storage import StorageConfigurationError, ViperCloudClient
 from .workspace import RunWorkspaceLock, WorkspaceError
 
 
@@ -46,19 +50,14 @@ class RunFileEviction(ProtocolModel):
 
 
 def _read_cloud_record(
+    root: Path,
     reference: ResolvedFileRef,
-    cloud_client: ViperCloudClient,
 ) -> bytes:
     """Read one small cloud record and verify its retained byte identity."""
     location = reference.stored_at
-    if not isinstance(location, ViperCloudFileRef):
+    if not isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
         raise RunFileEvictionError("run record is not durably stored in Viper Cloud")
-    raw = cloud_client.fetch(
-        owner=location.owner,
-        workspace=location.workspace,
-        revision=location.revision,
-        path=location.path,
-    )
+    raw = ViperCloud.for_reference(root, location).fetch(location)
     if (
         len(raw) != reference.bytes
         or hashlib.sha256(raw).hexdigest() != reference.sha256
@@ -97,8 +96,6 @@ def _directory_bytes(path: Path) -> int:
 def evict_cloud_backed_run_files(
     repository_root: Path,
     run: RunResult | ResolvedRunRef,
-    *,
-    cloud_client: ViperCloudClient,
 ) -> RunFileEviction:
     """Remove one successful run's local artifacts after cloud-byte verification.
 
@@ -111,7 +108,7 @@ def evict_cloud_backed_run_files(
     root = repository_root.resolve(strict=True)
     reference = run.reference if isinstance(run, RunResult) else run
     location = reference.stored_at
-    if not isinstance(location, ViperCloudFileRef):
+    if not isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
         raise RunFileEvictionError("terminal run is not stored in Viper Cloud")
 
     try:
@@ -127,7 +124,7 @@ def evict_cloud_backed_run_files(
     if (
         len(terminal) != reference.bytes
         or hashlib.sha256(terminal).hexdigest() != reference.sha256
-        or _read_cloud_record(reference, cloud_client) != terminal
+        or _read_cloud_record(root, reference) != terminal
     ):
         raise RunFileEvictionError("terminal record identity changed")
     record = ResolvedRun.model_validate(parse_yaml_bytes(terminal))
@@ -138,7 +135,7 @@ def evict_cloud_backed_run_files(
 
     selected_attempt: RunAttempt | None = None
     for attempt_reference in record.attempts:
-        raw = _read_cloud_record(attempt_reference, cloud_client)
+        raw = _read_cloud_record(root, attempt_reference)
         attempt = RunAttempt.model_validate(parse_yaml_bytes(raw))
         if attempt.attempt_id == record.successful_attempt_id:
             selected_attempt = attempt
@@ -151,17 +148,17 @@ def evict_cloud_backed_run_files(
         raise RunFileEvictionError("successful attempt record is missing")
 
     candidates: dict[
-        RepoRelPath, tuple[SnapshotFileRef, ViperCloudStageResultSnapshotRef]
+        RepoRelPath, tuple[SnapshotFileRef, CloudStageResultSnapshotRef]
     ] = {}
     for stage in selected_attempt.resolved_stages:
         snapshot = stage.snapshot
-        if not isinstance(snapshot, ViperCloudStageResultSnapshotRef):
-            raise RunFileEvictionError("successful attempt contains a local-only stage")
-        for file in cloud_client.list_files(
-            owner=snapshot.owner,
-            workspace=snapshot.workspace,
-            revision=snapshot.revision,
+        if not isinstance(
+            snapshot,
+            (GcsStageResultSnapshotRef, HuggingFaceStageResultSnapshotRef),
         ):
+            raise RunFileEvictionError("successful attempt contains a local-only stage")
+        cloud = ViperCloud.for_snapshot(root, snapshot)
+        for file in cloud.list_files(snapshot):
             if not _artifact_path(file.path):
                 continue
             previous = candidates.setdefault(file.path, (file, snapshot))
@@ -185,15 +182,17 @@ def evict_cloud_backed_run_files(
         if local.stat().st_size != file.bytes or digest != file.sha256:
             raise RunFileEvictionError("local artifact identity changed")
         try:
-            cloud_client.verify_file(
-                owner=snapshot.owner,
-                workspace=snapshot.workspace,
-                revision=snapshot.revision,
-                path=file.path,
+            reference = ResolvedFileRef(
                 sha256=file.sha256,
                 bytes=file.bytes,
+                stored_at=ViperCloud.for_snapshot(root, snapshot).file_ref(
+                    snapshot, file.path
+                ),
             )
-        except StorageConfigurationError as error:
+            cloud_location = reference.stored_at
+            assert isinstance(cloud_location, (GcsFileRef, HuggingFaceFileRef))
+            ViperCloud.for_reference(root, cloud_location).verify_file(reference)
+        except ViperCloudError as error:
             raise RunFileEvictionError("cloud artifact identity changed") from error
         verified.append(file)
 

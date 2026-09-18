@@ -8,11 +8,17 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..journal import DurableJournal
-from ..references import ResolvedFileRef, ResolvedStageInvocationRef
+from ..references import (
+    GcsFileRef,
+    HuggingFaceFileRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+    ResolvedStageInvocationRef,
+)
 from ..runs import AttemptJournalRef, ResolvedAttemptRef, RunAttempt
 from ..serialization import serialize_document
 from ..stages import StageInvocationReceipt
-from ..storage import StorageDestination, ViperCloudClient, publish_resolved_files
+from ..storage import StorageDestination, publish_resolved_files
 from .errors import RunError
 
 
@@ -56,6 +62,18 @@ def replace_synchronized(path: Path, raw: bytes) -> None:
         Path(temporary_name).unlink(missing_ok=True)
 
 
+def persist_terminal_reference(path: Path, reference: ResolvedRunRef) -> Path | None:
+    """Save one cloud terminal pointer beside its local terminal document."""
+    if not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef)):
+        return None
+    sidecar = path.with_name("resolved.ref.yaml")
+    raw = serialize_document(reference)
+    if sidecar.exists() and sidecar.read_bytes() != raw:
+        raise RunError("terminal cloud reference differs")
+    write_synchronized(sidecar, raw)
+    return sidecar
+
+
 def publish_attempt_files(
     root: Path,
     destination: StorageDestination,
@@ -65,7 +83,6 @@ def publish_attempt_files(
     log_files: Mapping[str, bytes],
     measurement_paths: list[Path],
     metric_verification_paths: list[Path],
-    cloud_client: ViperCloudClient | None = None,
 ) -> tuple[
     AttemptJournalRef,
     tuple[ResolvedFileRef, ...],
@@ -82,7 +99,6 @@ def publish_attempt_files(
         root,
         destination,
         files,
-        cloud_client=cloud_client,
     )
     journal_file = references[journal_path]
     return (
@@ -110,7 +126,6 @@ def write_attempt_document(
     run_root: str,
     attempt: RunAttempt,
     destination: StorageDestination,
-    cloud_client: ViperCloudClient | None = None,
     *,
     replace_existing: bool = False,
 ) -> ResolvedAttemptRef:
@@ -124,7 +139,6 @@ def write_attempt_document(
         root,
         destination,
         {relative_path: raw},
-        cloud_client=cloud_client,
     )[relative_path]
     return ResolvedAttemptRef(
         sha256=reference.sha256,
@@ -138,7 +152,6 @@ def publish_invocation_receipt(
     destination: StorageDestination,
     path: str,
     receipt: StageInvocationReceipt,
-    cloud_client: ViperCloudClient | None = None,
 ) -> ResolvedStageInvocationRef:
     """Publish one stage invocation receipt at its canonical attempt path."""
     raw = serialize_document(receipt)
@@ -146,7 +159,6 @@ def publish_invocation_receipt(
         root,
         destination,
         {path: raw},
-        cloud_client=cloud_client,
     )[path]
     return ResolvedStageInvocationRef(
         sha256=reference.sha256,

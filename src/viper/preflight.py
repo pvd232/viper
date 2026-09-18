@@ -23,6 +23,7 @@ from ._verification.plan import (
     verify_run_plan_relationships,
 )
 from ._verification.storage import fetch_storage_bytes
+from .cloud import ViperCloud
 from .evidence import VerificationError
 from .http import (
     HttpRetrievalError,
@@ -34,11 +35,12 @@ from .ids import StageId
 from .inputs import FutureInputRef
 from .metrics import MetricError, validate_metric_definition
 from .references import (
+    GcsFileRef,
     GitFileRef,
+    HuggingFaceFileRef,
     LocalFileRef,
     ResolvedRunSpecRef,
     StorageModel,
-    ViperCloudFileRef,
 )
 from .runs import RunSpec
 from .runtime import (
@@ -58,7 +60,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
-from .storage import ViperCloudClient, local_artifact_store
+from .storage import local_artifact_store
 
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[
@@ -140,7 +142,6 @@ def preflight_plan(
     run_spec_path: Path,
     *,
     plan: ResolvedRunSpecRef | None = None,
-    cloud_client: ViperCloudClient | None = None,
 ) -> PreflightReport:
     """Validate plan bytes, host requirements, and same-run dependencies."""
     root = repository_root.resolve()
@@ -170,15 +171,8 @@ def preflight_plan(
             return _git_bytes(root, location.commit, location.path)
         if isinstance(location, LocalFileRef):
             return local_artifact_store(location).fetch(location)
-        if isinstance(location, ViperCloudFileRef):
-            if cloud_client is None:
-                raise OSError("Viper Cloud retrieval requires a client")
-            return cloud_client.fetch(
-                owner=location.owner,
-                workspace=location.workspace,
-                revision=location.revision,
-                path=location.path,
-            )
+        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+            return ViperCloud.for_reference(root, location).fetch(location)
         return fetch_storage_bytes(location)
 
     try:

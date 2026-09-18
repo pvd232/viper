@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_storage import InMemoryViperCloudClient
+from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper.execution._downloads import publish_download_body
 from viper.execution._publication import publish_attempt_files
 from viper.execution.errors import RunError
 from viper.journal import DurableJournal
-from viper.references import ViperCloudFileRef
+from viper.references import GcsFileRef
 from viper.storage import ViperCloudDestination
 
 
@@ -58,7 +58,9 @@ def test_download_body_mutation_prevents_artifact_publication(tmp_path: Path) ->
     assert not (tmp_path / destination).exists()
 
 
-def test_attempt_publishes_evidence_to_selected_destination(tmp_path: Path) -> None:
+def test_attempt_publishes_evidence_to_selected_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Publish journal, metric, verification, and log bytes directly to cloud."""
     run_root = "experiments/example/runs/run"
     journal = DurableJournal(tmp_path / run_root / "attempts/1/journal.jsonl")
@@ -70,7 +72,8 @@ def test_attempt_publishes_evidence_to_selected_destination(tmp_path: Path) -> N
     verification.parent.mkdir(parents=True)
     measurement.write_bytes(b'{"value":1}\n')
     verification.write_bytes(b'{"verified":true}\n')
-    client = InMemoryViperCloudClient()
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
 
     journal_ref, measurements, verifications, logs = publish_attempt_files(
         tmp_path,
@@ -81,7 +84,6 @@ def test_attempt_publishes_evidence_to_selected_destination(tmp_path: Path) -> N
         {f"{run_root}/attempts/1/logs/stage.log": b"complete\n"},
         [measurement],
         [verification],
-        cloud_client=client,
     )
 
     stored = (
@@ -90,5 +92,5 @@ def test_attempt_publishes_evidence_to_selected_destination(tmp_path: Path) -> N
         verifications[0].stored_at,
         logs[0].stored_at,
     )
-    assert all(isinstance(item, ViperCloudFileRef) for item in stored)
+    assert all(isinstance(item, GcsFileRef) for item in stored)
     assert not (tmp_path / ".viper/store").exists()

@@ -12,19 +12,28 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Literal, Protocol
 
-from pydantic import Field, TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
-from ._schema import SHA256, ProtocolModel, RepoRelPath
-from .ids import HumanId, LocalStoreId, RunId
+from ._cloud import (
+    PublicationSource,
+    ViperCloudDestination,
+    ViperCloudError,
+    ViperCloudRepository,
+    resolve_publication_source,
+)
+from ._schema import ProtocolModel, RepoRelPath
+from .cloud import ViperCloud
+from .ids import LocalStoreId, RunId
 from .references import (
+    CloudStageResultSnapshotRef,
+    GcsStageResultSnapshotRef,
+    HuggingFaceStageResultSnapshotRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
-    ViperCloudFileRef,
-    ViperCloudStageResultSnapshotRef,
 )
 from .repository import PathError, resolve_path
 
@@ -33,7 +42,7 @@ class LocalStoreError(RuntimeError):
     """Report an unsafe path or inconsistent immutable-store revision."""
 
 
-class StorageConfigurationError(RuntimeError):
+class StorageConfigurationError(ViperCloudError):
     """Report invalid storage configuration or a changed run destination."""
 
 
@@ -44,17 +53,6 @@ class LocalStorageDestination(ProtocolModel):
         default="local",
         description="Discriminator selecting ROOT/.viper/store publication.",
     )
-
-
-class ViperCloudDestination(ProtocolModel):
-    """Select one Viper Cloud workspace for immutable publication."""
-
-    kind: Literal["viper_cloud"] = Field(
-        default="viper_cloud",
-        description="Discriminator selecting Viper Cloud publication.",
-    )
-    owner: HumanId = Field(description="Viper Cloud account owning the workspace.")
-    workspace: HumanId = Field(description="Viper Cloud workspace receiving the files.")
 
 
 StorageDestination = Annotated[
@@ -70,9 +68,20 @@ class StorageSettings(ProtocolModel):
         default_factory=LocalStorageDestination,
         description="Destination used for every immutable publication in one run.",
     )
+    repository: ViperCloudRepository | None = Field(
+        default=None,
+        description="Cloud repository used when destination selects ViperCloud.",
+    )
 
-
-PublicationSource = bytes | Path
+    @model_validator(mode="after")
+    def require_matching_repository(self) -> StorageSettings:
+        """Require a repository when publication selects ViperCloud."""
+        if (
+            isinstance(self.destination, ViperCloudDestination)
+            and self.repository is None
+        ):
+            raise ValueError("viper_cloud repository is required for cloud destination")
+        return self
 
 
 class SnapshotPublisher(Protocol):
@@ -346,7 +355,7 @@ def _parse_storage_destination(value: object) -> StorageDestination:
 
 
 def load_storage_settings(root: Path) -> StorageSettings:
-    """Load the storage table from the selected workspace's viper.toml file."""
+    """Load storage destination and cloud repository from ``viper.toml``."""
     try:
         marker = resolve_path(root, "viper.toml", operation="read")
         document = tomllib.loads(marker.read_text(encoding="utf-8"))
@@ -357,25 +366,13 @@ def load_storage_settings(root: Path) -> StorageSettings:
         payload["destination"] = _parse_storage_destination(
             payload.get("destination", "local")
         )
+        repository = document.get("viper_cloud")
+        if repository is not None and not isinstance(repository, dict):
+            raise StorageConfigurationError("viper_cloud table is invalid")
+        payload["repository"] = repository
         return StorageSettings.model_validate(payload)
     except (OSError, PathError, tomllib.TOMLDecodeError, ValidationError) as error:
         raise StorageConfigurationError("storage settings are invalid") from error
-
-
-def resolve_publication_source(root: Path, source: PublicationSource) -> bytes | Path:
-    """Return in-memory bytes or one validated root-confined source path."""
-    if isinstance(source, bytes):
-        return source
-    repository_root = root.resolve(strict=True)
-    candidate = source if source.is_absolute() else repository_root / source
-    try:
-        relative = candidate.relative_to(repository_root).as_posix()
-        validated = resolve_path(repository_root, relative, operation="read")
-    except (OSError, ValueError, PathError) as error:
-        raise StorageConfigurationError(
-            "storage publication source is invalid"
-        ) from error
-    return validated
 
 
 def read_publication_source(root: Path, source: PublicationSource) -> bytes:
@@ -384,234 +381,32 @@ def read_publication_source(root: Path, source: PublicationSource) -> bytes:
     return resolved if isinstance(resolved, bytes) else resolved.read_bytes()
 
 
-class ViperCloudClient(Protocol):
-    """Transfer files and seal immutable Viper Cloud revisions."""
-
-    def upload(
-        self,
-        *,
-        owner: HumanId,
-        workspace: HumanId,
-        revision: SHA256,
-        path: RepoRelPath,
-        source: PublicationSource,
-        sha256: SHA256,
-        bytes: int,
-    ) -> None:
-        """Upload one file without exposing the revision."""
-        ...
-
-    def copy(
-        self,
-        *,
-        source: ViperCloudFileRef,
-        target: ViperCloudFileRef,
-        sha256: SHA256,
-        bytes: int,
-    ) -> None:
-        """Copy one sealed payload to a path in an unsealed revision."""
-        ...
-
-    def seal(
-        self,
-        *,
-        owner: HumanId,
-        workspace: HumanId,
-        revision: SHA256,
-        files: tuple[SnapshotFileRef, ...],
-    ) -> None:
-        """Expose one complete immutable revision."""
-        ...
-
-    def fetch(
-        self,
-        *,
-        owner: HumanId,
-        workspace: HumanId,
-        revision: SHA256,
-        path: RepoRelPath,
-    ) -> bytes:
-        """Retrieve one file from a sealed revision."""
-        ...
-
-    def fetch_to_path(
-        self,
-        *,
-        owner: HumanId,
-        workspace: HumanId,
-        revision: SHA256,
-        path: RepoRelPath,
-        destination: Path,
-    ) -> Path:
-        """Restore one sealed file to a local path without buffering its bytes."""
-        ...
-
-    def list_files(
-        self,
-        *,
-        owner: HumanId,
-        workspace: HumanId,
-        revision: SHA256,
-    ) -> tuple[SnapshotFileRef, ...]:
-        """List every verified file in a sealed revision."""
-        ...
-
-    def verify_file(
-        self,
-        *,
-        owner: HumanId,
-        workspace: HumanId,
-        revision: SHA256,
-        path: RepoRelPath,
-        sha256: SHA256,
-        bytes: int,
-    ) -> None:
-        """Verify one sealed file without materializing another local copy."""
-        ...
-
-
-def manifest_revision(files: tuple[SnapshotFileRef, ...]) -> SHA256:
-    """Derive the shared local and cloud revision from file identities."""
-    digest = hashlib.sha256()
-    for file in sorted(files, key=lambda item: item.path):
-        encoded_path = str(file.path).encode("utf-8")
-        digest.update(len(encoded_path).to_bytes(8, "big"))
-        digest.update(encoded_path)
-        digest.update(file.bytes.to_bytes(8, "big"))
-        digest.update(bytes.fromhex(file.sha256))
-    return digest.hexdigest()
-
-
-def _source_file(
-    root: Path, path: RepoRelPath, source: PublicationSource
-) -> SnapshotFileRef:
-    """Hash one source without loading a file-sized payload into memory."""
-    resolved = resolve_publication_source(root, source)
-    if isinstance(resolved, bytes):
-        sha256 = hashlib.sha256(resolved).hexdigest()
-        size = len(resolved)
-    else:
-        with resolved.open("rb") as stream:
-            sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
-        size = resolved.stat().st_size
-    return SnapshotFileRef(
-        path=path,
-        sha256=sha256,
-        bytes=size,
-    )
-
-
 def _verify_reuse_source(source: SnapshotFileRef, raw: bytes) -> None:
     """Reject source bytes that do not match their snapshot identity."""
     if len(raw) != source.bytes or hashlib.sha256(raw).hexdigest() != source.sha256:
         raise StorageConfigurationError("reused snapshot file identity changed")
 
 
-def _cloud_upload_file(
-    *,
-    destination: ViperCloudDestination,
-    client: ViperCloudClient,
-    revision: SHA256,
-    path: RepoRelPath,
-    source: PublicationSource,
-    identity: SnapshotFileRef,
-    attempts: int,
-) -> None:
-    """Upload one cloud file with the configured retry limit."""
-    for attempt in range(attempts):
-        try:
-            client.upload(
-                owner=destination.owner,
-                workspace=destination.workspace,
-                revision=revision,
-                path=path,
-                source=source,
-                sha256=identity.sha256,
-                bytes=identity.bytes,
-            )
-            return
-        except Exception as error:
-            if attempt + 1 == attempts:
-                raise StorageConfigurationError("storage_upload_failed") from error
-
-
-def _cloud_seal(
-    *,
-    destination: ViperCloudDestination,
-    client: ViperCloudClient,
-    revision: SHA256,
-    files: tuple[SnapshotFileRef, ...],
-    attempts: int,
-) -> None:
-    """Seal one cloud revision with the configured retry limit."""
-    for attempt in range(attempts):
-        try:
-            client.seal(
-                owner=destination.owner,
-                workspace=destination.workspace,
-                revision=revision,
-                files=files,
-            )
-            return
-        except Exception as error:
-            if attempt + 1 == attempts:
-                raise StorageConfigurationError("storage_seal_failed") from error
-
-
-def _cloud_publish(
-    *,
-    root: Path,
-    destination: ViperCloudDestination,
-    client: ViperCloudClient,
-    sources: Mapping[RepoRelPath, PublicationSource],
-    attempts: int,
-) -> tuple[SHA256, tuple[SnapshotFileRef, ...]]:
-    """Upload and seal one deterministic revision with bounded retries."""
-    if attempts < 1:
-        raise ValueError("attempts must be positive")
-    files = tuple(
-        _source_file(root, path, source) for path, source in sorted(sources.items())
-    )
-    revision = manifest_revision(files)
-    identities = {file.path: file for file in files}
-
-    for path, source in sorted(sources.items()):
-        _cloud_upload_file(
-            destination=destination,
-            client=client,
-            revision=revision,
-            path=path,
-            source=source,
-            identity=identities[path],
-            attempts=attempts,
-        )
-
-    _cloud_seal(
-        destination=destination,
-        client=client,
-        revision=revision,
-        files=files,
-        attempts=attempts,
-    )
-    return revision, files
+def _viper_cloud(root: Path) -> ViperCloud:
+    """Construct the cloud service selected by workspace configuration."""
+    settings = load_storage_settings(root)
+    if settings.repository is None:
+        raise StorageConfigurationError("viper_cloud repository is required")
+    return ViperCloud(root, settings.repository)
 
 
 class ViperCloudSnapshotPublisher:
-    """Publish stage snapshots directly to one Viper Cloud workspace."""
+    """Publish stage snapshots through the workspace ViperCloud service."""
 
     def __init__(
         self,
         root: Path,
         destination: ViperCloudDestination,
-        client: ViperCloudClient,
-        *,
-        attempts: int = 3,
     ) -> None:
-        """Bind publication to one root, destination, and cloud client."""
+        """Bind publication to one root and logical cloud destination."""
         self.root = root.resolve(strict=True)
         self.destination = destination
-        self.client = client
-        self.attempts = attempts
+        self.cloud = _viper_cloud(self.root)
 
     def publish(
         self,
@@ -619,24 +414,13 @@ class ViperCloudSnapshotPublisher:
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
         files: Mapping[RepoRelPath, Path],
-    ) -> ViperCloudStageResultSnapshotRef:
-        """Upload one stage and return a reference only after sealing it."""
-        sources: dict[RepoRelPath, PublicationSource] = {
-            resolved_stage_path: resolved_stage,
-            **files,
-        }
-        revision, _ = _cloud_publish(
-            root=self.root,
-            destination=self.destination,
-            client=self.client,
-            sources=sources,
-            attempts=self.attempts,
+    ) -> CloudStageResultSnapshotRef:
+        """Publish one stage and return its sealed provider snapshot."""
+        snapshot, _ = self.cloud.publish(
+            self.destination,
+            {resolved_stage_path: resolved_stage, **files},
         )
-        return ViperCloudStageResultSnapshotRef(
-            owner=self.destination.owner,
-            workspace=self.destination.workspace,
-            revision=revision,
-        )
+        return snapshot
 
     def publish_reuse(
         self,
@@ -646,125 +430,41 @@ class ViperCloudSnapshotPublisher:
         source_snapshot: StageResultSnapshot,
         files: Mapping[RepoRelPath, SnapshotFileRef],
         source_bytes: Mapping[RepoRelPath, bytes],
-    ) -> ViperCloudStageResultSnapshotRef:
-        """Copy cloud payloads into a sealed target stage snapshot."""
-        source_files = {}
-        if isinstance(source_snapshot, ViperCloudStageResultSnapshotRef):
-            source_files = {
-                file.path: file
-                for file in self.client.list_files(
-                    owner=source_snapshot.owner,
-                    workspace=source_snapshot.workspace,
-                    revision=source_snapshot.revision,
-                )
-            }
-        resolved_file = snapshot_file(resolved_stage_path, resolved_stage)
-        target_files: list[SnapshotFileRef] = [resolved_file]
-        for target_path, source_file in sorted(files.items()):
-            if target_path == resolved_stage_path:
-                raise StorageConfigurationError("reused file replaces resolved stage")
-            target_files.append(
-                SnapshotFileRef(
-                    path=target_path,
-                    sha256=source_file.sha256,
-                    bytes=source_file.bytes,
-                )
-            )
-
-        manifest = tuple(sorted(target_files, key=lambda file: file.path))
-        revision = manifest_revision(manifest)
-        _cloud_upload_file(
+    ) -> CloudStageResultSnapshotRef:
+        """Publish verified reused payloads under their target paths."""
+        if not isinstance(
+            source_snapshot,
+            (GcsStageResultSnapshotRef, HuggingFaceStageResultSnapshotRef),
+        ):
+            raise StorageConfigurationError("cloud reuse requires a cloud snapshot")
+        if resolved_stage_path in files:
+            raise StorageConfigurationError("reused file replaces resolved stage")
+        return self.cloud.publish_reuse(
             destination=self.destination,
-            client=self.client,
-            revision=revision,
-            path=resolved_stage_path,
-            source=resolved_stage,
-            identity=resolved_file,
-            attempts=self.attempts,
-        )
-
-        for target_path, source_file in sorted(files.items()):
-            if (
-                isinstance(source_snapshot, ViperCloudStageResultSnapshotRef)
-                and source_files.get(source_file.path) == source_file
-            ):
-                source = ViperCloudFileRef(
-                    owner=source_snapshot.owner,
-                    workspace=source_snapshot.workspace,
-                    revision=source_snapshot.revision,
-                    path=source_file.path,
-                )
-                target = ViperCloudFileRef(
-                    owner=self.destination.owner,
-                    workspace=self.destination.workspace,
-                    revision=revision,
-                    path=target_path,
-                )
-                for attempt in range(self.attempts):
-                    try:
-                        self.client.copy(
-                            source=source,
-                            target=target,
-                            sha256=source_file.sha256,
-                            bytes=source_file.bytes,
-                        )
-                        break
-                    except Exception as error:
-                        if attempt + 1 == self.attempts:
-                            raise StorageConfigurationError(
-                                "storage_copy_failed"
-                            ) from error
-                continue
-            _cloud_upload_file(
-                destination=self.destination,
-                client=self.client,
-                revision=revision,
-                path=target_path,
-                source=source_bytes[target_path],
-                identity=SnapshotFileRef(
-                    path=target_path,
-                    sha256=source_file.sha256,
-                    bytes=source_file.bytes,
-                ),
-                attempts=self.attempts,
-            )
-
-        _cloud_seal(
-            destination=self.destination,
-            client=self.client,
-            revision=revision,
-            files=manifest,
-            attempts=self.attempts,
-        )
-        return ViperCloudStageResultSnapshotRef(
-            owner=self.destination.owner,
-            workspace=self.destination.workspace,
-            revision=revision,
+            resolved_stage_path=resolved_stage_path,
+            resolved_stage=resolved_stage,
+            source_snapshot=source_snapshot,
+            files=files,
+            source_bytes=source_bytes,
         )
 
 
 def create_snapshot_publisher(
     root: Path,
     destination: StorageDestination,
-    *,
-    cloud_client: ViperCloudClient | None = None,
 ) -> SnapshotPublisher:
-    """Create the stage publisher for one implemented storage destination."""
+    """Create the stage publisher selected by workspace configuration."""
     if isinstance(destination, LocalStorageDestination):
         return LocalSnapshotPublisher(root)
-    if cloud_client is None:
-        raise StorageConfigurationError("viper_cloud client is required")
-    return ViperCloudSnapshotPublisher(root, destination, cloud_client)
+    return ViperCloudSnapshotPublisher(root, destination)
 
 
 def publish_resolved_files(
     root: Path,
     destination: StorageDestination,
     files: Mapping[RepoRelPath, PublicationSource],
-    *,
-    cloud_client: ViperCloudClient | None = None,
 ) -> dict[RepoRelPath, ResolvedFileRef]:
-    """Publish standalone files and return references keyed by requested path."""
+    """Publish standalone files and return references by canonical path."""
     if isinstance(destination, LocalStorageDestination):
         payload = {
             path: read_publication_source(root, source)
@@ -776,28 +476,7 @@ def publish_resolved_files(
             for reference in references
             if isinstance(reference.stored_at, LocalFileRef)
         }
-    if cloud_client is None:
-        raise StorageConfigurationError("viper_cloud client is required")
-    revision, identities = _cloud_publish(
-        root=root,
-        destination=destination,
-        client=cloud_client,
-        sources=files,
-        attempts=3,
-    )
-    return {
-        identity.path: ResolvedFileRef(
-            sha256=identity.sha256,
-            bytes=identity.bytes,
-            stored_at=ViperCloudFileRef(
-                owner=destination.owner,
-                workspace=destination.workspace,
-                revision=revision,
-                path=identity.path,
-            ),
-        )
-        for identity in identities
-    }
+    return _viper_cloud(root).resolved_files(destination, files)
 
 
 def bind_run_destination(

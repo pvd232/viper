@@ -115,6 +115,8 @@ from viper.metrics import (
 from viper.outputs import EvalOutputs, OutputSpec
 from viper.references import (
     ArtifactPointerRef,
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
@@ -132,8 +134,6 @@ from viper.references import (
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
-    ViperCloudFileRef,
-    ViperCloudStageResultSnapshotRef,
 )
 from viper.resume import DataLoaderConfiguration
 from viper.reuse import (
@@ -295,7 +295,7 @@ class DocumentStore:
                 str(location.path),
                 "",
             )
-        if isinstance(location, ViperCloudFileRef):
+        if isinstance(location, GcsFileRef):
             return (
                 location.kind,
                 f"{location.owner}/{location.workspace}",
@@ -1821,7 +1821,7 @@ def copy_snapshot_files(
 
 def snapshot_revision(snapshot: StageResultSnapshot) -> str:
     """Return the revision field used by a snapshot's storage backend."""
-    if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+    if isinstance(snapshot, GcsStageResultSnapshotRef):
         return snapshot.revision
     return snapshot.commit
 

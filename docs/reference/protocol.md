@@ -104,8 +104,8 @@ manifest, then verify the restored byte count and SHA-256 digest.
 Cloud publication makes a stage output eligible for local eviction only after the
 run succeeds and its parity decision is accepted. Call
 `retention.evict_cloud_backed_run_files()` with that `RunResult`, or its retained
-`ResolvedRunRef` after a restart, and the same cloud client on any host running the
-workspace. VIPER verifies the local terminal record, selected attempt, sealed
+`ResolvedRunRef` after a restart, on any host running the workspace. VIPER reads the
+provider from `viper.toml` and verifies the local terminal record, selected attempt, sealed
 snapshot manifest, and the complete local and remote bytes before deleting any
 artifact. It checks every candidate before the first deletion, so one mismatch leaves
 the complete local set untouched.
@@ -118,9 +118,17 @@ and workspaces with an active owner. A download cache may be removed without ano
 cloud copy when its exact upstream reference and expected digest are retained. Never
 manually evict a file selected only by a `LocalFileRef` or a local stage snapshot.
 
-`GcsViperCloudClient` streams path-backed uploads and `fetch_to_path()` restores large
-objects through a temporary file followed by an atomic rename. The in-memory `fetch()`
-method remains appropriate for small protocol documents.
+`ViperCloud` delegates streaming to the configured GCS or Hugging Face provider.
+Path-backed restores use a temporary file followed by an atomic rename. Small protocol
+documents may be read in memory. A cloud-backed terminal also stores an adjacent
+`resolved.ref.yaml`, so later consumers recover the durable reference without knowing
+which provider owns it.
+
+Cloud configuration and cloud publication are separate choices. A workspace may
+configure a repository while keeping the default local destination. Local runs then
+publish to `.viper/store`, and local provenance traversal uses only local storage.
+Only a `viper://` run destination or an explicit promotion operation publishes bytes
+to the configured repository.
 
 ## Attempt and terminal states
 

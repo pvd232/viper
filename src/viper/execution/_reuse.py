@@ -53,7 +53,6 @@ from ..stages import (
 from ..storage import (
     SnapshotPublisher,
     StorageDestination,
-    ViperCloudClient,
     publish_resolved_files,
     snapshot_file,
 )
@@ -224,7 +223,6 @@ def reuse_stage(
     policy: VerificationPolicy,
     publisher: SnapshotPublisher,
     destination: StorageDestination,
-    cloud_client: ViperCloudClient | None,
     metrics: dict[MetricId, MetricSpec],
     download_source_closure: DownloadSourceClosureReceipt | None = None,
     candidate: StageReuseCandidate | None = None,
@@ -326,7 +324,6 @@ def reuse_stage(
         root,
         destination,
         {receipt_path: serialize_document(receipt)},
-        cloud_client=cloud_client,
     )[receipt_path]
     receipt_reference = ResolvedStageReuseRef.model_validate(
         published.model_dump(mode="json")

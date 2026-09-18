@@ -28,6 +28,7 @@ from tests.fixtures import (
     resume_state,
 )
 from tests.git_repository import REPOSITORY, run_git
+from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper import config
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
@@ -50,6 +51,7 @@ from viper.authoring import (
 )
 from viper.authoring import input as external_input
 from viper.catalog import Catalog, CatalogRunSource
+from viper.cloud import ViperCloud
 from viper.config import ConfigTypeRef
 from viper.evidence import (
     VerificationError,
@@ -107,6 +109,7 @@ from viper.metrics import (
 )
 from viper.outputs import OutputSpec, output
 from viper.references import (
+    GcsFileRef,
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
@@ -148,7 +151,12 @@ from viper.stages import (
     TrainSpec,
     load_stage_callable,
 )
-from viper.storage import LocalArtifactStore, LocalStorageDestination
+from viper.storage import (
+    LocalArtifactStore,
+    LocalStorageDestination,
+    ViperCloudDestination,
+    load_storage_settings,
+)
 from viper.verification import verify_download_source_closure, verify_run_result
 from viper.workspace import (
     AttemptWorkspace,
@@ -408,9 +416,16 @@ def test_local_fetcher_dispatches_hugging_face_inputs(
         path="data.bin",
         repo_type="dataset",
     )
+
+    class _Remote:
+        def fetch(self, location: HuggingFaceFileRef) -> bytes:
+            assert location == reference
+            return b"remote bytes"
+
     monkeypatch.setattr(
-        "viper.execution._source.fetch_huggingface_file_bytes",
-        lambda location: b"remote bytes",
+        ViperCloud,
+        "for_reference",
+        classmethod(lambda cls, root, location: _Remote()),
     )
     fetcher = RunFetcher(
         tmp_path,
@@ -677,6 +692,17 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             resolved_attempt=root / RUN_ROOT / "attempts/1/resolved.yaml",
             resolved_run=root / RUN_ROOT / "resolved.yaml",
             journal=root / ".viper" / "attempt.jsonl",
+            reference=ResolvedRunRef.model_construct(
+                sha256="a" * 64,
+                bytes=1,
+                stored_at=LocalFileRef.model_construct(
+                    workspace=root,
+                    store=".viper/store",
+                    store_id="0" * 32,
+                    commit="b" * 64,
+                    path=f"{RUN_ROOT}/resolved.yaml",
+                ),
+            ),
         )
 
     monkeypatch.setattr("viper.api.run_request", fake_run_request)
@@ -1719,6 +1745,53 @@ def _freeze_retry_plan(
     run_git(root, "add", "experiments/retry")
     run_git(root, "commit", "--quiet", "-m", "plan")
     return frozen
+
+
+def test_explicit_cloud_promotion_preserves_local_run_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promote one completed local graph without rerunning either stage."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    with pytest.raises(RunError, match="attempt 1 failed"):
+        execute_run(frozen.files[-1], repository_root=root)
+    result = execute_retry(root, frozen.files[-1])
+    calls_before = (
+        (root / "build_calls.txt").read_text(encoding="utf-8"),
+        (root / "embed_calls.txt").read_text(encoding="utf-8"),
+    )
+    (root / "viper.toml").write_text(
+        "[workspace]\nschema_version = 2\n"
+        '[viper_cloud]\nprovider = "gcs"\nbucket = "test-bucket"\n',
+        encoding="utf-8",
+    )
+    settings = load_storage_settings(root)
+    assert settings.destination == LocalStorageDestination()
+
+    provider = InMemoryViperCloudProvider(root)
+    cloud = install_in_memory_cloud(monkeypatch, root, provider)
+    monkeypatch.setattr(
+        "viper.execution._promotion.ViperCloud",
+        lambda selected_root, repository: cloud,
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="models")
+
+    promoted = execution_module.promote_run_to_cloud(
+        root,
+        result.path,
+        destination,
+    )
+
+    assert isinstance(promoted.stored_at, GcsFileRef)
+    assert promoted.stored_at.owner == destination.owner
+    assert promoted.stored_at.workspace == destination.workspace
+    assert execution_module.resolve_run_reference(root, promoted) == promoted
+    assert not result.path.with_name("resolved.ref.yaml").exists()
+    assert (
+        (root / "build_calls.txt").read_text(encoding="utf-8"),
+        (root / "embed_calls.txt").read_text(encoding="utf-8"),
+    ) == calls_before
 
 
 def test_download_source_failure_prevents_consumer_process_start(

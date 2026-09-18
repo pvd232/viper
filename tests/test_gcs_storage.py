@@ -11,14 +11,10 @@ from unittest.mock import patch
 import pytest
 from google.api_core.exceptions import PreconditionFailed
 
-from viper.gcs import GcsViperCloudClient, probe_gcs_storage
-from viper.references import SnapshotFileRef, ViperCloudFileRef
-from viper.storage import (
-    StorageConfigurationError,
-    ViperCloudDestination,
-    manifest_revision,
-    publish_resolved_files,
-)
+from viper._cloud import ViperCloudError, manifest_revision
+from viper.gcs import GcsProvider, probe_gcs_storage
+from viper.references import GcsFileRef, SnapshotFileRef
+from viper.storage import ViperCloudDestination
 
 
 class _Blob:
@@ -152,10 +148,10 @@ class _Client:
         return self.value
 
 
-def _client(root: Path) -> tuple[GcsViperCloudClient, _Client]:
+def _client(root: Path) -> tuple[GcsProvider, _Client]:
     """Create the production adapter over an inspectable fake GCS client."""
     fake = _Client()
-    client = GcsViperCloudClient(
+    client = GcsProvider(
         root,
         "mantra-fixture",
         prefix="viper",
@@ -186,13 +182,21 @@ def test_publishes_and_restores_durable_snapshot(tmp_path: Path) -> None:
     assert file_key in fake.value.objects
     assert f"viper/machina/mantra/{revision}.manifest.json" in fake.value.objects
     assert fake.value.objects[file_key][0] == b"VIPER GCS storage probe\n"
-    client.verify_file(
+    location = GcsFileRef(
+        bucket="mantra-fixture",
+        prefix="viper",
         owner="machina",
         workspace="mantra",
         revision=revision,
         path=".viper/probes/gcs-storage.bin",
-        sha256=receipt.sha256,
-        bytes=len(b"VIPER GCS storage probe\n"),
+    )
+    client.verify_file(
+        location,
+        SnapshotFileRef(
+            path=location.path,
+            sha256=receipt.sha256,
+            bytes=len(b"VIPER GCS storage probe\n"),
+        ),
     )
 
     repeated = probe_gcs_storage(
@@ -236,19 +240,13 @@ def test_streams_sealed_file_restore(tmp_path: Path) -> None:
     destination = ViperCloudDestination(owner="machina", workspace="mantra")
     source = tmp_path / "large.bin"
     source.write_bytes(b"bounded blocks")
-    reference = publish_resolved_files(
-        tmp_path,
-        destination,
-        {"data/large.bin": source},
-        cloud_client=client,
-    )["data/large.bin"]
-    assert isinstance(reference.stored_at, ViperCloudFileRef)
+    snapshot, files = client.publish(destination, {"data/large.bin": source})
+    reference = client.file_ref(snapshot, "data/large.bin")
+    identity = files[0]
 
     restored = client.fetch_to_path(
-        owner=reference.stored_at.owner,
-        workspace=reference.stored_at.workspace,
-        revision=reference.stored_at.revision,
-        path=reference.stored_at.path,
+        reference,
+        identity,
         destination=tmp_path / "restored/large.bin",
     )
 
@@ -267,32 +265,39 @@ def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:
     )
     revision = receipt.artifact_uri.split("@", 1)[1].split("/", 1)[0]
     path = ".viper/probes/gcs-storage.bin"
+    location = GcsFileRef(
+        bucket="mantra-fixture",
+        prefix="viper",
+        owner="machina",
+        workspace="mantra",
+        revision=revision,
+        path=path,
+    )
     key = f"viper/machina/mantra/{revision}/{path}"
     _, metadata, generation = fake.value.objects[key]
     fake.value.objects[key] = (b"changed", metadata, generation + 1)
 
-    with pytest.raises(StorageConfigurationError, match="identity changed"):
-        client.fetch(
-            owner="machina",
-            workspace="mantra",
-            revision=revision,
-            path=path,
-        )
-    with pytest.raises(StorageConfigurationError, match="identity changed"):
+    with pytest.raises(ViperCloudError, match="identity changed"):
+        client.fetch(location)
+    with pytest.raises(ViperCloudError, match="identity changed"):
         client.verify_file(
-            owner="machina",
-            workspace="mantra",
-            revision=revision,
-            path=path,
-            sha256=receipt.sha256,
-            bytes=len(b"VIPER GCS storage probe\n"),
+            location,
+            SnapshotFileRef(
+                path=path,
+                sha256=receipt.sha256,
+                bytes=len(b"VIPER GCS storage probe\n"),
+            ),
         )
-    with pytest.raises(StorageConfigurationError, match="no requested file"):
+    with pytest.raises(ViperCloudError, match="no requested file"):
         client.fetch(
-            owner="machina",
-            workspace="mantra",
-            revision=revision,
-            path="missing.bin",
+            GcsFileRef(
+                bucket="mantra-fixture",
+                prefix="viper",
+                owner="machina",
+                workspace="mantra",
+                revision=revision,
+                path="missing.bin",
+            )
         )
 
 
@@ -303,7 +308,9 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
     client, fake = _client(tmp_path)
     raw = b"parameters"
     digest = hashlib.sha256(raw).hexdigest()
-    source = ViperCloudFileRef(
+    source = GcsFileRef(
+        bucket="mantra-fixture",
+        prefix="viper",
         owner="machina",
         workspace="mantra",
         revision="a" * 64,
@@ -318,10 +325,12 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
         sha256=digest,
         bytes=len(raw),
     )
-    with pytest.raises(StorageConfigurationError, match="not sealed"):
+    with pytest.raises(ViperCloudError, match="not sealed"):
         client.copy(
             source=source,
-            target=ViperCloudFileRef(
+            target=GcsFileRef(
+                bucket="mantra-fixture",
+                prefix="viper",
                 owner="machina",
                 workspace="mantra",
                 revision="b" * 64,
@@ -357,7 +366,9 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
     target_revision_value = manifest_revision((target_file,))
     client.copy(
         source=source.model_copy(update={"revision": actual_revision}),
-        target=ViperCloudFileRef(
+        target=GcsFileRef(
+            bucket="mantra-fixture",
+            prefix="viper",
             owner="machina",
             workspace="mantra",
             revision=target_revision_value,
@@ -376,10 +387,14 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
     assert fake.value.copy_calls
     assert (
         client.fetch(
-            owner="machina",
-            workspace="mantra",
-            revision=target_revision_value,
-            path=target_path,
+            GcsFileRef(
+                bucket="mantra-fixture",
+                prefix="viper",
+                owner="machina",
+                workspace="mantra",
+                revision=target_revision_value,
+                path=target_path,
+            )
         )
         == raw
     )

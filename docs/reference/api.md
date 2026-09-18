@@ -224,26 +224,49 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval |
+| `viper.cloud` | Provider-neutral cloud publication, restore, and verification |
 | `viper.retention` | Verified release of local copies of cloud-backed run artifacts |
 | `viper.test_impact` | Repository-neutral selection from source declarations to observing tests |
-| `viper.gcs` | Google Cloud Storage publication and publish-restore probing |
+| `viper.gcs` | Google Cloud Storage provider and publish-restore probing |
+| `viper.huggingface` | Hugging Face repository provider |
 
-## Google Cloud Storage
+## ViperCloud
 
-Install the optional client with `pip install 'viper-provenance[gcs]'`. Construct
-`GcsViperCloudClient` with the workspace root and bucket, then pass it wherever VIPER
-accepts a `ViperCloudClient`. `probe_gcs_storage()` publishes one immutable object,
-restores it, compares the digest, and writes a local receipt suitable for a launch
-precondition. See [Workspace and cloud paths](protocol.md#workspace-and-cloud-paths) for
-the object-key contract and its local-eviction boundary. Use
-`GcsViperCloudClient.fetch_to_path()` for artifacts too large to hold in memory.
-After accepting parity, pass the completed `RunResult`—or its retained
-`ResolvedRunRef` after a restart—and that same client to
-`viper.retention.evict_cloud_backed_run_files()`. The returned `RunFileEviction`
-lists the removed file identities and total bytes released. Run
-records and canonical inputs remain local; every removed output remains restorable
-through its sealed Viper Cloud snapshot. The selected attempt's transient input
-materializations are removed and reported separately from output bytes.
+Select the repository once in `viper.toml`. VIPER constructs `ViperCloud` internally
+and keeps provider construction out of run, retry, restore, benchmark, export,
+authoring, preflight, and retention calls. Repository configuration leaves publication
+local. Setting `[storage].destination` to a `viper://` workspace selects cloud
+publication.
+
+```toml
+[storage]
+destination = "viper://machina/weekend_models"
+
+[viper_cloud]
+provider = "gcs"
+bucket = "mantra-mlfg-prod-uscentral1-8e7a"
+prefix = "viper"
+```
+
+For Hugging Face, set `provider = "huggingface"`, `repository = "owner/repo"`, and
+`repo_type = "dataset"` (or `model`/`space`). Both adapters implement the internal
+`ViperCloudProvider` contract. Consumers receive provider-specific immutable refs,
+while `ViperCloud` owns publication, materialization, listing, and verification.
+
+Every cloud run writes `resolved.ref.yaml` beside its local `resolved.yaml`. The
+sidecar preserves the durable `ResolvedRunRef`; selecting the local terminal path
+therefore resolves back to GCS or Hugging Face after a restart. Use
+`execution.promote_run_to_cloud()` to rewrite and publish a verified local-only run
+graph while keeping the stage-execution count at zero. A local-mode workspace may pass
+an explicit `ViperCloudDestination` to that operation; ordinary runs continue
+publishing to `.viper/store`.
+
+`probe_gcs_storage()` remains the GCS launch probe. It publishes one immutable object,
+restores it, compares the digest, and writes a local receipt. See
+[Workspace and cloud paths](protocol.md#workspace-and-cloud-paths) for the object-key
+contract. After accepting a result, call
+`viper.retention.evict_cloud_backed_run_files()` with the completed `RunResult` or its
+retained `ResolvedRunRef`. VIPER resolves the configured provider itself.
 
 ## Typed operations
 

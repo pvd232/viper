@@ -382,6 +382,7 @@ class RunSuccess(SuccessModel):
     resolved_attempt: Path
     resolved_run: Path
     journal: Path
+    reference: ResolvedRunRef
 
 
 class RetryRequest(RunRequest):
@@ -396,6 +397,7 @@ class RetrySuccess(SuccessModel):
     attempt_id: int = Field(ge=2)
     resolved_run: Path
     journal: Path
+    reference: ResolvedRunRef
 
 
 class ExecuteBenchmarkRequest(APIModel):
@@ -1131,6 +1133,7 @@ def run_request(request: RunRequest) -> RunSuccess:
         ),
         resolved_run=result.path,
         journal=result.journal_path,
+        reference=result.reference,
     )
 
 
@@ -1172,6 +1175,7 @@ def retry_request(request: RetryRequest) -> RetrySuccess:
         attempt_id=attempt_id,
         resolved_run=result.path,
         journal=result.journal_path,
+        reference=result.reference,
     )
 
 

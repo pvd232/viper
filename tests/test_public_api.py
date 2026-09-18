@@ -15,6 +15,7 @@ import viper.authoring as authoring
 import viper.benchmark as benchmark
 import viper.catalog as catalog
 import viper.cli as cli
+import viper.cloud as cloud
 import viper.config as config
 import viper.execution as execution
 import viper.execution.errors as execution_errors
@@ -22,6 +23,7 @@ import viper.execution.results as execution_results
 import viper.experiments as experiments
 import viper.gcs as gcs
 import viper.http as http
+import viper.huggingface as huggingface
 import viper.ids as ids
 import viper.inputs as inputs
 import viper.inspection as inspection
@@ -61,6 +63,7 @@ PUBLIC_MODULES = (
     api,
     artifacts,
     benchmark,
+    cloud,
     evidence,
     execution,
     experiments,
@@ -88,6 +91,7 @@ PUBLIC_MODULES_BY_NAME = {
         benchmark,
         catalog,
         cli,
+        cloud,
         config,
         evidence,
         execution,
@@ -96,6 +100,7 @@ PUBLIC_MODULES_BY_NAME = {
         experiments,
         gcs,
         http,
+        huggingface,
         ids,
         inputs,
         inspection,
@@ -168,6 +173,7 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert tuple(execution.__all__) == (
         "benchmark",
         "export_run",
+        "promote_run_to_cloud",
         "resolve_run_reference",
         "retry",
         "restore",
@@ -184,6 +190,7 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert callable(execution.run)
     assert callable(execution.retry)
     assert callable(execution.benchmark)
+    assert callable(execution.promote_run_to_cloud)
     assert callable(execution.resolve_run_reference)
     assert callable(execution.restore)
     assert callable(execution.run_many)
