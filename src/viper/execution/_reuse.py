@@ -17,7 +17,7 @@ from ..artifacts import (
     ResolvedSingleFileArtifact,
 )
 from ..catalog import Catalog
-from ..evidence import StorageFetcher, VerificationPolicy
+from ..evidence import StorageFetcher, VerificationPolicy, VerifiedRunResult
 from ..ids import InputName, MetricId, StageId
 from ..inputs import DownloadSourceClosureReceipt, ResolvedInputRef
 from ..metrics import Measurement, MetricSpec, is_recomputed_metric
@@ -228,6 +228,7 @@ def reuse_stage(
     metrics: dict[MetricId, MetricSpec],
     download_source_closure: DownloadSourceClosureReceipt | None = None,
     candidate: StageReuseCandidate | None = None,
+    verified_source: VerifiedRunResult | None = None,
 ) -> ReuseStageResult | None:
     """Verify one catalog hit and materialize it without running a worker."""
     candidate = catalog.reuse_candidate(key) if candidate is None else candidate
@@ -236,9 +237,11 @@ def reuse_stage(
     if candidate.key != key:
         return None
     try:
-        raw = fetcher(cast(StorageModel, candidate.source_run.stored_at))
-        source_run = ResolvedRun.model_validate(parse_yaml_bytes(raw))
-        verified = verify_run_result(source_run, policy=policy, fetcher=fetcher)
+        verified = verified_source
+        if verified is None:
+            raw = fetcher(cast(StorageModel, candidate.source_run.stored_at))
+            source_run = ResolvedRun.model_validate(parse_yaml_bytes(raw))
+            verified = verify_run_result(source_run, policy=policy, fetcher=fetcher)
         rebuilt = next(
             (
                 item

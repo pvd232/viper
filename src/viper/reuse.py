@@ -18,6 +18,7 @@ from ._schema import (
     RepoRelPath,
     RNGSeed,
 )
+from .artifacts import ResolvedArtifact, ResolvedBundleArtifact
 from .experiments import ExperimentSpec
 from .ids import InputName, MetricId, StageId
 from .metrics import MetricSpec
@@ -292,6 +293,37 @@ def input_identity(
     )
 
 
+def artifact_input_identity(
+    input_name: InputName,
+    data_role: DataRole,
+    materialized_path: RepoRelPath,
+    artifact: ResolvedArtifact,
+) -> ReuseInputIdentity:
+    """Build a reuse identity directly from an artifact receipt."""
+    if isinstance(artifact, ResolvedBundleArtifact):
+        files = tuple(
+            ReuseFileIdentity(
+                relative_path=member.relative_path,
+                sha256=member.file.sha256,
+                bytes=member.file.bytes,
+            )
+            for member in artifact.members
+        )
+    else:
+        files = (
+            ReuseFileIdentity(
+                relative_path=Path(materialized_path).name,
+                sha256=artifact.file.sha256,
+                bytes=artifact.file.bytes,
+            ),
+        )
+    return ReuseInputIdentity(
+        input_name=input_name,
+        data_role=data_role,
+        files=files,
+    )
+
+
 def verified_input_identity(
     input_name: InputName,
     value: _VerifiedInput,
@@ -438,6 +470,7 @@ __all__ = [
     "StageReuseKey",
     "StageReuseMode",
     "StageReuseReceipt",
+    "artifact_input_identity",
     "attempt_reuse_candidates",
     "build_stage_reuse_key",
     "catalog_reuse_candidates",

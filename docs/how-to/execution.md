@@ -20,6 +20,11 @@ VIPER first saves the plan, then checks it and runs its stages. The call
 returns after the completed run passes verification. The
 [CPU tutorial](../tutorials/getting-started.md) supplies the complete setup.
 
+Execution hashes a payload when it enters immutable storage and then uses its
+sealed byte count and SHA-256 receipt during ordinary run closure and retry.
+Call `verify_run` when you need an independent pass that retrieves and hashes
+the stored payload bytes again.
+
 ## Saved run files
 
 `execution.run(draft)` saves the plan and runs it. Each run directory contains

@@ -46,6 +46,7 @@ from ..references import (
     ResolvedStageRef,
     SnapshotFileRef,
 )
+from ..reuse import ReuseFileIdentity, ReuseInputIdentity, artifact_input_identity
 from ..serialization import parse_yaml_bytes
 from ..stages import (
     BaseSpec,
@@ -156,12 +157,14 @@ def resolve_inputs(
     dict[str, Path],
     dict[InputName, SnapshotFileRef],
     dict[InputName, tuple[ResolvedFileRef, ...]],
+    tuple[ReuseInputIdentity, ...],
 ]:
     """Materialize inputs and retain their existing immutable references."""
     resolved: dict[InputName, ResolvedInputRef] = {}
     paths: dict[str, Path] = {}
     captured: dict[InputName, SnapshotFileRef] = {}
     stored: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
+    identities: list[ReuseInputIdentity] = []
     verified_runs: dict[ResolvedRunRef, VerifiedProducerRun] = {}
     for name, input_ref in stage.inputs.items():
         if input_ref.kind == "future":
@@ -183,6 +186,14 @@ def resolve_inputs(
             )
             _materialize_verified_artifact(root, output_spec.path, verified)
             paths[name] = root / output_spec.path
+            identities.append(
+                artifact_input_identity(
+                    name,
+                    output_spec.data_role,
+                    output_spec.path,
+                    verified.artifact,
+                )
+            )
         elif input_ref.kind == "external":
             resolved_input, captured_path = capture_external_input(
                 root,
@@ -196,6 +207,19 @@ def resolve_inputs(
             resolved[name] = resolved_input
             paths[name] = captured_path
             captured[name] = resolved_input.file
+            identities.append(
+                ReuseInputIdentity(
+                    input_name=name,
+                    data_role=input_ref.data_role,
+                    files=(
+                        ReuseFileIdentity(
+                            relative_path=captured_path.name,
+                            sha256=resolved_input.file.sha256,
+                            bytes=resolved_input.file.bytes,
+                        ),
+                    ),
+                )
+            )
         elif input_ref.kind == "stored":
             if isinstance(input_ref.pointer, ResolvedArtifactPointerRef):
                 pointer_raw = fetcher.read_verified(input_ref.pointer)
@@ -236,7 +260,21 @@ def resolve_inputs(
             resolved[name] = ResolvedStoredInputRef(pointer=resolved_pointer)
             paths[name] = root / materialized_path
             stored[name] = verified.references
-    return resolved, paths, captured, stored
+            identities.append(
+                artifact_input_identity(
+                    name,
+                    input_ref.data_role,
+                    materialized_path,
+                    verified.artifact,
+                )
+            )
+    return (
+        resolved,
+        paths,
+        captured,
+        stored,
+        tuple(sorted(identities, key=lambda item: item.input_name)),
+    )
 
 
 def verify_captured_inputs(

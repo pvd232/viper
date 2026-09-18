@@ -1302,7 +1302,7 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         def read_verified(self, reference: object) -> bytes:
             return pointer_raw
 
-    _, paths, _, _ = resolve_inputs(
+    _, paths, _, _, _ = resolve_inputs(
         root,
         workspace,
         RUN_ID,
@@ -1378,7 +1378,7 @@ def test_future_input_materializes_verified_producer_snapshot(
         lambda *args, **kwargs: verified,
     )
 
-    _, paths, _, _ = resolve_inputs(
+    _, paths, _, _, _ = resolve_inputs(
         root,
         workspace,
         RUN_ID,
@@ -1784,7 +1784,14 @@ def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> Non
     failed = caught.value.result
     assert failed is not None
 
-    result = execute_retry(root, frozen.files[-1])
+    with pytest.MonkeyPatch.context() as context:
+        context.setattr(
+            "viper.execution._reuse.verify_run_result",
+            lambda *args, **kwargs: pytest.fail(
+                "retry reverified the same source run while reusing a stage"
+            ),
+        )
+        result = execute_retry(root, frozen.files[-1])
     store = LocalArtifactStore(root)
     verified = verify_run_result(
         result.record,
@@ -1801,8 +1808,8 @@ def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> Non
     assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
 
 
-def test_retry_rejects_tampered_completed_stage(tmp_path: Path) -> None:
-    """Reject a prior failed attempt whose completed snapshot changed."""
+def test_retry_reexecutes_tampered_completed_stage(tmp_path: Path) -> None:
+    """Reject corrupt reuse bytes and execute that stage again."""
     root = tmp_path / "project"
     frozen = _freeze_retry_plan(root)
     with pytest.raises(RunError) as caught:
@@ -1815,17 +1822,18 @@ def test_retry_rejects_tampered_completed_stage(tmp_path: Path) -> None:
     artifact = next(stored.glob("**/artifacts/prepare/features/features.bin"))
     artifact.write_bytes(b"tampered")
 
-    with pytest.raises(RunError) as retried:
-        execute_retry(root, frozen.files[-1])
-    result = retried.value.result
-    assert result is not None
-    assert result.completed_stage_ids == ()
-    assert result.failed_stage_id is None
-    assert result.latest_attempt.failure is not None
-    assert result.latest_attempt.failure.code == "verification_failed"
-    assert result.latest_attempt.failure.message == (
-        "prior failed run cannot be verified for retry"
-    )
+    result = execute_retry(root, frozen.files[-1])
+
+    assert result.status == "succeeded"
+    assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
+    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
+        verify_run_result(
+            result.record,
+            policy=VerificationPolicy(
+                trusted_source_repositories=frozenset({REPOSITORY})
+            ),
+            fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
+        )
 
 
 def test_retry_setup_failure_releases_run_lock(tmp_path: Path) -> None:

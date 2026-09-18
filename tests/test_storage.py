@@ -626,6 +626,32 @@ def test_cloud_fetcher_streams_one_verified_path_per_execution(tmp_path: Path) -
     assert client.fetch_to_path_calls == [location]
 
 
+def test_execution_fetcher_trusts_sealed_local_payload_until_strict_verification(
+    tmp_path: Path,
+) -> None:
+    """Trust a sealed local payload in execution and retain strict checks."""
+    store = LocalArtifactStore(tmp_path)
+    raw = b"large artifact"
+    reference = store.resolved_files({"runs/example/large.bin": raw})[0]
+    trusted = RunFetcher(
+        tmp_path,
+        store,
+        CONSUMER_REPOSITORY,
+        trust_immutable_payloads=True,
+    )
+
+    path = trusted.read_verified_path(reference)
+    path.write_bytes(b"other artifact")
+
+    assert trusted.read_verified_path(reference) == path
+    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
+        RunFetcher(
+            tmp_path,
+            store,
+            CONSUMER_REPOSITORY,
+        ).read_verified_path(reference)
+
+
 def test_cloud_verification_rejects_local_references() -> None:
     """Reject a cloud terminal graph that still reaches local evidence."""
     resolved_run = ResolvedRun.model_construct(

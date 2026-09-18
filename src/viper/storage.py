@@ -236,8 +236,12 @@ class LocalArtifactStore:
 
     def fetch(self, location: StorageModel) -> bytes:
         """Retrieve one local-store file after validating its revision path."""
+        return self.path(location).read_bytes()
+
+    def path(self, location: StorageModel) -> Path:
+        """Resolve one local-store file directly from its immutable reference."""
         if not isinstance(location, LocalFileRef):
-            raise TypeError("LocalArtifactStore can retrieve only LocalFileRef")
+            raise TypeError("LocalArtifactStore can resolve only LocalFileRef")
 
         if location.workspace != self.repository_root or location.store != self.store:
             raise LocalStoreError("local file belongs to a different store")
@@ -248,8 +252,7 @@ class LocalArtifactStore:
         target = (revision_root / location.path).resolve()
         if not target.is_relative_to(revision_root) or not target.is_file():
             raise LocalStoreError("local immutable file is missing")
-
-        return target.read_bytes()
+        return target
 
     def list_snapshot_files(
         self,

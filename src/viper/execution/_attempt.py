@@ -12,16 +12,13 @@ from typing import Literal
 
 from .._verification.storage import read_attempt_reference
 from ..catalog import Catalog
-from ..evidence import VerificationError, VerificationPolicy
+from ..evidence import VerificationError, VerificationPolicy, VerifiedRunResult
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
 from ..inputs import (
     DownloadSourceClosureReceipt,
-    ExternalInputRef,
-    FutureInputRef,
     ResolvedInputRef,
-    StoredInputRef,
 )
 from ..journal import DurableJournal
 from ..metrics import is_recomputed_metric
@@ -42,7 +39,6 @@ from ..reuse import (
     StageReuseCandidate,
     attempt_reuse_candidates,
     build_stage_reuse_key,
-    input_identity,
 )
 from ..runs import (
     AttemptFailure,
@@ -101,25 +97,6 @@ from ._stage import (
 )
 from .errors import RunError
 from .results import ConfirmationRunResult, RunResult
-
-
-def _reuse_input_identities(
-    stage: InternalSpec,
-    paths: dict[str, Path],
-    loaded_stages: dict[StageId, BaseSpec],
-) -> tuple[ReuseInputIdentity, ...]:
-    """Hash materialized inputs with the roles declared by their producers."""
-    identities = []
-    for name, reference in stage.inputs.items():
-        if isinstance(reference, (ExternalInputRef, StoredInputRef)):
-            role = reference.data_role
-        elif isinstance(reference, FutureInputRef):
-            producer = loaded_stages[reference.producer_stage_id]
-            role = producer.outputs[reference.name].data_role
-        else:
-            raise RunError("stage input has no reuse role")
-        identities.append(input_identity(name, role, paths[str(name)]))
-    return tuple(sorted(identities, key=lambda item: item.input_name))
 
 
 def _verification_policy(
@@ -241,6 +218,7 @@ def execute_attempt(
         store,
         str(run.source.repository),
         cloud_client=cloud_client,
+        trust_immutable_payloads=True,
     )
     origin = run_git(root, "remote", "get-url", "origin").decode().strip()
     if origin != str(run.source.repository):
@@ -376,6 +354,7 @@ def execute_attempt(
             )
             raise RunError(f"plan preflight failed: {failed_codes}")
         retry_candidates: dict[StageId, StageReuseCandidate] = {}
+        verified_previous: VerifiedRunResult | None = None
         if retry and previous_run is not None and previous_run_raw is not None:
             terminal_relative_path = terminal_path.relative_to(root).as_posix()
             published = publish_resolved_files(
@@ -415,6 +394,7 @@ def execute_attempt(
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             captured_inputs: dict[InputName, SnapshotFileRef] = {}
             stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
+            reuse_input_identities: tuple[ReuseInputIdentity, ...] = ()
             input_paths: dict[str, Path] = {}
             download_source_closure: DownloadSourceClosureReceipt | None = None
             process = None
@@ -468,6 +448,7 @@ def execute_attempt(
                         input_paths,
                         captured_inputs,
                         stored_input_references,
+                        reuse_input_identities,
                     ) = resolve_inputs(
                         root,
                         workspace,
@@ -508,11 +489,7 @@ def execute_attempt(
                     key = build_stage_reuse_key(
                         stage_id=stage_reference.stage_id,
                         stage=stage,
-                        inputs=_reuse_input_identities(
-                            stage,
-                            input_paths,
-                            loaded_stages,
-                        ),
+                        inputs=reuse_input_identities,
                         seed=run.seed,
                         env=effective_environment,
                         reproducibility=run.reproducibility,
@@ -538,6 +515,11 @@ def execute_attempt(
                         metrics=metric_specs,
                         download_source_closure=download_source_closure,
                         candidate=retry_candidates.get(stage_reference.stage_id),
+                        verified_source=(
+                            verified_previous
+                            if stage_reference.stage_id in retry_candidates
+                            else None
+                        ),
                     )
                     if reused is not None:
                         journal.append(

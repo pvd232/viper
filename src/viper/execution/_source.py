@@ -14,7 +14,7 @@ from .._verification.storage import (
     list_huggingface_snapshot_files,
     verify_resolved_file_bytes,
 )
-from ..evidence import VerificationPolicy, VerifiedProducerRun
+from ..evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
@@ -56,12 +56,20 @@ class RunFetcher:
         store: LocalArtifactStore,
         source_repository: str,
         cloud_client: ViperCloudClient | None = None,
+        *,
+        trust_immutable_payloads: bool = False,
     ) -> None:
-        """Bind retrieval to one local Git checkout and output store."""
+        """Bind retrieval to one local Git checkout and output store.
+
+        Execution may trust payloads already sealed beneath immutable storage
+        references. Independent verification leaves this disabled and hashes
+        the selected bytes again.
+        """
         self.repository_root = repository_root.resolve()
         self.store = store
         self.source_repository = source_repository
         self.cloud_client = cloud_client
+        self.trust_immutable_payloads = trust_immutable_payloads
         self._external_git_files: dict[GitFileRef, bytes] = {}
         self._external_git_cache_bytes = 0
         self._external_git_checkout_root = (
@@ -131,17 +139,34 @@ class RunFetcher:
         return raw
 
     def read_verified_path(self, reference: ResolvedFileRef) -> Path:
-        """Return one path-backed verified object without buffering its payload."""
-        if not isinstance(reference.stored_at, ViperCloudFileRef):
-            raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
-            self._verified_objects.write(reference, raw)
-            return self._verified_objects.path(reference)
-
+        """Return one path-backed verified object."""
         remembered = self._verified_paths.get(reference)
         if remembered is not None:
             return remembered
 
-        cached = self._verified_objects.verified_path(reference)
+        if self.trust_immutable_payloads and isinstance(
+            reference.stored_at, LocalFileRef
+        ):
+            path = local_artifact_store(reference.stored_at).path(reference.stored_at)
+            if path.stat().st_size != reference.bytes:
+                raise VerificationError(
+                    "retrieved file size differs from its resolved reference"
+                )
+            self._verified_paths[reference] = path
+            return path
+
+        if not isinstance(reference.stored_at, ViperCloudFileRef):
+            raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
+            self._verified_objects.write(reference, raw)
+            path = self._verified_objects.path(reference)
+            self._verified_paths[reference] = path
+            return path
+
+        cached = (
+            self._verified_objects.trusted_path(reference)
+            if self.trust_immutable_payloads
+            else self._verified_objects.verified_path(reference)
+        )
         if cached is not None:
             self._verified_paths[reference] = cached
             return cached
