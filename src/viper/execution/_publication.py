@@ -62,14 +62,22 @@ def replace_synchronized(path: Path, raw: bytes) -> None:
         Path(temporary_name).unlink(missing_ok=True)
 
 
-def persist_terminal_reference(path: Path, reference: ResolvedRunRef) -> Path | None:
+def persist_terminal_reference(
+    path: Path,
+    reference: ResolvedRunRef,
+    *,
+    replace_existing: bool = False,
+) -> Path | None:
     """Save one cloud terminal pointer beside its local terminal document."""
     if not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef)):
         return None
     sidecar = path.with_name("resolved.ref.yaml")
     raw = serialize_document(reference)
     if sidecar.exists() and sidecar.read_bytes() != raw:
-        raise RunError("terminal cloud reference differs")
+        if not replace_existing:
+            raise RunError("terminal cloud reference differs")
+        replace_synchronized(sidecar, raw)
+        return sidecar
     write_synchronized(sidecar, raw)
     return sidecar
 

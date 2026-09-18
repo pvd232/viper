@@ -23,7 +23,7 @@ from viper.execution._restore import (
     _restore_files,
 )
 from viper.execution._source import RunFetcher
-from viper.execution.errors import RestoreError
+from viper.execution.errors import RestoreError, RunError
 from viper.ids import HumanId
 from viper.references import (
     CloudFileRef,
@@ -176,6 +176,35 @@ def test_resolve_run_reference_rejects_stale_cloud_pointer(tmp_path: Path) -> No
 
     with pytest.raises(RestoreError, match="differs from terminal identity"):
         execution.resolve_run_reference(tmp_path, terminal)
+
+
+def test_terminal_reference_rejects_an_unverified_replacement(tmp_path: Path) -> None:
+    """Require callers to verify a saved terminal ref before advancing it."""
+    terminal = tmp_path / "runs/example/resolved.yaml"
+    terminal.parent.mkdir(parents=True)
+    terminal.write_bytes(b"status: failed\n")
+    failed = ResolvedRunRef(
+        sha256=hashlib.sha256(terminal.read_bytes()).hexdigest(),
+        bytes=terminal.stat().st_size,
+        stored_at=GcsFileRef(
+            bucket="test-bucket",
+            prefix="viper",
+            owner="machina",
+            workspace="models",
+            revision="a" * 64,
+            path="runs/example/resolved.yaml",
+        ),
+    )
+    persist_terminal_reference(terminal, failed)
+    succeeded = failed.model_copy(
+        update={
+            "sha256": "b" * 64,
+            "stored_at": failed.stored_at.model_copy(update={"revision": "c" * 64}),
+        }
+    )
+
+    with pytest.raises(RunError, match="terminal cloud reference differs"):
+        persist_terminal_reference(terminal, succeeded)
 
 
 def test_run_fetcher_reuses_one_external_git_file_within_an_execution(

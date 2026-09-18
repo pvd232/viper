@@ -1779,6 +1779,35 @@ def test_cloud_native_run_returns_and_persists_one_terminal_reference(
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
+def test_cloud_native_retry_replaces_the_verified_terminal_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Advance a verified failed cloud terminal to its successful retry."""
+    root = tmp_path / "project"
+    root.mkdir()
+    provider = InMemoryViperCloudProvider(root)
+    install_in_memory_cloud(monkeypatch, root, provider)
+    frozen = _freeze_retry_plan(root, cloud_native=True)
+
+    with pytest.raises(RunError, match="attempt 1 failed") as failure:
+        execute_run(frozen.files[-1], repository_root=root)
+    failed = failure.value.result
+    assert failed is not None
+    sidecar = failed.path.with_name("resolved.ref.yaml")
+    assert ResolvedRunRef.model_validate(parse_yaml_bytes(sidecar.read_bytes())) == (
+        failed.reference
+    )
+
+    result = execute_retry(root, frozen.files[-1])
+
+    assert result.reference != failed.reference
+    assert ResolvedRunRef.model_validate(parse_yaml_bytes(sidecar.read_bytes())) == (
+        result.reference
+    )
+    assert execution_module.resolve_run_reference(root, result.path) == result.reference
+
+
 def test_explicit_cloud_promotion_preserves_local_run_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

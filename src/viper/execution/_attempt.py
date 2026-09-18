@@ -88,6 +88,7 @@ from ._resolution import (
     resolve_runner_env,
     resolve_stage,
 )
+from ._restore import resolve_run_reference
 from ._reuse import reuse_stage
 from ._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
 from ._stage import (
@@ -95,7 +96,7 @@ from ._stage import (
     StageProcessInterrupted,
     execute_stage_process,
 )
-from .errors import RunError
+from .errors import RestoreError, RunError
 from .results import ConfirmationRunResult, RunResult
 
 
@@ -145,6 +146,10 @@ def _allocate_attempt(
         previous_run: ResolvedRun | None = None
         previous_run_raw: bytes | None = None
         if terminal_path.is_file():
+            try:
+                resolve_run_reference(root, terminal_path)
+            except RestoreError as error:
+                raise RunError("terminal cloud reference differs") from error
             previous_run_raw = terminal_path.read_bytes()
             previous_run = ResolvedRun.model_validate(
                 parse_yaml_bytes(previous_run_raw)
@@ -778,7 +783,11 @@ def execute_attempt(
             bytes=terminal_reference.bytes,
             stored_at=terminal_reference.stored_at,
         )
-        persist_terminal_reference(terminal_path, run_reference)
+        persist_terminal_reference(
+            terminal_path,
+            run_reference,
+            replace_existing=previous_run is not None,
+        )
         return RunResult(
             record=resolved_run,
             reference=run_reference,
@@ -907,7 +916,11 @@ def execute_attempt(
             bytes=terminal_reference.bytes,
             stored_at=terminal_reference.stored_at,
         )
-        persist_terminal_reference(terminal_path, run_reference)
+        persist_terminal_reference(
+            terminal_path,
+            run_reference,
+            replace_existing=previous_run is not None,
+        )
         result = RunResult(
             record=failed_run,
             reference=run_reference,
