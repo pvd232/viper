@@ -251,7 +251,9 @@ def _normalized_stage(stage: _ParameterizedStage) -> dict[str, object]:
     inputs = payload.get("inputs")
     if not isinstance(inputs, dict):
         raise ValueError("stage inputs are invalid")
-    payload["inputs"] = tuple(sorted(inputs))
+    payload["inputs"] = {
+        name: _normalized_input(reference) for name, reference in sorted(inputs.items())
+    }
     config_type = payload.get("config_type")
     if isinstance(config_type, dict) and config_type.get("definition_sha256"):
         config_type.pop("sha256", None)
@@ -268,6 +270,24 @@ def _normalized_stage(stage: _ParameterizedStage) -> dict[str, object]:
             raise ValueError("stage output path has no run-relative boundary")
         output["path"] = f"artifacts/{path.split(marker, 1)[1]}"
     return payload
+
+
+def _normalized_input(reference: object) -> dict[str, object]:
+    """Retain input semantics while removing provenance and materialization paths."""
+    if not isinstance(reference, dict) or not isinstance(reference.get("kind"), str):
+        raise ValueError("stage input reference is invalid")
+    selected = {
+        name: reference[name]
+        for name in ("kind", "data_role", "materialization")
+        if name in reference
+    }
+    pointer = reference.get("pointer")
+    if isinstance(pointer, dict) and "sha256" in pointer and "bytes" in pointer:
+        selected["pointer"] = {
+            "sha256": pointer["sha256"],
+            "bytes": pointer["bytes"],
+        }
+    return selected
 
 
 def _normalized_environment(

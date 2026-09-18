@@ -1375,6 +1375,25 @@ def test_stage_reuse_key_uses_semantic_source_and_lockfile_identity() -> None:
 
     original = build_stage_reuse_key(env=env, **arguments)
     moved = build_stage_reuse_key(env=moved_env, **arguments)
+    moved_input = stage.inputs["training_dataset"].model_copy(
+        update={
+            "path": "inputs/renamed/dataset.h5ad",
+            "pointer": stage.inputs["training_dataset"].pointer.model_copy(
+                update={"commit": "b" * 40}
+            ),
+        }
+    )
+    moved_input_key = build_stage_reuse_key(
+        env=env,
+        **(
+            arguments
+            | {
+                "stage": stage.model_copy(
+                    update={"inputs": {"training_dataset": moved_input}}
+                )
+            }
+        ),
+    )
     changed_lockfile = build_stage_reuse_key(
         env=moved_env,
         **(arguments | {"lockfile": FileIdentity(sha256=SHA_B, bytes=7)}),
@@ -1404,5 +1423,6 @@ def test_stage_reuse_key_uses_semantic_source_and_lockfile_identity() -> None:
     )
 
     assert moved == original
+    assert moved_input_key == original
     assert changed_lockfile != original
     assert changed_dependency != original
