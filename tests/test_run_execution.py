@@ -1637,9 +1637,10 @@ def _freeze_retry_plan(
     root: Path,
     *,
     download_rooted: bool = False,
+    cloud_native: bool = False,
 ) -> FrozenPlanFiles:
     """Freeze a two-stage plan whose second stage has a configurable failure budget."""
-    root.mkdir()
+    root.mkdir(exist_ok=True)
     run_git(root, "init", "--quiet")
     run_git(root, "config", "user.email", "viper@example.com")
     run_git(root, "config", "user.name", "VIPER Test")
@@ -1676,7 +1677,16 @@ def _freeze_retry_plan(
         encoding="utf-8",
     )
     (root / "environment.yml").write_text("name: viper-test\n", encoding="utf-8")
-    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    storage = (
+        '[storage]\ndestination = "viper://machina/models"\n'
+        '[viper_cloud]\nprovider = "gcs"\nbucket = "test-bucket"\n'
+        if cloud_native
+        else ""
+    )
+    (root / "viper.toml").write_text(
+        f"[workspace]\nschema_version = 2\n{storage}",
+        encoding="utf-8",
+    )
     run_git(root, "add", ".")
     run_git(root, "commit", "--quiet", "-m", "source")
     source_commit = run_git(root, "rev-parse", "HEAD")
@@ -1745,6 +1755,28 @@ def _freeze_retry_plan(
     run_git(root, "add", "experiments/retry")
     run_git(root, "commit", "--quiet", "-m", "plan")
     return frozen
+
+
+def test_cloud_native_run_returns_and_persists_one_terminal_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Return the same cloud run reference that the workspace persists."""
+    root = tmp_path / "project"
+    root.mkdir()
+    provider = InMemoryViperCloudProvider(root)
+    install_in_memory_cloud(monkeypatch, root, provider)
+    frozen = _freeze_retry_plan(root, cloud_native=True)
+    (root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
+
+    result = execute_run(frozen.files[-1], repository_root=root)
+
+    assert isinstance(result.reference.stored_at, GcsFileRef)
+    sidecar = result.path.with_name("resolved.ref.yaml")
+    assert ResolvedRunRef.model_validate(parse_yaml_bytes(sidecar.read_bytes())) == (
+        result.reference
+    )
+    assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
 def test_explicit_cloud_promotion_preserves_local_run_mode(
