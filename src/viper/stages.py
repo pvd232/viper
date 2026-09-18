@@ -39,6 +39,8 @@ from .config import (
     EmbedConfig,
     EvalConfig,
     TrainConfig,
+    config_definition_sha256,
+    config_schema_sha256,
 )
 from .http import (
     BuiltinHttpImplementationSpec,
@@ -92,6 +94,14 @@ class StageContext(Generic[ConfigT]):
     numpy_generators: Mapping[HumanId, np.random.Generator]
 
 
+class StageDependencyRef(ProtocolModel):
+    """Identify one workspace module used by a stage callable."""
+
+    path: PythonRepoRelPath
+    sha256: SHA256
+    bytes: int = Field(gt=0)
+
+
 class StageImplementationRef(ProtocolModel):
     """Identify one workspace-owned top-level stage callable by exact file bytes."""
 
@@ -99,6 +109,7 @@ class StageImplementationRef(ProtocolModel):
     symbol: PythonSymbol
     sha256: SHA256
     bytes: int = Field(gt=0)
+    dependencies: tuple[StageDependencyRef, ...] = ()
 
 
 class StageContextBinding(ProtocolModel):
@@ -843,6 +854,18 @@ def verify_stage_implementation_bytes(
         )
 
 
+def verify_stage_dependency_bytes(root: Path, reference: StageDependencyRef) -> None:
+    """Compare one workspace dependency with its frozen byte identity."""
+    raw = (root / reference.path).read_bytes()
+    if (
+        len(raw) != reference.bytes
+        or hashlib.sha256(raw).hexdigest() != reference.sha256
+    ):
+        raise StageDefinitionError(
+            f"stage dependency differs from its reference: {reference.path}"
+        )
+
+
 def load_stage_callable(
     path: Path,
     reference: StageImplementationRef,
@@ -958,6 +981,8 @@ def validate_stage_definition(
     """Match one decorated callable with its frozen stage and config class."""
     root = repository_root.resolve()
     implementation_path = root / stage.implementation.path
+    for dependency in stage.implementation.dependencies:
+        verify_stage_dependency_bytes(root, dependency)
     function = load_stage_callable(
         implementation_path,
         stage.implementation,
@@ -970,6 +995,18 @@ def validate_stage_definition(
         raise StageDefinitionError(
             "stage decorator config class differs from ConfigTypeRef"
         )
+    if (
+        stage.config_type.definition_sha256 is not None
+        and config_definition_sha256(definition.config_type)
+        != stage.config_type.definition_sha256
+    ):
+        raise StageDefinitionError("stage config definition differs from its reference")
+    if (
+        stage.config_type.schema_sha256 is not None
+        and config_schema_sha256(definition.config_type)
+        != stage.config_type.schema_sha256
+    ):
+        raise StageDefinitionError("stage config schema differs from its reference")
     source_file = getattr(function, "__viper_config_source__", None)
     if (
         source_file is None

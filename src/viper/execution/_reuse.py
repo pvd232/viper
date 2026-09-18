@@ -23,6 +23,7 @@ from ..inputs import DownloadSourceClosureReceipt, ResolvedInputRef
 from ..metrics import Measurement, MetricSpec, is_recomputed_metric
 from ..references import (
     ResolvedFileRef,
+    ResolvedGitFileRef,
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
@@ -224,6 +225,7 @@ def reuse_stage(
     publisher: SnapshotPublisher,
     destination: StorageDestination,
     metrics: dict[MetricId, MetricSpec],
+    lockfile: ResolvedGitFileRef,
     download_source_closure: DownloadSourceClosureReceipt | None = None,
     candidate: StageReuseCandidate | None = None,
     verified_source: VerifiedRunResult | None = None,
@@ -330,7 +332,10 @@ def reuse_stage(
     )
     resolved = _resolved_stage(
         stage,
-        completion=ReusedStageCompletion(receipt=receipt_reference),
+        completion=ReusedStageCompletion(
+            receipt=receipt_reference,
+            lockfile=lockfile,
+        ),
         artifacts=artifacts,
         inputs=inputs,
         completed_at=completed_at,

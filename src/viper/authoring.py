@@ -42,6 +42,8 @@ from .config import (
     HttpConfig,
     MetricConfig,
     TrainConfig,
+    config_definition_sha256,
+    config_schema_sha256,
     type_ref,
 )
 from .experiments import (
@@ -116,6 +118,7 @@ from .runtime import (
     resolve_execution_policy,
 )
 from .serialization import parse_yaml_bytes, serialize_document
+from .source_closure import workspace_dependency_refs
 from .stages import (
     BuildSpec,
     DiagnosticSpec,
@@ -1104,6 +1107,8 @@ def _freeze_stage(
             symbol=definition.config_type.__name__,
             sha256=hashlib.sha256(config_raw).hexdigest(),
             bytes=len(config_raw),
+            definition_sha256=config_definition_sha256(definition.config_type),
+            schema_sha256=config_schema_sha256(definition.config_type),
         )
     common = {
         "outputs": outputs,
@@ -1113,6 +1118,11 @@ def _freeze_stage(
             symbol=draft.implementation.__name__,
             sha256=hashlib.sha256(source_raw).hexdigest(),
             bytes=len(source_raw),
+            dependencies=workspace_dependency_refs(
+                root,
+                draft.implementation,
+                exclude=(source_path, config_path),
+            ),
         ),
         "config_type": config_reference,
         # Store every workspace-defined field in the protocol's config mapping.

@@ -217,6 +217,7 @@ class ReusedStageCompletion(ProtocolModel):
 
     kind: Literal["reused"] = "reused"
     receipt: ResolvedStageReuseRef
+    lockfile: ResolvedGitFileRef | None = None
 
 
 StageCompletion = Annotated[
@@ -247,6 +248,14 @@ def _normalized_stage(stage: _ParameterizedStage) -> dict[str, object]:
     """Remove run-specific paths and the permission flag from a stage spec."""
     payload = stage.model_dump(mode="json")
     payload.pop("reuse", None)
+    inputs = payload.get("inputs")
+    if not isinstance(inputs, dict):
+        raise ValueError("stage inputs are invalid")
+    payload["inputs"] = tuple(sorted(inputs))
+    config_type = payload.get("config_type")
+    if isinstance(config_type, dict) and config_type.get("definition_sha256"):
+        config_type.pop("sha256", None)
+        config_type.pop("bytes", None)
     outputs = payload["outputs"]
     if not isinstance(outputs, dict):
         raise ValueError("stage outputs are invalid")
@@ -258,6 +267,17 @@ def _normalized_stage(stage: _ParameterizedStage) -> dict[str, object]:
         if marker not in path:
             raise ValueError("stage output path has no run-relative boundary")
         output["path"] = f"artifacts/{path.split(marker, 1)[1]}"
+    return payload
+
+
+def _normalized_environment(
+    env: EnvSpec,
+    lockfile: FileIdentity | None,
+) -> dict[str, object]:
+    """Separate immutable lockfile content from its Git storage address."""
+    payload = env.model_dump(mode="json")
+    if lockfile is not None:
+        payload["lockfile"] = lockfile.model_dump(mode="json")
     return payload
 
 
@@ -364,6 +384,7 @@ def build_stage_reuse_key(
     env: EnvSpec,
     reproducibility: ReproducibilitySpec,
     metrics: Mapping[MetricId, MetricSpec],
+    lockfile: FileIdentity | None = None,
 ) -> StageReuseKey:
     """Build the canonical key for one frozen stage and its selected inputs."""
     selected_metrics = tuple(metrics[metric_id] for metric_id in stage.metric_ids)
@@ -372,7 +393,7 @@ def build_stage_reuse_key(
         stage_sha256=_canonical_sha256(_normalized_stage(stage)),
         inputs=tuple(sorted(inputs, key=lambda item: item.input_name)),
         seed=seed,
-        env_sha256=_canonical_sha256(env),
+        env_sha256=_canonical_sha256(_normalized_environment(env, lockfile)),
         reproducibility_sha256=_canonical_sha256(reproducibility),
         metric_sha256s=tuple(_canonical_sha256(metric) for metric in selected_metrics),
     )
@@ -424,15 +445,22 @@ def attempt_reuse_candidates(
         declared_inputs = getattr(stage, "inputs", {})
         if len(inputs) != len(declared_inputs):
             continue
-        key = build_stage_reuse_key(
-            stage_id=stage_id,
-            stage=stage,
-            inputs=inputs,
-            seed=verified.plan.run.seed,
-            env=stage.env or verified.plan.run.env,
-            reproducibility=verified.plan.run.reproducibility,
-            metrics=metrics,
-        )
+        if isinstance(completion, ReusedStageCompletion):
+            receipt = verified.attempt_reuse.get(attempt_id, {}).get(stage_id)
+            if receipt is None:
+                continue
+            key = receipt.key
+        else:
+            key = build_stage_reuse_key(
+                stage_id=stage_id,
+                stage=stage,
+                inputs=inputs,
+                seed=verified.plan.run.seed,
+                env=stage.env or verified.plan.run.env,
+                reproducibility=verified.plan.run.reproducibility,
+                metrics=metrics,
+                lockfile=completion.env.lockfile,
+            )
         candidates.append(
             StageReuseCandidate(
                 key=key,

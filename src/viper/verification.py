@@ -71,6 +71,7 @@ from .metrics import (
     is_recomputed_metric,
 )
 from .references import (
+    FileIdentity,
     GcsFileRef,
     GcsStageResultSnapshotRef,
     GitFileRef,
@@ -85,6 +86,7 @@ from .references import (
     storage_file,
 )
 from .reuse import (
+    ExecutedStageCompletion,
     ReusedStageCompletion,
     ReuseInputIdentity,
     StageReuseKey,
@@ -748,6 +750,7 @@ def _rebuilt_reuse_key(
     plan: VerifiedRunPlan,
     stage_id: StageId,
     inputs: Sequence[ReuseInputIdentity],
+    lockfile: FileIdentity | None,
 ) -> StageReuseKey:
     """Rebuild one stage key from its verified plan values and input files."""
     stage = plan.stages.get(stage_id)
@@ -763,6 +766,7 @@ def _rebuilt_reuse_key(
             env=stage.env or plan.run.env,
             reproducibility=plan.run.reproducibility,
             metrics=metrics,
+            lockfile=lockfile,
         )
     except (KeyError, ValueError) as exc:
         raise VerificationError("stage reuse key cannot be rebuilt") from exc
@@ -823,8 +827,35 @@ def verify_stage_reuse(
     ):
         raise VerificationError("reused source stage has no verified reuse receipt")
 
-    source_key = _rebuilt_reuse_key(source.plan, receipt.stage_id, source_inputs)
-    target_key = _rebuilt_reuse_key(target_plan, receipt.stage_id, target_inputs)
+    source_completion = getattr(source_result, "completion", None)
+    if isinstance(source_completion, ReusedStageCompletion):
+        source_key = receipt.key if source_reuse is None else source_reuse.key
+    elif isinstance(source_completion, ExecutedStageCompletion):
+        source_key = _rebuilt_reuse_key(
+            source.plan,
+            receipt.stage_id,
+            source_inputs,
+            source_completion.env.lockfile,
+        )
+    else:
+        source_key = _rebuilt_reuse_key(
+            source.plan,
+            receipt.stage_id,
+            source_inputs,
+            None,
+        )
+    target_completion = getattr(target_result, "completion", None)
+    target_lockfile = (
+        target_completion.lockfile
+        if isinstance(target_completion, ReusedStageCompletion)
+        else None
+    )
+    target_key = _rebuilt_reuse_key(
+        target_plan,
+        receipt.stage_id,
+        target_inputs,
+        target_lockfile,
+    )
     if target_result.spec != target_plan.stages.get(receipt.stage_id):
         raise VerificationError("reuse target result differs from its plan")
     if receipt.key != source_key or receipt.key != target_key:

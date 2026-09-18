@@ -2,6 +2,7 @@
 
 import hashlib
 import inspect
+import json
 from pathlib import Path
 from typing import Literal, Self
 
@@ -82,6 +83,23 @@ class ConfigTypeRef(ProtocolModel):
     symbol: PythonSymbol
     sha256: SHA256
     bytes: int = Field(gt=0)
+    definition_sha256: SHA256 | None = None
+    schema_sha256: SHA256 | None = None
+
+
+def config_definition_sha256(config_type: type[Config]) -> SHA256:
+    """Hash only the selected config class definition."""
+    return hashlib.sha256(inspect.getsource(config_type).encode("utf-8")).hexdigest()
+
+
+def config_schema_sha256(config_type: type[Config]) -> SHA256:
+    """Hash the selected config's canonical JSON schema."""
+    raw = json.dumps(
+        config_type.model_json_schema(),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def type_ref(config_type: type[Config]) -> ConfigTypeRef:
@@ -94,6 +112,8 @@ def type_ref(config_type: type[Config]) -> ConfigTypeRef:
         symbol=config_type.__name__,
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
+        definition_sha256=config_definition_sha256(config_type),
+        schema_sha256=config_schema_sha256(config_type),
     )
 
 

@@ -32,6 +32,7 @@ from ..references import (
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    ViperCloudFileRef,
     storage_file,
 )
 from ..reuse import (
@@ -252,7 +253,7 @@ def execute_attempt(
         plan_location = plan.stored_at
     plan_revision = (
         plan_location.revision
-        if isinstance(plan_location, GcsFileRef)
+        if isinstance(plan_location, (GcsFileRef, ViperCloudFileRef))
         else plan_location.commit
     )
 
@@ -482,6 +483,10 @@ def execute_attempt(
                         or stage_reference.stage_id in retry_candidates
                     )
                 ):
+                    resolved_lockfile = resolve_git_file(
+                        fetcher,
+                        effective_environment.lockfile,
+                    )
                     metric_specs = {
                         metric.metric_id: metric for metric in experiment.metrics
                     }
@@ -493,6 +498,7 @@ def execute_attempt(
                         env=effective_environment,
                         reproducibility=run.reproducibility,
                         metrics=metric_specs,
+                        lockfile=resolved_lockfile,
                     )
                     resolved_path = (
                         f"experiments/{run.experiment_id}/runs/{run.variant_id}/"
@@ -511,6 +517,7 @@ def execute_attempt(
                         publisher=snapshot_publisher,
                         destination=destination,
                         metrics=metric_specs,
+                        lockfile=resolved_lockfile,
                         download_source_closure=download_source_closure,
                         candidate=retry_candidates.get(stage_reference.stage_id),
                         verified_source=(

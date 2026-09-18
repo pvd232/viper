@@ -68,7 +68,7 @@ from viper.runs import (
 from viper.runtime import CUDABackendContext, ReproducibilitySpec
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 from viper.serialization import load_stage_spec
-from viper.stages import DownloadSpec, ParameterizedSpec, TrainSpec
+from viper.stages import DownloadSpec, ParameterizedSpec, StageDependencyRef, TrainSpec
 from viper.stages import EvalSpec as EvaluateSpec
 
 SHA_A = "a" * 64
@@ -1345,3 +1345,64 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             source=source_file,
             target=target.model_copy(update={"sha256": SHA_B}),
         )
+
+
+def test_stage_reuse_key_uses_semantic_source_and_lockfile_identity() -> None:
+    """Ignore storage addresses while retaining selected source-byte identities."""
+    payload = train_payload()
+    stage = TrainSpec.model_validate(payload).model_copy(
+        update={"reuse": "verified", "metric_ids": ()}
+    )
+    selected_input = ReuseInputIdentity(
+        input_name="training_dataset",
+        data_role="training",
+        files=(ReuseFileIdentity(relative_path="dataset.h5ad", sha256=SHA_A, bytes=7),),
+    )
+    env = GCEEnvironmentSpec.model_validate(environment())
+    moved_env = env.model_copy(
+        update={"lockfile": env.lockfile.model_copy(update={"commit": "b" * 40})}
+    )
+    lockfile = FileIdentity(sha256=SHA_A, bytes=7)
+    arguments = {
+        "stage_id": "train",
+        "stage": stage,
+        "inputs": (selected_input,),
+        "seed": 42,
+        "reproducibility": ReproducibilitySpec.model_validate(reproducibility()),
+        "metrics": {},
+        "lockfile": lockfile,
+    }
+
+    original = build_stage_reuse_key(env=env, **arguments)
+    moved = build_stage_reuse_key(env=moved_env, **arguments)
+    changed_lockfile = build_stage_reuse_key(
+        env=moved_env,
+        **(arguments | {"lockfile": FileIdentity(sha256=SHA_B, bytes=7)}),
+    )
+    changed_dependency = build_stage_reuse_key(
+        env=env,
+        **(
+            arguments
+            | {
+                "stage": stage.model_copy(
+                    update={
+                        "implementation": stage.implementation.model_copy(
+                            update={
+                                "dependencies": (
+                                    StageDependencyRef(
+                                        path="src/viper/domain.py",
+                                        sha256=SHA_B,
+                                        bytes=7,
+                                    ),
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+        ),
+    )
+
+    assert moved == original
+    assert changed_lockfile != original
+    assert changed_dependency != original

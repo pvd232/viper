@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
 
+from .._cloud import PublicationSource, manifest_revision
 from ..artifacts import ArtifactPointer
 from ..benchmark import BenchmarkResult, BenchmarkSpec
 from ..cloud import ViperCloud
@@ -37,7 +38,6 @@ from ..stages import ResolvedSpec, Spec
 from ..storage import (
     LocalArtifactStore,
     ViperCloudDestination,
-    content_revision,
     load_storage_settings,
     local_artifact_store,
 )
@@ -76,7 +76,6 @@ class _RunGraphPromoter:
             LocalStageResultSnapshotRef,
             dict[str, BaseModel],
         ] = {}
-        self.local_bytes: dict[LocalFileRef, bytes] = {}
         self.promoting: set[LocalStageResultSnapshotRef] = set()
 
     @staticmethod
@@ -94,9 +93,6 @@ class _RunGraphPromoter:
         location = reference.stored_at
         if not isinstance(location, LocalFileRef):
             raise RunPromotionError("source run graph is unavailable")
-        remembered = self.local_bytes.get(location)
-        if remembered is not None:
-            return remembered
         try:
             raw = local_artifact_store(location).fetch(location)
         except (OSError, RuntimeError) as error:
@@ -106,8 +102,24 @@ class _RunGraphPromoter:
             or hashlib.sha256(raw).hexdigest() != reference.sha256
         ):
             raise RunPromotionError("source run graph is unavailable")
-        self.local_bytes[location] = raw
         return raw
+
+    @staticmethod
+    def source_identity(path: str, source: PublicationSource) -> SnapshotFileRef:
+        """Identify one publication source without retaining its payload."""
+        if isinstance(source, bytes):
+            return SnapshotFileRef(
+                path=path,
+                sha256=hashlib.sha256(source).hexdigest(),
+                bytes=len(source),
+            )
+        digest = hashlib.sha256()
+        size = 0
+        with source.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+                size += len(chunk)
+        return SnapshotFileRef(path=path, sha256=digest.hexdigest(), bytes=size)
 
     @staticmethod
     def document_decoder(reference: ResolvedFileRef) -> _DocumentDecoder | None:
@@ -285,7 +297,6 @@ class _RunGraphPromoter:
         remembered = self.files.get(location)
         if remembered is not None:
             return remembered
-        self.read_local(reference)
         snapshot = self.snapshot_for(location)
         promoted_snapshot = self.promote_snapshot(snapshot)
         matches = tuple(
@@ -316,19 +327,20 @@ class _RunGraphPromoter:
         store = local_artifact_store(snapshot)
         try:
             paths = store.list_snapshot_files(snapshot)
-            original = {
-                path: store.fetch(
-                    LocalFileRef(
-                        workspace=snapshot.workspace,
-                        store=snapshot.store,
-                        store_id=snapshot.store_id,
-                        commit=snapshot.commit,
-                        path=path,
-                    )
+            original: dict[str, PublicationSource] = {}
+            identities = []
+            for path in paths:
+                location = LocalFileRef(
+                    workspace=snapshot.workspace,
+                    store=snapshot.store,
+                    store_id=snapshot.store_id,
+                    commit=snapshot.commit,
+                    path=path,
                 )
-                for path in paths
-            }
-            if content_revision(original) != snapshot.commit:
+                source = store.path(location)
+                original[path] = source
+                identities.append(self.source_identity(path, source))
+            if manifest_revision(tuple(identities)) != snapshot.commit:
                 raise RunPromotionError("source run graph is unavailable")
             sources = self.rewrite_snapshot_documents(snapshot, original)
         except (OSError, RuntimeError) as error:
@@ -343,33 +355,31 @@ class _RunGraphPromoter:
     def rewrite_snapshot_documents(
         self,
         snapshot: LocalStageResultSnapshotRef,
-        original: dict[str, bytes],
-    ) -> dict[str, bytes]:
+        original: dict[str, PublicationSource],
+    ) -> dict[str, PublicationSource]:
         """Rewrite referenced documents and propagate changed stage identities."""
         sources = dict(original)
         documents = self.documents.get(snapshot, {})
-        for path, document in documents.items():
-            if isinstance(document, RunSpec) or not _contains_local_reference(document):
-                continue
+        ordered = sorted(
+            documents.items(),
+            key=lambda item: (isinstance(item[1], RunSpec), item[0]),
+        )
+        for path, document in ordered:
             rewritten = self.rewrite_typed(document)
-            if _contains_local_reference(rewritten):
-                raise RunPromotionError("promoted run graph retains local storage")
-            sources[path] = serialize_document(rewritten)
-
-        for path, document in documents.items():
-            if not isinstance(document, RunSpec):
-                continue
-            rewritten = self.rewrite_typed(document)
-            stages = tuple(
-                stage.model_copy(
-                    update={
-                        "sha256": hashlib.sha256(sources[stage.spec]).hexdigest(),
-                        "bytes": len(sources[stage.spec]),
-                    }
+            if isinstance(rewritten, RunSpec):
+                stages = tuple(
+                    stage.model_copy(
+                        update={
+                            "sha256": identity.sha256,
+                            "bytes": identity.bytes,
+                        }
+                    )
+                    for stage in rewritten.stages
+                    for identity in (
+                        self.source_identity(stage.spec, sources[stage.spec]),
+                    )
                 )
-                for stage in rewritten.stages
-            )
-            rewritten = rewritten.model_copy(update={"stages": stages})
+                rewritten = rewritten.model_copy(update={"stages": stages})
             if _contains_local_reference(rewritten):
                 raise RunPromotionError("promoted run graph retains local storage")
             if rewritten != document:

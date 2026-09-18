@@ -683,7 +683,7 @@ def install_in_memory_cloud(
         GcsRepository(bucket=provider.bucket, prefix=provider.prefix),
         provider=provider,
     )
-    monkeypatch.setattr("viper.storage._viper_cloud", lambda selected: cloud)
+    monkeypatch.setattr("viper.storage.viper_cloud", lambda selected: cloud)
     monkeypatch.setattr(
         ViperCloud,
         "for_reference",
