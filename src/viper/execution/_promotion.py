@@ -330,12 +330,7 @@ class _RunGraphPromoter:
             }
             if content_revision(original) != snapshot.commit:
                 raise RunPromotionError("source run graph is unavailable")
-            sources = dict(original)
-            for path, document in self.documents.get(snapshot, {}).items():
-                rewritten = self.rewrite_typed(document)
-                if _contains_local_reference(rewritten):
-                    raise RunPromotionError("promoted run graph retains local storage")
-                sources[path] = serialize_document(rewritten)
+            sources = self.rewrite_snapshot_documents(snapshot, original)
         except (OSError, RuntimeError) as error:
             raise RunPromotionError("source run graph is unavailable") from error
         finally:
@@ -344,6 +339,43 @@ class _RunGraphPromoter:
         self.snapshots[snapshot] = promoted
         self.snapshot_files[snapshot] = files
         return promoted
+
+    def rewrite_snapshot_documents(
+        self,
+        snapshot: LocalStageResultSnapshotRef,
+        original: dict[str, bytes],
+    ) -> dict[str, bytes]:
+        """Rewrite referenced documents and propagate changed stage identities."""
+        sources = dict(original)
+        documents = self.documents.get(snapshot, {})
+        for path, document in documents.items():
+            if isinstance(document, RunSpec) or not _contains_local_reference(document):
+                continue
+            rewritten = self.rewrite_typed(document)
+            if _contains_local_reference(rewritten):
+                raise RunPromotionError("promoted run graph retains local storage")
+            sources[path] = serialize_document(rewritten)
+
+        for path, document in documents.items():
+            if not isinstance(document, RunSpec):
+                continue
+            rewritten = self.rewrite_typed(document)
+            stages = tuple(
+                stage.model_copy(
+                    update={
+                        "sha256": hashlib.sha256(sources[stage.spec]).hexdigest(),
+                        "bytes": len(sources[stage.spec]),
+                    }
+                )
+                for stage in rewritten.stages
+            )
+            rewritten = rewritten.model_copy(update={"stages": stages})
+            if _contains_local_reference(rewritten):
+                raise RunPromotionError("promoted run graph retains local storage")
+            if rewritten != document:
+                sources[path] = serialize_document(rewritten)
+
+        return sources
 
     def promote_stage_reference(self, value: ResolvedStageRef) -> ResolvedStageRef:
         """Promote one stage snapshot and bind its rewritten resolved record."""
