@@ -387,7 +387,7 @@ def _verify_reuse_source(source: SnapshotFileRef, raw: bytes) -> None:
         raise StorageConfigurationError("reused snapshot file identity changed")
 
 
-def _viper_cloud(root: Path) -> ViperCloud:
+def viper_cloud(root: Path) -> ViperCloud:
     """Construct the cloud service selected by workspace configuration."""
     settings = load_storage_settings(root)
     if settings.repository is None:
@@ -406,7 +406,7 @@ class ViperCloudSnapshotPublisher:
         """Bind publication to one root and logical cloud destination."""
         self.root = root.resolve(strict=True)
         self.destination = destination
-        self.cloud = _viper_cloud(self.root)
+        self.cloud = viper_cloud(self.root)
 
     def publish(
         self,
@@ -476,7 +476,7 @@ def publish_resolved_files(
             for reference in references
             if isinstance(reference.stored_at, LocalFileRef)
         }
-    return _viper_cloud(root).resolved_files(destination, files)
+    return viper_cloud(root).resolved_files(destination, files)
 
 
 def bind_run_destination(

@@ -26,6 +26,8 @@ from .references import (
     HuggingFaceStageResultSnapshotRef,
     ResolvedFileRef,
     SnapshotFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
 )
 
 CloudReference = CloudFileRef | CloudStageResultSnapshotRef
@@ -88,11 +90,22 @@ class ViperCloud:
                 repository=reference.repository,
                 repo_type=reference.repo_type,
             )
+        if isinstance(
+            reference,
+            (ViperCloudFileRef, ViperCloudStageResultSnapshotRef),
+        ):
+            raise ViperCloudError(
+                "provider-neutral references require the workspace repository"
+            )
         raise TypeError("reference is not cloud-backed")
 
     @classmethod
     def for_reference(cls, root: Path, reference: CloudFileRef) -> ViperCloud:
         """Construct the service that owns one self-describing cloud reference."""
+        if isinstance(reference, ViperCloudFileRef):
+            raise ViperCloudError(
+                "provider-neutral references require the workspace repository"
+            )
         return cls(root, cls._repository_for(reference))
 
     @classmethod
@@ -102,7 +115,47 @@ class ViperCloud:
         snapshot: CloudStageResultSnapshotRef,
     ) -> ViperCloud:
         """Construct the service that owns one self-describing cloud snapshot."""
+        if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+            raise ViperCloudError(
+                "provider-neutral snapshots require the workspace repository"
+            )
         return cls(root, cls._repository_for(snapshot))
+
+    def _file_location(self, location: CloudFileRef) -> CloudFileRef:
+        """Resolve an older provider-neutral file through this repository."""
+        if not isinstance(location, ViperCloudFileRef):
+            return location
+        if isinstance(self.repository, GcsRepository):
+            return GcsFileRef(
+                bucket=self.repository.bucket,
+                prefix=self.repository.prefix,
+                owner=location.owner,
+                workspace=location.workspace,
+                revision=location.revision,
+                path=location.path,
+            )
+        raise ViperCloudError(
+            "provider-neutral revisions cannot identify a Hugging Face commit"
+        )
+
+    def _snapshot_location(
+        self,
+        snapshot: CloudStageResultSnapshotRef,
+    ) -> CloudStageResultSnapshotRef:
+        """Resolve an older provider-neutral snapshot through this repository."""
+        if not isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+            return snapshot
+        if isinstance(self.repository, GcsRepository):
+            return GcsStageResultSnapshotRef(
+                bucket=self.repository.bucket,
+                prefix=self.repository.prefix,
+                owner=snapshot.owner,
+                workspace=snapshot.workspace,
+                revision=snapshot.revision,
+            )
+        raise ViperCloudError(
+            "provider-neutral revisions cannot identify a Hugging Face commit"
+        )
 
     def publish(
         self,
@@ -152,16 +205,20 @@ class ViperCloud:
     def fetch(self, location: CloudFileRef) -> bytes:
         """Return verified bytes from the provider named by the reference."""
         service = self._service_for(location)
-        return service.provider.fetch(location)
+        return service.provider.fetch(service._file_location(location))
 
     def fetch_to_path(self, reference: ResolvedFileRef, destination: Path) -> Path:
         """Materialize a verified reference at one local workspace path."""
         location = reference.stored_at
-        if not isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+        if not isinstance(
+            location,
+            (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
+        ):
             raise TypeError("resolved file is not cloud-backed")
         service = self._service_for(location)
+        concrete = service._file_location(location)
         return service.provider.fetch_to_path(
-            location,
+            concrete,
             SnapshotFileRef(
                 path=location.path,
                 sha256=reference.sha256,
@@ -176,7 +233,7 @@ class ViperCloud:
     ) -> tuple[SnapshotFileRef, ...]:
         """Return the exact members of one sealed provider snapshot."""
         service = self._service_for(snapshot)
-        return service.provider.list_files(snapshot)
+        return service.provider.list_files(service._snapshot_location(snapshot))
 
     def file_ref(
         self,
@@ -190,11 +247,15 @@ class ViperCloud:
     def verify_file(self, reference: ResolvedFileRef) -> None:
         """Verify one cloud file without changing its artifact identity."""
         location = reference.stored_at
-        if not isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+        if not isinstance(
+            location,
+            (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
+        ):
             raise TypeError("resolved file is not cloud-backed")
         service = self._service_for(location)
+        concrete = service._file_location(location)
         service.provider.verify_file(
-            location,
+            concrete,
             SnapshotFileRef(
                 path=location.path,
                 sha256=reference.sha256,
@@ -204,6 +265,11 @@ class ViperCloud:
 
     def _service_for(self, reference: CloudReference) -> ViperCloud:
         """Reuse this service or construct the service named by a reference."""
+        if isinstance(
+            reference,
+            (ViperCloudFileRef, ViperCloudStageResultSnapshotRef),
+        ):
+            return self
         if self.repository == self._repository_for(reference):
             return self
         return type(self)(self.root, self._repository_for(reference))

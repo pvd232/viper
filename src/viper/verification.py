@@ -80,6 +80,8 @@ from .references import (
     ResolvedRunRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
     storage_file,
 )
 from .reuse import (
@@ -1916,6 +1918,8 @@ def _stored_locations(value: object) -> tuple[object, ...]:
             LocalStageResultSnapshotRef,
             GcsFileRef,
             GcsStageResultSnapshotRef,
+            ViperCloudFileRef,
+            ViperCloudStageResultSnapshotRef,
         ),
     ):
         return (value,)
@@ -1940,7 +1944,12 @@ def _verify_cloud_graph(resolved_run: ResolvedRun) -> None:
     cloud = any(
         isinstance(
             location,
-            (GcsFileRef, GcsStageResultSnapshotRef),
+            (
+                GcsFileRef,
+                GcsStageResultSnapshotRef,
+                ViperCloudFileRef,
+                ViperCloudStageResultSnapshotRef,
+            ),
         )
         for location in locations
     )

@@ -135,6 +135,16 @@ class GcsFileRef(ProtocolModel):
     path: RepoRelPath
 
 
+class ViperCloudFileRef(ProtocolModel):
+    """A file in a provider-neutral ViperCloud revision."""
+
+    kind: Literal["viper_cloud"] = "viper_cloud"
+    owner: HumanId
+    workspace: HumanId
+    revision: SHA256
+    path: RepoRelPath
+
+
 class GcsStageResultSnapshotRef(ProtocolModel):
     """One sealed stage snapshot in Google Cloud Storage."""
 
@@ -146,19 +156,33 @@ class GcsStageResultSnapshotRef(ProtocolModel):
     revision: SHA256
 
 
+class ViperCloudStageResultSnapshotRef(ProtocolModel):
+    """One provider-neutral ViperCloud stage snapshot."""
+
+    kind: Literal["viper_cloud"] = "viper_cloud"
+    owner: HumanId
+    workspace: HumanId
+    revision: SHA256
+
+
 StageResultSnapshot = Annotated[
     GcsStageResultSnapshotRef
     | HuggingFaceStageResultSnapshotRef
-    | LocalStageResultSnapshotRef,
+    | LocalStageResultSnapshotRef
+    | ViperCloudStageResultSnapshotRef,
     Field(discriminator="kind"),
 ]
 
-CloudFileRef = GcsFileRef | HuggingFaceFileRef
+CloudFileRef = GcsFileRef | HuggingFaceFileRef | ViperCloudFileRef
 CloudStageResultSnapshotRef = (
-    GcsStageResultSnapshotRef | HuggingFaceStageResultSnapshotRef
+    GcsStageResultSnapshotRef
+    | HuggingFaceStageResultSnapshotRef
+    | ViperCloudStageResultSnapshotRef
 )
 
-StorageModel = GitFileRef | GcsFileRef | HuggingFaceFileRef | LocalFileRef
+StorageModel = (
+    GitFileRef | GcsFileRef | HuggingFaceFileRef | LocalFileRef | ViperCloudFileRef
+)
 
 StorageRef = Annotated[
     StorageModel,
@@ -267,6 +291,8 @@ __all__ = [
     "StageResultSnapshot",
     "StorageModel",
     "StorageRef",
+    "ViperCloudFileRef",
+    "ViperCloudStageResultSnapshotRef",
     "storage_file",
 ]
 
@@ -299,10 +325,17 @@ def resolve_snapshot_file_ref(
             path=file.path,
             repo_type=snapshot.repo_type,
         )
-    else:
+    elif isinstance(snapshot, GcsStageResultSnapshotRef):
         stored_at = GcsFileRef(
             bucket=snapshot.bucket,
             prefix=snapshot.prefix,
+            owner=snapshot.owner,
+            workspace=snapshot.workspace,
+            revision=snapshot.revision,
+            path=file.path,
+        )
+    else:
+        stored_at = ViperCloudFileRef(
             owner=snapshot.owner,
             workspace=snapshot.workspace,
             revision=snapshot.revision,

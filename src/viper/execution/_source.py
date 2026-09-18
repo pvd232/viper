@@ -23,8 +23,10 @@ from ..references import (
     ResolvedRunRef,
     StageResultSnapshot,
     StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
 )
-from ..storage import LocalArtifactStore, local_artifact_store
+from ..storage import LocalArtifactStore, local_artifact_store, viper_cloud
 from ._verified_cache import VerifiedObjectCache
 from .errors import RunError
 
@@ -100,10 +102,16 @@ class RunFetcher:
                 "show",
                 f"{location.commit}:{location.path}",
             )
-        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
-            return ViperCloud.for_reference(self.repository_root, location).fetch(
-                location
+        if isinstance(
+            location,
+            (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
+        ):
+            cloud = (
+                viper_cloud(self.repository_root)
+                if isinstance(location, ViperCloudFileRef)
+                else ViperCloud.for_reference(self.repository_root, location)
             )
+            return cloud.fetch(location)
         if isinstance(location, LocalFileRef):
             return local_artifact_store(location).fetch(location)
         return self.store.fetch(location)
@@ -147,7 +155,10 @@ class RunFetcher:
             self._verified_paths[reference] = path
             return path
 
-        if not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef)):
+        if not isinstance(
+            reference.stored_at,
+            (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
+        ):
             raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
             self._verified_objects.write(reference, raw)
             path = self._verified_objects.path(reference)
@@ -161,10 +172,15 @@ class RunFetcher:
 
         temporary = self._verified_objects.temporary_path(reference)
         try:
-            restored = ViperCloud.for_reference(
-                self.repository_root,
-                reference.stored_at,
-            ).fetch_to_path(reference, temporary)
+            cloud = (
+                viper_cloud(self.repository_root)
+                if isinstance(reference.stored_at, ViperCloudFileRef)
+                else ViperCloud.for_reference(
+                    self.repository_root,
+                    reference.stored_at,
+                )
+            )
+            restored = cloud.fetch_to_path(reference, temporary)
             cached = self._verified_objects.adopt_verified_path(reference, restored)
         finally:
             temporary.unlink(missing_ok=True)
@@ -196,15 +212,18 @@ class RunFetcher:
         """List every regular file in one immutable stage snapshot."""
         if isinstance(
             snapshot,
-            (GcsStageResultSnapshotRef, HuggingFaceStageResultSnapshotRef),
+            (
+                GcsStageResultSnapshotRef,
+                HuggingFaceStageResultSnapshotRef,
+                ViperCloudStageResultSnapshotRef,
+            ),
         ):
-            return tuple(
-                file.path
-                for file in ViperCloud.for_snapshot(
-                    self.repository_root,
-                    snapshot,
-                ).list_files(snapshot)
+            cloud = (
+                viper_cloud(self.repository_root)
+                if isinstance(snapshot, ViperCloudStageResultSnapshotRef)
+                else ViperCloud.for_snapshot(self.repository_root, snapshot)
             )
+            return tuple(file.path for file in cloud.list_files(snapshot))
         return local_artifact_store(snapshot).list_snapshot_files(snapshot)
 
 

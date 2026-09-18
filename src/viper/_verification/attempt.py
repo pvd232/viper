@@ -46,6 +46,7 @@ from ..references import (
     ResolvedFileRef,
     ResolvedStageInvocationRef,
     StageResultSnapshot,
+    ViperCloudFileRef,
     resolve_snapshot_file_ref,
 )
 from ..reuse import ExecutedStageCompletion
@@ -948,7 +949,7 @@ def verify_attempt_files(
     for reference in attempt.measurement_files:
         if not isinstance(
             reference.stored_at,
-            (HuggingFaceFileRef, LocalFileRef, GcsFileRef),
+            (HuggingFaceFileRef, LocalFileRef, GcsFileRef, ViperCloudFileRef),
         ):
             raise VerificationError(
                 "measurement files must use immutable artifact storage"
@@ -1041,7 +1042,7 @@ def verify_attempt_files(
     for reference in attempt.log_files:
         if not isinstance(
             reference.stored_at,
-            (HuggingFaceFileRef, LocalFileRef, GcsFileRef),
+            (HuggingFaceFileRef, LocalFileRef, GcsFileRef, ViperCloudFileRef),
         ):
             raise VerificationError("log files must use immutable artifact storage")
         log_pattern = re.compile(

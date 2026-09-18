@@ -51,11 +51,13 @@ from ..references import (
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
     resolve_snapshot_file_ref,
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
-from ..storage import LocalStoreError, local_artifact_store
+from ..storage import LocalStoreError, local_artifact_store, viper_cloud
 from .paths import run_root
 
 _ARTIFACT_VALIDATION_CACHE: dict[
@@ -214,9 +216,17 @@ def fetch_storage_bytes(location: StorageModel) -> bytes:
     """Dispatch an immutable storage reference to its retrieval backend."""
     if isinstance(location, GitFileRef):
         return fetch_git_file_bytes(location)
-    if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+    if isinstance(
+        location,
+        (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
+    ):
         try:
-            return ViperCloud.for_reference(Path.cwd(), location).fetch(location)
+            cloud = (
+                viper_cloud(Path.cwd())
+                if isinstance(location, ViperCloudFileRef)
+                else ViperCloud.for_reference(Path.cwd(), location)
+            )
+            return cloud.fetch(location)
         except (OSError, ValueError, RuntimeError) as exc:
             raise VerificationError("cloud file could not be retrieved") from exc
     if isinstance(location, LocalFileRef):
@@ -278,7 +288,20 @@ def list_snapshot_files(
         return list_huggingface_snapshot_files(snapshot)
     if isinstance(snapshot, LocalStageResultSnapshotRef):
         return list_local_snapshot_files(snapshot)
-    raise VerificationError("Viper Cloud snapshot listing requires a client")
+    if isinstance(
+        snapshot,
+        (GcsStageResultSnapshotRef, ViperCloudStageResultSnapshotRef),
+    ):
+        try:
+            cloud = (
+                viper_cloud(Path.cwd())
+                if isinstance(snapshot, ViperCloudStageResultSnapshotRef)
+                else ViperCloud.for_snapshot(Path.cwd(), snapshot)
+            )
+            return tuple(file.path for file in cloud.list_files(snapshot))
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise VerificationError("artifact.bundle: snapshot listing failed") from exc
+    raise VerificationError("artifact.bundle: unsupported snapshot")
 
 
 def verify_resolved_file_bytes(
@@ -429,11 +452,17 @@ def read_snapshot_file(
             commit=snapshot.commit,
             path=reference.path,
         )
-    else:
-        assert isinstance(snapshot, GcsStageResultSnapshotRef)
+    elif isinstance(snapshot, GcsStageResultSnapshotRef):
         location = GcsFileRef(
             bucket=snapshot.bucket,
             prefix=snapshot.prefix,
+            owner=snapshot.owner,
+            workspace=snapshot.workspace,
+            revision=snapshot.revision,
+            path=reference.path,
+        )
+    else:
+        location = ViperCloudFileRef(
             owner=snapshot.owner,
             workspace=snapshot.workspace,
             revision=snapshot.revision,
@@ -476,6 +505,13 @@ def snapshot_identity(
             snapshot.store_id,
             snapshot.commit,
         )
+    if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+        return (
+            snapshot.kind,
+            snapshot.owner,
+            snapshot.workspace,
+            snapshot.revision,
+        )
     return (
         snapshot.kind,
         snapshot.bucket,
@@ -508,6 +544,13 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
             location.kind,
             location.bucket,
             location.prefix,
+            location.owner,
+            location.workspace,
+            location.revision,
+        )
+    if isinstance(location, ViperCloudFileRef):
+        return (
+            location.kind,
             location.owner,
             location.workspace,
             location.revision,

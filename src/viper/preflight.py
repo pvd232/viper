@@ -41,6 +41,7 @@ from .references import (
     LocalFileRef,
     ResolvedRunSpecRef,
     StorageModel,
+    ViperCloudFileRef,
 )
 from .runs import RunSpec
 from .runtime import (
@@ -60,7 +61,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
-from .storage import local_artifact_store
+from .storage import local_artifact_store, viper_cloud
 
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[
@@ -171,8 +172,16 @@ def preflight_plan(
             return _git_bytes(root, location.commit, location.path)
         if isinstance(location, LocalFileRef):
             return local_artifact_store(location).fetch(location)
-        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
-            return ViperCloud.for_reference(root, location).fetch(location)
+        if isinstance(
+            location,
+            (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
+        ):
+            cloud = (
+                viper_cloud(root)
+                if isinstance(location, ViperCloudFileRef)
+                else ViperCloud.for_reference(root, location)
+            )
+            return cloud.fetch(location)
         return fetch_storage_bytes(location)
 
     try:
