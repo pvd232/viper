@@ -65,7 +65,7 @@ from ..runtime import (
     ResolvedGCEEnv,
     process_environment,
 )
-from ..serialization import document_digest, parse_yaml_bytes
+from ..serialization import document_digest, parse_yaml_bytes, semantic_document_digest
 from ..stages import (
     BaseSpec,
     EvalSpec,
@@ -290,7 +290,7 @@ def _verify_stage_invocation(
         raise VerificationError(
             f"stage {stage_id!r} invocation context differs from the plan"
         )
-    expected_digest = document_digest(expected_binding)
+    expected_digest = semantic_document_digest(expected_binding)
     if receipt.context_digest != expected_digest:
         raise VerificationError(f"stage {stage_id!r} invocation context digest differs")
     if stage.file_access == "declared":
@@ -484,7 +484,7 @@ def _verify_unresolved_stage_invocation(
         raise VerificationError(
             f"stage {stage_id!r} invocation context differs from the plan"
         )
-    if receipt.context_digest != document_digest(expected_binding):
+    if receipt.context_digest != semantic_document_digest(expected_binding):
         raise VerificationError(f"stage {stage_id!r} invocation context digest differs")
     allowed_outcomes = (
         {"succeeded", "failed"} if attempt.status == "failed" else {attempt.status}

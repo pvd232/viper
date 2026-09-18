@@ -63,7 +63,11 @@ from viper.runtime import (
     ExecutionPolicyRef,
     LocalEnvSpec,
 )
-from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
+from viper.serialization import (
+    parse_yaml_bytes,
+    semantic_document_digest,
+    serialize_document,
+)
 from viper.stages import (
     ResolvedTrainSpec,
     StageInvocationReceipt,
@@ -643,7 +647,7 @@ def test_python_adapter_and_cli_share_verification_boundary(
     changed_configs = original_receipt.model_copy(
         update={
             "context": changed_config_binding,
-            "context_digest": document_digest(changed_config_binding),
+            "context_digest": semantic_document_digest(changed_config_binding),
         }
     )
     with pytest.raises(VerificationError, match="context differs"):
@@ -664,7 +668,7 @@ def test_python_adapter_and_cli_share_verification_boundary(
     changed_context = original_receipt.model_copy(
         update={
             "context": changed_context_binding,
-            "context_digest": document_digest(changed_context_binding),
+            "context_digest": semantic_document_digest(changed_context_binding),
         }
     )
     with pytest.raises(VerificationError, match="context differs"):

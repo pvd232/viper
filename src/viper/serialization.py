@@ -101,6 +101,18 @@ def document_digest(document: BaseModel) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def semantic_document_digest(document: BaseModel) -> str:
+    """Hash present semantic fields while ignoring absent optional extensions."""
+    value = document.model_dump(mode="json", exclude_none=True)
+    raw = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
 def parse_yaml_bytes(raw: bytes) -> Any:
     """Parse YAML bytes while rejecting duplicate mapping keys."""
     if not isinstance(raw, bytes):

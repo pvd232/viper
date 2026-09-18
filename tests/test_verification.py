@@ -134,7 +134,7 @@ from viper.runtime import (
     TorchPrecisionSpec,
     process_environment,
 )
-from viper.serialization import document_digest
+from viper.serialization import document_digest, semantic_document_digest
 from viper.stages import (
     BuildSpec,
     DiagnosticSpec,
@@ -591,7 +591,7 @@ def invocation_evidence(
     receipt = StageInvocationReceipt(
         implementation=stage.implementation,
         context=binding,
-        context_digest=document_digest(binding),
+        context_digest=semantic_document_digest(binding),
         started_at=started_at,
         completed_at=completed_at,
         outcome="succeeded",

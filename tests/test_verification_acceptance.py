@@ -181,7 +181,11 @@ from viper.runtime import (
 )
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 from viper.runtime import ResolvedGCEEnv as ResolvedGCEEnvironment
-from viper.serialization import document_digest, parse_yaml_bytes
+from viper.serialization import (
+    document_digest,
+    parse_yaml_bytes,
+    semantic_document_digest,
+)
 from viper.stages import (
     BaseSpec,
     BuildSpec,
@@ -609,7 +613,7 @@ def publish_invocation(
     receipt = StageInvocationReceipt(
         implementation=stage.implementation,
         context=binding,
-        context_digest=document_digest(binding),
+        context_digest=semantic_document_digest(binding),
         started_at=started_at,
         completed_at=completed_at,
         outcome="succeeded",

@@ -36,7 +36,12 @@ from ..runtime import (
     observe_process_startup,
     observe_python_env,
 )
-from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
+from ..serialization import (
+    document_digest,
+    load_stage_spec,
+    parse_yaml_bytes,
+    semantic_document_digest,
+)
 from ..stages import (
     BaseSpec,
     InternalSpec,
@@ -382,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
         invocation = StageInvocationReceipt(
             implementation=stage.implementation,
             context=binding,
-            context_digest=document_digest(binding),
+            context_digest=semantic_document_digest(binding),
             started_at=started_at,
             completed_at=completed_at,
             outcome="failed",
@@ -404,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
     invocation = StageInvocationReceipt(
         implementation=stage.implementation,
         context=binding,
-        context_digest=document_digest(binding),
+        context_digest=semantic_document_digest(binding),
         started_at=started_at,
         completed_at=completed_at,
         outcome="succeeded",

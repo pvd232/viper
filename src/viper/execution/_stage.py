@@ -41,7 +41,7 @@ from ..runtime import (
     process_environment,
     select_cuda_device,
 )
-from ..serialization import document_digest
+from ..serialization import document_digest, semantic_document_digest
 from ..stages import (
     ParameterizedSpec,
     ParameterizedStageSpec,
@@ -347,7 +347,7 @@ def execute_stage_process(
         exc.invocation = StageInvocationReceipt(
             implementation=stage_spec.implementation,
             context=binding,
-            context_digest=document_digest(binding),
+            context_digest=semantic_document_digest(binding),
             started_at=started_at,
             completed_at=completed_at,
             outcome=exc.outcome,
@@ -363,7 +363,7 @@ def execute_stage_process(
             invocation=StageInvocationReceipt(
                 implementation=stage_spec.implementation,
                 context=binding,
-                context_digest=document_digest(binding),
+                context_digest=semantic_document_digest(binding),
                 started_at=started_at,
                 completed_at=completed_at,
                 outcome="failed",
@@ -379,7 +379,7 @@ def execute_stage_process(
             invocation=StageInvocationReceipt(
                 implementation=stage_spec.implementation,
                 context=binding,
-                context_digest=document_digest(binding),
+                context_digest=semantic_document_digest(binding),
                 started_at=started_at,
                 completed_at=completed_at,
                 outcome="failed",

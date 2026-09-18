@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -67,8 +68,14 @@ from viper.runs import (
 )
 from viper.runtime import CUDABackendContext, ReproducibilitySpec
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
-from viper.serialization import load_stage_spec
-from viper.stages import DownloadSpec, ParameterizedSpec, StageDependencyRef, TrainSpec
+from viper.serialization import load_stage_spec, semantic_document_digest
+from viper.stages import (
+    DownloadSpec,
+    ParameterizedSpec,
+    StageContextBinding,
+    StageDependencyRef,
+    TrainSpec,
+)
 from viper.stages import EvalSpec as EvaluateSpec
 
 SHA_A = "a" * 64
@@ -1345,6 +1352,29 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             source=source_file,
             target=target.model_copy(update={"sha256": SHA_B}),
         )
+
+
+def test_stage_context_digest_ignores_absent_schema_extensions() -> None:
+    """Keep old invocation digests valid when optional fields are added."""
+    binding = StageContextBinding(
+        run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        attempt_id=1,
+        stage_id="train",
+        config_type=config_type_ref("train"),
+        config_digest=SHA_A,
+        inputs={"training_dataset": "inputs/dataset.bin"},
+        outputs={"model": "artifacts/model.bin"},
+        metric_ids=(),
+        numpy_generator_names=(),
+    )
+    legacy = binding.model_dump(mode="json")
+    config_reference = legacy["config_type"]
+    assert isinstance(config_reference, dict)
+    config_reference.pop("definition_sha256", None)
+    config_reference.pop("schema_sha256", None)
+    raw = json.dumps(legacy, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+    assert semantic_document_digest(binding) == hashlib.sha256(raw).hexdigest()
 
 
 def test_stage_reuse_key_uses_semantic_source_and_lockfile_identity() -> None:
