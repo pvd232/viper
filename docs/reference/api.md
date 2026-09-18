@@ -257,8 +257,8 @@ Every cloud run writes `resolved.ref.yaml` beside its local `resolved.yaml`. The
 sidecar preserves the durable `ResolvedRunRef`; selecting the local terminal path
 therefore resolves back to GCS or Hugging Face after a restart. Use
 `execution.promote_run_to_cloud()` to rewrite and publish a verified local-only run
-graph while keeping the stage-execution count at zero. A local-mode workspace may pass
-an explicit `ViperCloudDestination` to that operation; ordinary runs continue
+graph while keeping the stage-execution count at zero. The caller must pass an explicit
+`ViperCloudDestination` to that operation; ordinary runs continue
 publishing to `.viper/store`.
 
 `probe_gcs_storage()` remains the GCS launch probe. It publishes one immutable object,

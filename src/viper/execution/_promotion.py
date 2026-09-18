@@ -254,14 +254,9 @@ def _contains_local_reference(value: Any) -> bool:
 def promote_run_to_cloud(
     repository_root: Path,
     source: Path | ResolvedRunRef,
-    destination: ViperCloudDestination | None = None,
+    destination: ViperCloudDestination,
 ) -> ResolvedRunRef:
-    """Verify and promote one local run graph without invoking a stage.
-
-    An explicit ``destination`` lets a local-mode workspace promote a selected
-    run without changing where ordinary runs publish. When omitted, promotion
-    uses the workspace's cloud publication destination.
-    """
+    """Verify and promote one local run graph to the required destination."""
     root = repository_root.resolve(strict=True)
     reference = resolve_run_reference(root, source)
     if not isinstance(reference.stored_at, LocalFileRef):
@@ -283,17 +278,10 @@ def promote_run_to_cloud(
     settings = load_storage_settings(root)
     if settings.repository is None:
         raise RunPromotionError("cloud destination is not configured")
-    selected_destination = destination
-    if selected_destination is None and isinstance(
-        settings.destination, ViperCloudDestination
-    ):
-        selected_destination = settings.destination
-    if selected_destination is None:
-        raise RunPromotionError("cloud destination is not selected")
     promoter = _RunGraphPromoter(
         root,
         ViperCloud(root, settings.repository),
-        selected_destination,
+        destination,
     )
     promoted = promoter.promote_reference(reference)
     result = ResolvedRunRef.model_validate(promoted.model_dump(mode="python"))
