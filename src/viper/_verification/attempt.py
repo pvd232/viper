@@ -13,8 +13,6 @@ from typing import cast
 import yaml
 from pydantic import TypeAdapter
 
-from viper.workspace import captured_input_path, stored_input_path
-
 from .._config.validation import (
     ConfigValidationError,
     verify_config_type_bytes,
@@ -35,7 +33,11 @@ from ..http import (
     validate_request_policy,
 )
 from ..ids import InputName, StageId
-from ..inputs import ExternalInputRef, FutureInputRef, ResolvedExternalInputRef
+from ..inputs import (
+    ExternalInputRef,
+    FutureInputRef,
+    ResolvedExternalInputRef,
+)
 from ..journal import parse_journal_bytes
 from ..metrics import Measurement, is_recomputed_metric
 from ..references import (
@@ -81,6 +83,7 @@ from ..stages import (
     StageFileAccessReceipt,
     StageInvocationReceipt,
 )
+from ..workspace import captured_input_path, stored_input_path
 from . import storage
 from .paths import (
     resolved_stage_spec_path,
@@ -607,18 +610,11 @@ def verify_download_retrieval(
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} HTTP config type differs"
             ) from exc
+        bundle_reader = getattr(fetcher, "read_external_executable", None)
+        if bundle_reader is None:
+            return
         for executable in http.external_executables:
-            try:
-                bundle_reader = getattr(fetcher, "read_external_executable", None)
-                executable_raw = (
-                    bundle_reader(executable)
-                    if bundle_reader is not None
-                    else executable.path.read_bytes()
-                )
-            except OSError as exc:
-                raise VerificationError(
-                    f"HTTP retrieval {input_name!r} executable is unavailable"
-                ) from exc
+            executable_raw = bundle_reader(executable)
             if (
                 len(executable_raw) != executable.spec.bytes
                 or hashlib.sha256(executable_raw).hexdigest() != executable.spec.sha256
