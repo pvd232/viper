@@ -29,6 +29,7 @@ from viper.inputs import (
     FutureInputRef,
     LocalSource,
     ResolvedExternalInputRef,
+    StoredInputRef,
 )
 from viper.keys import Eval as EvalKeys
 from viper.keys import Train as TrainKeys
@@ -1393,63 +1394,78 @@ def test_stage_reuse_key_uses_semantic_source_and_lockfile_identity() -> None:
         update={"lockfile": env.lockfile.model_copy(update={"commit": "b" * 40})}
     )
     lockfile = FileIdentity(sha256=SHA_A, bytes=7)
-    arguments = {
-        "stage_id": "train",
-        "stage": stage,
-        "inputs": (selected_input,),
-        "seed": 42,
-        "reproducibility": ReproducibilitySpec.model_validate(reproducibility()),
-        "metrics": {},
-        "lockfile": lockfile,
-    }
-
-    original = build_stage_reuse_key(env=env, **arguments)
-    moved = build_stage_reuse_key(env=moved_env, **arguments)
-    moved_input = stage.inputs["training_dataset"].model_copy(
+    controls = ReproducibilitySpec.model_validate(reproducibility())
+    original = build_stage_reuse_key(
+        stage_id="train",
+        stage=stage,
+        inputs=(selected_input,),
+        seed=42,
+        env=env,
+        reproducibility=controls,
+        metrics={},
+        lockfile=lockfile,
+    )
+    moved = build_stage_reuse_key(
+        stage_id="train",
+        stage=stage,
+        inputs=(selected_input,),
+        seed=42,
+        env=moved_env,
+        reproducibility=controls,
+        metrics={},
+        lockfile=lockfile,
+    )
+    training_input = stage.inputs["training_dataset"]
+    assert isinstance(training_input, StoredInputRef)
+    moved_input = training_input.model_copy(
         update={
             "path": "inputs/renamed/dataset.h5ad",
-            "pointer": stage.inputs["training_dataset"].pointer.model_copy(
-                update={"commit": "b" * 40}
-            ),
+            "pointer": training_input.pointer.model_copy(update={"commit": "b" * 40}),
         }
     )
     moved_input_key = build_stage_reuse_key(
+        stage_id="train",
+        stage=stage.model_copy(update={"inputs": {"training_dataset": moved_input}}),
+        inputs=(selected_input,),
+        seed=42,
         env=env,
-        **(
-            arguments
-            | {
-                "stage": stage.model_copy(
-                    update={"inputs": {"training_dataset": moved_input}}
-                )
-            }
-        ),
+        reproducibility=controls,
+        metrics={},
+        lockfile=lockfile,
     )
     changed_lockfile = build_stage_reuse_key(
+        stage_id="train",
+        stage=stage,
+        inputs=(selected_input,),
+        seed=42,
         env=moved_env,
-        **(arguments | {"lockfile": FileIdentity(sha256=SHA_B, bytes=7)}),
+        reproducibility=controls,
+        metrics={},
+        lockfile=FileIdentity(sha256=SHA_B, bytes=7),
     )
     changed_dependency = build_stage_reuse_key(
-        env=env,
-        **(
-            arguments
-            | {
-                "stage": stage.model_copy(
+        stage_id="train",
+        stage=stage.model_copy(
+            update={
+                "implementation": stage.implementation.model_copy(
                     update={
-                        "implementation": stage.implementation.model_copy(
-                            update={
-                                "dependencies": (
-                                    StageDependencyRef(
-                                        path="src/viper/domain.py",
-                                        sha256=SHA_B,
-                                        bytes=7,
-                                    ),
-                                )
-                            }
+                        "dependencies": (
+                            StageDependencyRef(
+                                path="src/viper/domain.py",
+                                sha256=SHA_B,
+                                bytes=7,
+                            ),
                         )
                     }
                 )
             }
         ),
+        inputs=(selected_input,),
+        seed=42,
+        env=env,
+        reproducibility=controls,
+        metrics={},
+        lockfile=lockfile,
     )
 
     assert moved == original

@@ -134,6 +134,8 @@ from viper.references import (
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
 )
 from viper.resume import DataLoaderConfiguration
 from viper.reuse import (
@@ -300,6 +302,14 @@ class DocumentStore:
                 "",
             )
         if isinstance(location, GcsFileRef):
+            return (
+                location.kind,
+                f"{location.owner}/{location.workspace}",
+                location.revision,
+                str(location.path),
+                "",
+            )
+        if isinstance(location, ViperCloudFileRef):
             return (
                 location.kind,
                 f"{location.owner}/{location.workspace}",
@@ -1825,7 +1835,10 @@ def copy_snapshot_files(
 
 def snapshot_revision(snapshot: StageResultSnapshot) -> str:
     """Return the revision field used by a snapshot's storage backend."""
-    if isinstance(snapshot, GcsStageResultSnapshotRef):
+    if isinstance(
+        snapshot,
+        (GcsStageResultSnapshotRef, ViperCloudStageResultSnapshotRef),
+    ):
         return snapshot.revision
     return snapshot.commit
 
@@ -3069,8 +3082,8 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
 
         with mock.patch.object(
             verification,
-            "verify_pointer_run",
-            wraps=verification.verify_pointer_run,
+            "verify_pointer_producer",
+            wraps=verification.verify_pointer_producer,
         ) as observed:
             verification.verify_stored_inputs(
                 {"build": repeated_build},
@@ -4084,6 +4097,8 @@ def _policy_reused_evaluation(
         verified_input_identity(name, value)
         for name, value in sorted(verified.inputs["evaluate"].items())
     )
+    source_completion = source_result.completion
+    assert isinstance(source_completion, ExecutedStageCompletion)
     artifact = source_result.artifacts["predictions"]
     assert isinstance(artifact, ResolvedSingleFileArtifact)
     reuse = StageReuseReceipt(
@@ -4098,6 +4113,7 @@ def _policy_reused_evaluation(
             metrics={
                 metric.metric_id: metric for metric in verified.plan.experiment.metrics
             },
+            lockfile=source_completion.env.lockfile,
         ),
         source_run=source_run,
         source_attempt=source.attempts[-1],
@@ -4124,7 +4140,8 @@ def _policy_reused_evaluation(
             "completion": ReusedStageCompletion(
                 receipt=ResolvedStageReuseRef(
                     stored_at=location, sha256=sha256(raw), bytes=len(raw)
-                )
+                ),
+                lockfile=source_completion.env.lockfile,
             )
         }
     )

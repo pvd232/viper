@@ -28,6 +28,8 @@ from viper.stages import (
 class WorkspaceModuleCallable(Protocol):
     """Expose the workspace modules retained on a loaded stage callable."""
 
+    __viper_config_definition_sha256__: str
+    __viper_config_schema_sha256__: str
     __viper_workspace_modules__: Mapping[str, ModuleType]
 
     def __call__(self, *args: object, **kwargs: object) -> object:
@@ -139,12 +141,15 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
         bytes=len(raw),
     )
 
-    loaded = load_stage_callable(path, reference, import_root=tmp_path)
+    loaded = cast(
+        WorkspaceModuleCallable,
+        load_stage_callable(path, reference, import_root=tmp_path),
+    )
 
     assert stage_definition(loaded).config_type.__name__ == "ProjectConfig"
-    workspace_modules = cast(
-        WorkspaceModuleCallable, loaded
-    ).__viper_workspace_modules__
+    assert len(loaded.__viper_config_definition_sha256__) == 64
+    assert len(loaded.__viper_config_schema_sha256__) == 64
+    workspace_modules = loaded.__viper_workspace_modules__
     assert workspace_modules["example_project.config"].ProjectConfig is (
         stage_definition(loaded).config_type
     )

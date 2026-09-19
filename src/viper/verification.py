@@ -110,9 +110,9 @@ from .stages import (
 )
 
 __all__ = [
-    "verify_download_source_closure",
     "verify_attempt_future_inputs",
     "verify_benchmark_result",
+    "verify_download_source_closure",
     "verify_promoted_artifact",
     "verify_run_result",
     "verify_stage_reuse",
@@ -227,54 +227,50 @@ def verify_download_source_closure(
             selected_runs[reference] = (result, selected_run)
         else:
             result, selected_run = loaded_run
+        source_attempt: RunAttempt | None = None
         if attempt_reference is None:
-            if result.status != "succeeded" or result.successful_attempt_id is None:
-                raise VerificationError("download source run did not succeed")
-            expected_path = (
-                f"{run_root(selected_run)}/attempts/"
-                f"{result.successful_attempt_id}/resolved.yaml"
-            )
-            matching = tuple(
-                candidate
-                for candidate in result.attempts
-                if candidate.stored_at.path == expected_path
-            )
-            if len(matching) != 1:
-                raise VerificationError(
-                    "download source successful attempt receipt is unavailable"
+            # Find the attempt that actually resolved the selected stage
+            for candidate in reversed(result.attempts):
+                candidate_attempt = read_attempt_reference(
+                    candidate,
+                    selected_run,
+                    fetcher=fetcher,
                 )
-            attempt_reference = matching[0]
+                if any(
+                    item.stage_id == selected_stage_id
+                    for item in candidate_attempt.resolved_stages
+                ):
+                    attempt_reference = candidate
+                    source_attempt = candidate_attempt
+                    break
+            if attempt_reference is None or source_attempt is None:
+                raise VerificationError(
+                    f"download source stage {selected_stage_id!r} not found in run attempts"
+                )
         elif attempt_reference not in result.attempts:
             raise VerificationError("download source reuse attempt is unavailable")
-        assert attempt_reference is not None
-        cache_key = (reference, attempt_reference, selected_stage_id)
-        cached = selected_contexts.get(cache_key)
-        if cached is not None:
-            return cached
-        attempt_key = (reference, attempt_reference)
-        source_attempt = selected_attempts.get(attempt_key)
-        if source_attempt is None:
+        else:
             source_attempt = read_attempt_reference(
                 attempt_reference,
                 selected_run,
                 fetcher=fetcher,
             )
-            if (
-                attempt_reference.stored_at.path.endswith(
-                    f"/{result.successful_attempt_id}/resolved.yaml"
-                )
-                and source_attempt.status != "succeeded"
-            ):
-                raise VerificationError("download source successful attempt differs")
-            planned_ids = tuple(item.stage_id for item in selected_run.stages)
-            completed_ids = tuple(
-                item.stage_id for item in source_attempt.resolved_stages
+
+        cache_key = (reference, attempt_reference, selected_stage_id)
+        cached = selected_contexts.get(cache_key)
+        if cached is not None:
+            return cached
+
+        attempt_key = (reference, attempt_reference)
+        selected_attempts[attempt_key] = source_attempt
+
+        planned_ids = tuple(item.stage_id for item in selected_run.stages)
+        completed_ids = tuple(item.stage_id for item in source_attempt.resolved_stages)
+        if completed_ids != planned_ids[: len(completed_ids)]:
+            raise VerificationError(
+                "download source attempt stages do not form a plan prefix"
             )
-            if completed_ids != planned_ids[: len(completed_ids)]:
-                raise VerificationError(
-                    "download source attempt stages do not form a plan prefix"
-                )
-            selected_attempts[attempt_key] = source_attempt
+
         selected_specs: dict[StageId, BaseSpec] = {}
         selected_refs: dict[StageId, ResolvedStageRef] = {}
         selected_results: dict[StageId, ResolvedBaseSpec] = {}
@@ -1147,7 +1143,7 @@ def _verify_pointer_producer_structure(
         plan.run,
         fetcher=fetcher,
     )
-    successful_stages: dict[StageId, ResolvedBaseSpec] = {}
+    resolved_stages: dict[StageId, ResolvedBaseSpec] = {}
     for attempt in attempts:
         verify_attempt_journal(attempt, plan.run, fetcher=fetcher)
         stages = verify_attempt_stages(
@@ -1159,11 +1155,11 @@ def _verify_pointer_producer_structure(
             fetcher=fetcher,
             verify_payloads=False,
         )
-        if attempt.attempt_id == resolved_run.successful_attempt_id:
-            successful_stages = stages
+
+        resolved_stages.update(stages)
 
     if resolved_run.status == "succeeded":
-        estimator_stage = successful_stages.get(plan.run.estimator.stage_id)
+        estimator_stage = resolved_stages.get(plan.run.estimator.stage_id)
         if estimator_stage is None:
             raise VerificationError("successful run has no estimator-producing stage")
         if plan.run.estimator.artifact_name not in estimator_stage.artifacts:
@@ -1173,7 +1169,7 @@ def _verify_pointer_producer_structure(
         result=resolved_run,
         plan=plan,
         attempts=attempts,
-        resolved_stages=successful_stages,
+        resolved_stages=resolved_stages,
     )
 
 
@@ -1283,14 +1279,25 @@ def verify_artifact_in_run(
         if pointer.artifact != verified_run.plan.run.estimator:
             raise VerificationError("benchmark promotion must select the run estimator")
 
-    successful_attempt = next(
+    producer_attempt = next(
         attempt
-        for attempt in verified_run.attempts
-        if attempt.attempt_id == verified_run.result.successful_attempt_id
+        for attempt in (
+            [
+                a
+                for a in verified_run.attempts
+                if a.attempt_id == verified_run.result.successful_attempt_id
+            ]
+            or reversed(verified_run.attempts)
+        )
+        if any(
+            stage.stage_id == pointer.artifact.stage_id
+            for stage in attempt.resolved_stages
+        )
     )
+
     producer_stage = next(
         stage
-        for stage in successful_attempt.resolved_stages
+        for stage in producer_attempt.resolved_stages
         if stage.stage_id == pointer.artifact.stage_id
     )
     verified_artifact = verify_snapshot_artifact(
@@ -1301,7 +1308,7 @@ def verify_artifact_in_run(
     )
     if isinstance(producer_spec, ResolvedDownloadSpec):
         verify_download_retrieval(
-            successful_attempt,
+            producer_attempt,
             verified_run.plan.run,
             producer_spec,
             producer_stage.snapshot,
@@ -1513,9 +1520,9 @@ def verify_attempt_future_inputs(
                     f"future input {input_name!r} must name an earlier stage"
                 )
 
-            resolved_producer_spec = resolved_stages.get(producer_stage_id)
+            resolved_producer = resolved_stages.get(producer_stage_id)
 
-            if resolved_producer_spec is None:
+            if resolved_producer is None:
                 raise VerificationError(
                     f"resolved producer stage {producer_stage_id!r} is missing"
                 )
@@ -1535,23 +1542,20 @@ def verify_attempt_future_inputs(
                 )
 
             artifact_name = spec_input.name
-            artifact = resolved_producer_spec.artifacts.get(artifact_name)
+            artifact = resolved_producer.artifacts.get(artifact_name)
             if artifact is None:
                 raise VerificationError(
                     f"producer stage {producer_stage_id!r} has no artifact "
                     f"named {artifact_name!r}"
                 )
 
-            declared_artifact = (
-                resolved_producer_spec.spec.outputs[artifact_name]
-                if artifact_name in resolved_producer_spec.spec.outputs.keys()
-                else None
-            )
-            if declared_artifact is None:
+            if artifact_name not in resolved_producer.spec.outputs:
                 raise VerificationError(
                     f"producer stage {producer_stage_id!r} did not declare "
                     f"artifact {artifact_name!r}"
                 )
+
+            declared_artifact = resolved_producer.spec.outputs[artifact_name]
 
             verified_artifact = verify_snapshot_artifact(
                 producer_stage_reference,
@@ -1806,7 +1810,7 @@ def verify_benchmark_result(
         )
     for artifact_key, expected in expected_artifacts.items():
         (
-            artifact_ref,
+            _,
             candidate_stage,
             confirmation_stage,
             candidate,

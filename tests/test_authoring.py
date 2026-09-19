@@ -16,6 +16,7 @@ import viper.authoring as authoring
 import viper.config as config
 from examples.cpu_quickstart import training as example_training
 from viper import _subprocess as subprocess
+from viper._source_closure import workspace_dependency_refs
 from viper.artifacts import (
     ArtifactLoaderRef,
     BundleArtifactDraft,
@@ -86,7 +87,6 @@ from viper.runtime import (
     resolve_execution_policy,
 )
 from viper.serialization import parse_yaml_bytes, serialize_document
-from viper.source_closure import workspace_dependency_refs
 from viper.stages import (
     StageContext,
     StageFileAccessMode,

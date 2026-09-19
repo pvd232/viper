@@ -931,6 +931,16 @@ def load_stage_callable(
                 )
             config_source = inspect.getsourcefile(definition.config_type)
             setattr(value, "__viper_config_source__", config_source)
+            setattr(
+                value,
+                "__viper_config_definition_sha256__",
+                config_definition_sha256(definition.config_type),
+            )
+            setattr(
+                value,
+                "__viper_config_schema_sha256__",
+                config_schema_sha256(definition.config_type),
+            )
             setattr(value, "__viper_source_path__", str(path.resolve()))
             loaded_workspace_modules = {
                 name: loaded_module
@@ -997,13 +1007,13 @@ def validate_stage_definition(
         )
     if (
         stage.config_type.definition_sha256 is not None
-        and config_definition_sha256(definition.config_type)
+        and getattr(function, "__viper_config_definition_sha256__", None)
         != stage.config_type.definition_sha256
     ):
         raise StageDefinitionError("stage config definition differs from its reference")
     if (
         stage.config_type.schema_sha256 is not None
-        and config_schema_sha256(definition.config_type)
+        and getattr(function, "__viper_config_schema_sha256__", None)
         != stage.config_type.schema_sha256
     ):
         raise StageDefinitionError("stage config schema differs from its reference")

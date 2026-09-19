@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-import subprocess
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+import viper._subprocess as subprocess
 
 from .stages import StageDependencyRef
 

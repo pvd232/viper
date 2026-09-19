@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_v
 
 from . import keys
 from ._schema import DataRole, RepoRelPath, RNGSeed
+from ._source_closure import workspace_dependency_refs
 from .artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
@@ -118,7 +119,6 @@ from .runtime import (
     resolve_execution_policy,
 )
 from .serialization import parse_yaml_bytes, serialize_document
-from .source_closure import workspace_dependency_refs
 from .stages import (
     BuildSpec,
     DiagnosticSpec,
