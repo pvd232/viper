@@ -188,6 +188,22 @@ def preflight_plan(
             return cloud.fetch(location)
         return fetch_storage_bytes(location)
 
+    class _CachedFetcher:
+        def __init__(self, fetch_fn):
+            self._fetch = fetch_fn
+            self._producers = {}
+
+        def __call__(self, loc: StorageModel) -> bytes:
+            return self._fetch(loc)
+
+        def read_verified_producer(self, ref, policy):
+            return self._producers.get((ref, policy))
+
+        def remember_verified_producer(self, ref, policy, prod):
+            self._producers[(ref, policy)] = prod
+
+    fetch = _CachedFetcher(fetch)
+
     try:
         if plan is None:
             relative_run_path = run_spec_path.resolve().relative_to(root).as_posix()
