@@ -2,12 +2,12 @@
 
 ## 1. Status
 
-**Contract status:** Planned in the [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md) checklist.
+**Contract status:** Planned in the [Execution storage protocol](../checklists/execution-storage-protocol.md) checklist.
 
 <!-- contract-protocol:generated:start -->
 **Planned.**
 
-**Checklist:** [CleaRx-driven VIPER friction repairs](../checklists/clearrx-viper-friction.md)
+**Checklist:** [Execution storage protocol](../checklists/execution-storage-protocol.md)
 
 ### PairBlocks
 

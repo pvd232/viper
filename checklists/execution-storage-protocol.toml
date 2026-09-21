@@ -1,0 +1,43 @@
+schema_version = 1
+checklist_id = "execution-storage-protocol"
+title = "Execution storage protocol"
+coordination_repository_id = "viper"
+checklist_path = "checklists/execution-storage-protocol.md"
+contract_paths = [
+  "contracts/execution-path-parity.toml",
+]
+
+[[phases]]
+number = 1
+title = "Preserve execution paths across storage destinations"
+requirement_ids = [
+  "EPP-REQ-01",
+  "EPP-REQ-02",
+  "EPP-REQ-03",
+  "EPP-REQ-04",
+  "EPP-REQ-05",
+]
+
+[[repository_bindings]]
+repository_id = "viper"
+checkout = "/Users/machina/Developer/ChatGPT/viper"
+
+[[repository_bindings.executables]]
+command = "python3"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/python3"
+
+[[repository_bindings.executables]]
+command = "pyright"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/pyright"
+
+[[repository_bindings.executables]]
+command = "node"
+path = "/usr/local/bin/node"
+
+[[repository_bindings.executables]]
+command = "ruff"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/ruff"
+
+[[repository_bindings.executables]]
+command = "git"
+path = "/usr/bin/git"

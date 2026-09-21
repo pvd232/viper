@@ -35,15 +35,6 @@ This checklist converts the concrete friction observed in the CleaRx audio-reten
 |---|---|---|---|---|
 | <nobr><code>AUG-REQ-02</code></nobr> | complete | [authoring-guardrails](../contracts/authoring-guardrails.md#aug-req-02) | <nobr><code>AUG-PB-02</code></nobr> | None |
 
-### Phase 6: Preserve execution paths across storage destinations
-
-| Requirement | Status | Contract | PairBlocks | Dependencies |
-|---|---|---|---|---|
-| <nobr><code>EPP-REQ-01</code></nobr> | planned | [execution-path-parity](../contracts/execution-path-parity.md#epp-req-01) | <nobr><code>EPP-PB-01</code></nobr> | None |
-| <nobr><code>EPP-REQ-02</code></nobr> | planned | [execution-path-parity](../contracts/execution-path-parity.md#epp-req-02) | <nobr><code>EPP-PB-01</code></nobr> | <nobr><code>EPP-REQ-01</code></nobr> |
-| <nobr><code>EPP-REQ-03</code></nobr> | planned | [execution-path-parity](../contracts/execution-path-parity.md#epp-req-03) | <nobr><code>EPP-PB-02</code></nobr> | <nobr><code>EPP-REQ-01</code></nobr>, <nobr><code>EPP-REQ-02</code></nobr> |
-| <nobr><code>EPP-REQ-04</code></nobr> | planned | [execution-path-parity](../contracts/execution-path-parity.md#epp-req-04) | <nobr><code>EPP-PB-02</code></nobr> | <nobr><code>EPP-REQ-03</code></nobr> |
-| <nobr><code>EPP-REQ-05</code></nobr> | planned | [execution-path-parity](../contracts/execution-path-parity.md#epp-req-05) | <nobr><code>EPP-PB-02</code></nobr> | <nobr><code>EPP-REQ-01</code></nobr>, <nobr><code>EPP-REQ-02</code></nobr>, <nobr><code>EPP-REQ-03</code></nobr>, <nobr><code>EPP-REQ-04</code></nobr> |
 <!-- contract-protocol:generated:end -->
 
-The execution order front-loads invalid-plan rejection, then protects completed computation, packages provenance, improves environment diagnosis, finishes authoring ergonomics, and restores destination-independent execution paths. Each PairBlock is independently reviewable and may stop without weakening later acceptance criteria.
+The execution order front-loads invalid-plan rejection, then protects completed computation, packages provenance, improves environment diagnosis, and finishes authoring ergonomics. Each PairBlock is independently reviewable and may stop without weakening later acceptance criteria.

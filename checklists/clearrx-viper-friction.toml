@@ -7,7 +7,6 @@ contract_paths = [
   "contracts/authoring-guardrails.toml",
   "contracts/attempt-recovery-and-export.toml",
   "contracts/python-environment-diagnostics.toml",
-  "contracts/execution-path-parity.toml",
 ]
 
 [[phases]]
@@ -34,17 +33,6 @@ requirement_ids = ["PED-REQ-01", "PED-REQ-02"]
 number = 5
 title = "Generate complete experiment matrices"
 requirement_ids = ["AUG-REQ-02"]
-
-[[phases]]
-number = 6
-title = "Preserve execution paths across storage destinations"
-requirement_ids = [
-  "EPP-REQ-01",
-  "EPP-REQ-02",
-  "EPP-REQ-03",
-  "EPP-REQ-04",
-  "EPP-REQ-05",
-]
 
 [[repository_bindings]]
 repository_id = "viper"
