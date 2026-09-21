@@ -83,7 +83,11 @@ from ..stages import (
     StageFileAccessReceipt,
     StageInvocationReceipt,
 )
-from ..workspace import captured_input_path, stored_input_path
+from ..workspace import (
+    captured_input_path,
+    captured_input_snapshot_path,
+    stored_input_path,
+)
 from . import storage
 from .paths import (
     resolved_stage_spec_path,
@@ -1109,9 +1113,7 @@ def verify_external_inputs(
             raise VerificationError(
                 "input.local.identity: resolved input provenance differs"
             )
-        expected_path = captured_input_path(
-            run_id=run.run_id,
-            attempt_id=attempt.attempt_id,
+        expected_path = captured_input_snapshot_path(
             stage_id=stage_id,
             input_name=input_name,
             source_path=planned_input.source.path,

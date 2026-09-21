@@ -60,7 +60,12 @@ from ..verification import (
     verify_pointer_producer,
     verify_snapshot_artifact,
 )
-from ..workspace import AttemptWorkspace, captured_input_path, stored_input_path
+from ..workspace import (
+    AttemptWorkspace,
+    captured_input_path,
+    captured_input_snapshot_path,
+    stored_input_path,
+)
 from ._downloads import publish_download_body
 from ._source import RunFetcher
 from .errors import RunError
@@ -278,14 +283,14 @@ def resolve_inputs(
 
 
 def verify_captured_inputs(
-    root: Path,
     captured: Mapping[InputName, SnapshotFileRef],
+    paths: Mapping[str, Path],
 ) -> None:
     """Require every captured local input to retain its pre-execution identity."""
     for input_name, reference in captured.items():
         try:
-            raw = (root / reference.path).read_bytes()
-        except OSError as exc:
+            raw = paths[input_name].read_bytes()
+        except (KeyError, OSError) as exc:
             raise RunError(
                 f"input.local.identity: captured input {input_name!r} is unavailable"
             ) from exc
@@ -379,14 +384,14 @@ def capture_external_input(
     if not source.is_relative_to(root) or not source.is_file():
         raise RunError("input.local.capture: source must be a repository file")
     raw = source.read_bytes()
-    relative_path = captured_input_path(
+    captured_path = captured_input_path(
         run_id=run_id,
         attempt_id=attempt_id,
         stage_id=stage_id,
         input_name=input_name,
         source_path=input_ref.source.path,
     )
-    target = root / relative_path
+    target = root / captured_path
     if not target.resolve().is_relative_to(workspace.inputs.resolve()):
         raise RunError(
             "input.local.capture: captured path escapes the attempt workspace"
@@ -407,7 +412,12 @@ def capture_external_input(
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-    reference = snapshot_file(relative_path, raw)
+    snapshot_path = captured_input_snapshot_path(
+        stage_id=stage_id,
+        input_name=input_name,
+        source_path=input_ref.source.path,
+    )
+    reference = snapshot_file(snapshot_path, raw)
     return (
         ResolvedExternalInputRef(
             source=input_ref.source,

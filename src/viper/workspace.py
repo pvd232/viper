@@ -176,6 +176,17 @@ def captured_input_path(
     )
 
 
+def captured_input_snapshot_path(
+    *,
+    stage_id: StageId,
+    input_name: InputName,
+    source_path: RepoRelPath,
+) -> RepoRelPath:
+    """Return the durable stage-snapshot path for one captured local input."""
+    suffix = Path(source_path).suffix
+    return f"inputs/{stage_id}/{input_name}{suffix}"
+
+
 def stored_input_path(
     *,
     run_id: RunId,

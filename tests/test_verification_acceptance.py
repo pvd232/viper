@@ -209,7 +209,11 @@ from viper.verification import (
     verify_run_result,
     verify_stage_reuse,
 )
-from viper.workspace import captured_input_path, stored_input_path
+from viper.workspace import (
+    captured_input_path,
+    captured_input_snapshot_path,
+    stored_input_path,
+)
 
 SOURCE_REPOSITORY = HttpUrl("https://github.com/example/viper-project")
 ARTIFACT_REPOSITORY = "example/viper-runs"
@@ -2833,9 +2837,7 @@ def test_external_input_identity_survives_execution() -> None:
     stage_id = "train"
     source = LocalSource(path="inputs/raw/dataset.bin")
     declared = ExternalInputRef(source=source, data_role="training")
-    captured_path = captured_input_path(
-        run_id=run_id,
-        attempt_id=attempt_id,
+    captured_path = captured_input_snapshot_path(
         stage_id=stage_id,
         input_name="dataset",
         source_path=source.path,
@@ -2880,9 +2882,7 @@ def test_external_input_identity_rejects_tampering() -> None:
     stage_id = "train"
     source = LocalSource(path="inputs/raw/dataset.bin")
     declared = ExternalInputRef(source=source, data_role="training")
-    captured_path = captured_input_path(
-        run_id=run_id,
-        attempt_id=attempt_id,
+    captured_path = captured_input_snapshot_path(
         stage_id=stage_id,
         input_name="dataset",
         source_path=source.path,

@@ -161,6 +161,7 @@ from viper.verification import verify_download_source_closure, verify_run_result
 from viper.workspace import (
     AttemptWorkspace,
     captured_input_path,
+    captured_input_snapshot_path,
     stored_input_path,
 )
 
@@ -1191,20 +1192,48 @@ def test_train_stage_captures_local_external_input(
     resolved_input = resolved_train.inputs["prior"]
 
     assert isinstance(resolved_input, ResolvedExternalInputRef)
-    expected_path = captured_input_path(
+    expected_runtime_path = captured_input_path(
         run_id=RUN_ID,
         attempt_id=verified.attempts[-1].attempt_id,
         stage_id="train",
         input_name="prior",
         source_path="inputs/raw/prior.bin",
     )
-    assert resolved_input.file.path == expected_path
-    assert (root / expected_path).read_bytes() == b"prior"
+    expected_snapshot_path = captured_input_snapshot_path(
+        stage_id="train",
+        input_name="prior",
+        source_path="inputs/raw/prior.bin",
+    )
+    assert resolved_input.file.path == expected_snapshot_path
+    train_stage_ref = next(
+        reference
+        for reference in verified.attempts[-1].resolved_stages
+        if reference.stage_id == "train"
+    )
+    assert isinstance(train_stage_ref.snapshot, LocalStageResultSnapshotRef)
+    assert (
+        store.fetch(
+            LocalFileRef(
+                workspace=root,
+                store=train_stage_ref.snapshot.store,
+                store_id=train_stage_ref.snapshot.store_id,
+                commit=train_stage_ref.snapshot.commit,
+                path=expected_snapshot_path,
+            )
+        )
+        == b"prior"
+    )
+    assert not (
+        root
+        / train_stage_ref.snapshot.store
+        / train_stage_ref.snapshot.commit
+        / ".viper"
+    ).exists()
     invocation = StageInvocationReceipt.model_validate(
         parse_yaml_bytes(store.fetch(verified.attempts[-1].invocations[-1].stored_at))
     )
     assert invocation.file_access is not None
-    assert invocation.file_access.reads == (expected_path,)
+    assert invocation.file_access.reads == (expected_runtime_path,)
     assert invocation.file_access.writes == (
         f"{RUN_ROOT}/artifacts/train/model/model.bin",
         f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.bin",
@@ -1244,7 +1273,11 @@ def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
     assert captured == root / expected
     assert captured.read_bytes() == b"dataset"
     assert resolved.source == declared.source
-    assert resolved.file.path == expected
+    assert resolved.file.path == captured_input_snapshot_path(
+        stage_id="train",
+        input_name="dataset",
+        source_path=declared.source.path,
+    )
     assert resolved.file.sha256 == hashlib.sha256(b"dataset").hexdigest()
     assert resolved.file.bytes == len(b"dataset")
 
@@ -1469,7 +1502,7 @@ def test_local_input_mutation_fails_attempt(tmp_path: Path) -> None:
     captured.write_bytes(b"changed")
 
     with pytest.raises(RunError, match="input.local.identity"):
-        verify_captured_inputs(root, {"dataset": resolved.file})
+        verify_captured_inputs({"dataset": resolved.file}, {"dataset": captured})
 
 
 def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
@@ -1506,7 +1539,8 @@ def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
     assert any(
         line not in exception_lines for line in call_lines["verify_captured_inputs"]
     )
-    assert "for reference in captured_inputs.values()" in source
+    assert "for input_name, reference in captured_inputs.items()" in source
+    assert "reference.path: input_paths[input_name]" in source
 
 
 def test_download_source_closure_runs_before_reuse_or_stage_process() -> None:

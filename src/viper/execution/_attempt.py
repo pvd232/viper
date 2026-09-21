@@ -511,6 +511,7 @@ def execute_attempt(
                         stage=stage,
                         inputs=resolved_inputs or {},
                         captured_inputs=captured_inputs,
+                        input_paths=input_paths,
                         resolved_stage_path=resolved_path,
                         fetcher=fetcher,
                         policy=policy,
@@ -628,10 +629,10 @@ def execute_attempt(
                 f"/stages/{stage_reference.stage_id}/resolved.yaml"
             )
             resolved_raw = serialize_document(resolved)
-            verify_captured_inputs(root, captured_inputs)
+            verify_captured_inputs(captured_inputs, input_paths)
             snapshot_paths: dict[str, Path] = {
-                reference.path: root / reference.path
-                for reference in captured_inputs.values()
+                reference.path: input_paths[input_name]
+                for input_name, reference in captured_inputs.items()
             }
             if resolved_retrievals is not None:
                 for retrieval in resolved_retrievals.values():

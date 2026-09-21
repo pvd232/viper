@@ -663,6 +663,18 @@ def replicate(
     )
 
 
+def experiment_version_id(
+    base_experiment_id: ExperimentId,
+    version: int,
+) -> ExperimentId:
+    """Return the canonical ID for a later version of one experiment line."""
+    if version < 2:
+        raise ValueError("experiment version must be at least 2")
+    if re.search(r"_v[0-9]+$", base_experiment_id):
+        raise ValueError("base experiment_id must not already include a version")
+    return TypeAdapter(ExperimentId).validate_python(f"{base_experiment_id}_v{version}")
+
+
 _DraftT = TypeVar("_DraftT", StageDraft, VariantDraft, ReplicateDraft, FactorDraft)
 
 
@@ -694,10 +706,15 @@ def experiment(
     variants: tuple[VariantDraft, ...] | dict[VariantId, VariantDraft],
     replicates: tuple[ReplicateDraft, ...] | dict[ReplicateId, ReplicateDraft],
     factors: tuple[FactorDraft, ...] | dict[FactorId, FactorDraft] | None = None,
+    version: int | None = None,
 ) -> ExperimentDraft:
     """Declare one experiment over reusable variants and replicates."""
     return ExperimentDraft(
-        experiment_id=experiment_id,
+        experiment_id=(
+            experiment_id
+            if version is None
+            else experiment_version_id(experiment_id, version)
+        ),
         factors={} if factors is None else _named_drafts(factors, "factor_id"),
         variants=_named_drafts(variants, "variant_id"),
         replicates=_named_drafts(replicates, "replicate_id"),

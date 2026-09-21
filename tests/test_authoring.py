@@ -36,6 +36,7 @@ from viper.authoring import (
     expand,
     expand_http_url,
     experiment,
+    experiment_version_id,
     factor,
     freeze_run_plan,
     matrix,
@@ -1224,6 +1225,88 @@ def test_named_experiment_declarations_preserve_order_and_identity() -> None:
     assert baseline.levels == {}
     assert tuple(study.replicates) == ("seed_19", "seed_7")
     assert study.replicates["seed_19"].seed == 19
+
+
+def test_experiment_version_id_matches_directory_version_suffix() -> None:
+    """Build the canonical experiment ID for a later experiment version."""
+    assert (
+        experiment_version_id("k562_control_program_panel_download_rooted", 2)
+        == "k562_control_program_panel_download_rooted_v2"
+    )
+    with pytest.raises(ValueError, match="at least 2"):
+        experiment_version_id("k562_control_program_panel_download_rooted", 1)
+    with pytest.raises(ValueError, match="already include a version"):
+        experiment_version_id("k562_control_program_panel_download_rooted_v2", 3)
+
+
+def test_experiment_version_argument_writes_versioned_experiment_id() -> None:
+    """Declare a later version without hand-splicing the experiment ID."""
+    training = example_training.model_copy(update={"stage_id": "fit_model"})
+    baseline = variant(
+        "baseline", stages=(training,), estimator=training.outputs["model"]
+    )
+    study = experiment(
+        experiment_id="k562_control_program_panel_download_rooted",
+        version=2,
+        variants=(baseline,),
+        replicates=(replicate("seed_0", seed=0),),
+    )
+
+    assert study.experiment_id == "k562_control_program_panel_download_rooted_v2"
+
+
+def test_versioned_experiment_writes_separate_provenance_tree(tmp_path: Path) -> None:
+    """Keep a later experiment version from replacing the base spec file."""
+    training = example_training.model_copy(update={"stage_id": "fit_model"})
+    baseline = variant(
+        "baseline", stages=(training,), estimator=training.outputs["model"]
+    )
+    base = experiment(
+        experiment_id="k562_control_program_panel_download_rooted",
+        variants=(baseline,),
+        replicates=(replicate("seed_0", seed=0),),
+    )
+    updated = experiment(
+        experiment_id="k562_control_program_panel_download_rooted",
+        version=2,
+        variants=(baseline,),
+        replicates=(replicate("seed_0", seed=0),),
+    )
+
+    base_path = write_experiment_spec(
+        tmp_path,
+        ExperimentSpec(
+            experiment_id=base.experiment_id,
+            factors=(),
+            variant_ids=tuple(base.variants),
+            replicates=tuple(
+                ReplicateSpec(replicate_id=key, seed=value.seed)
+                for key, value in base.replicates.items()
+            ),
+            metrics=(),
+        ),
+    )
+    updated_path = write_experiment_spec(
+        tmp_path,
+        ExperimentSpec(
+            experiment_id=updated.experiment_id,
+            factors=(),
+            variant_ids=tuple(updated.variants),
+            replicates=tuple(
+                ReplicateSpec(replicate_id=key, seed=value.seed)
+                for key, value in updated.replicates.items()
+            ),
+            metrics=(),
+        ),
+    )
+
+    assert base_path == (
+        tmp_path / "experiments/k562_control_program_panel_download_rooted/spec.yaml"
+    )
+    assert updated_path == (
+        tmp_path / "experiments/k562_control_program_panel_download_rooted_v2/spec.yaml"
+    )
+    assert base_path.read_bytes() != updated_path.read_bytes()
 
 
 def test_download_only_variant_compiles_without_workspace_stage_config() -> None:

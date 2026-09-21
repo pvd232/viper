@@ -219,6 +219,7 @@ def reuse_stage(
     stage: ParameterizedSpec,
     inputs: dict[InputName, ResolvedInputRef],
     captured_inputs: dict[InputName, SnapshotFileRef],
+    input_paths: dict[str, Path],
     resolved_stage_path: str,
     fetcher: StorageFetcher,
     policy: VerificationPolicy,
@@ -293,10 +294,10 @@ def reuse_stage(
             )
             for target_path, source_file in publication_files.items()
         }
-        for captured in captured_inputs.values():
+        for input_name, captured in captured_inputs.items():
             if captured.path in publication_files:
                 raise ValueError("captured input conflicts with a reused artifact")
-            raw = (root / captured.path).read_bytes()
+            raw = input_paths[input_name].read_bytes()
             if snapshot_file(captured.path, raw) != captured:
                 raise ValueError("captured input changed before reuse publication")
             publication_files[captured.path] = captured
