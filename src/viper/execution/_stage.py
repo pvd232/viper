@@ -21,13 +21,14 @@ from .._config.validation import (
     ConfigValidationError,
     validate_stage_config,
 )
-from .._schema import ArtifactName
+from .._schema import ArtifactName, RepoRelPath
 from ..artifacts import (
     ResolvedArtifact,
     ResolvedBundleArtifact,
     ResolvedBundleMember,
     ResolvedSingleFileArtifact,
 )
+from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
 from ..outputs import OutputSpec
 from ..references import SnapshotFileRef
 from ..runs import (
@@ -41,13 +42,16 @@ from ..runtime import (
     process_environment,
     select_cuda_device,
 )
-from ..serialization import document_digest, semantic_document_digest
+from ..serialization import document_digest, load_stage_spec, semantic_document_digest
 from ..stages import (
+    BaseSpec,
+    InternalSpec,
     ParameterizedSpec,
     ParameterizedStageSpec,
     StageContextBinding,
     StageInvocationReceipt,
 )
+from ..workspace import captured_input_path, stored_input_path
 
 
 class StageExecutionError(RuntimeError):
@@ -91,6 +95,8 @@ class StageWorkerContext(BaseModel):
     stage_spec_path: Path
     binding: StageContextBinding
     result_path: Path
+    physical_inputs: dict[str, RepoRelPath] | None = None
+    physical_outputs: dict[ArtifactName, RepoRelPath] | None = None
 
 
 class StageWorkerResult(BaseModel):
@@ -113,6 +119,7 @@ class StageProcessResult:
     started_at: datetime
     completed_at: datetime
     artifacts: dict[ArtifactName, ResolvedArtifact]
+    publication_sources: dict[RepoRelPath, Path]
     execution_context: ExecutionContext
     python_env: PythonEnvSpec
     startup: ProcessStartupReceipt
@@ -149,9 +156,18 @@ def _workspace_path(repository_root: Path, relative_path: str) -> Path:
     return path
 
 
-def _snapshot_file(repository_root: Path, relative_path: str) -> SnapshotFileRef:
-    """Hash one regular output file at its repository-relative path."""
-    path = _workspace_path(repository_root, relative_path)
+def _snapshot_file(
+    repository_root: Path,
+    relative_path: str,
+    *,
+    source_path: Path | None = None,
+) -> SnapshotFileRef:
+    """Hash one regular output file while retaining its logical path."""
+    path = (
+        _workspace_path(repository_root, relative_path)
+        if source_path is None
+        else source_path
+    )
     if path.is_symlink() or not path.is_file():
         raise StageExecutionError(f"declared artifact file is missing: {relative_path}")
     raw = path.read_bytes()
@@ -165,15 +181,25 @@ def _snapshot_file(repository_root: Path, relative_path: str) -> SnapshotFileRef
 def _resolve_artifact(
     repository_root: Path,
     declaration: OutputSpec,
+    *,
+    output_path: Path | None = None,
 ) -> ResolvedArtifact:
     """Convert one materialized artifact into exact file records."""
     if declaration.kind == "file":
         return ResolvedSingleFileArtifact(
             relative_path=declaration.relative_path,
-            file=_snapshot_file(repository_root, declaration.path),
+            file=_snapshot_file(
+                repository_root,
+                declaration.path,
+                source_path=output_path,
+            ),
         )
 
-    root = _workspace_path(repository_root, declaration.path)
+    root = (
+        _workspace_path(repository_root, declaration.path)
+        if output_path is None
+        else output_path
+    )
     if root.is_symlink() or not root.is_dir():
         raise StageExecutionError(
             f"declared artifact bundle is missing: {declaration.path}"
@@ -195,6 +221,7 @@ def _resolve_artifact(
                 file=_snapshot_file(
                     repository_root,
                     f"{declaration.path}/{relative_member}",
+                    source_path=path,
                 ),
             )
         )
@@ -210,6 +237,85 @@ def _resolve_artifact(
         ) from exc
 
 
+def _resolved_output_paths(
+    repository_root: Path,
+    outputs: dict[ArtifactName, OutputSpec],
+    output_paths: dict[ArtifactName, Path] | None,
+) -> dict[ArtifactName, Path]:
+    """Resolve the physical output path for each declared artifact."""
+    resolved: dict[ArtifactName, Path] = {}
+    for name, declaration in outputs.items():
+        path = declaration.path if output_paths is None else output_paths[name]
+        if isinstance(path, Path):
+            physical_path = path.resolve()
+        else:
+            physical_path = _workspace_path(repository_root, path)
+        if not physical_path.is_relative_to(repository_root):
+            raise StageExecutionError("stage output path escapes the repository root")
+        resolved[name] = physical_path
+    return resolved
+
+
+def _logical_input_paths(
+    repository_root: Path,
+    run: RunSpec,
+    stage_reference: RunStageRef,
+    stage_spec: ParameterizedSpec,
+    attempt_id: int,
+    supplied_inputs: dict[str, Path],
+) -> dict[str, str]:
+    """Derive plan-owned input paths for the invocation receipt."""
+    if not isinstance(stage_spec, InternalSpec):
+        return {}
+    loaded: dict[str, BaseSpec] = {}
+    for reference in run.stages:
+        if reference.stage_id == stage_reference.stage_id:
+            break
+        loaded[reference.stage_id] = load_stage_spec(repository_root / reference.spec)
+    logical_inputs: dict[str, str] = {}
+    for name, input_ref in stage_spec.inputs.items():
+        if isinstance(input_ref, StoredInputRef):
+            logical_inputs[name] = str(
+                stored_input_path(
+                    run_id=run.run_id,
+                    attempt_id=attempt_id,
+                    stage_id=stage_reference.stage_id,
+                    input_name=name,
+                    declared_path=input_ref.path,
+                    materialization=input_ref.materialization,
+                )
+            )
+        elif isinstance(input_ref, ExternalInputRef):
+            logical_inputs[name] = str(
+                captured_input_path(
+                    run_id=run.run_id,
+                    attempt_id=attempt_id,
+                    stage_id=stage_reference.stage_id,
+                    input_name=name,
+                    source_path=input_ref.source.path,
+                )
+            )
+        elif isinstance(input_ref, FutureInputRef):
+            producer = loaded[input_ref.producer_stage_id]
+            logical_inputs[name] = str(producer.outputs[input_ref.name].path)
+    if set(logical_inputs) != set(supplied_inputs):
+        raise StageExecutionError("stage input paths do not match stage inputs")
+    return logical_inputs
+
+
+def _artifact_publication_sources(
+    artifact: ResolvedArtifact,
+    physical_root: Path,
+) -> dict[RepoRelPath, Path]:
+    """Map logical snapshot paths to the physical files produced by the stage."""
+    if artifact.kind == "file":
+        return {artifact.file.path: physical_root}
+    return {
+        member.file.path: physical_root / member.relative_path
+        for member in artifact.members
+    }
+
+
 def execute_stage_process(
     repository_root: Path,
     run: RunSpec,
@@ -218,6 +324,7 @@ def execute_stage_process(
     *,
     attempt_id: int = 1,
     input_paths: dict[str, Path] | None = None,
+    output_paths: dict[ArtifactName, Path] | None = None,
     timeout_seconds: float | None = None,
 ) -> StageProcessResult:
     """Invoke one frozen callable and hash every declared output file."""
@@ -257,12 +364,25 @@ def execute_stage_process(
         f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}/spec.yaml"
     )
     supplied_inputs = {} if input_paths is None else input_paths
-    logical_inputs: dict[str, str] = {}
+    physical_inputs: dict[str, str] = {}
     for name, path in supplied_inputs.items():
         resolved_path = path.resolve()
         if not resolved_path.is_relative_to(root):
             raise StageExecutionError("stage input path escapes the repository root")
-        logical_inputs[name] = resolved_path.relative_to(root).as_posix()
+        physical_inputs[name] = resolved_path.relative_to(root).as_posix()
+    logical_inputs = _logical_input_paths(
+        root,
+        run,
+        stage_reference,
+        parameterized_stage,
+        attempt_id,
+        supplied_inputs,
+    )
+    physical_output_paths = _resolved_output_paths(
+        root,
+        dict(stage_spec.outputs.items()),
+        output_paths,
+    )
     binding = StageContextBinding(
         run_id=run.run_id,
         attempt_id=attempt_id,
@@ -325,6 +445,15 @@ def execute_stage_process(
             stage_spec_path=spec_path,
             binding=binding,
             result_path=result_path,
+            physical_inputs=physical_inputs
+            if physical_inputs != logical_inputs
+            else None,
+            physical_outputs={
+                name: path.relative_to(root).as_posix()
+                for name, path in physical_output_paths.items()
+            }
+            if output_paths is not None
+            else None,
         ).model_dump_json(),
         encoding="utf-8",
     )
@@ -408,15 +537,24 @@ def execute_stage_process(
     ):
         raise StageExecutionError("successful stage omitted runtime evidence")
 
-    artifacts = {
-        name: _resolve_artifact(root, declaration)
-        for name, declaration in stage_spec.outputs.items()
-    }
+    artifacts = {}
+    publication_sources = {}
+    for name, declaration in stage_spec.outputs.items():
+        artifact = _resolve_artifact(
+            root,
+            declaration,
+            output_path=physical_output_paths[name],
+        )
+        artifacts[name] = artifact
+        publication_sources.update(
+            _artifact_publication_sources(artifact, physical_output_paths[name])
+        )
     return StageProcessResult(
         command=command,
         started_at=started_at,
         completed_at=completed_at,
         artifacts=artifacts,
+        publication_sources=publication_sources,
         execution_context=worker_result.execution_context,
         python_env=worker_result.python_env,
         startup=worker_result.startup,

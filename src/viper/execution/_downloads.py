@@ -17,16 +17,19 @@ def publish_download_body(
     repository_root: Path,
     source: Path,
     destination: RepoRelPath,
+    physical_destination: Path | None = None,
     expected_sha256: SHA256,
     expected_bytes: int,
 ) -> SnapshotFileRef:
-    """Copy one verified HTTP body atomically into its declared artifact path."""
+    """Copy one verified HTTP body while retaining its logical artifact path."""
     root = repository_root.resolve(strict=True)
     source_path = source.resolve(strict=True)
     if source.is_symlink() or not source_path.is_file():
         raise RunError("HTTP result body must be a regular nonsymlink file")
 
-    target = root / destination
+    target = (
+        (root / destination) if physical_destination is None else physical_destination
+    )
     if not target.resolve(strict=False).is_relative_to(root):
         raise RunError("download artifact path escapes the repository root")
     if target.is_symlink():

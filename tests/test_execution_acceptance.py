@@ -38,6 +38,33 @@ def test_download_body_becomes_declared_artifact(tmp_path: Path) -> None:
     assert reference.bytes == len(body)
 
 
+def test_download_body_can_use_private_physical_destination(tmp_path: Path) -> None:
+    """Hash an HTTP result under its declared path without writing that path."""
+    body = b"tiny response body"
+    scratch = tmp_path / ".viper/workspaces/run/attempts/1/http/body"
+    scratch.parent.mkdir(parents=True)
+    scratch.write_bytes(body)
+    destination = "experiments/example/artifacts/datasets/tiny/dataset.bin"
+    physical_destination = (
+        tmp_path / ".viper/workspaces/run/attempt-1/stages/download/outputs/tiny.bin"
+    )
+
+    reference = publish_download_body(
+        repository_root=tmp_path,
+        source=scratch,
+        destination=destination,
+        physical_destination=physical_destination,
+        expected_sha256=hashlib.sha256(body).hexdigest(),
+        expected_bytes=len(body),
+    )
+
+    assert not (tmp_path / destination).exists()
+    assert physical_destination.read_bytes() == body
+    assert reference.path == destination
+    assert reference.sha256 == hashlib.sha256(body).hexdigest()
+    assert reference.bytes == len(body)
+
+
 def test_download_body_mutation_prevents_artifact_publication(tmp_path: Path) -> None:
     """Reject a same-size body mutation before the artifact becomes visible."""
     expected = b"prior"

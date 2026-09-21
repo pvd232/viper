@@ -1801,11 +1801,22 @@ def test_cloud_native_run_returns_and_persists_one_terminal_reference(
     provider = InMemoryViperCloudProvider(root)
     install_in_memory_cloud(monkeypatch, root, provider)
     frozen = _freeze_retry_plan(root, cloud_native=True)
+    run_id = frozen.run.run_id
     (root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
 
     result = execute_run(frozen.files[-1], repository_root=root)
 
     assert isinstance(result.reference.stored_at, GcsFileRef)
+    assert not (
+        root / "experiments/retry/runs/baseline" / run_id / "artifacts/prepare"
+    ).exists()
+    assert not (
+        root / "experiments/retry/runs/baseline" / run_id / "artifacts/embed"
+    ).exists()
+    assert {
+        f"experiments/retry/runs/baseline/{run_id}/artifacts/prepare/features/features.bin",
+        f"experiments/retry/runs/baseline/{run_id}/artifacts/embed/embedding/embedding.bin",
+    } <= {path for _owner, _workspace, _revision, path in provider.uploads}
     sidecar = result.path.with_name("resolved.ref.yaml")
     assert ResolvedRunRef.model_validate(parse_yaml_bytes(sidecar.read_bytes())) == (
         result.reference

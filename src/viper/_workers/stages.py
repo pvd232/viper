@@ -192,6 +192,8 @@ def _stage_metric_handles(
     run: RunSpec,
     stage: ParameterizedSpec,
     binding: StageContextBinding,
+    input_paths: Mapping[str, Path] | None = None,
+    artifact_paths: Mapping[str, Path] | None = None,
 ) -> dict[str, MetricHandle]:
     """Bind every stage-recorded metric to frozen config and stage paths."""
     if not stage.metric_ids:
@@ -204,8 +206,16 @@ def _stage_metric_handles(
     if experiment.experiment_id != run.experiment_id:
         raise ValueError("startup.plan: experiment ID differs from RunSpec")
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
-    inputs = MappingProxyType(_workspace_paths(root, binding.inputs))
-    outputs = MappingProxyType(_workspace_paths(root, binding.outputs))
+    inputs = MappingProxyType(
+        dict(input_paths)
+        if input_paths is not None
+        else _workspace_paths(root, binding.inputs)
+    )
+    outputs = MappingProxyType(
+        dict(artifact_paths)
+        if artifact_paths is not None
+        else _workspace_paths(root, binding.outputs)
+    )
     handles: dict[str, MetricHandle] = {}
     for metric_id in stage.metric_ids:
         spec = metrics.get(metric_id)
@@ -334,7 +344,16 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("startup.callable: config type source differs")
 
-        output_paths = _workspace_paths(root, binding.outputs)
+        input_paths = (
+            _workspace_paths(root, worker_context.physical_inputs)
+            if worker_context.physical_inputs is not None
+            else _workspace_paths(root, binding.inputs)
+        )
+        output_paths = (
+            _workspace_paths(root, worker_context.physical_outputs)
+            if worker_context.physical_outputs is not None
+            else _workspace_paths(root, binding.outputs)
+        )
         for output_path in output_paths.values():
             output_path.parent.mkdir(parents=True, exist_ok=True)
         context = StageContext(
@@ -342,9 +361,13 @@ def main(argv: list[str] | None = None) -> int:
             attempt_id=binding.attempt_id,
             stage_id=binding.stage_id,
             config=config,
-            inputs=MappingProxyType(_workspace_paths(root, binding.inputs)),
+            inputs=MappingProxyType(input_paths),
             outputs=MappingProxyType(output_paths),
-            metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
+            metrics=MappingProxyType(
+                _stage_metric_handles(
+                    root, run, stage, binding, input_paths, output_paths
+                )
+            ),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )
         runtime_temp_path = Path(os.environ["TMPDIR"]).resolve()

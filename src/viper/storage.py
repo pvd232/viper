@@ -348,8 +348,9 @@ def _parse_storage_destination(value: object) -> StorageDestination:
     parts = address.split("/")
     if len(parts) != 2 or not all(parts):
         raise StorageConfigurationError("storage destination is invalid")
+    owner, workspace = (part.replace("-", "_") for part in parts)
     try:
-        return ViperCloudDestination(owner=parts[0], workspace=parts[1])
+        return ViperCloudDestination(owner=owner, workspace=workspace)
     except ValidationError as error:
         raise StorageConfigurationError("storage destination is invalid") from error
 

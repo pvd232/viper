@@ -936,7 +936,7 @@ def test_storage_settings_parse_local_and_cloud_destinations(tmp_path: Path) -> 
 
     marker.write_text(
         "[workspace]\nschema_version = 2\n"
-        '[storage]\ndestination = "viper://machina/weekend_models"\n'
+        '[storage]\ndestination = "viper://machina/weekend-models"\n'
         '[viper_cloud]\nprovider = "gcs"\nbucket = "test-bucket"\n',
         encoding="utf-8",
     )

@@ -157,6 +157,7 @@ def resolve_inputs(
     stage_specs: Mapping[StageId, BaseSpec],
     fetcher: RunFetcher,
     policy: VerificationPolicy,
+    materialize_future_inputs_to_workspace: bool = False,
 ) -> tuple[
     dict[InputName, ResolvedInputRef],
     dict[str, Path],
@@ -189,13 +190,19 @@ def resolve_inputs(
                 data_role=output_spec.data_role,
                 fetcher=fetcher,
             )
-            _materialize_verified_artifact(root, output_spec.path, verified)
-            paths[name] = root / output_spec.path
+            materialized_path = output_spec.path
+            if materialize_future_inputs_to_workspace:
+                materialized_path = (
+                    f".viper/workspaces/{run_id}/attempt-{attempt_id}/"
+                    f"inputs/{stage_id}/{name}/{output_spec.relative_path}"
+                )
+            _materialize_verified_artifact(root, materialized_path, verified)
+            paths[name] = root / materialized_path
             identities.append(
                 artifact_input_identity(
                     name,
                     output_spec.data_role,
-                    output_spec.path,
+                    materialized_path,
                     verified.artifact,
                 )
             )
@@ -305,6 +312,7 @@ def retrieve_download_inputs(
     workspace: AttemptWorkspace,
     stage_id: StageId,
     stage: DownloadSpec,
+    materialize_outputs_to_workspace: bool = False,
 ) -> tuple[
     dict[InputName, ResolvedHttpRetrieval],
     dict[str, ResolvedArtifact],
@@ -339,10 +347,16 @@ def retrieve_download_inputs(
         declaration = stage.outputs[input_name]
         if declaration.kind != "file":
             raise RunError("download artifact must be a single file")
+        physical_destination = None
+        if materialize_outputs_to_workspace:
+            physical_destination = workspace.resolve(
+                f"stages/{stage_id}/outputs/{input_name}/{declaration.relative_path}"
+            )
         body = publish_download_body(
             repository_root=root,
             source=result.body,
             destination=declaration.path,
+            physical_destination=physical_destination,
             expected_sha256=request.expected_body_sha256,
             expected_bytes=request.expected_body_bytes,
         )
@@ -360,6 +374,8 @@ def retrieve_download_inputs(
             file=body,
         )
         paths[input_name] = root / body.path
+        if physical_destination is not None:
+            paths[input_name] = physical_destination
     return retrievals, artifacts, paths
 
 

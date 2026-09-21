@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import current_thread, main_thread
 from typing import Literal
 
+from .._schema import ArtifactName
 from .._verification.storage import read_attempt_reference
 from ..catalog import Catalog
 from ..evidence import VerificationError, VerificationPolicy, VerifiedRunResult
@@ -59,6 +60,7 @@ from ..stages import (
 )
 from ..storage import (
     LocalArtifactStore,
+    LocalStorageDestination,
     StorageDestination,
     bind_run_destination,
     create_snapshot_publisher,
@@ -99,6 +101,33 @@ from ._stage import (
 )
 from .errors import RestoreError, RunError
 from .results import ConfirmationRunResult, RunResult
+
+
+def _stage_output_paths(
+    root: Path,
+    destination: StorageDestination,
+    run: RunSpec,
+    attempt_id: int,
+    stage_id: StageId,
+    stage: ParameterizedSpec,
+) -> dict[ArtifactName, Path] | None:
+    """Return private physical output paths for cloud-native stage execution."""
+    if isinstance(destination, LocalStorageDestination):
+        return None
+    output_root = (
+        root
+        / ".viper"
+        / "workspaces"
+        / run.run_id
+        / f"attempt-{attempt_id}"
+        / "stages"
+        / stage_id
+        / "outputs"
+    )
+    return {
+        name: output_root / name / Path(output.relative_path)
+        for name, output in stage.outputs.items()
+    }
 
 
 def _verification_policy(
@@ -419,6 +448,10 @@ def execute_attempt(
                     workspace,
                     stage_reference.stage_id,
                     stage,
+                    materialize_outputs_to_workspace=not isinstance(
+                        destination,
+                        LocalStorageDestination,
+                    ),
                 )
                 stage_completed = datetime.now(UTC)
                 resolved = resolve_download_stage(
@@ -461,6 +494,10 @@ def execute_attempt(
                         loaded_stages,
                         fetcher,
                         policy,
+                        materialize_future_inputs_to_workspace=not isinstance(
+                            destination,
+                            LocalStorageDestination,
+                        ),
                     )
                     if stage.input_roots == "download":
                         download_source_closure = verify_download_source_closure(
@@ -553,6 +590,14 @@ def execute_attempt(
                         stage,
                         attempt_id=attempt_id,
                         input_paths=input_paths,
+                        output_paths=_stage_output_paths(
+                            root,
+                            destination,
+                            run,
+                            attempt_id,
+                            stage_reference.stage_id,
+                            stage,
+                        ),
                         timeout_seconds=timeout_seconds,
                     )
                 except (StageExecutionError, StageProcessInterrupted) as exc:
@@ -635,9 +680,12 @@ def execute_attempt(
                 for input_name, reference in captured_inputs.items()
             }
             if resolved_retrievals is not None:
-                for retrieval in resolved_retrievals.values():
+                for input_name, retrieval in resolved_retrievals.items():
                     retrieval_path = retrieval.body.path
-                    snapshot_paths[retrieval_path] = root / retrieval_path
+                    snapshot_paths[retrieval_path] = input_paths[input_name]
+            artifact_publication_sources = (
+                process.publication_sources if process is not None else {}
+            )
             for artifact in resolved_artifacts.values():
                 artifact_references: tuple[SnapshotFileRef, ...]
                 if artifact.kind == "file":
@@ -647,7 +695,10 @@ def execute_attempt(
                         member.file for member in artifact.members
                     )
                 for reference in artifact_references:
-                    snapshot_paths[reference.path] = root / reference.path
+                    snapshot_paths[reference.path] = artifact_publication_sources.get(
+                        reference.path,
+                        root / reference.path,
+                    )
             journal.append(
                 "publishing_stage",
                 "stage snapshot publication started",
