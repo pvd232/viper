@@ -1,0 +1,84 @@
+schema_version = 1
+contract_id = "execution-path-parity"
+title = "Execution Path Parity"
+
+[[requirements]]
+id = "EPP-REQ-01"
+claim = "For the same RunSpec, StageContext.outputs must expose the same declared workspace-relative output paths when StorageSettings.destination is local and when it is viper_cloud."
+depends_on = []
+verifier_ids = ["EPP-VR-01"]
+
+[[requirements]]
+id = "EPP-REQ-02"
+claim = "For the same RunSpec, StageContext.inputs must not change because StorageSettings.destination changes; same-run future inputs, stored inputs, external inputs, and download-stage outputs must use their declared materialization rules without a cloud-only path override."
+depends_on = ["EPP-REQ-01"]
+verifier_ids = ["EPP-VR-02"]
+
+[[requirements]]
+id = "EPP-REQ-03"
+claim = "Cloud-backed runs must publish the files written at the declared StageContext paths to sealed cloud snapshots under the same logical SnapshotFileRef.path values used by local runs, while retaining storage_destination_changed protection for an existing run."
+depends_on = ["EPP-REQ-01", "EPP-REQ-02"]
+verifier_ids = ["EPP-VR-03"]
+
+[[requirements]]
+id = "EPP-REQ-04"
+claim = "Recomputed metrics, file-access receipts, retention, and verification must consume declared stage input and output paths after path parity is restored; no verifier may require cloud-only scratch output paths."
+depends_on = ["EPP-REQ-03"]
+verifier_ids = ["EPP-VR-04"]
+
+[[requirements]]
+id = "EPP-REQ-05"
+claim = "Each execution-path-parity PairBlock must receive a code review before completion; the review must inspect the changed execution files, changed tests, retained path invariant, and validation evidence."
+depends_on = ["EPP-REQ-01", "EPP-REQ-02", "EPP-REQ-03", "EPP-REQ-04"]
+verifier_ids = ["EPP-VR-05"]
+
+[[verifiers]]
+id = "EPP-VR-01"
+requirement_ids = ["EPP-REQ-01"]
+acceptance_conditions = ["A paired local and cloud run records the same path string for a stage callable's observed context.outputs entry and publishes the same artifact SnapshotFileRef.path."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_cloud_run_exposes_declared_output_paths_to_stage_context" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_cloud_run_rejects_destination_dependent_output_context_paths" }]
+
+[[verifiers]]
+id = "EPP-VR-02"
+requirement_ids = ["EPP-REQ-02"]
+acceptance_conditions = ["A downstream stage that reads a same-run producer artifact observes the same context.inputs path under local and cloud destinations, and a download stage writes its declared output path before publication."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_cloud_run_exposes_destination_independent_input_paths" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_execution_acceptance.py", symbol = "test_download_publication_rejects_cloud_only_output_materialization" }]
+
+[[verifiers]]
+id = "EPP-VR-03"
+requirement_ids = ["EPP-REQ-03"]
+acceptance_conditions = ["The in-memory cloud provider receives sealed snapshot files whose paths match the declared output paths, and an existing run still rejects a changed storage destination."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_cloud_snapshot_uses_declared_paths_after_context_path_parity" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_storage.py", symbol = "test_run_destination_is_bound_to_first_execution" }]
+
+[[verifiers]]
+id = "EPP-VR-04"
+requirement_ids = ["EPP-REQ-04"]
+acceptance_conditions = ["Recomputed metrics read the declared artifact paths, file-access receipts admit declared paths and reject undeclared writes, retention verifies cloud-backed files, and protocol tests contain no cloud-only output path contract."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_cloud_recomputed_metric_reads_declared_artifact_path" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_stage_file_access.py", symbol = "test_stage_file_access_rejects_undeclared_write" }]
+
+[[verifiers]]
+id = "EPP-VR-05"
+requirement_ids = ["EPP-REQ-05"]
+acceptance_conditions = ["The PairBlock handoff contains a code-review decision that names every changed execution file, every changed test file, the path invariant, and the passing gate receipt."]
+success_case = { repository_id = "viper", path = "contracts/execution-path-parity.md", symbol = "EPP-PB-01 review handoff" }
+rejection_cases = [{ repository_id = "viper", path = "contracts/execution-path-parity.md", symbol = "missing code-review decision" }]
+
+[[pair_blocks]]
+id = "EPP-PB-01"
+requirement_ids = ["EPP-REQ-01", "EPP-REQ-02"]
+depends_on = []
+repository_id = "viper"
+requirement_contribution = "Remove storage-destination-dependent StageContext input and output path overrides while preserving declared materialization rules."
+completion_evidence = ["implementation_review", "code_review"]
+
+[[pair_blocks]]
+id = "EPP-PB-02"
+requirement_ids = ["EPP-REQ-03", "EPP-REQ-04", "EPP-REQ-05"]
+depends_on = ["EPP-PB-01"]
+repository_id = "viper"
+requirement_contribution = "Publish declared local paths to cloud snapshots and update metrics, verification, retention, and tests to observe the restored path contract."
+completion_evidence = ["implementation_review", "code_review"]
