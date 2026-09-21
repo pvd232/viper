@@ -120,6 +120,9 @@ def test_resolve_run_reference_identifies_local_terminal_bytes(tmp_path: Path) -
     assert reference.sha256 == hashlib.sha256(terminal.read_bytes()).hexdigest()
     assert reference.bytes == terminal.stat().st_size
     assert reference.stored_at.path == "runs/example/resolved.yaml"
+    assert (
+        LocalArtifactStore(tmp_path).fetch(reference.stored_at) == terminal.read_bytes()
+    )
 
 
 def test_resolve_run_reference_prefers_adjacent_cloud_pointer(tmp_path: Path) -> None:

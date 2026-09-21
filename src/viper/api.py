@@ -1614,7 +1614,7 @@ def restore_artifacts(request: RestoreRequest) -> RestoreSuccess:
                 operation="restore",
                 origin="application",
                 code="verification_failed",
-                message="artifact restore failed",
+                message=f"artifact restore failed {exc}",
             )
         ) from exc
     except (OSError, ValueError, yaml.YAMLError) as exc:

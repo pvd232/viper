@@ -16,7 +16,6 @@ from ..references import (
     GcsFileRef,
     GcsStageResultSnapshotRef,
     HuggingFaceFileRef,
-    LocalFileRef,
     ResolvedFileRef,
     ResolvedRunRef,
     resolve_snapshot_file_ref,
@@ -33,7 +32,7 @@ from ..restoration import (
 from ..runs import ResolvedRun, RunAttempt
 from ..serialization import parse_yaml_bytes
 from ..stages import ResolvedSpec
-from ..storage import LocalArtifactStore, content_revision, load_storage_settings
+from ..storage import LocalArtifactStore, load_storage_settings
 from ._source import RunFetcher
 from .errors import RestoreError
 
@@ -101,17 +100,12 @@ def _local_run_reference(root: Path, path: Path) -> ResolvedRunRef:
         ):
             raise RestoreError("stored run reference differs from terminal identity")
         return reference
-    revision = content_revision({relative: raw})
     store = LocalArtifactStore(root)
+    reference = store.resolved_files({relative: raw})[0]
     return ResolvedRunRef(
-        sha256=hashlib.sha256(raw).hexdigest(),
-        bytes=len(raw),
-        stored_at=LocalFileRef(
-            workspace=store.repository_root,
-            store_id=store.store_id,
-            commit=revision,
-            path=relative,
-        ),
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+        stored_at=reference.stored_at,
     )
 
 
