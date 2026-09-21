@@ -10,7 +10,6 @@ from pathlib import Path
 from threading import current_thread, main_thread
 from typing import Literal
 
-from .._schema import ArtifactName
 from .._verification.storage import read_attempt_reference
 from ..catalog import Catalog
 from ..evidence import VerificationError, VerificationPolicy, VerifiedRunResult
@@ -60,7 +59,6 @@ from ..stages import (
 )
 from ..storage import (
     LocalArtifactStore,
-    LocalStorageDestination,
     StorageDestination,
     bind_run_destination,
     create_snapshot_publisher,
@@ -101,33 +99,6 @@ from ._stage import (
 )
 from .errors import RestoreError, RunError
 from .results import ConfirmationRunResult, RunResult
-
-
-def _stage_output_paths(
-    root: Path,
-    destination: StorageDestination,
-    run: RunSpec,
-    attempt_id: int,
-    stage_id: StageId,
-    stage: ParameterizedSpec,
-) -> dict[ArtifactName, Path] | None:
-    """Return private physical output paths for cloud-native stage execution."""
-    if isinstance(destination, LocalStorageDestination):
-        return None
-    output_root = (
-        root
-        / ".viper"
-        / "workspaces"
-        / run.run_id
-        / f"attempt-{attempt_id}"
-        / "stages"
-        / stage_id
-        / "outputs"
-    )
-    return {
-        name: output_root / name / Path(output.relative_path)
-        for name, output in stage.outputs.items()
-    }
 
 
 def _verification_policy(
@@ -425,7 +396,6 @@ def execute_attempt(
             stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
             reuse_input_identities: tuple[ReuseInputIdentity, ...] = ()
             input_paths: dict[str, Path] = {}
-            output_paths: dict[ArtifactName, Path] | None = None
             download_source_closure: DownloadSourceClosureReceipt | None = None
             process = None
             journal.append(
@@ -449,10 +419,6 @@ def execute_attempt(
                     workspace,
                     stage_reference.stage_id,
                     stage,
-                    materialize_outputs_to_workspace=not isinstance(
-                        destination,
-                        LocalStorageDestination,
-                    ),
                 )
                 stage_completed = datetime.now(UTC)
                 resolved = resolve_download_stage(
@@ -495,10 +461,6 @@ def execute_attempt(
                         loaded_stages,
                         fetcher,
                         policy,
-                        materialize_future_inputs_to_workspace=not isinstance(
-                            destination,
-                            LocalStorageDestination,
-                        ),
                     )
                     if stage.input_roots == "download":
                         download_source_closure = verify_download_source_closure(
@@ -583,14 +545,6 @@ def execute_attempt(
                         completed_results[stage_reference.stage_id] = reused.resolved
                         active_stage_id = None
                         continue
-                output_paths = _stage_output_paths(
-                    root,
-                    destination,
-                    run,
-                    attempt_id,
-                    stage_reference.stage_id,
-                    stage,
-                )
                 try:
                     process = execute_stage_process(
                         root,
@@ -599,7 +553,6 @@ def execute_attempt(
                         stage,
                         attempt_id=attempt_id,
                         input_paths=input_paths,
-                        output_paths=output_paths,
                         timeout_seconds=timeout_seconds,
                     )
                 except (StageExecutionError, StageProcessInterrupted) as exc:
@@ -737,7 +690,6 @@ def execute_attempt(
                     metric_verification_paths,
                     timeout_seconds,
                     attempt_id,
-                    artifact_paths_override=output_paths,
                 )
             if process is not None:
                 log_files[

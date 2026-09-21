@@ -17,7 +17,6 @@ def publish_download_body(
     repository_root: Path,
     source: Path,
     destination: RepoRelPath,
-    physical_destination: Path | None = None,
     expected_sha256: SHA256,
     expected_bytes: int,
 ) -> SnapshotFileRef:
@@ -27,9 +26,7 @@ def publish_download_body(
     if source.is_symlink() or not source_path.is_file():
         raise RunError("HTTP result body must be a regular nonsymlink file")
 
-    target = (
-        (root / destination) if physical_destination is None else physical_destination
-    )
+    target = root / destination
     if not target.resolve(strict=False).is_relative_to(root):
         raise RunError("download artifact path escapes the repository root")
     if target.is_symlink():

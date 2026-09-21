@@ -2,10 +2,10 @@
 
 ## 1. Status
 
-**Contract status:** Planned in the [Execution storage protocol](../checklists/execution-storage-protocol.md) checklist.
+**Contract status:** Complete in the [Execution storage protocol](../checklists/execution-storage-protocol.md) checklist.
 
 <!-- contract-protocol:generated:start -->
-**Planned.**
+**Complete.**
 
 **Checklist:** [Execution storage protocol](../checklists/execution-storage-protocol.md)
 
@@ -15,7 +15,7 @@
 
 #### <nobr><code>EPP-PB-01</code></nobr>
 
-**Status:** planned
+**Status:** complete
 
 **Requirement contribution:** Remove storage-destination-dependent StageContext input and output path overrides while preserving declared materialization rules.
 
@@ -23,7 +23,7 @@
 
 #### <nobr><code>EPP-PB-02</code></nobr>
 
-**Status:** planned
+**Status:** complete
 
 **Requirement contribution:** Publish declared local paths to cloud snapshots and update metrics, verification, retention, and tests to observe the restored path contract.
 
@@ -33,11 +33,11 @@
 
 | Requirement | Claim | Progress | Verifiers | PairBlocks |
 |---|---|---|---|---|
-| <nobr><code>EPP-REQ-01</code></nobr> | For the same RunSpec, StageContext.outputs must expose the same declared workspace-relative output paths when StorageSettings.destination is local and when it is viper_cloud. | planned | <nobr><code>EPP-VR-01</code></nobr> | <nobr><code>EPP-PB-01</code></nobr> |
-| <nobr><code>EPP-REQ-02</code></nobr> | For the same RunSpec, StageContext.inputs must not change because StorageSettings.destination changes; same-run future inputs, stored inputs, external inputs, and download-stage outputs must use their declared materialization rules without a cloud-only path override. | planned | <nobr><code>EPP-VR-02</code></nobr> | <nobr><code>EPP-PB-01</code></nobr> |
-| <nobr><code>EPP-REQ-03</code></nobr> | Cloud-backed runs must publish the files written at the declared StageContext paths to sealed cloud snapshots under the same logical SnapshotFileRef.path values used by local runs, while retaining storage_destination_changed protection for an existing run. | planned | <nobr><code>EPP-VR-03</code></nobr> | <nobr><code>EPP-PB-02</code></nobr> |
-| <nobr><code>EPP-REQ-04</code></nobr> | Recomputed metrics, file-access receipts, retention, and verification must consume declared stage input and output paths after path parity is restored; no verifier may require cloud-only scratch output paths. | planned | <nobr><code>EPP-VR-04</code></nobr> | <nobr><code>EPP-PB-02</code></nobr> |
-| <nobr><code>EPP-REQ-05</code></nobr> | Each execution-path-parity PairBlock must receive a code review before completion; the review must inspect the changed execution files, changed tests, retained path invariant, and validation evidence. | planned | <nobr><code>EPP-VR-05</code></nobr> | <nobr><code>EPP-PB-02</code></nobr> |
+| <nobr><code>EPP-REQ-01</code></nobr> | For the same RunSpec, StageContext.outputs must expose the same declared workspace-relative output paths when StorageSettings.destination is local and when it is viper_cloud. | complete | <nobr><code>EPP-VR-01</code></nobr> | <nobr><code>EPP-PB-01</code></nobr> |
+| <nobr><code>EPP-REQ-02</code></nobr> | For the same RunSpec, StageContext.inputs must not change because StorageSettings.destination changes; same-run future inputs, stored inputs, external inputs, and download-stage outputs must use their declared materialization rules without a cloud-only path override. | complete | <nobr><code>EPP-VR-02</code></nobr> | <nobr><code>EPP-PB-01</code></nobr> |
+| <nobr><code>EPP-REQ-03</code></nobr> | Cloud-backed runs must publish the files written at the declared StageContext paths to sealed cloud snapshots under the same logical SnapshotFileRef.path values used by local runs, while retaining storage_destination_changed protection for an existing run. | complete | <nobr><code>EPP-VR-03</code></nobr> | <nobr><code>EPP-PB-02</code></nobr> |
+| <nobr><code>EPP-REQ-04</code></nobr> | Recomputed metrics, file-access receipts, retention, and verification must consume declared stage input and output paths after path parity is restored; no verifier may require cloud-only scratch output paths. | complete | <nobr><code>EPP-VR-04</code></nobr> | <nobr><code>EPP-PB-02</code></nobr> |
+| <nobr><code>EPP-REQ-05</code></nobr> | Each execution-path-parity PairBlock must receive a code review before completion; the review must inspect the changed execution files, changed tests, retained path invariant, and validation evidence. | complete | <nobr><code>EPP-VR-05</code></nobr> | <nobr><code>EPP-PB-02</code></nobr> |
 
 ### Verification rules
 
@@ -56,9 +56,9 @@ VIPER must expose the same `StageContext.inputs` and `StageContext.outputs` path
 
 The storage destination selects where VIPER publishes immutable run evidence. The storage destination must not change the file paths passed to user stage functions through `StageContext`.
 
-## 3. Current Gap
+## 3. Resolved Gap
 
-### Observed path
+### Observed pre-repair path
 
 1. `OutputSpec.path` stores the run-owned logical output path, and `run_output_path()` constructs paths shaped as `artifacts/<stage_id>/<output_name>/<relative_path>` in [outputs.py](../src/viper/outputs.py).
 2. `execute_attempt()` reads `[storage].destination` through `load_storage_settings()` and binds that destination for the run in [execution/_attempt.py](../src/viper/execution/_attempt.py).
@@ -66,21 +66,21 @@ The storage destination selects where VIPER publishes immutable run evidence. Th
 4. `execute_stage_process()` writes those cloud-only paths into `StageWorkerContext.physical_outputs` in [execution/_stage.py](../src/viper/execution/_stage.py).
 5. The stage worker validates that `StageContextBinding.outputs` equals the declared logical paths, then replaces those paths with `StageWorkerContext.physical_outputs` before constructing `StageContext` in [viper/_workers/stages.py](../src/viper/_workers/stages.py).
 
-### First unsupported connector
+### Repaired connector
 
-`StageContextBinding.outputs` verifies the declared output paths, but `viper._workers.stages.main()` passes `physical_outputs` to `StageContext.outputs` when `StageWorkerContext.physical_outputs` is present. The worker therefore gives user code different output paths for the same `RunSpec` when cloud storage is enabled.
+`StageContextBinding.outputs` verifies the declared output paths, and `viper._workers.stages.main()` builds `StageContext.outputs` from those paths for every storage destination. `StageWorkerContext` has no `physical_outputs` field.
 
-### Counterexample
+### Rejected counterexample
 
 A stage declares `model = output(path="artifacts/train/model/model.pt", ...)`. With local storage, the callable receives `context.outputs["model"] == root / "artifacts/train/model/model.pt"`. With cloud storage, `_stage_output_paths()` makes the callable receive `context.outputs["model"] == root / ".viper/workspaces/<run_id>/attempt-1/stages/train/outputs/model/model.pt"`. Both executions can publish a cloud snapshot whose `SnapshotFileRef.path` is `artifacts/train/model/model.pt`, so existing verification can pass while the public stage path contract differs.
 
-### Missing evidence
+### Retained evidence
 
-No current test asserts that a paired local and cloud execution passes the same `StageContext.outputs` value to a stage callable. No current test asserts that same-run future inputs preserve the same `StageContext.inputs` path under local and cloud destinations.
+`test_cloud_run_exposes_declared_output_paths_to_stage_context` records local and cloud `StageContext.outputs` values from stage code. `test_cloud_run_exposes_destination_independent_input_paths` records the same-run producer input path under cloud storage.
 
 ### Disposition
 
-Gap confirmed. The repair must make `StageContext.inputs` and `StageContext.outputs` destination-independent for a fixed `RunSpec`, while keeping cloud publication, destination binding, snapshot verification, run retention, and recomputed metrics valid.
+Gap resolved. `StageContext.inputs` and `StageContext.outputs` are destination-independent for a fixed `RunSpec`, while cloud publication, destination binding, snapshot verification, run retention, and recomputed metrics remain valid.
 
 ## 4. Minimal Sufficient Design
 
@@ -97,9 +97,9 @@ The selected design keeps `OutputSpec.path`, `StageContextBinding.outputs`, `Sna
 
 ## 5. Regression Inventory
 
-This contract recognizes these destination-dependent path regressions and review surfaces. Each row names the current code that creates or accepts the regression and the exact observation required before implementation can close.
+This contract recognizes these destination-dependent path regressions and review surfaces. Each row names the pre-repair code that created or accepted the regression and the exact observation required for closure.
 
-| Regression | Current code link | Required review evidence |
+| Regression | Pre-repair code link | Required review evidence |
 |---|---|---|
 | Cloud execution gives a stage callable a different `context.outputs` path than local execution for the same declared output. | [`_stage_output_paths()` creates cloud-only output paths](../src/viper/execution/_attempt.py#L106); [`execute_attempt()` passes those paths to `execute_stage_process()`](../src/viper/execution/_attempt.py#L586); [`execute_stage_process()` serializes them as `physical_outputs`](../src/viper/execution/_stage.py#L451); [`viper._workers.stages.main()` passes `physical_outputs` into `StageContext.outputs`](../src/viper/_workers/stages.py#L352). | A paired local/cloud test records the same observed `context.outputs["<artifact>"]` path and the code review verifies that no storage destination branch can alter `StageContext.outputs`. |
 | Cloud execution materializes same-run future inputs under `.viper/workspaces/.../inputs/...` instead of the producer's declared artifact path. | [`resolve_inputs()` accepts `materialize_future_inputs_to_workspace`](../src/viper/execution/_materialization.py#L148); [the cloud branch rewrites `materialized_path`](../src/viper/execution/_materialization.py#L194); [`execute_attempt()` enables that branch for non-local destinations](../src/viper/execution/_attempt.py#L498). | A downstream-stage test records the same observed future-input path under local and cloud storage and the code review verifies the future-input path comes from the producer `OutputSpec.path`. |
@@ -144,6 +144,20 @@ Every PairBlock in this contract requires a code review before completion. The r
 | `EPP-PB-01` | `execution/_attempt.py`, `execution/_stage.py`, `viper/_workers/stages.py`, `execution/_materialization.py`, `execution/_downloads.py`, and the tests that observe `StageContext.inputs` and `StageContext.outputs`. |
 | `EPP-PB-02` | `execution/_metric.py`, `storage.py`, `cloud.py`, `gcs.py`, verification, retention, and every test that proves cloud publication still records declared `SnapshotFileRef.path` values. |
 
+### Code Review Decision
+
+Decision: pass.
+
+Reviewed implementation files: [execution/_attempt.py](../src/viper/execution/_attempt.py), [execution/_stage.py](../src/viper/execution/_stage.py), [viper/_workers/stages.py](../src/viper/_workers/stages.py), [execution/_materialization.py](../src/viper/execution/_materialization.py), [execution/_downloads.py](../src/viper/execution/_downloads.py), and [execution/_metric.py](../src/viper/execution/_metric.py).
+
+Reviewed test files: [tests/test_run_execution.py](../tests/test_run_execution.py) and [tests/test_execution_acceptance.py](../tests/test_execution_acceptance.py).
+
+Invariant reviewed: `StageContext.outputs` comes from `StageContextBinding.outputs`; same-run future inputs materialize to the producer `OutputSpec.path`; download artifacts materialize to their declared `OutputSpec.path`; recomputed metrics read `_artifact_paths(root, stage)`.
+
+Residual risk: external and stored inputs can still use attempt-workspace custody paths when their input declaration selects that behavior. That path is input-declaration-dependent, not storage-destination-dependent.
+
+Stale override scan: `rg -n "_stage_output_paths|materialize_future_inputs_to_workspace|materialize_outputs_to_workspace|artifact_paths_override|physical_outputs|physical_destination" src tests` returns no matches.
+
 ## 9. Enforcement Chain
 
 | Requirement | Implementation owner | Verifier |
@@ -163,3 +177,30 @@ Rejected execution: a cloud run passes `root / ".viper/workspaces/<run_id>/attem
 ## 11. PairBlock Scope
 
 `EPP-PB-01` owns the execution-path repair. `EPP-PB-02` owns cloud publication, metrics, file-access, verification, retention, and test convergence after the stage context path repair lands.
+
+## 12. Validation Receipt
+
+Pyright:
+
+```bash
+.venv/bin/pyright src/viper/execution/_attempt.py src/viper/execution/_stage.py src/viper/execution/_materialization.py src/viper/execution/_downloads.py src/viper/execution/_metric.py src/viper/_workers/stages.py tests/test_run_execution.py tests/test_execution_acceptance.py
+```
+
+Result: `0 errors, 0 warnings, 0 informations`.
+
+Behavior tests:
+
+```bash
+.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_execution_acceptance.py tests/test_worker.py tests/test_protocol.py::test_external_inputs_are_local_only tests/test_protocol.py::test_download_models_use_runner_owned_hierarchy tests/test_stage_file_access.py::test_declared_access_rejects_undeclared_write tests/test_stage_file_access.py::test_verifier_rejects_invalid_file_access_receipts tests/test_storage.py::test_bind_run_destination_is_idempotent_and_rejects_change tests/test_retention.py::test_evicts_only_verified_cloud_backed_run_artifacts tests/test_run_execution.py::test_cloud_native_run_returns_and_persists_one_terminal_reference tests/test_run_execution.py::test_cloud_run_exposes_declared_output_paths_to_stage_context tests/test_run_execution.py::test_cloud_run_exposes_destination_independent_input_paths tests/test_run_execution.py::test_cloud_snapshot_uses_declared_paths_after_context_path_parity tests/test_run_execution.py::test_cloud_recomputed_metric_reads_declared_artifact_path
+```
+
+Result: `28 passed in 74.52s`.
+
+Ruff:
+
+```bash
+.venv/bin/ruff format --check src/viper/execution/_attempt.py src/viper/execution/_stage.py src/viper/execution/_materialization.py src/viper/execution/_downloads.py src/viper/execution/_metric.py src/viper/_workers/stages.py tests/test_run_execution.py tests/test_execution_acceptance.py
+.venv/bin/ruff check src/viper/execution/_attempt.py src/viper/execution/_stage.py src/viper/execution/_materialization.py src/viper/execution/_downloads.py src/viper/execution/_metric.py src/viper/_workers/stages.py tests/test_run_execution.py tests/test_execution_acceptance.py
+```
+
+Results: `8 files already formatted`; `All checks passed!`.

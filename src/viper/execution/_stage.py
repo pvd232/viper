@@ -96,7 +96,6 @@ class StageWorkerContext(BaseModel):
     binding: StageContextBinding
     result_path: Path
     physical_inputs: dict[str, RepoRelPath] | None = None
-    physical_outputs: dict[ArtifactName, RepoRelPath] | None = None
 
 
 class StageWorkerResult(BaseModel):
@@ -240,16 +239,11 @@ def _resolve_artifact(
 def _resolved_output_paths(
     repository_root: Path,
     outputs: dict[ArtifactName, OutputSpec],
-    output_paths: dict[ArtifactName, Path] | None,
 ) -> dict[ArtifactName, Path]:
-    """Resolve the physical output path for each declared artifact."""
+    """Resolve each declared artifact output path inside the repository."""
     resolved: dict[ArtifactName, Path] = {}
     for name, declaration in outputs.items():
-        path = declaration.path if output_paths is None else output_paths[name]
-        if isinstance(path, Path):
-            physical_path = path.resolve()
-        else:
-            physical_path = _workspace_path(repository_root, path)
+        physical_path = _workspace_path(repository_root, declaration.path)
         if not physical_path.is_relative_to(repository_root):
             raise StageExecutionError("stage output path escapes the repository root")
         resolved[name] = physical_path
@@ -324,7 +318,6 @@ def execute_stage_process(
     *,
     attempt_id: int = 1,
     input_paths: dict[str, Path] | None = None,
-    output_paths: dict[ArtifactName, Path] | None = None,
     timeout_seconds: float | None = None,
 ) -> StageProcessResult:
     """Invoke one frozen callable and hash every declared output file."""
@@ -381,7 +374,6 @@ def execute_stage_process(
     physical_output_paths = _resolved_output_paths(
         root,
         dict(stage_spec.outputs.items()),
-        output_paths,
     )
     binding = StageContextBinding(
         run_id=run.run_id,
@@ -447,12 +439,6 @@ def execute_stage_process(
             result_path=result_path,
             physical_inputs=physical_inputs
             if physical_inputs != logical_inputs
-            else None,
-            physical_outputs={
-                name: path.relative_to(root).as_posix()
-                for name, path in physical_output_paths.items()
-            }
-            if output_paths is not None
             else None,
         ).model_dump_json(),
         encoding="utf-8",

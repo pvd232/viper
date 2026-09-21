@@ -349,11 +349,7 @@ def main(argv: list[str] | None = None) -> int:
             if worker_context.physical_inputs is not None
             else _workspace_paths(root, binding.inputs)
         )
-        output_paths = (
-            _workspace_paths(root, worker_context.physical_outputs)
-            if worker_context.physical_outputs is not None
-            else _workspace_paths(root, binding.outputs)
-        )
+        output_paths = _workspace_paths(root, binding.outputs)
         for output_path in output_paths.values():
             output_path.parent.mkdir(parents=True, exist_ok=True)
         context = StageContext(

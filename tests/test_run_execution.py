@@ -1685,12 +1685,18 @@ def _freeze_retry_plan(
         "from pathlib import Path\n"
         "from viper import config\n"
         "from viper.stages import StageContext, build, embed\n\n"
+        "def record_path(name, path):\n"
+        "    Path(name).write_text(\n"
+        "        path.resolve().relative_to(Path.cwd().resolve()).as_posix(),\n"
+        "        encoding='utf-8',\n"
+        "    )\n\n"
         "@build(config=config.BuildConfig)\n"
         "def prepare(context: StageContext[config.BuildConfig]):\n"
         "    marker = Path('build_calls.txt')\n"
         "    prior = marker.read_text() if marker.exists() else ''\n"
         "    marker.write_text(prior + '1\\n')\n"
         "    target = context.outputs['features']\n"
+        "    record_path('prepare_features_output_path.txt', target)\n"
         "    target.parent.mkdir(parents=True, exist_ok=True)\n"
         "    target.write_bytes(b'features')\n\n"
         "@embed(config=config.EmbedConfig)\n"
@@ -1704,10 +1710,16 @@ def _freeze_retry_plan(
         "        budget.write_text(f'{remaining - 1}\\n')\n"
         "        raise RuntimeError('planned transient failure')\n"
         "    target = context.outputs['embedding']\n"
+        "    record_path(\n"
+        "        'encode_features_input_path.txt', context.inputs['features']\n"
+        "    )\n"
+        "    record_path('encode_embedding_output_path.txt', target)\n"
         "    target.parent.mkdir(parents=True, exist_ok=True)\n"
         "    target.write_bytes(context.inputs['features'].read_bytes())\n\n"
         "def load(path):\n"
-        "    return path.read_bytes()\n",
+        "    return path.read_bytes()\n\n"
+        "def load_state(path):\n"
+        f"    return {resume_state().model_dump(mode='python')!r}\n",
         encoding="utf-8",
     )
     (root / "environment.yml").write_text("name: viper-test\n", encoding="utf-8")
@@ -1807,12 +1819,18 @@ def test_cloud_native_run_returns_and_persists_one_terminal_reference(
     result = execute_run(frozen.files[-1], repository_root=root)
 
     assert isinstance(result.reference.stored_at, GcsFileRef)
-    assert not (
-        root / "experiments/retry/runs/baseline" / run_id / "artifacts/prepare"
-    ).exists()
-    assert not (
-        root / "experiments/retry/runs/baseline" / run_id / "artifacts/embed"
-    ).exists()
+    assert (
+        root
+        / "experiments/retry/runs/baseline"
+        / run_id
+        / "artifacts/prepare/features/features.bin"
+    ).read_bytes() == b"features"
+    assert (
+        root
+        / "experiments/retry/runs/baseline"
+        / run_id
+        / "artifacts/embed/embedding/embedding.bin"
+    ).read_bytes() == b"features"
     assert {
         f"experiments/retry/runs/baseline/{run_id}/artifacts/prepare/features/features.bin",
         f"experiments/retry/runs/baseline/{run_id}/artifacts/embed/embedding/embedding.bin",
@@ -1822,6 +1840,245 @@ def test_cloud_native_run_returns_and_persists_one_terminal_reference(
         result.reference
     )
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
+
+
+def test_cloud_run_exposes_declared_output_paths_to_stage_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass the same declared output paths to stage code under local and cloud."""
+    local_root = tmp_path / "local"
+    cloud_root = tmp_path / "cloud"
+    local_frozen = _freeze_retry_plan(local_root)
+    cloud_root.mkdir()
+    cloud_provider = InMemoryViperCloudProvider(cloud_root)
+    install_in_memory_cloud(monkeypatch, cloud_root, cloud_provider)
+    cloud_frozen = _freeze_retry_plan(cloud_root, cloud_native=True)
+    (local_root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
+    (cloud_root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
+
+    local_result = execute_run(local_frozen.files[-1], repository_root=local_root)
+    cloud_result = execute_run(cloud_frozen.files[-1], repository_root=cloud_root)
+    assert local_result.status == cloud_result.status == "succeeded"
+    local_run_id = local_frozen.run.run_id
+    cloud_run_id = cloud_frozen.run.run_id
+
+    assert (local_root / "prepare_features_output_path.txt").read_text(
+        encoding="utf-8"
+    ) == (
+        f"experiments/retry/runs/baseline/{local_run_id}/"
+        "artifacts/prepare/features/features.bin"
+    )
+    assert (cloud_root / "prepare_features_output_path.txt").read_text(
+        encoding="utf-8"
+    ) == (
+        f"experiments/retry/runs/baseline/{cloud_run_id}/"
+        "artifacts/prepare/features/features.bin"
+    )
+    assert (local_root / "encode_embedding_output_path.txt").read_text(
+        encoding="utf-8"
+    ) == (
+        f"experiments/retry/runs/baseline/{local_run_id}/"
+        "artifacts/embed/embedding/embedding.bin"
+    )
+    assert (cloud_root / "encode_embedding_output_path.txt").read_text(
+        encoding="utf-8"
+    ) == (
+        f"experiments/retry/runs/baseline/{cloud_run_id}/"
+        "artifacts/embed/embedding/embedding.bin"
+    )
+
+
+def test_cloud_run_exposes_destination_independent_input_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass same-run producer artifact paths to consumers under cloud storage."""
+    root = tmp_path / "project"
+    root.mkdir()
+    provider = InMemoryViperCloudProvider(root)
+    install_in_memory_cloud(monkeypatch, root, provider)
+    frozen = _freeze_retry_plan(root, cloud_native=True)
+    run_id = frozen.run.run_id
+    (root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
+
+    execute_run(frozen.files[-1], repository_root=root)
+
+    assert (root / "encode_features_input_path.txt").read_text(encoding="utf-8") == (
+        f"experiments/retry/runs/baseline/{run_id}/"
+        "artifacts/prepare/features/features.bin"
+    )
+    assert not (
+        root
+        / ".viper/workspaces"
+        / run_id
+        / "attempt-1/inputs/embed/features/features.bin"
+    ).exists()
+
+
+def test_cloud_snapshot_uses_declared_paths_after_context_path_parity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Publish cloud snapshots under the declared artifact paths."""
+    root = tmp_path / "project"
+    root.mkdir()
+    provider = InMemoryViperCloudProvider(root)
+    install_in_memory_cloud(monkeypatch, root, provider)
+    frozen = _freeze_retry_plan(root, cloud_native=True)
+    run_id = frozen.run.run_id
+    (root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
+
+    execute_run(frozen.files[-1], repository_root=root)
+
+    uploaded_paths = {path for _owner, _workspace, _revision, path in provider.uploads}
+    assert {
+        f"experiments/retry/runs/baseline/{run_id}/artifacts/prepare/features/features.bin",
+        f"experiments/retry/runs/baseline/{run_id}/artifacts/embed/embedding/embedding.bin",
+    } <= uploaded_paths
+    assert not any(
+        path.startswith(".viper/workspaces/") and "/outputs/" in path
+        for path in uploaded_paths
+    )
+
+
+def test_cloud_recomputed_metric_reads_declared_artifact_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Give recomputed cloud metrics the declared artifact path."""
+    root = tmp_path / "project"
+    root.mkdir()
+    provider = InMemoryViperCloudProvider(root)
+    install_in_memory_cloud(monkeypatch, root, provider)
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
+    source = root / "project/metric_pipeline.py"
+    source.parent.mkdir()
+    source.write_text(
+        "from pathlib import Path\n"
+        "from viper import config\n"
+        "from viper.metrics import metric\n"
+        "from viper.stages import StageContext, train\n\n"
+        "@metric(metric_id='model_bytes', mode='stateless')\n"
+        "def model_bytes(context):\n"
+        "    path = context.artifacts['model']\n"
+        "    Path('metric_model_artifact_path.txt').write_text(\n"
+        "        path.resolve().relative_to(Path.cwd().resolve()).as_posix(),\n"
+        "        encoding='utf-8',\n"
+        "    )\n"
+        "    return float(len(path.read_bytes()))\n\n"
+        "@train(config=config.TrainConfig)\n"
+        "def train_model(context: StageContext[config.TrainConfig]):\n"
+        "    model = context.outputs['model']\n"
+        "    model.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    model.write_bytes(context.inputs['dataset'].read_bytes())\n\n"
+        "    context.outputs['resume_state'].parent.mkdir(\n"
+        "        parents=True, exist_ok=True\n"
+        "    )\n"
+        "    context.outputs['resume_state'].write_bytes(b'state')\n\n"
+        "def load(path):\n"
+        "    return path.read_bytes()\n\n"
+        "def load_state(path):\n"
+        f"    return {resume_state().model_dump(mode='python')!r}\n",
+        encoding="utf-8",
+    )
+    dataset = root / "inputs/raw/dataset.bin"
+    dataset.parent.mkdir(parents=True)
+    dataset.write_bytes(b"dataset")
+    (root / "environment.yml").write_text("name: viper-test\n", encoding="utf-8")
+    (root / "viper.toml").write_text(
+        "[workspace]\nschema_version = 2\n"
+        '[storage]\ndestination = "viper://machina/models"\n'
+        '[viper_cloud]\nprovider = "gcs"\nbucket = "test-bucket"\n',
+        encoding="utf-8",
+    )
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "source")
+    source_commit = run_git(root, "rev-parse", "HEAD")
+    module_spec = importlib.util.spec_from_file_location(
+        f"metric_pipeline_{root.parent.name}", source
+    )
+    assert module_spec is not None and module_spec.loader is not None
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    model_bytes = measure(
+        module.model_bytes,
+        config=current_config.MetricConfig(),
+        dependencies=(
+            MetricDependency(source="artifact", name="model", data_role="training"),
+        ),
+        comparator=FloatComparator(),
+    )
+    trained = stage(
+        module.train_model,
+        config=current_config.TrainConfig(),
+        inputs={
+            "dataset": external_input(
+                "dataset",
+                path="inputs/raw/dataset.bin",
+                data_role="training",
+            )
+        },
+        outputs={  # pyright: ignore[reportArgumentType]
+            "model": output(
+                path="model.bin",
+                loader=module.load,
+                data_role="training",
+            ),
+            "resume_state": output(
+                path="resume_state.bin",
+                loader=module.load_state,
+                data_role="training",
+            ),
+        },
+        metrics=(model_bytes,),
+        objective=minimize(model_bytes),
+    )
+    authored = experiment(
+        experiment_id="metric_paths",
+        variants={
+            "baseline": variant(
+                levels={},
+                stages={"train": trained},
+                estimator=trained.outputs["model"],
+            )
+        },
+        replicates={"r1": replicate("r1", seed=7)},
+    )
+    source_ref = GitSource.model_validate(
+        {"repository": REPOSITORY, "commit": source_commit}
+    )
+    environment = LocalEnvSpec(
+        lockfile=GitFileRef(
+            repository=source_ref.repository,
+            commit=source_commit,
+            path="environment.yml",
+        ),
+        python_env=python_environment(),
+    )
+    frozen = freeze_run_plan(
+        root,
+        plan(
+            experiment=authored,
+            variant="baseline",
+            replicate="r1",
+            source=source_ref,
+            env=environment,
+            reproducibility=reproducibility(),
+        ),
+    )
+    run_git(root, "add", "experiments/metric_paths")
+    run_git(root, "commit", "--quiet", "-m", "plan")
+
+    execute_run(frozen.files[-1], repository_root=root)
+
+    assert (root / "metric_model_artifact_path.txt").read_text(encoding="utf-8") == (
+        f"experiments/metric_paths/runs/baseline/{frozen.run.run_id}/"
+        "artifacts/train/model/model.bin"
+    )
 
 
 def test_cloud_native_retry_replaces_the_verified_terminal_reference(

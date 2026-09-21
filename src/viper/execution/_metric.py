@@ -269,7 +269,6 @@ def run_after_stage_metrics(
     metric_verification_paths: list[Path],
     timeout_seconds: float | None,
     attempt_id: int,
-    artifact_paths_override: Mapping[ArtifactName, Path] | None = None,
 ) -> None:
     """Invoke selected recomputed metrics with existing immutable references."""
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
@@ -285,11 +284,7 @@ def run_after_stage_metrics(
             metric,
             stored_inputs,
         )
-        available_artifacts = (
-            dict(artifact_paths_override)
-            if artifact_paths_override is not None
-            else _artifact_paths(root, stage)
-        )
+        available_artifacts = _artifact_paths(root, stage)
         metric_inputs = {
             dependency.name: input_paths[dependency.name]
             for dependency in metric.dependencies
