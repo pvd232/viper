@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
@@ -66,6 +67,205 @@ def parse_query(value: str) -> dict[str, Any]:
     if not isinstance(query, dict):
         raise argparse.ArgumentTypeError("query must be a JSON object")
     return query
+
+
+def _run_change_payload(change: Any) -> dict[str, Any]:
+    """Render one RunChange-like object as a stable JSON mapping."""
+    return {
+        "path": change.path,
+        "kind": change.kind,
+        "left": change.left,
+        "right": change.right,
+    }
+
+
+def _compare_summary_noise(path: str) -> bool:
+    """Identify comparison paths that obscure semantic run differences."""
+    if path == "benchmark_spec" or path.startswith("benchmark_spec."):
+        return True
+    if path in {
+        "experiment_spec.experiment_id",
+        "run_spec.experiment_id",
+        "variant_spec.experiment_id",
+        "variant_spec.variant_id",
+    }:
+        return True
+    if re.match(r"run_spec\.stages\[\d+\]\.spec\.", path) is not None:
+        return True
+    if path.startswith("terminal_run."):
+        return True
+    if path.endswith((".run_id", ".measured_at", ".completed_at", ".kind")):
+        return True
+    if path.endswith((".file.bytes", ".bytes")) and ".artifacts." not in path:
+        return True
+    if ".completion.invocation." in path or ".completion.source." in path:
+        return True
+    if ".stored_at.path" in path or ".stored_at.revision" in path:
+        return True
+    if ".stored_at." in path and ".artifacts." not in path:
+        return True
+    if path.endswith((".file.path", ".relative_path")):
+        return True
+    if ".spec.outputs." in path and path.endswith(".path"):
+        return True
+    return False
+
+
+def _stage_id_from_change(path: str) -> str | None:
+    """Extract the stage identifier named by one flattened path."""
+    match = re.match(r"(?:resolved_stages|stage_specs)\.([^.]+)\.", path)
+    return None if match is None else match.group(1)
+
+
+def _artifact_from_change(path: str) -> tuple[str, str] | None:
+    """Extract a stage and artifact selected by one artifact identity change."""
+    match = re.match(r"resolved_stages\.([^.]+)\.artifacts\.([^.]+)\.", path)
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
+
+
+def _stage_id_from_stage_spec_ref(value: Any) -> str | None:
+    """Extract the stage directory from one run_spec stage spec reference."""
+    if not isinstance(value, str):
+        return None
+    match = re.search(r"(?:^|/)stages/([^/]+)/spec\.yaml$", value)
+    if match is None:
+        return None
+    return match.group(1)
+
+
+def _stage_order(changes: tuple[Any, ...]) -> dict[str, int]:
+    """Infer run-stage order from run_spec stage references in changes."""
+    ordered: dict[str, int] = {}
+    for change in changes:
+        match = re.match(r"run_spec\.stages\[(\d+)\]\.spec(?:\.|$)", change.path)
+        if match is None:
+            continue
+        for value in (change.left, change.right):
+            stage_id = _stage_id_from_stage_spec_ref(value)
+            if stage_id is not None:
+                ordered.setdefault(stage_id, int(match.group(1)))
+    return ordered
+
+
+def _change_sort_key(change: Any, stage_order: dict[str, int]) -> tuple[int, int, str]:
+    """Sort stage-local changes by execution order before flattened path."""
+    stage_id = _stage_id_from_change(change.path)
+    stage_index = 10_000 if stage_id is None else stage_order.get(stage_id, 9_000)
+    digest_rank = 0 if change.path.endswith(".file.sha256") else 1
+    return stage_index, digest_rank, change.path
+
+
+def _compare_runs_summary(result: SuccessModel) -> dict[str, Any]:
+    """Build a compact, noise-filtered sidecar for a compare-runs result."""
+    changes = tuple(getattr(result, "changes"))
+    stage_order = _stage_order(changes)
+    semantic_changes = [
+        change for change in changes if not _compare_summary_noise(change.path)
+    ]
+    artifact_identity_changes = [
+        change
+        for change in semantic_changes
+        if ".artifacts." in change.path
+        and change.path.endswith((".file.sha256", ".file.bytes"))
+    ]
+    measurement_value_changes = [
+        change
+        for change in semantic_changes
+        if change.path.startswith("measurements[") and change.path.endswith(".value")
+    ]
+    protocol_changes = [
+        change
+        for change in semantic_changes
+        if change not in artifact_identity_changes
+        and change not in measurement_value_changes
+    ]
+    artifact_identity_changes.sort(
+        key=lambda change: _change_sort_key(change, stage_order)
+    )
+    protocol_changes.sort(key=lambda change: _change_sort_key(change, stage_order))
+    stages: dict[str, dict[str, Any]] = {}
+    for change in semantic_changes:
+        stage_id = _stage_id_from_change(change.path)
+        if stage_id is None:
+            continue
+        stage = stages.setdefault(
+            stage_id,
+            {
+                "stage_id": stage_id,
+                "change_count": 0,
+                "artifact_identity_changes": [],
+                "protocol_change_paths": [],
+            },
+        )
+        stage["change_count"] += 1
+        artifact = _artifact_from_change(change.path)
+        if artifact is not None and change.path.endswith(
+            (".file.sha256", ".file.bytes")
+        ):
+            stage["artifact_identity_changes"].append(_run_change_payload(change))
+        elif artifact is None:
+            stage["protocol_change_paths"].append(change.path)
+    return {
+        "schema_version": 1,
+        "left_run_id": getattr(result, "left_run_id"),
+        "right_run_id": getattr(result, "right_run_id"),
+        "identical": getattr(result, "identical"),
+        "change_count": len(changes),
+        "semantic_change_count": len(semantic_changes),
+        "filtered_noise_count": len(changes) - len(semantic_changes),
+        "filter": {
+            "removed": [
+                "benchmark_spec.*",
+                "terminal_run.*",
+                "*.run_id",
+                "*.measured_at",
+                "*.completed_at",
+                "*.kind",
+                "non-artifact *.bytes",
+                "non-artifact *.file.bytes",
+                "*.completion.invocation.*",
+                "*.completion.source.*",
+                "non-artifact *.stored_at.*",
+                "*.stored_at.path",
+                "*.stored_at.revision",
+                "*.file.path",
+                "*.relative_path",
+                "*.spec.outputs.*.path",
+            ]
+        },
+        "first_protocol_change": (
+            None if not protocol_changes else _run_change_payload(protocol_changes[0])
+        ),
+        "first_artifact_identity_change": (
+            None
+            if not artifact_identity_changes
+            else _run_change_payload(artifact_identity_changes[0])
+        ),
+        "artifact_identity_changes": [
+            _run_change_payload(change) for change in artifact_identity_changes
+        ],
+        "measurement_value_changes": [
+            _run_change_payload(change) for change in measurement_value_changes
+        ],
+        "stages": tuple(
+            stages[stage_id]
+            for stage_id in sorted(
+                stages,
+                key=lambda item: (stage_order.get(item, 9_000), item),
+            )
+        ),
+    }
+
+
+def _write_json_sidecar(path: Path, value: dict[str, Any]) -> None:
+    """Write one structured CLI sidecar without changing the main result."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def build_parser() -> ArgumentParser:
@@ -314,6 +514,11 @@ def build_parser() -> ArgumentParser:
         required=True,
         help="source repository URL approved to supply executable loaders",
     )
+    compare_runs.add_argument(
+        "--summary-output",
+        type=Path,
+        help="write a compact JSON summary with low-signal changes filtered out",
+    )
 
     for name, help_text in (
         ("verify-run", "verify one terminal resolved run"),
@@ -423,6 +628,7 @@ def _operation_and_payload(
         values["artifacts"] = selectors
         values["repository_root"] = values.pop("root")
     trusted = values.pop("trust_source", None)
+    values.pop("summary_output", None)
     if trusted is not None:
         values["trusted_source_repositories"] = trusted
     return operation, values
@@ -581,6 +787,12 @@ def main(argv: list[str] | None = None) -> int:
 
     operation, payload = _operation_and_payload(parsed)
     result = dispatch(operation, payload)
+    if (
+        operation == "compare_runs"
+        and isinstance(result, SuccessModel)
+        and parsed.summary_output is not None
+    ):
+        _write_json_sidecar(parsed.summary_output, _compare_runs_summary(result))
     return _render(result, json_output=parsed.json_output)
 
 

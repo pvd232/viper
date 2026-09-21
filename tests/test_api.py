@@ -18,6 +18,7 @@ from viper.api import (
     REQUEST_REGISTRY,
     CapabilitiesRequest,
     CatalogRefreshRequest,
+    CompareRunsSuccess,
     KnowledgeRefreshRequest,
     KnowledgeSearchRequest,
     LocalRunPath,
@@ -46,8 +47,9 @@ from viper.api import (
     validate_stage,
 )
 from viper.catalog import Catalog, CatalogRefreshResult
-from viper.cli import main
+from viper.cli import _compare_runs_summary, main
 from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
+from viper.inspection import RunChange
 from viper.journal import DurableJournal
 from viper.knowledge import (
     KnowledgeRecordEnvelope,
@@ -125,6 +127,84 @@ def test_mcp_tool_schemas_match_typed_operations() -> None:
     result = call_tool(Path.cwd(), "read", "get_capabilities")
     assert result.is_error is False
     assert result.structured_content["operation"] == "get_capabilities"
+
+
+def test_compare_runs_summary_filters_noise_and_preserves_artifact_changes() -> None:
+    """Summarize verified run differences without hiding artifact byte changes."""
+    result = CompareRunsSuccess(
+        left_run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        right_run_id="01BRZ3NDEKTSV4RRFFQ69G5FAV",
+        identical=False,
+        changes=(
+            RunChange(
+                path="benchmark_spec.benchmark_id",
+                kind="added",
+                right="cluster64_hopfield",
+            ),
+            RunChange(
+                path="experiment_spec.experiment_id",
+                kind="changed",
+                left="experiment_v10",
+                right="experiment_v17",
+            ),
+            RunChange(
+                path="run_spec.stages[0].spec.path",
+                kind="changed",
+                left="experiments/a/runs/base/stages/build/spec.yaml",
+                right="experiments/b/runs/base/stages/build/spec.yaml",
+            ),
+            RunChange(
+                path="run_spec.stages[1].spec.path",
+                kind="changed",
+                left="experiments/a/runs/base/stages/train/spec.yaml",
+                right="experiments/b/runs/base/stages/train/spec.yaml",
+            ),
+            RunChange(
+                path="resolved_stages.train.completed_at",
+                kind="changed",
+                left="2026-09-21T01:00:00Z",
+                right="2026-09-21T02:00:00Z",
+            ),
+            RunChange(
+                path="resolved_stages.build.spec.config.cluster_dimensions",
+                kind="changed",
+                left=None,
+                right=64,
+            ),
+            RunChange(
+                path="resolved_stages.train.completion.source.stored_at.commit",
+                kind="changed",
+                left="a" * 40,
+                right="b" * 40,
+            ),
+            RunChange(
+                path="resolved_stages.train.artifacts.model.file.sha256",
+                kind="changed",
+                left="c" * 64,
+                right="d" * 64,
+            ),
+            RunChange(
+                path="measurements[0].value",
+                kind="changed",
+                left=0.57,
+                right=0.56,
+            ),
+        ),
+    )
+
+    summary = _compare_runs_summary(result)
+
+    assert summary["change_count"] == 9
+    assert summary["filtered_noise_count"] == 6
+    assert summary["semantic_change_count"] == 3
+    assert summary["first_protocol_change"]["path"] == (
+        "resolved_stages.build.spec.config.cluster_dimensions"
+    )
+    assert summary["first_artifact_identity_change"]["path"] == (
+        "resolved_stages.train.artifacts.model.file.sha256"
+    )
+    assert summary["measurement_value_changes"][0]["left"] == 0.57
+    assert [stage["stage_id"] for stage in summary["stages"]] == ["build", "train"]
 
 
 @pytest.mark.parametrize("kind", ("run", "benchmark", "evidence"))
