@@ -14,7 +14,11 @@ from viper.benchmark import (
     BenchmarkSpec,
     MetricCriterion,
 )
-from viper.execution._benchmark import _benchmark_metric_results, _benchmark_status
+from viper.execution._benchmark import (
+    _benchmark_metric_results,
+    _benchmark_mirror_path,
+    _benchmark_status,
+)
 from viper.execution.results import BenchmarkExecutionResult
 from viper.metrics import (
     FloatComparator,
@@ -98,6 +102,34 @@ def test_benchmark_result_reference_accepts_local_immutable_storage() -> None:
     )
 
     assert reference.stored_at.kind == "local"
+
+
+def test_benchmark_mirror_path_indexes_result_by_benchmark_and_run(
+    tmp_path: Path,
+) -> None:
+    """Mirror benchmark results under the benchmark directory for local discovery."""
+    benchmark = BenchmarkSpec(
+        benchmark_id="sota",
+        eval_id="evaluate",
+        test=_pointer("inputs/datasets/holdout/test.pointer.yaml"),
+        splits={"split": _pointer("inputs/benchmarks/holdout/split.pointer.yaml")},
+        metric_ids=("accuracy",),
+    )
+    candidate_path = (
+        tmp_path
+        / "experiments/k562_cluster64_hopfield_v6/runs"
+        / "cluster64_canonical_sota_v6_dual_space/01M2ZFP03ZKSRJ8T41NHHHGX04"
+        / "resolved.yaml"
+    )
+
+    mirror_path = _benchmark_mirror_path(tmp_path, benchmark, candidate_path)
+
+    assert mirror_path == (
+        tmp_path
+        / "benchmarks/sota/runs/k562_cluster64_hopfield_v6"
+        / "cluster64_canonical_sota_v6_dual_space/01M2ZFP03ZKSRJ8T41NHHHGX04"
+        / "benchmark.result.yaml"
+    )
 
 
 def test_benchmark_records_metrics_before_criteria() -> None:

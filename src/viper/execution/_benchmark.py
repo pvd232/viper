@@ -69,6 +69,29 @@ def _write_new(path: Path, raw: bytes) -> None:
         Path(temporary_name).unlink(missing_ok=True)
 
 
+def _benchmark_mirror_path(
+    root: Path,
+    benchmark: BenchmarkSpec,
+    candidate_path: Path,
+) -> Path:
+    """Return the benchmark-indexed mirror path for one candidate run."""
+    run_directory = candidate_path.parent.relative_to(root)
+    parts = run_directory.parts
+    if len(parts) != 5 or parts[0] != "experiments" or parts[2] != "runs":
+        raise BenchmarkExecutionError("candidate run path is outside experiments")
+    _, experiment_id, _, variant_id, run_id = parts
+    return (
+        root
+        / "benchmarks"
+        / benchmark.benchmark_id
+        / "runs"
+        / experiment_id
+        / variant_id
+        / run_id
+        / "benchmark.result.yaml"
+    )
+
+
 def _metric_receipts(
     attempt: RunAttempt,
     fetcher: RunFetcher,
@@ -333,6 +356,8 @@ def benchmark(
     verify_benchmark_result(result, policy=policy, fetcher=fetcher)
     result_raw = serialize_document(result)
     _write_new(result_path, result_raw)
+    mirror_path = _benchmark_mirror_path(root, benchmark, candidate_path)
+    _write_new(mirror_path, result_raw)
     result_relative_path = result_path.relative_to(root).as_posix()
     result_reference = publish_resolved_files(
         root,
