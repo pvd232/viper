@@ -425,6 +425,7 @@ def execute_attempt(
             stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
             reuse_input_identities: tuple[ReuseInputIdentity, ...] = ()
             input_paths: dict[str, Path] = {}
+            output_paths: dict[ArtifactName, Path] | None = None
             download_source_closure: DownloadSourceClosureReceipt | None = None
             process = None
             journal.append(
@@ -582,6 +583,14 @@ def execute_attempt(
                         completed_results[stage_reference.stage_id] = reused.resolved
                         active_stage_id = None
                         continue
+                output_paths = _stage_output_paths(
+                    root,
+                    destination,
+                    run,
+                    attempt_id,
+                    stage_reference.stage_id,
+                    stage,
+                )
                 try:
                     process = execute_stage_process(
                         root,
@@ -590,14 +599,7 @@ def execute_attempt(
                         stage,
                         attempt_id=attempt_id,
                         input_paths=input_paths,
-                        output_paths=_stage_output_paths(
-                            root,
-                            destination,
-                            run,
-                            attempt_id,
-                            stage_reference.stage_id,
-                            stage,
-                        ),
+                        output_paths=output_paths,
                         timeout_seconds=timeout_seconds,
                     )
                 except (StageExecutionError, StageProcessInterrupted) as exc:
@@ -735,6 +737,7 @@ def execute_attempt(
                     metric_verification_paths,
                     timeout_seconds,
                     attempt_id,
+                    artifact_paths_override=output_paths,
                 )
             if process is not None:
                 log_files[
