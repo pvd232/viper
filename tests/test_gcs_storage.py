@@ -636,15 +636,19 @@ def test_sliced_range_fetch_retries_transient_read_failure(
         progress=events.append,
     )
     progress: list[int] = []
+    destination = tmp_path / "range.bin"
+    destination.write_bytes(b"\0" * len(b"bounded"))
 
-    raw = client._download_range(
+    written = client._download_range_to_path(
         key="viper/machina/mantra/revision/data/large.bin",
         start=0,
         stop=len(b"bounded"),
+        destination=destination,
         progress=progress.append,
     )
 
-    assert raw == b"bounded"
+    assert written == len(b"bounded")
+    assert destination.read_bytes() == b"bounded"
     assert progress == [len(b"bounded")]
     assert fake._http.calls == 2  # type: ignore[attr-defined]
     assert fake._http.timeouts == [  # type: ignore[attr-defined]

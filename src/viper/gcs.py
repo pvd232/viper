@@ -1017,55 +1017,55 @@ class GcsProvider(ViperCloudProvider):
                 while next_progress_bytes <= completed_bytes:
                     next_progress_bytes += GCS_SLICED_FETCH_PROGRESS_BYTES
 
-        def fetch_range(start: int, stop: int) -> tuple[int, bytes]:
-            raw = self._download_range(
+        def fetch_range(start: int, stop: int) -> int:
+            return self._download_range_to_path(
                 key=key,
                 start=start,
                 stop=stop,
+                destination=destination,
                 progress=record_progress,
             )
-            if len(raw) != stop - start:
-                raise ViperCloudError("GCS sliced restore returned a short range")
-            return start, raw
 
         try:
             with destination.open("wb") as output:
                 output.truncate(size)
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                futures: dict[Future[tuple[int, bytes]], tuple[int, int]] = {
+                futures: dict[Future[int], tuple[int, int]] = {
                     executor.submit(fetch_range, start, stop): (start, stop)
                     for start, stop in ranges
                 }
-                with destination.open("r+b") as output:
-                    for future in as_completed(futures):
-                        start, stop = futures[future]
-                        try:
-                            offset, raw = future.result()
-                        except (GoogleAPIError, RequestException) as error:
-                            raise ViperCloudError(
-                                "GCS sliced restore failed for bytes "
-                                f"{start}-{stop - 1}"
-                            ) from error
-                        output.seek(offset)
-                        output.write(raw)
+                for future in as_completed(futures):
+                    start, stop = futures[future]
+                    try:
+                        written = future.result()
+                    except (GoogleAPIError, RequestException) as error:
+                        raise ViperCloudError(
+                            f"GCS sliced restore failed for bytes {start}-{stop - 1}"
+                        ) from error
+                    if written != stop - start:
+                        raise ViperCloudError(
+                            "GCS sliced restore returned a short range"
+                        )
         except ViperCloudError:
             raise
 
-    def _download_range(
+    def _download_range_to_path(
         self,
         *,
         key: str,
         start: int,
         stop: int,
+        destination: Path,
         progress: Callable[[int], None],
-    ) -> bytes:
-        """Read one half-open byte range from GCS with bounded retries."""
+    ) -> int:
+        """Read one half-open byte range from GCS into its destination offset."""
         for attempt in range(1, self.range_fetch_attempts + 1):
             try:
-                return self._download_range_once(
+                return self._download_range_to_path_once(
                     key=key,
                     start=start,
                     stop=stop,
+                    destination=destination,
                     progress=progress,
                 )
             except (GoogleAPIError, RequestException):
@@ -1078,15 +1078,16 @@ class GcsProvider(ViperCloudProvider):
                 )
         raise ViperCloudError("GCS range restore exhausted retries")
 
-    def _download_range_once(
+    def _download_range_to_path_once(
         self,
         *,
         key: str,
         start: int,
         stop: int,
+        destination: Path,
         progress: Callable[[int], None],
-    ) -> bytes:
-        """Read one half-open byte range from GCS through the authorized session."""
+    ) -> int:
+        """Stream one half-open GCS byte range into its destination offset."""
         session = getattr(self.client, "_http", None)
         self._emit_progress(
             "stream_fetch_range_start",
@@ -1101,12 +1102,15 @@ class GcsProvider(ViperCloudProvider):
                 timeout=self.operation_timeout,
             )
             progress(len(raw))
+            with destination.open("r+b") as output:
+                output.seek(start)
+                output.write(raw)
             self._emit_progress(
                 "stream_fetch_range_done",
                 key=key,
                 bytes=len(raw),
             )
-            return raw
+            return len(raw)
         object_name = quote(key, safe="")
         url = (
             f"https://storage.googleapis.com/download/storage/v1/b/"
@@ -1123,22 +1127,22 @@ class GcsProvider(ViperCloudProvider):
             raise ViperCloudError(
                 f"GCS sliced restore expected HTTP 206, got {response.status_code}"
             )
-        chunks: list[bytes] = []
         downloaded = 0
-        for chunk in response.iter_content(chunk_size=1024 * 1024):
-            if not chunk:
-                continue
-            chunks.append(chunk)
-            chunk_bytes = len(chunk)
-            downloaded += chunk_bytes
-            progress(chunk_bytes)
-        raw = b"".join(chunks)
+        with destination.open("r+b") as output:
+            output.seek(start)
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if not chunk:
+                    continue
+                output.write(chunk)
+                chunk_bytes = len(chunk)
+                downloaded += chunk_bytes
+                progress(chunk_bytes)
         self._emit_progress(
             "stream_fetch_range_done",
             key=key,
-            bytes=len(raw),
+            bytes=downloaded,
         )
-        return raw
+        return downloaded
 
     def list_files(
         self,
