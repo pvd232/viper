@@ -493,8 +493,16 @@ def test_reuses_loaded_manifest_for_repeated_snapshot_reads(tmp_path: Path) -> N
 
 
 def test_fetch_streams_payload_through_temporary_file(tmp_path: Path) -> None:
-    """Restore byte-returning artifact payloads without the all-bytes GCS API."""
-    client, fake = _client(tmp_path)
+    """Restore byte-returning payloads through bounded authorized range reads."""
+    fake = _Client()
+    fake._http = _FlakyRangeSession(b"alpha")  # type: ignore[attr-defined]
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        range_fetch_read_timeout=7,
+    )
     destination = ViperCloudDestination(owner="machina", workspace="mantra")
     snapshot, _ = client.publish(destination, {"runs/source/a.bin": b"alpha"})
     assert isinstance(snapshot, GcsStageResultSnapshotRef)
@@ -506,7 +514,12 @@ def test_fetch_streams_payload_through_temporary_file(tmp_path: Path) -> None:
     assert client.fetch(reference) == b"alpha"
 
     assert key not in fake.value.download_calls
-    assert fake.value.file_download_calls == [key]
+    assert key not in fake.value.file_download_calls
+    assert fake._http.calls == 2  # type: ignore[attr-defined]
+    assert fake._http.timeouts == [  # type: ignore[attr-defined]
+        (GCS_OPERATION_TIMEOUT_SECONDS, 7),
+        (GCS_OPERATION_TIMEOUT_SECONDS, 7),
+    ]
 
 
 def test_stream_restore_emits_source_and_destination_progress(

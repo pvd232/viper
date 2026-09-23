@@ -939,34 +939,8 @@ class GcsProvider(ViperCloudProvider):
         revision: SHA256,
     ) -> None:
         """Download one sealed object using the fastest available verified path."""
-        if expected.bytes >= self.sliced_fetch_min_bytes:
-            self._emit_progress(
-                "stream_fetch_sliced_start",
-                key=key,
-                owner=owner,
-                workspace=workspace,
-                revision=revision,
-                path=expected.path,
-                bytes=expected.bytes,
-            )
-            self._download_sliced_to_path(
-                key=key,
-                size=expected.bytes,
-                destination=destination,
-            )
-            self._emit_progress(
-                "stream_fetch_sliced_done",
-                key=key,
-                owner=owner,
-                workspace=workspace,
-                revision=revision,
-                path=expected.path,
-                bytes=expected.bytes,
-            )
-            return
-
         self._emit_progress(
-            "stream_fetch_python_start",
+            "stream_fetch_sliced_start",
             key=key,
             owner=owner,
             workspace=workspace,
@@ -974,11 +948,13 @@ class GcsProvider(ViperCloudProvider):
             path=expected.path,
             bytes=expected.bytes,
         )
-        self.bucket.blob(key).download_to_filename(
-            str(destination), checksum="auto", timeout=self.operation_timeout
+        self._download_sliced_to_path(
+            key=key,
+            size=expected.bytes,
+            destination=destination,
         )
         self._emit_progress(
-            "stream_fetch_python_done",
+            "stream_fetch_sliced_done",
             key=key,
             owner=owner,
             workspace=workspace,
@@ -1043,9 +1019,7 @@ class GcsProvider(ViperCloudProvider):
                             f"GCS sliced restore failed for bytes {start}-{stop - 1}"
                         ) from error
                     if written != stop - start:
-                        raise ViperCloudError(
-                            "GCS sliced restore returned a short range"
-                        )
+                        raise ViperCloudError("GCS restored file identity changed")
         except ViperCloudError:
             raise
 
