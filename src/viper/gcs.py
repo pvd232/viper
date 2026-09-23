@@ -43,6 +43,8 @@ GCS_MAX_WORKERS: int = 16
 GCS_SLICED_FETCH_MIN_BYTES: int = 64 * 1024 * 1024
 GCS_SLICED_FETCH_CHUNK_BYTES: int = 16 * 1024 * 1024
 GCS_SLICED_FETCH_PROGRESS_BYTES: int = 64 * 1024 * 1024
+GCS_RANGE_FETCH_ATTEMPTS: int = 3
+GCS_RANGE_FETCH_READ_TIMEOUT_SECONDS: int = 60
 
 GcsProgressPhase = Literal[
     "manifest_cache_hit",
@@ -62,6 +64,7 @@ GcsProgressPhase = Literal[
     "stream_fetch_sliced_start",
     "stream_fetch_range_start",
     "stream_fetch_range_done",
+    "stream_fetch_range_retry",
     "stream_fetch_progress",
     "stream_fetch_sliced_done",
     "stream_fetch_python_start",
@@ -186,6 +189,8 @@ class GcsProvider(ViperCloudProvider):
         max_workers: int = GCS_MAX_WORKERS,
         sliced_fetch_min_bytes: int = GCS_SLICED_FETCH_MIN_BYTES,
         sliced_fetch_chunk_bytes: int = GCS_SLICED_FETCH_CHUNK_BYTES,
+        range_fetch_attempts: int = GCS_RANGE_FETCH_ATTEMPTS,
+        range_fetch_read_timeout: int = GCS_RANGE_FETCH_READ_TIMEOUT_SECONDS,
         progress: GcsProgressSink | None = None,
     ) -> None:
         """Bind publication sources and object keys to one workspace and bucket."""
@@ -196,6 +201,10 @@ class GcsProvider(ViperCloudProvider):
             raise ValueError("GCS sliced fetch threshold must be non-negative")
         if sliced_fetch_chunk_bytes < 1:
             raise ValueError("GCS sliced fetch chunk size must be positive")
+        if range_fetch_attempts < 1:
+            raise ValueError("GCS range fetch attempts must be positive")
+        if range_fetch_read_timeout < 1:
+            raise ValueError("GCS range fetch read timeout must be positive")
         prefix_path = PurePosixPath(prefix)
         if (
             prefix_path.is_absolute()
@@ -211,6 +220,8 @@ class GcsProvider(ViperCloudProvider):
         self.max_workers = max_workers
         self.sliced_fetch_min_bytes = sliced_fetch_min_bytes
         self.sliced_fetch_chunk_bytes = sliced_fetch_chunk_bytes
+        self.range_fetch_attempts = range_fetch_attempts
+        self.range_fetch_read_timeout = range_fetch_read_timeout
         self.progress = progress
         self._manifest_cache: dict[
             tuple[HumanId, HumanId, SHA256], RevisionManifest
@@ -772,8 +783,12 @@ class GcsProvider(ViperCloudProvider):
             path=path,
             bytes=identity.bytes,
         )
-        raw = self.bucket.blob(key).download_as_bytes(
-            checksum="auto", timeout=self.operation_timeout
+        raw = self._download_object_to_bytes(
+            key=key,
+            expected=identity,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
         )
         if (
             len(raw) != identity.bytes
@@ -790,6 +805,35 @@ class GcsProvider(ViperCloudProvider):
             bytes=len(raw),
         )
         return raw
+
+    def _download_object_to_bytes(
+        self,
+        *,
+        key: str,
+        expected: SnapshotFileRef,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+    ) -> bytes:
+        """Download one sealed object as bytes through the bounded restore path."""
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=self.root,
+            prefix=".viper-fetch.",
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            self._download_object_to_path(
+                key=key,
+                expected=expected,
+                destination=temporary,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+            )
+            return temporary.read_bytes()
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def fetch_to_path(
         self,
@@ -1015,6 +1059,33 @@ class GcsProvider(ViperCloudProvider):
         stop: int,
         progress: Callable[[int], None],
     ) -> bytes:
+        """Read one half-open byte range from GCS with bounded retries."""
+        for attempt in range(1, self.range_fetch_attempts + 1):
+            try:
+                return self._download_range_once(
+                    key=key,
+                    start=start,
+                    stop=stop,
+                    progress=progress,
+                )
+            except (GoogleAPIError, RequestException):
+                if attempt >= self.range_fetch_attempts:
+                    raise
+                self._emit_progress(
+                    "stream_fetch_range_retry",
+                    key=key,
+                    bytes=stop - start,
+                )
+        raise ViperCloudError("GCS range restore exhausted retries")
+
+    def _download_range_once(
+        self,
+        *,
+        key: str,
+        start: int,
+        stop: int,
+        progress: Callable[[int], None],
+    ) -> bytes:
         """Read one half-open byte range from GCS through the authorized session."""
         session = getattr(self.client, "_http", None)
         self._emit_progress(
@@ -1046,7 +1117,7 @@ class GcsProvider(ViperCloudProvider):
             url,
             headers={"Range": f"bytes={start}-{stop - 1}"},
             stream=True,
-            timeout=self.operation_timeout,
+            timeout=(self.operation_timeout, self.range_fetch_read_timeout),
         )
         if response.status_code != 206:
             raise ViperCloudError(
