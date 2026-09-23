@@ -107,6 +107,7 @@ class _Blob:
         """Stream the selected immutable generation to a file-like consumer."""
         assert checksum == "auto"
         assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
+        self.bucket.stream_download_calls.append(self.name)
         raw, _, generation = self.bucket.objects[self.name]
         assert generation == if_generation_match
         stream.write(raw)
@@ -129,6 +130,7 @@ class _Bucket:
         self.next_generation = 0
         self.copy_calls: list[tuple[str, str]] = []
         self.download_calls: list[str] = []
+        self.stream_download_calls: list[str] = []
 
     def blob(self, name: str) -> _Blob:
         """Return a handle for one object name."""
@@ -274,10 +276,10 @@ def test_streams_file_backed_publication(tmp_path: Path) -> None:
     assert fake.value.objects[key][0] == b"bounded blocks"
 
 
-def test_idempotent_upload_checks_metadata_without_downloading(
+def test_idempotent_upload_verifies_existing_payload_by_streaming(
     tmp_path: Path,
 ) -> None:
-    """Accept an existing upload from metadata without reading payload bytes."""
+    """Accept an existing upload only after streaming its immutable bytes."""
     client, fake = _client(tmp_path)
     raw = b"bounded blocks"
     digest = hashlib.sha256(raw).hexdigest()
@@ -303,6 +305,37 @@ def test_idempotent_upload_checks_metadata_without_downloading(
     )
 
     assert key not in fake.value.download_calls
+    assert fake.value.stream_download_calls == [key]
+
+
+def test_rejects_existing_upload_with_spoofed_identity_metadata(
+    tmp_path: Path,
+) -> None:
+    """Reject an upload collision when metadata matches but bytes differ."""
+    client, fake = _client(tmp_path)
+    raw = b"bounded blocks"
+    digest = hashlib.sha256(raw).hexdigest()
+    key = f"viper/machina/mantra/{'b' * 64}/data/large.bin"
+    fake.value.next_generation += 1
+    fake.value.objects[key] = (
+        b"changed blocks",
+        {"sha256": digest, "bytes": str(len(raw))},
+        fake.value.next_generation,
+    )
+
+    with pytest.raises(ViperCloudError, match="different bytes"):
+        client.upload(
+            owner="machina",
+            workspace="mantra",
+            revision="b" * 64,
+            path="data/large.bin",
+            source=raw,
+            sha256=digest,
+            bytes=len(raw),
+        )
+
+    assert key not in fake.value.download_calls
+    assert fake.value.stream_download_calls == [key]
 
 
 def test_idempotent_upload_emits_reuse_progress(tmp_path: Path) -> None:
@@ -334,6 +367,7 @@ def test_idempotent_upload_emits_reuse_progress(tmp_path: Path) -> None:
     )
 
     assert key not in fake.value.download_calls
+    assert fake.value.stream_download_calls == [key]
     assert events[-1] == GcsProgressEvent(
         phase="upload_reuse",
         bucket="mantra-fixture",
@@ -542,6 +576,7 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
     target_path = "runs/target/model.bin"
     target_file = SnapshotFileRef(path=target_path, sha256=digest, bytes=len(raw))
     target_revision_value = manifest_revision((target_file,))
+    target_key = f"viper/machina/mantra/{target_revision_value}/{target_path}"
     client.copy(
         source=source.model_copy(update={"revision": actual_revision}),
         target=GcsFileRef(
@@ -556,6 +591,7 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
         bytes=len(raw),
     )
     fake.value.download_calls.clear()
+    fake.value.stream_download_calls.clear()
     client.copy(
         source=source.model_copy(update={"revision": actual_revision}),
         target=GcsFileRef(
@@ -577,8 +613,8 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
     )
 
     assert fake.value.copy_calls
-    target_key = f"viper/machina/mantra/{target_revision_value}/{target_path}"
     assert target_key not in fake.value.download_calls
+    assert fake.value.stream_download_calls == [target_key]
     copy_events = [
         event
         for event in events
@@ -605,3 +641,107 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
         )
         == raw
     )
+
+
+def test_rejects_existing_copy_target_with_spoofed_identity_metadata(
+    tmp_path: Path,
+) -> None:
+    """Reject a copy collision when target metadata matches but bytes differ."""
+    client, fake = _client(tmp_path)
+    raw = b"parameters"
+    digest = hashlib.sha256(raw).hexdigest()
+    source_path = "runs/source/model.bin"
+    source_file = SnapshotFileRef(path=source_path, sha256=digest, bytes=len(raw))
+    actual_revision = manifest_revision((source_file,))
+    client.upload(
+        owner="machina",
+        workspace="mantra",
+        revision=actual_revision,
+        path=source_path,
+        source=raw,
+        sha256=digest,
+        bytes=len(raw),
+    )
+    client.seal(
+        owner="machina",
+        workspace="mantra",
+        revision=actual_revision,
+        files=(source_file,),
+    )
+    target_path = "runs/target/model.bin"
+    target_file = SnapshotFileRef(path=target_path, sha256=digest, bytes=len(raw))
+    target_revision_value = manifest_revision((target_file,))
+    target_key = f"viper/machina/mantra/{target_revision_value}/{target_path}"
+    fake.value.next_generation += 1
+    fake.value.objects[target_key] = (
+        b"changed",
+        {"sha256": digest, "bytes": str(len(raw))},
+        fake.value.next_generation,
+    )
+
+    with pytest.raises(ViperCloudError, match="different bytes"):
+        client.copy(
+            source=GcsFileRef(
+                bucket="mantra-fixture",
+                prefix="viper",
+                owner="machina",
+                workspace="mantra",
+                revision=actual_revision,
+                path=source_path,
+            ),
+            target=GcsFileRef(
+                bucket="mantra-fixture",
+                prefix="viper",
+                owner="machina",
+                workspace="mantra",
+                revision=target_revision_value,
+                path=target_path,
+            ),
+            sha256=digest,
+            bytes=len(raw),
+        )
+
+    assert target_key not in fake.value.download_calls
+    assert fake.value.stream_download_calls == [target_key]
+
+
+def test_publish_reuse_loads_source_manifest_once_before_parallel_copies(
+    tmp_path: Path,
+) -> None:
+    """Preload one source manifest before publishing several reused files."""
+    source_client, fake = _client(tmp_path)
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    source_snapshot, source_files = source_client.publish(
+        destination,
+        {
+            "runs/source/a.bin": b"alpha",
+            "runs/source/b.bin": b"beta",
+            "runs/source/c.bin": b"gamma",
+        },
+    )
+    assert isinstance(source_snapshot, GcsStageResultSnapshotRef)
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        max_workers=4,
+    )
+    file_map = {
+        "runs/target/a.bin": source_files[0],
+        "runs/target/b.bin": source_files[1],
+        "runs/target/c.bin": source_files[2],
+    }
+    fake.value.download_calls.clear()
+
+    client.publish_reuse(
+        destination=destination,
+        resolved_stage_path="runs/target/stage.json",
+        resolved_stage=b'{"stage": true}\n',
+        source_snapshot=source_snapshot,
+        files=file_map,
+        source_bytes={},
+    )
+
+    manifest_key = f"viper/machina/mantra/{source_snapshot.revision}.manifest.json"
+    assert fake.value.download_calls.count(manifest_key) == 1

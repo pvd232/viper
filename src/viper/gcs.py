@@ -115,6 +115,20 @@ def stderr_gcs_progress(event: GcsProgressEvent) -> None:
     print(format_gcs_progress_event(event), file=sys.stderr, flush=True)
 
 
+class _DigestWriter:
+    """Count and hash chunks written by the GCS downloader."""
+
+    def __init__(self) -> None:
+        self.digest = hashlib.sha256()
+        self.bytes = 0
+
+    def write(self, chunk: bytes) -> int:
+        """Consume one downloaded chunk."""
+        self.digest.update(chunk)
+        self.bytes += len(chunk)
+        return len(chunk)
+
+
 class GcsStorageProbeReceipt(ProtocolModel):
     """Record one successful GCS publication and byte-for-byte restoration."""
 
@@ -336,11 +350,22 @@ class GcsProvider(ViperCloudProvider):
         sha256: SHA256,
         size: int,
     ) -> bool:
-        """Check one already-written object identity from its stored metadata."""
+        """Check one already-written object by metadata and generation-locked bytes."""
         blob = self.bucket.blob(key)
         blob.reload(timeout=self.operation_timeout)
         metadata = blob.metadata or {}
-        return metadata.get("sha256") == sha256 and metadata.get("bytes") == str(size)
+        if metadata.get("sha256") != sha256 or metadata.get("bytes") != str(size):
+            return False
+        if blob.generation is None:
+            raise ViperCloudError("GCS existing object has no immutable generation")
+        observed = _DigestWriter()
+        blob.download_to_file(
+            observed,
+            if_generation_match=blob.generation,
+            checksum="auto",
+            timeout=self.operation_timeout,
+        )
+        return observed.bytes == size and observed.digest.hexdigest() == sha256
 
     def _load_manifest(
         self,
@@ -632,6 +657,11 @@ class GcsProvider(ViperCloudProvider):
         del source_bytes
         if not isinstance(source_snapshot, GcsStageResultSnapshotRef):
             raise TypeError("GcsProvider requires a GcsStageResultSnapshotRef")
+        self._load_manifest(
+            source_snapshot.owner,
+            source_snapshot.workspace,
+            source_snapshot.revision,
+        )
         stage_file = SnapshotFileRef(
             path=resolved_stage_path,
             sha256=hashlib.sha256(resolved_stage).hexdigest(),
@@ -879,19 +909,6 @@ class GcsProvider(ViperCloudProvider):
         if expected not in self._load_manifest(owner, workspace, revision).files:
             raise ViperCloudError("GCS file differs from its sealed manifest")
 
-        class DigestWriter:
-            """Count and hash chunks written by the GCS downloader."""
-
-            def __init__(self) -> None:
-                self.digest = hashlib.sha256()
-                self.bytes = 0
-
-            def write(self, chunk: bytes) -> int:
-                """Consume one downloaded chunk."""
-                self.digest.update(chunk)
-                self.bytes += len(chunk)
-                return len(chunk)
-
         key = self._file_key(owner, workspace, revision, path)
         blob = self.bucket.blob(key)
         self._emit_progress(
@@ -907,7 +924,7 @@ class GcsProvider(ViperCloudProvider):
             blob.reload(timeout=self.operation_timeout)
             if blob.generation is None:
                 raise ViperCloudError("GCS file has no immutable generation")
-            observed = DigestWriter()
+            observed = _DigestWriter()
             blob.download_to_file(
                 observed,
                 if_generation_match=blob.generation,
