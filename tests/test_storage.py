@@ -897,6 +897,38 @@ def test_cloud_fetcher_rejects_corrupt_verified_cache_path(
     assert client.fetch_to_path_calls == [location, location]
 
 
+def test_run_fetcher_reuses_remembered_verified_path_for_cloud_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse a just-published local file without restoring it from cloud."""
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
+    raw = b"published artifact"
+    source = tmp_path / "outputs/artifact.bin"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(raw)
+    location = GcsFileRef(
+        bucket=client.bucket,
+        prefix=client.prefix,
+        owner="machina",
+        workspace="weekend_models",
+        revision="2" * 64,
+        path="runs/example/artifact.bin",
+    )
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=location,
+    )
+    fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
+
+    fetcher.remember_verified_path(reference, source)
+
+    assert fetcher.read_verified_path(reference) == source
+    assert client.fetch_to_path_calls == []
+
+
 def test_execution_fetcher_trusts_sealed_local_payload_until_strict_verification(
     tmp_path: Path,
 ) -> None:

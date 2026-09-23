@@ -34,6 +34,7 @@ from ..references import (
     ResolvedStageRef,
     SnapshotFileRef,
     ViperCloudFileRef,
+    resolve_snapshot_file_ref,
     storage_file,
 )
 from ..reuse import (
@@ -666,6 +667,20 @@ def execute_attempt(
                 resolved_stage=resolved_raw,
                 files=snapshot_paths,
             )
+            for path, source_path in snapshot_paths.items():
+                with source_path.open("rb") as stream:
+                    source_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+                fetcher.remember_verified_path(
+                    resolve_snapshot_file_ref(
+                        snapshot,
+                        SnapshotFileRef(
+                            path=path,
+                            sha256=source_sha256,
+                            bytes=source_path.stat().st_size,
+                        ),
+                    ),
+                    source_path,
+                )
             resolved_stage_ref = ResolvedStageRef(
                 stage_id=stage_reference.stage_id,
                 snapshot=snapshot,

@@ -187,6 +187,21 @@ class RunFetcher:
         self._verified_paths[reference] = cached
         return cached
 
+    def remember_verified_path(self, reference: ResolvedFileRef, path: Path) -> None:
+        """Reuse a local file already matched to its immutable reference."""
+        if path.stat().st_size != reference.bytes:
+            raise VerificationError(
+                f"byte-count mismatch: expected {reference.bytes}, "
+                f"received {path.stat().st_size}"
+            )
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if digest != reference.sha256:
+            raise VerificationError(
+                f"SHA-256 mismatch: expected {reference.sha256}, received {digest}"
+            )
+        self._verified_paths[reference] = path
+
     def read_verified_producer(
         self,
         reference: ResolvedRunRef,
