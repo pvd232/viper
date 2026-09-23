@@ -15,7 +15,7 @@ from ._cloud import (
     ViperCloudRepository,
 )
 from ._schema import RepoRelPath
-from .gcs import GcsProvider
+from .gcs import GcsProgressSink, GcsProvider
 from .huggingface import HuggingFaceProvider
 from .references import (
     CloudFileRef,
@@ -42,10 +42,12 @@ class ViperCloud:
         repository: ViperCloudRepository,
         *,
         provider: ViperCloudProvider | None = None,
+        progress: GcsProgressSink | None = None,
     ) -> None:
         """Bind one workspace to its configured cloud repository."""
         self.root = root.resolve(strict=True)
         self.repository = repository
+        self.progress = progress
         self.provider = provider or self._create_provider(repository)
 
     def _create_provider(
@@ -58,6 +60,7 @@ class ViperCloud:
                 self.root,
                 repository.bucket,
                 prefix=repository.prefix,
+                progress=self.progress,
             )
         if isinstance(repository, HuggingFaceRepository):
             return HuggingFaceProvider(
@@ -272,7 +275,11 @@ class ViperCloud:
             return self
         if self.repository == self._repository_for(reference):
             return self
-        return type(self)(self.root, self._repository_for(reference))
+        return type(self)(
+            self.root,
+            self._repository_for(reference),
+            progress=self.progress,
+        )
 
 
 __all__ = ["ViperCloud"]

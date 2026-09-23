@@ -23,6 +23,7 @@ from ._cloud import (
 )
 from ._schema import ProtocolModel, RepoRelPath
 from .cloud import ViperCloud
+from .gcs import GcsProgressSink, stderr_gcs_progress
 from .ids import LocalStoreId, RunId
 from .references import (
     CloudStageResultSnapshotRef,
@@ -393,7 +394,14 @@ def viper_cloud(root: Path) -> ViperCloud:
     settings = load_storage_settings(root)
     if settings.repository is None:
         raise StorageConfigurationError("viper_cloud repository is required")
-    return ViperCloud(root, settings.repository)
+    return ViperCloud(root, settings.repository, progress=_gcs_progress_sink())
+
+
+def _gcs_progress_sink() -> GcsProgressSink | None:
+    """Return the configured GCS progress sink for workspace cloud operations."""
+    if os.environ.get("VIPER_GCS_PROGRESS") == "0":
+        return None
+    return stderr_gcs_progress
 
 
 class ViperCloudSnapshotPublisher:

@@ -24,6 +24,7 @@ from viper.execution._restore import (
 )
 from viper.execution._source import RunFetcher
 from viper.execution.errors import RestoreError, RunError
+from viper.gcs import GcsProgressEvent
 from viper.ids import HumanId
 from viper.references import (
     CloudFileRef,
@@ -51,6 +52,7 @@ from viper.storage import (
     StorageSettings,
     ViperCloudDestination,
     ViperCloudSnapshotPublisher,
+    _gcs_progress_sink,
     bind_run_destination,
     create_snapshot_publisher,
     load_storage_settings,
@@ -967,6 +969,40 @@ def test_storage_settings_parse_local_and_cloud_destinations(tmp_path: Path) -> 
     )
     with pytest.raises(StorageConfigurationError, match="destination is invalid"):
         load_storage_settings(tmp_path)
+
+
+def test_gcs_progress_sink_defaults_to_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Show GCS cloud progress by default without writing to stdout."""
+    monkeypatch.delenv("VIPER_GCS_PROGRESS", raising=False)
+    sink = _gcs_progress_sink()
+    assert sink is not None
+
+    sink(
+        GcsProgressEvent(
+            phase="upload_start",
+            bucket="test-bucket",
+            key="viper/machina/models/a/artifact.bin",
+            path="artifact.bin",
+            bytes=7,
+        )
+    )
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "phase=upload_start" in captured.err
+    assert "path=artifact.bin" in captured.err
+
+
+def test_gcs_progress_sink_honors_quiet_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disable automatic GCS progress output when the workspace requests quiet mode."""
+    monkeypatch.setenv("VIPER_GCS_PROGRESS", "0")
+
+    assert _gcs_progress_sink() is None
 
 
 def test_local_publishers_share_destination_neutral_interface(

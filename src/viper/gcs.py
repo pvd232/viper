@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import tempfile
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
@@ -34,6 +36,7 @@ from .references import (
 )
 
 GCS_OPERATION_TIMEOUT_SECONDS: int = 300
+GCS_MAX_WORKERS: int = 8
 
 GcsProgressPhase = Literal[
     "manifest_cache_hit",
@@ -89,6 +92,29 @@ class GcsProgressEvent(ProtocolModel):
 GcsProgressSink = Callable[[GcsProgressEvent], None]
 
 
+def format_gcs_progress_event(event: GcsProgressEvent) -> str:
+    """Render one GCS progress event as a compact stderr line."""
+    details = [
+        f"phase={event.phase}",
+        f"bucket={event.bucket}",
+        f"key={event.key}",
+    ]
+    if event.path is not None:
+        details.append(f"path={event.path}")
+    if event.bytes is not None:
+        details.append(f"bytes={event.bytes}")
+    if event.file_count is not None:
+        details.append(f"files={event.file_count}")
+    if event.source_key is not None:
+        details.append(f"source={event.source_key}")
+    return "viper gcs " + " ".join(details)
+
+
+def stderr_gcs_progress(event: GcsProgressEvent) -> None:
+    """Write one GCS progress event to stderr without touching command stdout."""
+    print(format_gcs_progress_event(event), file=sys.stderr, flush=True)
+
+
 class GcsStorageProbeReceipt(ProtocolModel):
     """Record one successful GCS publication and byte-for-byte restoration."""
 
@@ -130,10 +156,13 @@ class GcsProvider(ViperCloudProvider):
         prefix: str = "viper",
         client: storage.Client | None = None,
         operation_timeout: int = GCS_OPERATION_TIMEOUT_SECONDS,
+        max_workers: int = GCS_MAX_WORKERS,
         progress: GcsProgressSink | None = None,
     ) -> None:
         """Bind publication sources and object keys to one workspace and bucket."""
         super().__init__(root)
+        if max_workers < 1:
+            raise ValueError("GCS max_workers must be positive")
         prefix_path = PurePosixPath(prefix)
         if (
             prefix_path.is_absolute()
@@ -146,6 +175,7 @@ class GcsProvider(ViperCloudProvider):
         self.bucket_name = bucket
         self.bucket = self.client.bucket(bucket)
         self.operation_timeout = operation_timeout
+        self.max_workers = max_workers
         self.progress = progress
         self._manifest_cache: dict[
             tuple[HumanId, HumanId, SHA256], RevisionManifest
@@ -181,6 +211,16 @@ class GcsProvider(ViperCloudProvider):
                 file_count=file_count,
             )
         )
+
+    def _run_parallel(self, operations: list[Callable[[], None]]) -> None:
+        """Run independent GCS operations with bounded parallelism."""
+        if len(operations) <= 1 or self.max_workers == 1:
+            for operation in operations:
+                operation()
+            return
+        workers = min(self.max_workers, len(operations))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            list(executor.map(lambda operation: operation(), operations))
 
     def _revision_prefix(
         self,
@@ -532,17 +572,21 @@ class GcsProvider(ViperCloudProvider):
     ) -> GcsStageResultSnapshotRef:
         """Upload all revision members and expose them through one manifest."""
         identities = {file.path: file for file in files}
+        upload_operations: list[Callable[[], None]] = []
         for path, source in sorted(sources.items()):
             identity = identities[path]
-            self.upload(
-                owner=destination.owner,
-                workspace=destination.workspace,
-                revision=revision,
-                path=path,
-                source=source,
-                sha256=identity.sha256,
-                bytes=identity.bytes,
+            upload_operations.append(
+                lambda path=path, source=source, identity=identity: self.upload(
+                    owner=destination.owner,
+                    workspace=destination.workspace,
+                    revision=revision,
+                    path=path,
+                    source=source,
+                    sha256=identity.sha256,
+                    bytes=identity.bytes,
+                )
             )
+        self._run_parallel(upload_operations)
         self.seal(
             owner=destination.owner,
             workspace=destination.workspace,
@@ -621,13 +665,17 @@ class GcsProvider(ViperCloudProvider):
             workspace=destination.workspace,
             revision=revision,
         )
+        copy_operations: list[Callable[[], None]] = []
         for target_path, source_file in sorted(files.items()):
-            self.copy(
-                source=self.file_ref(source_snapshot, source_file.path),
-                target=self.file_ref(target_snapshot, target_path),
-                sha256=source_file.sha256,
-                bytes=source_file.bytes,
+            copy_operations.append(
+                lambda target_path=target_path, source_file=source_file: self.copy(
+                    source=self.file_ref(source_snapshot, source_file.path),
+                    target=self.file_ref(target_snapshot, target_path),
+                    sha256=source_file.sha256,
+                    bytes=source_file.bytes,
+                )
             )
+        self._run_parallel(copy_operations)
         self.seal(
             owner=destination.owner,
             workspace=destination.workspace,

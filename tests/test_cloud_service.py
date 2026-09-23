@@ -105,6 +105,46 @@ def test_hugging_face_snapshot_resolves_through_the_same_service(
     assert cloud.repository.repo_type == snapshot.repo_type
 
 
+def test_gcs_repository_receives_progress_sink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass GCS progress reporting through the provider-neutral cloud service."""
+    captured: dict[str, Any] = {}
+
+    class _Provider(InMemoryViperCloudProvider):
+        def __init__(
+            self,
+            root: Path,
+            bucket: str,
+            *,
+            prefix: str,
+            progress: Any,
+        ) -> None:
+            captured["root"] = root
+            captured["bucket"] = bucket
+            captured["prefix"] = prefix
+            captured["progress"] = progress
+            super().__init__(root)
+
+    monkeypatch.setattr("viper.cloud.GcsProvider", _Provider)
+    events: list[Any] = []
+
+    cloud = ViperCloud(
+        tmp_path,
+        GcsRepository(bucket="test-bucket", prefix="artifacts"),
+        progress=events.append,
+    )
+
+    assert isinstance(cloud.provider, _Provider)
+    assert captured == {
+        "root": tmp_path.resolve(),
+        "bucket": "test-bucket",
+        "prefix": "artifacts",
+        "progress": events.append,
+    }
+
+
 def test_public_execution_signatures_do_not_expose_provider_clients() -> None:
     """Keep provider construction inside VIPER's workspace boundary."""
     operations = (
