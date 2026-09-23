@@ -41,14 +41,6 @@ class VerifiedObjectCache:
             return None
         return path if digest == reference.sha256 else None
 
-    def trusted_path(self, reference: ResolvedFileRef) -> Path | None:
-        """Return a previously verified object by its recorded identity."""
-        path = self._path(reference.sha256)
-        try:
-            return path if path.stat().st_size == reference.bytes else None
-        except OSError:
-            return None
-
     def adopt_verified_path(self, reference: ResolvedFileRef, source: Path) -> Path:
         """Atomically retain a path already verified by its storage client."""
         if source.stat().st_size != reference.bytes:

@@ -14,7 +14,7 @@ schema_version = 1
 "src/viper/execution/_publication.py" = "domain_execution"
 "src/viper/execution/_benchmark.py" = "domain_execution"
 "src/viper/execution/_restore.py" = "domain_execution"
-"src/viper/execution/_source.py" = "domain_execution"
+"src/viper/_source.py" = "domain_execution"
 "src/viper/gcs.py" = "domain_storage"
 "src/viper/knowledge.py" = "domain_verification"
 "src/viper/preflight.py" = "domain_verification"
@@ -327,14 +327,14 @@ fallback_domain = "domain_storage"
 tests = ["tests/test_storage.py::test_local_snapshot_reuse_remaps_source_files"]
 
 [[declarations]]
-id = "src/viper/execution/_source.py:RunFetcher.__call__"
+id = "src/viper/_source.py:RunFetcher.__call__"
 fallback_domain = "domain_execution"
 tests = [
   "tests/test_prior_run_inputs.py::test_local_pointer_accepts_a_run_from_another_workspace",
 ]
 
 [[declarations]]
-id = "src/viper/execution/_source.py:RunFetcher.list_snapshot_files"
+id = "src/viper/_source.py:RunFetcher.list_snapshot_files"
 fallback_domain = "domain_execution"
 tests = [
   "tests/test_prior_run_inputs.py::test_local_pointer_accepts_a_run_from_another_workspace",

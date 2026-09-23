@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
+from threading import Lock
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -231,6 +233,45 @@ class _FlakyRangeSession:
         if self.calls == 1:
             raise RequestException("transient range stall")
         return _RangeResponse(self.raw)
+
+
+class _ConcurrentRangeSession:
+    """Record the maximum number of simultaneous range requests."""
+
+    def __init__(self, raw: bytes) -> None:
+        """Store the payload and initialize the concurrency counters."""
+        self.raw = raw
+        self.active = 0
+        self.max_active = 0
+        self.lock = Lock()
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        stream: bool,
+        timeout: object,
+    ) -> _RangeResponse:
+        """Return one requested byte range while counting active requests."""
+        assert method == "GET"
+        assert "alt=media" in url
+        assert headers["Range"].startswith("bytes=")
+        assert stream is True
+        del timeout
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.01)
+            start_text, stop_text = headers["Range"].removeprefix("bytes=").split("-")
+            start = int(start_text)
+            stop = int(stop_text) + 1
+            return _RangeResponse(self.raw[start:stop])
+        finally:
+            with self.lock:
+                self.active -= 1
 
 
 def _client(root: Path) -> tuple[GcsProvider, _Client]:
@@ -501,6 +542,7 @@ def test_fetch_streams_payload_through_temporary_file(tmp_path: Path) -> None:
         "mantra-fixture",
         prefix="viper",
         client=cast(Any, fake),
+        sliced_fetch_min_bytes=1,
         range_fetch_read_timeout=7,
     )
     destination = ViperCloudDestination(owner="machina", workspace="mantra")
@@ -526,7 +568,7 @@ def test_stream_restore_emits_source_and_destination_progress(
     tmp_path: Path,
 ) -> None:
     """Report streamed restore start and completion for one exact GCS object."""
-    client, _, events = _client_with_progress(tmp_path)
+    client, fake, events = _client_with_progress(tmp_path)
     destination = ViperCloudDestination(owner="machina", workspace="mantra")
     snapshot, files = client.publish(destination, {"data/large.bin": b"bounded"})
     assert isinstance(snapshot, GcsStageResultSnapshotRef)
@@ -541,6 +583,7 @@ def test_stream_restore_emits_source_and_destination_progress(
 
     assert restored.read_bytes() == b"bounded"
     key = f"viper/machina/mantra/{snapshot.revision}/data/large.bin"
+    assert fake.value.file_download_calls == [key]
     stream_events = [
         event
         for event in events
@@ -560,6 +603,7 @@ def test_large_restore_uses_sliced_ranges_and_verifies_bytes(
 ) -> None:
     """Restore large GCS objects through byte ranges and verify the result."""
     fake = _Client()
+    fake._http = _ConcurrentRangeSession(b"bounded")  # type: ignore[attr-defined]
     events: list[GcsProgressEvent] = []
     client = GcsProvider(
         tmp_path,
@@ -568,6 +612,7 @@ def test_large_restore_uses_sliced_ranges_and_verifies_bytes(
         client=cast(Any, fake),
         sliced_fetch_min_bytes=1,
         sliced_fetch_chunk_bytes=3,
+        sliced_fetch_max_workers=2,
         progress=events.append,
     )
     destination = ViperCloudDestination(owner="machina", workspace="mantra")
@@ -584,7 +629,8 @@ def test_large_restore_uses_sliced_ranges_and_verifies_bytes(
     )
 
     assert restored.read_bytes() == b"bounded"
-    assert fake.value.download_calls.count(key) == 3
+    assert fake.value.download_calls.count(key) == 0
+    assert fake._http.max_active == 2  # type: ignore[attr-defined]
     stream_events = [
         event
         for event in events

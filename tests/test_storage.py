@@ -838,6 +838,65 @@ def test_cloud_fetcher_streams_one_verified_path_per_execution(
     assert client.fetch_to_path_calls == [location]
 
 
+def test_cloud_fetcher_rejects_corrupt_verified_cache_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rehash a cross-execution cache hit before returning its local path."""
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
+    raw = b"large artifact"
+    location = GcsFileRef(
+        bucket=client.bucket,
+        prefix=client.prefix,
+        owner="machina",
+        workspace="weekend_models",
+        revision="1" * 64,
+        path="runs/example/large.bin",
+    )
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=location,
+    )
+    client.upload(
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+        path=location.path,
+        source=raw,
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+    )
+    client.seal(
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+        files=(
+            SnapshotFileRef(
+                path=location.path,
+                sha256=reference.sha256,
+                bytes=reference.bytes,
+            ),
+        ),
+    )
+    first = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        CONSUMER_REPOSITORY,
+    ).read_verified_path(reference)
+    first.write_bytes(b"wrong artifact")
+
+    repaired = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        CONSUMER_REPOSITORY,
+    ).read_verified_path(reference)
+
+    assert repaired.read_bytes() == raw
+    assert client.fetch_to_path_calls == [location, location]
+
+
 def test_execution_fetcher_trusts_sealed_local_payload_until_strict_verification(
     tmp_path: Path,
 ) -> None:

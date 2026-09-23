@@ -42,6 +42,7 @@ GCS_OPERATION_TIMEOUT_SECONDS: int = 300
 GCS_MAX_WORKERS: int = 16
 GCS_SLICED_FETCH_MIN_BYTES: int = 64 * 1024 * 1024
 GCS_SLICED_FETCH_CHUNK_BYTES: int = 16 * 1024 * 1024
+GCS_SLICED_FETCH_MAX_WORKERS: int = 4
 GCS_SLICED_FETCH_PROGRESS_BYTES: int = 64 * 1024 * 1024
 GCS_RANGE_FETCH_ATTEMPTS: int = 3
 GCS_RANGE_FETCH_READ_TIMEOUT_SECONDS: int = 60
@@ -189,6 +190,7 @@ class GcsProvider(ViperCloudProvider):
         max_workers: int = GCS_MAX_WORKERS,
         sliced_fetch_min_bytes: int = GCS_SLICED_FETCH_MIN_BYTES,
         sliced_fetch_chunk_bytes: int = GCS_SLICED_FETCH_CHUNK_BYTES,
+        sliced_fetch_max_workers: int = GCS_SLICED_FETCH_MAX_WORKERS,
         range_fetch_attempts: int = GCS_RANGE_FETCH_ATTEMPTS,
         range_fetch_read_timeout: int = GCS_RANGE_FETCH_READ_TIMEOUT_SECONDS,
         progress: GcsProgressSink | None = None,
@@ -201,6 +203,8 @@ class GcsProvider(ViperCloudProvider):
             raise ValueError("GCS sliced fetch threshold must be non-negative")
         if sliced_fetch_chunk_bytes < 1:
             raise ValueError("GCS sliced fetch chunk size must be positive")
+        if sliced_fetch_max_workers < 1:
+            raise ValueError("GCS sliced fetch max_workers must be positive")
         if range_fetch_attempts < 1:
             raise ValueError("GCS range fetch attempts must be positive")
         if range_fetch_read_timeout < 1:
@@ -220,6 +224,7 @@ class GcsProvider(ViperCloudProvider):
         self.max_workers = max_workers
         self.sliced_fetch_min_bytes = sliced_fetch_min_bytes
         self.sliced_fetch_chunk_bytes = sliced_fetch_chunk_bytes
+        self.sliced_fetch_max_workers = sliced_fetch_max_workers
         self.range_fetch_attempts = range_fetch_attempts
         self.range_fetch_read_timeout = range_fetch_read_timeout
         self.progress = progress
@@ -939,6 +944,9 @@ class GcsProvider(ViperCloudProvider):
         revision: SHA256,
     ) -> None:
         """Download one sealed object using the fastest available verified path."""
+        if expected.bytes < self.sliced_fetch_min_bytes:
+            self._download_python_to_path(key=key, destination=destination)
+            return
         self._emit_progress(
             "stream_fetch_sliced_start",
             key=key,
@@ -962,6 +970,16 @@ class GcsProvider(ViperCloudProvider):
             path=expected.path,
             bytes=expected.bytes,
         )
+
+    def _download_python_to_path(self, *, key: str, destination: Path) -> None:
+        """Download one small object through the GCS Python client."""
+        self._emit_progress("stream_fetch_python_start", key=key)
+        self.bucket.blob(key).download_to_filename(
+            str(destination),
+            checksum="auto",
+            timeout=self.operation_timeout,
+        )
+        self._emit_progress("stream_fetch_python_done", key=key)
 
     def _download_sliced_to_path(
         self,
@@ -1005,7 +1023,8 @@ class GcsProvider(ViperCloudProvider):
         try:
             with destination.open("wb") as output:
                 output.truncate(size)
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            restore_workers = min(self.sliced_fetch_max_workers, len(ranges))
+            with ThreadPoolExecutor(max_workers=restore_workers) as executor:
                 futures: dict[Future[int], tuple[int, int]] = {
                     executor.submit(fetch_range, start, stop): (start, stop)
                     for start, stop in ranges

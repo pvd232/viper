@@ -164,7 +164,7 @@ class RunFetcher:
             self._verified_paths[reference] = path
             return path
 
-        cached = self._verified_objects.trusted_path(reference)
+        cached = self._verified_objects.verified_path(reference)
         if cached is not None:
             self._verified_paths[reference] = cached
             return cached
