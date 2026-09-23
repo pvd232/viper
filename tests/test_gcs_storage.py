@@ -76,12 +76,24 @@ class _Blob:
             timeout=timeout,
         )
 
-    def download_as_bytes(self, *, checksum: str, timeout: float) -> bytes:
+    def download_as_bytes(
+        self,
+        *,
+        checksum: str | None,
+        timeout: float,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> bytes:
         """Return the current object bytes."""
-        assert checksum == "auto"
+        assert checksum in {"auto", None}
         assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
         self.bucket.download_calls.append(self.name)
-        return self.bucket.objects[self.name][0]
+        raw = self.bucket.objects[self.name][0]
+        if start is None and end is None:
+            return raw
+        lower = 0 if start is None else start
+        upper = len(raw) - 1 if end is None else end
+        return raw[lower : upper + 1]
 
     def download_to_filename(
         self,
@@ -455,7 +467,8 @@ def test_stream_restore_emits_source_and_destination_progress(
     stream_events = [
         event
         for event in events
-        if event.key == key and event.phase.startswith("stream")
+        if event.key == key
+        and event.phase in {"stream_fetch_start", "stream_fetch_done"}
     ]
     assert [event.phase for event in stream_events] == [
         "stream_fetch_start",
@@ -463,6 +476,79 @@ def test_stream_restore_emits_source_and_destination_progress(
     ]
     assert {event.path for event in stream_events} == {"data/large.bin"}
     assert {event.bytes for event in stream_events} == {len(b"bounded")}
+
+
+def test_large_restore_uses_sliced_ranges_and_verifies_bytes(
+    tmp_path: Path,
+) -> None:
+    """Restore large GCS objects through byte ranges and verify the result."""
+    fake = _Client()
+    events: list[GcsProgressEvent] = []
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        sliced_fetch_min_bytes=1,
+        sliced_fetch_chunk_bytes=3,
+        progress=events.append,
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, files = client.publish(destination, {"data/large.bin": b"bounded"})
+    assert isinstance(snapshot, GcsStageResultSnapshotRef)
+    reference = client.file_ref(snapshot, "data/large.bin")
+    identity = files[0]
+    key = f"viper/machina/mantra/{snapshot.revision}/data/large.bin"
+
+    restored = client.fetch_to_path(
+        reference,
+        identity,
+        destination=tmp_path / "restored/large.bin",
+    )
+
+    assert restored.read_bytes() == b"bounded"
+    assert fake.value.download_calls.count(key) == 3
+    stream_events = [
+        event
+        for event in events
+        if event.key == key
+        and event.phase in {"stream_fetch_sliced_start", "stream_fetch_sliced_done"}
+    ]
+    assert [event.phase for event in stream_events] == [
+        "stream_fetch_sliced_start",
+        "stream_fetch_sliced_done",
+    ]
+
+
+def test_large_restore_rejects_bad_sliced_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject a sliced restore whose final bytes differ from the manifest."""
+    fake = _Client()
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        sliced_fetch_min_bytes=1,
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, files = client.publish(destination, {"data/large.bin": b"bounded"})
+    reference = client.file_ref(snapshot, "data/large.bin")
+    identity = files[0]
+
+    def corrupt_download(*, key: str, size: int, destination: Path) -> None:
+        destination.write_bytes(b"changed")
+
+    monkeypatch.setattr(client, "_download_sliced_to_path", corrupt_download)
+
+    with pytest.raises(ViperCloudError, match="identity changed"):
+        client.fetch_to_path(
+            reference,
+            identity,
+            destination=tmp_path / "restored/large.bin",
+        )
 
 
 def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:

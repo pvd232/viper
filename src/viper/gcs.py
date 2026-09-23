@@ -7,13 +7,16 @@ import os
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from typing import Literal
+from urllib.parse import quote
 
 from google.api_core.exceptions import GoogleAPIError, PreconditionFailed
 from google.cloud import storage
 from pydantic import Field, ValidationError, model_validator
+from requests import RequestException
 
 from ._cloud import (
     PublicationSource,
@@ -36,7 +39,10 @@ from .references import (
 )
 
 GCS_OPERATION_TIMEOUT_SECONDS: int = 300
-GCS_MAX_WORKERS: int = 8
+GCS_MAX_WORKERS: int = 16
+GCS_SLICED_FETCH_MIN_BYTES: int = 64 * 1024 * 1024
+GCS_SLICED_FETCH_CHUNK_BYTES: int = 16 * 1024 * 1024
+GCS_SLICED_FETCH_PROGRESS_BYTES: int = 64 * 1024 * 1024
 
 GcsProgressPhase = Literal[
     "manifest_cache_hit",
@@ -53,6 +59,13 @@ GcsProgressPhase = Literal[
     "fetch_start",
     "fetch_done",
     "stream_fetch_start",
+    "stream_fetch_sliced_start",
+    "stream_fetch_range_start",
+    "stream_fetch_range_done",
+    "stream_fetch_progress",
+    "stream_fetch_sliced_done",
+    "stream_fetch_python_start",
+    "stream_fetch_python_done",
     "stream_fetch_done",
     "verify_start",
     "verify_done",
@@ -171,12 +184,18 @@ class GcsProvider(ViperCloudProvider):
         client: storage.Client | None = None,
         operation_timeout: int = GCS_OPERATION_TIMEOUT_SECONDS,
         max_workers: int = GCS_MAX_WORKERS,
+        sliced_fetch_min_bytes: int = GCS_SLICED_FETCH_MIN_BYTES,
+        sliced_fetch_chunk_bytes: int = GCS_SLICED_FETCH_CHUNK_BYTES,
         progress: GcsProgressSink | None = None,
     ) -> None:
         """Bind publication sources and object keys to one workspace and bucket."""
         super().__init__(root)
         if max_workers < 1:
             raise ValueError("GCS max_workers must be positive")
+        if sliced_fetch_min_bytes < 0:
+            raise ValueError("GCS sliced fetch threshold must be non-negative")
+        if sliced_fetch_chunk_bytes < 1:
+            raise ValueError("GCS sliced fetch chunk size must be positive")
         prefix_path = PurePosixPath(prefix)
         if (
             prefix_path.is_absolute()
@@ -190,6 +209,8 @@ class GcsProvider(ViperCloudProvider):
         self.bucket = self.client.bucket(bucket)
         self.operation_timeout = operation_timeout
         self.max_workers = max_workers
+        self.sliced_fetch_min_bytes = sliced_fetch_min_bytes
+        self.sliced_fetch_chunk_bytes = sliced_fetch_chunk_bytes
         self.progress = progress
         self._manifest_cache: dict[
             tuple[HumanId, HumanId, SHA256], RevisionManifest
@@ -834,8 +855,13 @@ class GcsProvider(ViperCloudProvider):
             bytes=identity.bytes,
         )
         try:
-            self.bucket.blob(key).download_to_filename(
-                str(temporary), checksum="auto", timeout=self.operation_timeout
+            self._download_object_to_path(
+                key=key,
+                expected=identity,
+                destination=temporary,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
             )
             with temporary.open("rb") as stream:
                 observed_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
@@ -857,6 +883,191 @@ class GcsProvider(ViperCloudProvider):
         finally:
             temporary.unlink(missing_ok=True)
         return target
+
+    def _download_object_to_path(
+        self,
+        *,
+        key: str,
+        expected: SnapshotFileRef,
+        destination: Path,
+        owner: HumanId,
+        workspace: HumanId,
+        revision: SHA256,
+    ) -> None:
+        """Download one sealed object using the fastest available verified path."""
+        if expected.bytes >= self.sliced_fetch_min_bytes:
+            self._emit_progress(
+                "stream_fetch_sliced_start",
+                key=key,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=expected.path,
+                bytes=expected.bytes,
+            )
+            self._download_sliced_to_path(
+                key=key,
+                size=expected.bytes,
+                destination=destination,
+            )
+            self._emit_progress(
+                "stream_fetch_sliced_done",
+                key=key,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=expected.path,
+                bytes=expected.bytes,
+            )
+            return
+
+        self._emit_progress(
+            "stream_fetch_python_start",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=expected.path,
+            bytes=expected.bytes,
+        )
+        self.bucket.blob(key).download_to_filename(
+            str(destination), checksum="auto", timeout=self.operation_timeout
+        )
+        self._emit_progress(
+            "stream_fetch_python_done",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=expected.path,
+            bytes=expected.bytes,
+        )
+
+    def _download_sliced_to_path(
+        self,
+        *,
+        key: str,
+        size: int,
+        destination: Path,
+    ) -> None:
+        """Restore one object through parallel byte-range reads."""
+        ranges = tuple(
+            (start, min(start + self.sliced_fetch_chunk_bytes, size))
+            for start in range(0, size, self.sliced_fetch_chunk_bytes)
+        )
+        progress_lock = Lock()
+        completed_bytes = 0
+        next_progress_bytes = GCS_SLICED_FETCH_PROGRESS_BYTES
+
+        def record_progress(chunk_bytes: int) -> None:
+            nonlocal completed_bytes, next_progress_bytes
+            with progress_lock:
+                completed_bytes += chunk_bytes
+                if completed_bytes < next_progress_bytes and completed_bytes < size:
+                    return
+                self._emit_progress(
+                    "stream_fetch_progress",
+                    key=key,
+                    bytes=completed_bytes,
+                )
+                while next_progress_bytes <= completed_bytes:
+                    next_progress_bytes += GCS_SLICED_FETCH_PROGRESS_BYTES
+
+        def fetch_range(start: int, stop: int) -> tuple[int, bytes]:
+            raw = self._download_range(
+                key=key,
+                start=start,
+                stop=stop,
+                progress=record_progress,
+            )
+            if len(raw) != stop - start:
+                raise ViperCloudError("GCS sliced restore returned a short range")
+            return start, raw
+
+        try:
+            with destination.open("wb") as output:
+                output.truncate(size)
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures: dict[Future[tuple[int, bytes]], tuple[int, int]] = {
+                    executor.submit(fetch_range, start, stop): (start, stop)
+                    for start, stop in ranges
+                }
+                with destination.open("r+b") as output:
+                    for future in as_completed(futures):
+                        start, stop = futures[future]
+                        try:
+                            offset, raw = future.result()
+                        except (GoogleAPIError, RequestException) as error:
+                            raise ViperCloudError(
+                                "GCS sliced restore failed for bytes "
+                                f"{start}-{stop - 1}"
+                            ) from error
+                        output.seek(offset)
+                        output.write(raw)
+        except ViperCloudError:
+            raise
+
+    def _download_range(
+        self,
+        *,
+        key: str,
+        start: int,
+        stop: int,
+        progress: Callable[[int], None],
+    ) -> bytes:
+        """Read one half-open byte range from GCS through the authorized session."""
+        session = getattr(self.client, "_http", None)
+        self._emit_progress(
+            "stream_fetch_range_start",
+            key=key,
+            bytes=stop - start,
+        )
+        if session is None:
+            raw = self.bucket.blob(key).download_as_bytes(
+                start=start,
+                end=stop - 1,
+                checksum=None,  # pyright: ignore[reportArgumentType]
+                timeout=self.operation_timeout,
+            )
+            progress(len(raw))
+            self._emit_progress(
+                "stream_fetch_range_done",
+                key=key,
+                bytes=len(raw),
+            )
+            return raw
+        object_name = quote(key, safe="")
+        url = (
+            f"https://storage.googleapis.com/download/storage/v1/b/"
+            f"{self.bucket_name}/o/{object_name}?alt=media"
+        )
+        response = session.request(
+            "GET",
+            url,
+            headers={"Range": f"bytes={start}-{stop - 1}"},
+            stream=True,
+            timeout=self.operation_timeout,
+        )
+        if response.status_code != 206:
+            raise ViperCloudError(
+                f"GCS sliced restore expected HTTP 206, got {response.status_code}"
+            )
+        chunks: list[bytes] = []
+        downloaded = 0
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            chunk_bytes = len(chunk)
+            downloaded += chunk_bytes
+            progress(chunk_bytes)
+        raw = b"".join(chunks)
+        self._emit_progress(
+            "stream_fetch_range_done",
+            key=key,
+            bytes=len(raw),
+        )
+        return raw
 
     def list_files(
         self,
