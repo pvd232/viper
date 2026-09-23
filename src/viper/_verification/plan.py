@@ -711,9 +711,9 @@ def verify_stage_plan(
 
         if isinstance(spec, InternalSpec):
             for input_name, input_ref in spec.inputs.items():
-                if isinstance(input_ref, StoredInputRef) and not str(
-                    input_ref.path
-                ).startswith("inputs/"):
+                if isinstance(
+                    input_ref, StoredInputRef
+                ) and not input_ref.path.startswith("inputs/"):
                     raise VerificationError(
                         f"stored input {input_name!r} of stage "
                         f"{stage.stage_id!r} is outside inputs"

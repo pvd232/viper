@@ -12,8 +12,13 @@ import pytest
 from google.api_core.exceptions import PreconditionFailed
 
 from viper._cloud import ViperCloudError, manifest_revision
-from viper.gcs import GcsProvider, probe_gcs_storage
-from viper.references import GcsFileRef, SnapshotFileRef
+from viper.gcs import (
+    GCS_OPERATION_TIMEOUT_SECONDS,
+    GcsProgressEvent,
+    GcsProvider,
+    probe_gcs_storage,
+)
+from viper.references import GcsFileRef, GcsStageResultSnapshotRef, SnapshotFileRef
 from viper.storage import ViperCloudDestination
 
 
@@ -34,11 +39,13 @@ class _Blob:
         content_type: str,
         if_generation_match: int,
         checksum: str,
+        timeout: float,
     ) -> None:
         """Create an object only when its key is absent."""
         assert content_type == "application/octet-stream"
         assert if_generation_match == 0
         assert checksum == "auto"
+        assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
         if self.name in self.bucket.objects:
             raise PreconditionFailed("object exists")
         self.bucket.next_generation += 1
@@ -56,6 +63,7 @@ class _Blob:
         content_type: str,
         if_generation_match: int,
         checksum: str,
+        timeout: float,
     ) -> None:
         """Model the streaming upload path used for file-backed sources."""
         with Path(filename).open("rb") as stream:
@@ -65,16 +73,26 @@ class _Blob:
             content_type=content_type,
             if_generation_match=if_generation_match,
             checksum=checksum,
+            timeout=timeout,
         )
 
-    def download_as_bytes(self, *, checksum: str) -> bytes:
+    def download_as_bytes(self, *, checksum: str, timeout: float) -> bytes:
         """Return the current object bytes."""
         assert checksum == "auto"
+        assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
+        self.bucket.download_calls.append(self.name)
         return self.bucket.objects[self.name][0]
 
-    def download_to_filename(self, filename: str, *, checksum: str) -> None:
+    def download_to_filename(
+        self,
+        filename: str,
+        *,
+        checksum: str,
+        timeout: float,
+    ) -> None:
         """Model a streamed object download to one local file."""
         assert checksum == "auto"
+        assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
         with Path(filename).open("wb") as stream:
             stream.write(self.bucket.objects[self.name][0])
 
@@ -84,15 +102,18 @@ class _Blob:
         *,
         if_generation_match: int,
         checksum: str,
+        timeout: float,
     ) -> None:
         """Stream the selected immutable generation to a file-like consumer."""
         assert checksum == "auto"
+        assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
         raw, _, generation = self.bucket.objects[self.name]
         assert generation == if_generation_match
         stream.write(raw)
 
-    def reload(self) -> None:
+    def reload(self, *, timeout: float) -> None:
         """Load the current object's metadata and generation."""
+        assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
         raw, metadata, generation = self.bucket.objects[self.name]
         assert raw is not None
         self.metadata = dict(metadata)
@@ -107,6 +128,7 @@ class _Bucket:
         self.objects: dict[str, tuple[bytes, dict[str, str], int]] = {}
         self.next_generation = 0
         self.copy_calls: list[tuple[str, str]] = []
+        self.download_calls: list[str] = []
 
     def blob(self, name: str) -> _Blob:
         """Return a handle for one object name."""
@@ -120,10 +142,12 @@ class _Bucket:
         new_name: str,
         if_generation_match: int,
         if_source_generation_match: int | None,
+        timeout: float,
     ) -> _Blob:
         """Copy the selected source generation into one absent destination."""
         assert destination_bucket is self
         assert if_generation_match == 0
+        assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
         if new_name in self.objects:
             raise PreconditionFailed("object exists")
         raw, metadata, generation = self.objects[source.name]
@@ -158,6 +182,22 @@ def _client(root: Path) -> tuple[GcsProvider, _Client]:
         client=cast(Any, fake),
     )
     return client, fake
+
+
+def _client_with_progress(
+    root: Path,
+) -> tuple[GcsProvider, _Client, list[GcsProgressEvent]]:
+    """Create the GCS adapter and capture its structured progress events."""
+    fake = _Client()
+    events: list[GcsProgressEvent] = []
+    client = GcsProvider(
+        root,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        progress=events.append,
+    )
+    return client, fake, events
 
 
 def test_publishes_and_restores_durable_snapshot(tmp_path: Path) -> None:
@@ -234,6 +274,78 @@ def test_streams_file_backed_publication(tmp_path: Path) -> None:
     assert fake.value.objects[key][0] == b"bounded blocks"
 
 
+def test_idempotent_upload_checks_metadata_without_downloading(
+    tmp_path: Path,
+) -> None:
+    """Accept an existing upload from metadata without reading payload bytes."""
+    client, fake = _client(tmp_path)
+    raw = b"bounded blocks"
+    digest = hashlib.sha256(raw).hexdigest()
+    key = f"viper/machina/mantra/{'b' * 64}/data/large.bin"
+
+    client.upload(
+        owner="machina",
+        workspace="mantra",
+        revision="b" * 64,
+        path="data/large.bin",
+        source=raw,
+        sha256=digest,
+        bytes=len(raw),
+    )
+    client.upload(
+        owner="machina",
+        workspace="mantra",
+        revision="b" * 64,
+        path="data/large.bin",
+        source=raw,
+        sha256=digest,
+        bytes=len(raw),
+    )
+
+    assert key not in fake.value.download_calls
+
+
+def test_idempotent_upload_emits_reuse_progress(tmp_path: Path) -> None:
+    """Report metadata-backed upload reuse with the exact object path."""
+    client, fake, events = _client_with_progress(tmp_path)
+    raw = b"bounded blocks"
+    digest = hashlib.sha256(raw).hexdigest()
+    path = "data/large.bin"
+    revision = "b" * 64
+    key = f"viper/machina/mantra/{revision}/{path}"
+
+    client.upload(
+        owner="machina",
+        workspace="mantra",
+        revision=revision,
+        path=path,
+        source=raw,
+        sha256=digest,
+        bytes=len(raw),
+    )
+    client.upload(
+        owner="machina",
+        workspace="mantra",
+        revision=revision,
+        path=path,
+        source=raw,
+        sha256=digest,
+        bytes=len(raw),
+    )
+
+    assert key not in fake.value.download_calls
+    assert events[-1] == GcsProgressEvent(
+        phase="upload_reuse",
+        bucket="mantra-fixture",
+        key=key,
+        owner="machina",
+        workspace="mantra",
+        revision=revision,
+        path=path,
+        bytes=len(raw),
+    )
+
+
 def test_streams_sealed_file_restore(tmp_path: Path) -> None:
     """Restore a sealed object without returning its complete byte payload."""
     client, _ = _client(tmp_path)
@@ -251,6 +363,72 @@ def test_streams_sealed_file_restore(tmp_path: Path) -> None:
     )
 
     assert restored.read_bytes() == b"bounded blocks"
+
+
+def test_reuses_loaded_manifest_for_repeated_snapshot_reads(tmp_path: Path) -> None:
+    """Use cached manifests while restoring several files from one snapshot."""
+    client, fake, events = _client_with_progress(tmp_path)
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, identities = client.publish(
+        destination,
+        {
+            "runs/source/a.bin": b"alpha",
+            "runs/source/b.bin": b"beta",
+        },
+    )
+    assert isinstance(snapshot, GcsStageResultSnapshotRef)
+
+    first = client.file_ref(snapshot, "runs/source/a.bin")
+    second = client.file_ref(snapshot, "runs/source/b.bin")
+    assert client.fetch(first) == b"alpha"
+    client.verify_file(second, identities[1])
+    assert client.list_files(snapshot) == identities
+
+    manifest_key = f"viper/machina/mantra/{snapshot.revision}.manifest.json"
+    assert fake.value.download_calls.count(manifest_key) == 0
+    manifest_events = [event.phase for event in events if event.key == manifest_key]
+    assert manifest_events.count("seal_done") == 1
+    assert manifest_events.count("manifest_cache_hit") == 3
+    fetch_events = [
+        event
+        for event in events
+        if event.path == "runs/source/a.bin"
+        and event.phase in {"fetch_start", "fetch_done"}
+    ]
+    assert [event.phase for event in fetch_events] == ["fetch_start", "fetch_done"]
+    assert {event.bytes for event in fetch_events} == {len(b"alpha")}
+
+
+def test_stream_restore_emits_source_and_destination_progress(
+    tmp_path: Path,
+) -> None:
+    """Report streamed restore start and completion for one exact GCS object."""
+    client, _, events = _client_with_progress(tmp_path)
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, files = client.publish(destination, {"data/large.bin": b"bounded"})
+    assert isinstance(snapshot, GcsStageResultSnapshotRef)
+    reference = client.file_ref(snapshot, "data/large.bin")
+    identity = files[0]
+
+    restored = client.fetch_to_path(
+        reference,
+        identity,
+        destination=tmp_path / "restored/large.bin",
+    )
+
+    assert restored.read_bytes() == b"bounded"
+    key = f"viper/machina/mantra/{snapshot.revision}/data/large.bin"
+    stream_events = [
+        event
+        for event in events
+        if event.key == key and event.phase.startswith("stream")
+    ]
+    assert [event.phase for event in stream_events] == [
+        "stream_fetch_start",
+        "stream_fetch_done",
+    ]
+    assert {event.path for event in stream_events} == {"data/large.bin"}
+    assert {event.bytes for event in stream_events} == {len(b"bounded")}
 
 
 def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:
@@ -305,7 +483,7 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
     tmp_path: Path,
 ) -> None:
     """Copy a sealed file without downloading it and expose it only after sealing."""
-    client, fake = _client(tmp_path)
+    client, fake, events = _client_with_progress(tmp_path)
     raw = b"parameters"
     digest = hashlib.sha256(raw).hexdigest()
     source = GcsFileRef(
@@ -377,6 +555,20 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
         sha256=digest,
         bytes=len(raw),
     )
+    fake.value.download_calls.clear()
+    client.copy(
+        source=source.model_copy(update={"revision": actual_revision}),
+        target=GcsFileRef(
+            bucket="mantra-fixture",
+            prefix="viper",
+            owner="machina",
+            workspace="mantra",
+            revision=target_revision_value,
+            path=target_path,
+        ),
+        sha256=digest,
+        bytes=len(raw),
+    )
     client.seal(
         owner="machina",
         workspace="mantra",
@@ -385,6 +577,21 @@ def test_server_side_copy_preserves_identity_and_requires_a_sealed_source(
     )
 
     assert fake.value.copy_calls
+    target_key = f"viper/machina/mantra/{target_revision_value}/{target_path}"
+    assert target_key not in fake.value.download_calls
+    copy_events = [
+        event
+        for event in events
+        if event.key == target_key and event.phase.startswith("copy")
+    ]
+    assert [event.phase for event in copy_events] == [
+        "copy_start",
+        "copy_done",
+        "copy_start",
+        "copy_reuse",
+    ]
+    assert {event.path for event in copy_events} == {target_path}
+    assert {event.bytes for event in copy_events} == {len(raw)}
     assert (
         client.fetch(
             GcsFileRef(

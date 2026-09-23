@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
@@ -32,6 +32,61 @@ from .references import (
     GcsStageResultSnapshotRef,
     SnapshotFileRef,
 )
+
+GCS_OPERATION_TIMEOUT_SECONDS: int = 300
+
+GcsProgressPhase = Literal[
+    "manifest_cache_hit",
+    "manifest_load_start",
+    "manifest_load_done",
+    "upload_start",
+    "upload_done",
+    "upload_reuse",
+    "copy_start",
+    "copy_done",
+    "copy_reuse",
+    "seal_start",
+    "seal_done",
+    "fetch_start",
+    "fetch_done",
+    "stream_fetch_start",
+    "stream_fetch_done",
+    "verify_start",
+    "verify_done",
+]
+
+
+class GcsProgressEvent(ProtocolModel):
+    """Describe one GCS operation boundary for publication and restore diagnostics."""
+
+    phase: GcsProgressPhase = Field(description="GCS operation phase.")
+    bucket: str = Field(description="GCS bucket used by the operation.")
+    key: str = Field(description="GCS object key used by the operation.")
+    owner: HumanId | None = Field(default=None, description="Logical Viper owner.")
+    workspace: HumanId | None = Field(
+        default=None,
+        description="Logical Viper workspace.",
+    )
+    revision: SHA256 | None = Field(
+        default=None,
+        description="Content-derived Viper revision when known.",
+    )
+    path: RepoRelPath | None = Field(
+        default=None,
+        description="Repository-relative artifact path when known.",
+    )
+    source_key: str | None = Field(
+        default=None,
+        description="Source GCS object key for server-side copies.",
+    )
+    bytes: int | None = Field(default=None, description="Expected object byte count.")
+    file_count: int | None = Field(
+        default=None,
+        description="Number of manifest members when the operation handles a seal.",
+    )
+
+
+GcsProgressSink = Callable[[GcsProgressEvent], None]
 
 
 class GcsStorageProbeReceipt(ProtocolModel):
@@ -74,6 +129,8 @@ class GcsProvider(ViperCloudProvider):
         *,
         prefix: str = "viper",
         client: storage.Client | None = None,
+        operation_timeout: int = GCS_OPERATION_TIMEOUT_SECONDS,
+        progress: GcsProgressSink | None = None,
     ) -> None:
         """Bind publication sources and object keys to one workspace and bucket."""
         super().__init__(root)
@@ -88,6 +145,42 @@ class GcsProvider(ViperCloudProvider):
         self.client = client or storage.Client()
         self.bucket_name = bucket
         self.bucket = self.client.bucket(bucket)
+        self.operation_timeout = operation_timeout
+        self.progress = progress
+        self._manifest_cache: dict[
+            tuple[HumanId, HumanId, SHA256], RevisionManifest
+        ] = {}
+
+    def _emit_progress(
+        self,
+        phase: GcsProgressPhase,
+        *,
+        key: str,
+        owner: HumanId | None = None,
+        workspace: HumanId | None = None,
+        revision: SHA256 | None = None,
+        path: RepoRelPath | None = None,
+        source_key: str | None = None,
+        bytes: int | None = None,
+        file_count: int | None = None,
+    ) -> None:
+        """Send one structured GCS progress event to the configured sink."""
+        if self.progress is None:
+            return
+        self.progress(
+            GcsProgressEvent(
+                phase=phase,
+                bucket=self.bucket_name,
+                key=key,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=path,
+                source_key=source_key,
+                bytes=bytes,
+                file_count=file_count,
+            )
+        )
 
     def _revision_prefix(
         self,
@@ -124,6 +217,10 @@ class GcsProvider(ViperCloudProvider):
         *,
         sha256: SHA256,
         size: int,
+        owner: HumanId | None = None,
+        workspace: HumanId | None = None,
+        revision: SHA256 | None = None,
+        path: RepoRelPath | None = None,
     ) -> None:
         """Create one object once and stream validated file-backed sources."""
         resolved = resolve_publication_source(self.root, source)
@@ -138,6 +235,15 @@ class GcsProvider(ViperCloudProvider):
             raise ViperCloudError("GCS upload source identity changed")
         blob = self.bucket.blob(key)
         blob.metadata = {"sha256": sha256, "bytes": str(size)}
+        self._emit_progress(
+            "upload_start",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
+            bytes=size,
+        )
         try:
             if isinstance(resolved, bytes):
                 blob.upload_from_string(
@@ -145,6 +251,7 @@ class GcsProvider(ViperCloudProvider):
                     content_type="application/octet-stream",
                     if_generation_match=0,
                     checksum="auto",
+                    timeout=self.operation_timeout,
                 )
             else:
                 blob.upload_from_filename(
@@ -152,13 +259,48 @@ class GcsProvider(ViperCloudProvider):
                     content_type="application/octet-stream",
                     if_generation_match=0,
                     checksum="auto",
+                    timeout=self.operation_timeout,
                 )
+            self._emit_progress(
+                "upload_done",
+                key=key,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=path,
+                bytes=size,
+            )
         except PreconditionFailed:
-            existing = blob.download_as_bytes(checksum="auto")
-            if len(existing) != size or hashlib.sha256(existing).hexdigest() != sha256:
+            if not self._existing_object_has_identity(
+                key,
+                sha256=sha256,
+                size=size,
+            ):
                 raise ViperCloudError(
                     "GCS object already contains different bytes"
                 ) from None
+            self._emit_progress(
+                "upload_reuse",
+                key=key,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=path,
+                bytes=size,
+            )
+
+    def _existing_object_has_identity(
+        self,
+        key: str,
+        *,
+        sha256: SHA256,
+        size: int,
+    ) -> bool:
+        """Check one already-written object identity from its stored metadata."""
+        blob = self.bucket.blob(key)
+        blob.reload(timeout=self.operation_timeout)
+        metadata = blob.metadata or {}
+        return metadata.get("sha256") == sha256 and metadata.get("bytes") == str(size)
 
     def _load_manifest(
         self,
@@ -167,10 +309,29 @@ class GcsProvider(ViperCloudProvider):
         revision: SHA256,
     ) -> RevisionManifest:
         """Load and validate the seal before exposing any revision member."""
+        cache_key = (owner, workspace, revision)
+        cached = self._manifest_cache.get(cache_key)
+        if cached is not None:
+            self._emit_progress(
+                "manifest_cache_hit",
+                key=self._manifest_key(owner, workspace, revision),
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+            )
+            return cached
         try:
-            raw = self.bucket.blob(
-                self._manifest_key(owner, workspace, revision)
-            ).download_as_bytes(checksum="auto")
+            key = self._manifest_key(*cache_key)
+            self._emit_progress(
+                "manifest_load_start",
+                key=key,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+            )
+            raw = self.bucket.blob(key).download_as_bytes(
+                checksum="auto", timeout=self.operation_timeout
+            )
             manifest = RevisionManifest.model_validate_json(raw)
         except (GoogleAPIError, KeyError, ValidationError) as error:
             raise ViperCloudError("GCS revision is not sealed") from error
@@ -180,6 +341,15 @@ class GcsProvider(ViperCloudProvider):
             or manifest.revision != revision
         ):
             raise ViperCloudError("GCS manifest names another revision")
+        self._manifest_cache[cache_key] = manifest
+        self._emit_progress(
+            "manifest_load_done",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            bytes=len(raw),
+        )
         return manifest
 
     def upload(
@@ -194,11 +364,16 @@ class GcsProvider(ViperCloudProvider):
         bytes: int,
     ) -> None:
         """Upload one immutable file while leaving its revision unsealed."""
+        key = self._file_key(owner, workspace, revision, path)
         self._upload_exact(
-            self._file_key(owner, workspace, revision, path),
+            key,
             source,
             sha256=sha256,
             size=bytes,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
         )
 
     def copy(
@@ -232,7 +407,7 @@ class GcsProvider(ViperCloudProvider):
                 source.path,
             )
         )
-        source_blob.reload()
+        source_blob.reload(timeout=self.operation_timeout)
         if source_blob.generation is None:
             raise ViperCloudError("GCS copy source has no generation")
         target_key = self._file_key(
@@ -241,6 +416,16 @@ class GcsProvider(ViperCloudProvider):
             target.revision,
             target.path,
         )
+        self._emit_progress(
+            "copy_start",
+            key=target_key,
+            owner=target.owner,
+            workspace=target.workspace,
+            revision=target.revision,
+            path=target.path,
+            source_key=source_blob.name,
+            bytes=bytes,
+        )
         try:
             self.bucket.copy_blob(
                 source_blob,
@@ -248,13 +433,37 @@ class GcsProvider(ViperCloudProvider):
                 new_name=target_key,
                 if_generation_match=0,
                 if_source_generation_match=source_blob.generation,
+                timeout=self.operation_timeout,
+            )
+            self._emit_progress(
+                "copy_done",
+                key=target_key,
+                owner=target.owner,
+                workspace=target.workspace,
+                revision=target.revision,
+                path=target.path,
+                source_key=source_blob.name,
+                bytes=bytes,
             )
         except PreconditionFailed:
-            existing = self.bucket.blob(target_key).download_as_bytes(checksum="auto")
-            if len(existing) != bytes or hashlib.sha256(existing).hexdigest() != sha256:
+            if not self._existing_object_has_identity(
+                target_key,
+                sha256=sha256,
+                size=bytes,
+            ):
                 raise ViperCloudError(
                     "GCS copy target already contains different bytes"
                 ) from None
+            self._emit_progress(
+                "copy_reuse",
+                key=target_key,
+                owner=target.owner,
+                workspace=target.workspace,
+                revision=target.revision,
+                path=target.path,
+                source_key=source_blob.name,
+                bytes=bytes,
+            )
 
     def seal(
         self,
@@ -271,11 +480,20 @@ class GcsProvider(ViperCloudProvider):
             revision=revision,
             files=tuple(sorted(files, key=lambda file: file.path)),
         )
+        manifest_key = self._manifest_key(owner, workspace, revision)
+        self._emit_progress(
+            "seal_start",
+            key=manifest_key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            file_count=len(manifest.files),
+        )
         for file in manifest.files:
             blob = self.bucket.blob(
                 self._file_key(owner, workspace, revision, file.path)
             )
-            blob.reload()
+            blob.reload(timeout=self.operation_timeout)
             metadata = blob.metadata or {}
             if metadata.get("sha256") != file.sha256 or metadata.get("bytes") != str(
                 file.bytes
@@ -285,10 +503,23 @@ class GcsProvider(ViperCloudProvider):
                 )
         raw = canonical_json_bytes(manifest)
         self._upload_exact(
-            self._manifest_key(owner, workspace, revision),
+            manifest_key,
             raw,
             sha256=hashlib.sha256(raw).hexdigest(),
             size=len(raw),
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+        )
+        self._manifest_cache[(owner, workspace, revision)] = manifest
+        self._emit_progress(
+            "seal_done",
+            key=manifest_key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            bytes=len(raw),
+            file_count=len(manifest.files),
         )
 
     def publish_revision(
@@ -432,14 +663,33 @@ class GcsProvider(ViperCloudProvider):
         identity = files.get(path)
         if identity is None:
             raise ViperCloudError("GCS sealed revision has no requested file")
-        raw = self.bucket.blob(
-            self._file_key(owner, workspace, revision, path)
-        ).download_as_bytes(checksum="auto")
+        key = self._file_key(owner, workspace, revision, path)
+        self._emit_progress(
+            "fetch_start",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
+            bytes=identity.bytes,
+        )
+        raw = self.bucket.blob(key).download_as_bytes(
+            checksum="auto", timeout=self.operation_timeout
+        )
         if (
             len(raw) != identity.bytes
             or hashlib.sha256(raw).hexdigest() != identity.sha256
         ):
             raise ViperCloudError("GCS restored file identity changed")
+        self._emit_progress(
+            "fetch_done",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
+            bytes=len(raw),
+        )
         return raw
 
     def fetch_to_path(
@@ -495,10 +745,20 @@ class GcsProvider(ViperCloudProvider):
         )
         os.close(descriptor)
         temporary = Path(temporary_name)
+        key = self._file_key(owner, workspace, revision, path)
+        self._emit_progress(
+            "stream_fetch_start",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
+            bytes=identity.bytes,
+        )
         try:
-            self.bucket.blob(
-                self._file_key(owner, workspace, revision, path)
-            ).download_to_filename(str(temporary), checksum="auto")
+            self.bucket.blob(key).download_to_filename(
+                str(temporary), checksum="auto", timeout=self.operation_timeout
+            )
             with temporary.open("rb") as stream:
                 observed_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
             if (
@@ -507,6 +767,15 @@ class GcsProvider(ViperCloudProvider):
             ):
                 raise ViperCloudError("GCS restored file identity changed")
             os.replace(temporary, target)
+            self._emit_progress(
+                "stream_fetch_done",
+                key=key,
+                owner=owner,
+                workspace=workspace,
+                revision=revision,
+                path=path,
+                bytes=identity.bytes,
+            )
         finally:
             temporary.unlink(missing_ok=True)
         return target
@@ -575,9 +844,19 @@ class GcsProvider(ViperCloudProvider):
                 self.bytes += len(chunk)
                 return len(chunk)
 
-        blob = self.bucket.blob(self._file_key(owner, workspace, revision, path))
+        key = self._file_key(owner, workspace, revision, path)
+        blob = self.bucket.blob(key)
+        self._emit_progress(
+            "verify_start",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
+            bytes=bytes,
+        )
         try:
-            blob.reload()
+            blob.reload(timeout=self.operation_timeout)
             if blob.generation is None:
                 raise ViperCloudError("GCS file has no immutable generation")
             observed = DigestWriter()
@@ -585,11 +864,21 @@ class GcsProvider(ViperCloudProvider):
                 observed,
                 if_generation_match=blob.generation,
                 checksum="auto",
+                timeout=self.operation_timeout,
             )
         except GoogleAPIError as error:
             raise ViperCloudError("GCS file could not be verified") from error
         if observed.bytes != bytes or observed.digest.hexdigest() != sha256:
             raise ViperCloudError("GCS file identity changed")
+        self._emit_progress(
+            "verify_done",
+            key=key,
+            owner=owner,
+            workspace=workspace,
+            revision=revision,
+            path=path,
+            bytes=observed.bytes,
+        )
 
 
 def probe_gcs_storage(
@@ -626,7 +915,11 @@ def probe_gcs_storage(
 
 
 __all__ = [
+    "GcsProgressEvent",
+    "GcsProgressPhase",
+    "GcsProgressSink",
     "GcsStorageProbeReceipt",
+    "GCS_OPERATION_TIMEOUT_SECONDS",
     "GcsProvider",
     "probe_gcs_storage",
 ]
