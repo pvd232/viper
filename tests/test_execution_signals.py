@@ -28,6 +28,7 @@ from tests.fixtures import (
 )
 from viper import _subprocess as subprocess
 from viper import config
+from viper._source import RunFetcher
 from viper._verification.attempt import _verify_stage_invocation, verify_attempt_stages
 from viper._verification.storage import read_attempt_reference
 from viper.authoring import (
@@ -41,7 +42,6 @@ from viper.authoring import (
 )
 from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution import run as execute_run
-from viper.execution._source import RunFetcher
 from viper.journal import DurableJournal
 from viper.metrics import measure, min
 from viper.outputs import OutputDraft, output

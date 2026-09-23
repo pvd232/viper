@@ -16,6 +16,7 @@ import yaml
 from pydantic import TypeAdapter, ValidationError
 
 from .._schema import SHA256, RepoRelPath
+from .._source import RunFetcher
 from .._verification.storage import verify_resolved_file_bytes
 from ..config import Config, ConfigTypeRef
 from ..evidence import VerificationError, VerificationPolicy
@@ -38,7 +39,6 @@ from ..runs import ResolvedRun, RunSpec
 from ..serialization import parse_yaml_bytes
 from ..storage import LocalArtifactStore
 from ..verification import verify_run_result
-from ._source import RunFetcher
 from .errors import RunExportError
 from .results import (
     RunBundleEntry,

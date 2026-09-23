@@ -30,6 +30,7 @@ from tests.fixtures import (
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper import config
+from viper._source import ExecutionRunFetcher, RunFetcher
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
 from viper.api import compare_runs as compare_runs_application
@@ -71,7 +72,6 @@ from viper.execution._materialization import (
 from viper.execution._metric import MetricWorkerResult
 from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
-from viper.execution._source import RunFetcher
 from viper.execution._stage import (
     StageExecutionError,
     _resolve_artifact,
@@ -2243,6 +2243,31 @@ def test_preflight_failure_exposes_no_completed_stage(
     assert result is not None
     assert result.completed_stage_ids == ()
     assert result.failed_stage_id is None
+
+
+def test_attempt_preflight_reuses_execution_fetcher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Share verified object state between preflight and materialization."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    report = SimpleNamespace(
+        ready=False,
+        checks=(SimpleNamespace(code="source_changed", status="failure"),),
+    )
+    captured: dict[str, object] = {}
+
+    def record_preflight(*args: object, **kwargs: object) -> object:
+        captured["fetcher"] = kwargs["fetcher"]
+        return report
+
+    monkeypatch.setattr("viper.execution._attempt.preflight_plan", record_preflight)
+
+    with pytest.raises(RunError, match="attempt 1 failed"):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+
+    assert isinstance(captured["fetcher"], ExecutionRunFetcher)
 
 
 def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> None:

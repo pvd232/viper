@@ -103,7 +103,7 @@ def test_export_run_verifies_offline(
         raise AssertionError("local run source was treated as external")
 
     monkeypatch.setattr(
-        "viper.execution._source.fetch_git_file_bytes",
+        "viper._source.fetch_git_file_bytes",
         reject_external_fetch,
     )
     root = tmp_path / "project"

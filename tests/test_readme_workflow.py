@@ -412,7 +412,7 @@ import json
 import sys
 from pathlib import Path
 
-from viper.execution._source import RunFetcher
+from viper._source import RunFetcher
 from viper.runs import ResolvedRun, RunSpec
 from viper.serialization import parse_yaml_bytes
 from viper.storage import LocalArtifactStore

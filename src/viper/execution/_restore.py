@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .._schema import RepoRelPath, repo_file_paths_overlap
+from .._source import RunFetcher
 from ..artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
 from ..cloud import ViperCloud
 from ..evidence import StorageFetcher
@@ -33,7 +34,6 @@ from ..runs import ResolvedRun, RunAttempt
 from ..serialization import parse_yaml_bytes
 from ..stages import ResolvedSpec
 from ..storage import LocalArtifactStore, load_storage_settings
-from ._source import RunFetcher
 from .errors import RestoreError
 
 

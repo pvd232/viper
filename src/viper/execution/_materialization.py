@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .._source import RunFetcher
 from ..artifacts import (
     ArtifactPointer,
     ResolvedArtifact,
@@ -67,7 +68,6 @@ from ..workspace import (
     stored_input_path,
 )
 from ._downloads import publish_download_body
-from ._source import RunFetcher
 from .errors import RunError
 
 

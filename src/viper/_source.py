@@ -7,11 +7,12 @@ from pathlib import Path
 
 import viper._subprocess as subprocess
 
-from .._schema import RepoRelPath
-from .._verification.storage import fetch_git_file_bytes, verify_resolved_file_bytes
-from ..cloud import ViperCloud
-from ..evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
-from ..references import (
+from ._schema import RepoRelPath
+from ._verification.storage import fetch_git_file_bytes, verify_resolved_file_bytes
+from ._verified_cache import VerifiedObjectCache
+from .cloud import ViperCloud
+from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
+from .references import (
     GcsFileRef,
     GcsStageResultSnapshotRef,
     GitFileRef,
@@ -26,9 +27,7 @@ from ..references import (
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
-from ..storage import LocalArtifactStore, local_artifact_store, viper_cloud
-from ._verified_cache import VerifiedObjectCache
-from .errors import RunError
+from .storage import LocalArtifactStore, local_artifact_store, viper_cloud
 
 _MAX_EXTERNAL_GIT_CACHE_BYTES = 64 * 1024**2
 
@@ -42,7 +41,7 @@ def run_git(repository_root: Path, *arguments: str) -> bytes:
             capture_output=True,
         ).stdout
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        raise RunError("local Git evidence could not be read") from exc
+        raise VerificationError("local Git evidence could not be read") from exc
 
 
 class RunFetcher:

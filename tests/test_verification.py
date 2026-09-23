@@ -30,6 +30,7 @@ from tests.fixtures import (
 from viper import _subprocess as subprocess
 from viper import config
 from viper._schema import NonEmptyStr
+from viper._source import RunFetcher
 from viper._verification.attempt import (
     verify_attempt_files,
     verify_download_retrieval,
@@ -64,7 +65,6 @@ from viper.evidence import (
     VerifiedProducerRun,
     VerifiedSnapshotFile,
 )
-from viper.execution._source import RunFetcher
 from viper.experiments import (
     BuildVariantStageConfig,
     DiagnosticVariantStageConfig,

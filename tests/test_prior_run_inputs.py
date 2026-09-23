@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
+from viper._source import RunFetcher
 from viper._verification.storage import fetch_local_file_bytes
 from viper.artifacts import ArtifactPointer, StageArtifactRef
 from viper.authoring import RunArtifactDraft, _freeze_input, run_artifact
-from viper.execution._source import RunFetcher
 from viper.inputs import StoredInputMaterialization, StoredInputRef
 from viper.references import (
     GcsFileRef,

@@ -11,6 +11,7 @@ from pydantic import HttpUrl, ValidationError
 from viper import execution
 from viper._cloud import GcsRepository, ViperCloudProvider, manifest_revision
 from viper._schema import SHA256, RepoRelPath
+from viper._source import RunFetcher
 from viper._verification.storage import read_resolved_file
 from viper.artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
 from viper.cloud import ViperCloud
@@ -22,7 +23,6 @@ from viper.execution._restore import (
     _PlannedFile,
     _restore_files,
 )
-from viper.execution._source import RunFetcher
 from viper.execution.errors import RestoreError, RunError
 from viper.gcs import GcsProgressEvent
 from viper.ids import HumanId
@@ -228,7 +228,7 @@ def test_run_fetcher_reuses_one_external_git_file_within_an_execution(
         fetched.append(location)
         return b"source"
 
-    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
     fetcher = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),
@@ -256,8 +256,8 @@ def test_run_fetcher_does_not_retain_an_external_git_file_over_its_budget(
         fetched.append(location)
         return b"checkpoint"
 
-    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
-    monkeypatch.setattr("viper.execution._source._MAX_EXTERNAL_GIT_CACHE_BYTES", 5)
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
+    monkeypatch.setattr("viper._source._MAX_EXTERNAL_GIT_CACHE_BYTES", 5)
     fetcher = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),
@@ -288,7 +288,7 @@ def test_run_fetcher_reuses_one_checkout_for_files_from_the_same_commit(
         checkouts.append(checkout)
         return str(location.path).encode()
 
-    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
     fetcher = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),

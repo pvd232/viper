@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from .. import keys
+from .._source import RunFetcher
 from .._verification.attempt import verify_attempt_stages
 from .._verification.storage import fetch_storage_bytes
 from ..artifacts import StageArtifactRef
@@ -43,7 +44,6 @@ from ..storage import (
 )
 from ..verification import verify_benchmark_result, verify_run_result
 from ._run import execute_benchmark_confirmation
-from ._source import RunFetcher
 from .errors import BenchmarkExecutionError
 from .results import BenchmarkExecutionResult
 

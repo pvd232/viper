@@ -8,8 +8,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..evidence import VerificationError
-from ..references import ResolvedFileRef
+from .evidence import VerificationError
+from .references import ResolvedFileRef
 
 
 @dataclass(frozen=True)

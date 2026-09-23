@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import current_thread, main_thread
 from typing import Literal
 
+from .._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
 from .._verification.storage import read_attempt_reference
 from ..catalog import Catalog
 from ..evidence import VerificationError, VerificationPolicy, VerifiedRunResult
@@ -91,7 +92,6 @@ from ._resolution import (
 )
 from ._restore import resolve_run_reference
 from ._reuse import reuse_stage
-from ._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
 from ._stage import (
     StageExecutionError,
     StageProcessInterrupted,
@@ -335,6 +335,7 @@ def execute_attempt(
             root,
             run_path,
             plan=plan,
+            fetcher=fetcher,
         )
         preflight_path = workspace.control / "preflight.json"
         write_synchronized(

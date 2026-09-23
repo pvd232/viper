@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, TypeAdapter
 
 from .._cloud import PublicationSource, manifest_revision
+from .._source import RunFetcher
 from ..artifacts import ArtifactPointer
 from ..benchmark import BenchmarkResult, BenchmarkSpec
 from ..cloud import ViperCloud
@@ -43,7 +44,6 @@ from ..storage import (
 )
 from ..verification import verify_run_result
 from ._restore import resolve_run_reference
-from ._source import RunFetcher
 from .errors import RunPromotionError
 
 _SPEC_ADAPTER = TypeAdapter(Spec)

@@ -25,6 +25,7 @@ from pydantic import (
     field_validator,
 )
 
+from ._source import RunFetcher, run_git
 from .artifacts import (
     ArtifactPointer,
     ResolvedArtifact,
@@ -50,7 +51,6 @@ from .execution._benchmark import benchmark as execute_benchmark_run
 from .execution._export import export_run as execute_run_export
 from .execution._restore import restore as restore_run_artifacts
 from .execution._run import run as execute_run
-from .execution._source import RunFetcher, run_git
 from .execution._stage import StageExecutionError, execute_stage_process
 from .execution.errors import (
     BenchmarkExecutionError,
