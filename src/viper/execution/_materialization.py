@@ -96,7 +96,12 @@ def _write_materialized_file(
         target.write_bytes(verified_file.content)
     else:
         assert verified_file.local_path is not None
-        shutil.copyfile(verified_file.local_path, target)
+        try:
+            os.link(verified_file.local_path, target)
+        except OSError:
+            shutil.copyfile(verified_file.local_path, target)
+        mode = verified_file.local_path.stat().st_mode
+        os.chmod(target, mode & ~0o222)
 
 
 def _materialize_verified_artifact(

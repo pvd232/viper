@@ -1385,7 +1385,11 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
     )
     assert paths["reference_predictions"] == root / expected
     assert paths["reference_predictions"].read_bytes() == b"predictions"
+    assert paths["reference_predictions"].samefile(cached_predictions)
+    assert paths["reference_predictions"].stat().st_mode & 0o222 == 0
     assert paths["reference_predictions_copy"].read_bytes() == b"predictions"
+    assert paths["reference_predictions_copy"].samefile(cached_predictions)
+    assert paths["reference_predictions_copy"].stat().st_mode & 0o222 == 0
     assert len(verified_runs) == 1
     assert not (root / "inputs/parity/historical_predictions.npz").exists()
 
