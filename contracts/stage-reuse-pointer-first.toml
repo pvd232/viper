@@ -1,0 +1,92 @@
+schema_version = 1
+contract_id = "stage-reuse-pointer-first"
+title = "Stage Reuse Pointer First"
+
+[[requirements]]
+id = "SRPF-REQ-01"
+claim = "A stage with reuse=\"verified\" must be able to discover matching reusable stage results from the resolved producer runs named by its StoredInputRef pointers without requiring the operator to run catalog_refresh first."
+depends_on = []
+verifier_ids = ["SRPF-VR-01"]
+
+[[requirements]]
+id = "SRPF-REQ-02"
+claim = "Stored-input producer discovery must use the same StageReuseKey fields as catalog reuse: normalized stage spec, resolved input identities, seed, environment lockfile identity, reproducibility identity, and selected metric identities."
+depends_on = ["SRPF-REQ-01"]
+verifier_ids = ["SRPF-VR-02"]
+
+[[requirements]]
+id = "SRPF-REQ-03"
+claim = "Stored inputs must expose pointer-backed producer evidence to reuse selection while preserving byte-verified materialization for stage callables that require filesystem paths."
+depends_on = ["SRPF-REQ-01", "SRPF-REQ-02"]
+verifier_ids = ["SRPF-VR-03"]
+
+[[requirements]]
+id = "SRPF-REQ-04"
+claim = "Viper must provide a pointer-first stored-input execution path for stages that declare they can consume immutable artifact references, so large upstream artifacts are not restored to local bytes solely to pass through unchanged."
+depends_on = ["SRPF-REQ-03"]
+verifier_ids = ["SRPF-VR-04"]
+
+[[requirements]]
+id = "SRPF-REQ-05"
+claim = "The public docs must distinguish automatic pointer-backed reuse discovery, manual catalog_refresh for search workflows, and pointer-first execution for declared reference-consuming stages."
+depends_on = ["SRPF-REQ-01", "SRPF-REQ-04"]
+verifier_ids = ["SRPF-VR-05"]
+
+[[verifiers]]
+id = "SRPF-VR-01"
+requirement_ids = ["SRPF-REQ-01"]
+acceptance_conditions = ["A second run with reuse=\"verified\" and StoredInputRef pointers reuses a matching producer stage when the local catalog database is absent."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_verified_reuse_discovers_stored_pointer_producer_without_catalog_refresh" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_verified_reuse_rejects_pointer_producer_with_nonmatching_key" }]
+
+[[verifiers]]
+id = "SRPF-VR-02"
+requirement_ids = ["SRPF-REQ-02"]
+acceptance_conditions = ["Changing one StageReuseKey field on the candidate producer prevents automatic pointer-backed reuse and forces the consumer stage to execute."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_pointer_backed_reuse_uses_complete_stage_reuse_key" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_pointer_backed_reuse_rejects_metric_identity_mismatch" }]
+
+[[verifiers]]
+id = "SRPF-VR-03"
+requirement_ids = ["SRPF-REQ-03"]
+acceptance_conditions = ["StoredInputRef materialization returns producer run refs for reuse selection and still writes verified bytes to context.inputs for ordinary filesystem-consuming stages."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_stored_input_producer_refs_feed_reuse_selection_and_materialize_bytes" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_stored_input_rejects_unverified_pointer_before_reuse_selection" }]
+
+[[verifiers]]
+id = "SRPF-VR-04"
+requirement_ids = ["SRPF-REQ-04"]
+acceptance_conditions = ["A reference-consuming stage receives immutable artifact references for selected stored inputs and the fetcher does not restore those artifact payload bytes before invoking the stage."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_pointer_first_stored_input_passes_reference_without_payload_restore" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_pointer_first_stored_input_rejects_stage_that_opens_missing_bytes" }]
+
+[[verifiers]]
+id = "SRPF-VR-05"
+requirement_ids = ["SRPF-REQ-05"]
+acceptance_conditions = ["The stages, inputs, catalog, and API docs name the three execution paths and no doc says catalog_refresh is required before pointer-backed producer reuse can be attempted."]
+success_case = { repository_id = "viper", path = "docs/how-to/stages.md", symbol = "Reuse a verified stage result" }
+rejection_cases = [{ repository_id = "viper", path = "docs/how-to/catalog-knowledge-mcp.md", symbol = "manual catalog refresh described as execution prerequisite" }]
+
+[[pair_blocks]]
+id = "SRPF-PB-01"
+requirement_ids = ["SRPF-REQ-01", "SRPF-REQ-02", "SRPF-REQ-03"]
+depends_on = []
+repository_id = "viper"
+requirement_contribution = "Feed StoredInputRef producer run references into verified stage reuse selection and retain byte materialization for ordinary stage inputs."
+completion_evidence = ["implementation_review", "code_review"]
+
+[[pair_blocks]]
+id = "SRPF-PB-02"
+requirement_ids = ["SRPF-REQ-04"]
+depends_on = ["SRPF-PB-01"]
+repository_id = "viper"
+requirement_contribution = "Add a declared pointer-first stored-input path for stages that consume immutable artifact references without payload restore."
+completion_evidence = ["implementation_review", "code_review"]
+
+[[pair_blocks]]
+id = "SRPF-PB-03"
+requirement_ids = ["SRPF-REQ-05"]
+depends_on = ["SRPF-PB-01", "SRPF-PB-02"]
+repository_id = "viper"
+requirement_contribution = "Update public documentation and examples for automatic pointer-backed reuse discovery, manual catalog search, and pointer-first stage input execution."
+completion_evidence = ["documentation_review", "code_review"]

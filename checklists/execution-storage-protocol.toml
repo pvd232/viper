@@ -5,6 +5,7 @@ coordination_repository_id = "viper"
 checklist_path = "checklists/execution-storage-protocol.md"
 contract_paths = [
   "contracts/execution-path-parity.toml",
+  "contracts/stage-reuse-pointer-first.toml",
 ]
 
 [[phases]]
@@ -16,6 +17,17 @@ requirement_ids = [
   "EPP-REQ-03",
   "EPP-REQ-04",
   "EPP-REQ-05",
+]
+
+[[phases]]
+number = 2
+title = "Reuse pointer-backed stored inputs without manual catalog refresh"
+requirement_ids = [
+  "SRPF-REQ-01",
+  "SRPF-REQ-02",
+  "SRPF-REQ-03",
+  "SRPF-REQ-04",
+  "SRPF-REQ-05",
 ]
 
 [[repository_bindings]]
