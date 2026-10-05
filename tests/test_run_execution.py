@@ -59,6 +59,7 @@ from viper.evidence import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
+    VerifiedInput,
     VerifiedSnapshotFile,
 )
 from viper.execution import _batch
@@ -126,6 +127,7 @@ from viper.references import (
 from viper.reuse import (
     ReusedStageCompletion,
     catalog_reuse_candidates,
+    verified_input_identity,
 )
 from viper.runs import (
     AttemptFailure,
@@ -169,6 +171,33 @@ from viper.workspace import (
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
+
+
+@pytest.mark.parametrize("consumer_name", ("original.npz", "bank.npz", "bank"))
+def test_reuse_identity_preserves_the_consumer_filename(consumer_name: str) -> None:
+    """Keep a renamed stored input reusable without changing its byte identity."""
+    payload = b"saved control program bank"
+    reference = SnapshotFileRef(
+        path="experiments/producer/artifacts/original.npz",
+        sha256=hashlib.sha256(payload).hexdigest(),
+        bytes=len(payload),
+    )
+    artifact = ResolvedSingleFileArtifact(relative_path="original.npz", file=reference)
+    value = VerifiedInput(
+        path=f"inputs/control/{consumer_name}",
+        data_role="training",
+        artifact=artifact,
+        files=(VerifiedSnapshotFile(reference=reference, content=payload),),
+    )
+
+    identity = verified_input_identity("control_program_bank", value)
+
+    assert identity.input_name == "control_program_bank"
+    assert identity.data_role == "training"
+    assert len(identity.files) == 1
+    assert identity.files[0].relative_path == consumer_name
+    assert identity.files[0].sha256 == hashlib.sha256(payload).hexdigest()
+    assert identity.files[0].bytes == len(payload)
 
 
 def test_bundle_resolution_sorts_serialized_member_paths(tmp_path: Path) -> None:

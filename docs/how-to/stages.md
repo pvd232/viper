@@ -356,5 +356,10 @@ executing another plan that might reuse its stages.
 VIPER looks for a candidate with matching stage, config, inputs, runtime,
 randomness, and metric identities. A matching candidate is verified and its
 artifacts are copied into the new run's snapshot; otherwise the stage executes.
+Input identities use the filenames supplied to the consuming stage. Verification
+uses the declared filename for stored files and the captured filename for local
+inputs; the original source remains in the input receipt. Retries reconstruct the
+same identity even when the original filename differs. This adds no user action
+or artifact read.
 The new run records whether each stage executed or reused earlier work. A
 benchmark confirmation executes the candidate stages independently.

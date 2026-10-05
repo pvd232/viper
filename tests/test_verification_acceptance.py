@@ -2835,7 +2835,7 @@ def test_external_input_identity_survives_execution() -> None:
     run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
     attempt_id = 1
     stage_id = "train"
-    source = LocalSource(path="inputs/raw/dataset.bin")
+    source = LocalSource(path="inputs/raw/original.bin")
     declared = ExternalInputRef(source=source, data_role="training")
     captured_path = captured_input_snapshot_path(
         stage_id=stage_id,
@@ -2870,7 +2870,16 @@ def test_external_input_identity_survives_execution() -> None:
         snapshot(snapshot_commit),
         fetcher=store.fetch,
     )
-    assert verified["dataset"].path == source.path
+    assert verified["dataset"].path == captured_input_path(
+        run_id=run_id,
+        attempt_id=attempt_id,
+        stage_id=stage_id,
+        input_name="dataset",
+        source_path=source.path,
+    )
+    resolved_input = resolved.inputs["dataset"]
+    assert isinstance(resolved_input, ResolvedExternalInputRef)
+    assert resolved_input.source == source
     assert verified["dataset"].files[0].content == raw
     assert store.fetch(hf_file(snapshot_commit, captured_path)) == raw
 

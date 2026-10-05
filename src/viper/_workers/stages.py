@@ -12,7 +12,8 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from .._config.validation import config_type_path, instantiate_config
 from ..config import MetricConfig
 from ..execution._stage import StageWorkerContext, StageWorkerResult

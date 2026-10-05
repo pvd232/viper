@@ -245,7 +245,8 @@ def verify_download_source_closure(
                     break
             if attempt_reference is None or source_attempt is None:
                 raise VerificationError(
-                    f"download source stage {selected_stage_id!r} not found in run attempts"
+                    f"download source stage {selected_stage_id!r} "
+                    "not found in run attempts"
                 )
         elif attempt_reference not in result.attempts:
             raise VerificationError("download source reuse attempt is unavailable")

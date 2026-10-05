@@ -1129,7 +1129,13 @@ def verify_external_inputs(
                 f"input.local.identity: captured input {input_name!r} differs"
             ) from exc
         verified[input_name] = VerifiedInput(
-            path=planned_input.source.path,
+            path=captured_input_path(
+                run_id=run.run_id,
+                attempt_id=attempt.attempt_id,
+                stage_id=stage_id,
+                input_name=input_name,
+                source_path=planned_input.source.path,
+            ),
             data_role=planned_input.data_role,
             artifact=ResolvedSingleFileArtifact(
                 relative_path=planned_input.source.path,
