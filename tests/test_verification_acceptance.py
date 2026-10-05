@@ -4159,7 +4159,13 @@ def test_policy_rejects_saved_metric_reading(execution: str) -> None:
 
 
 def _policy_reused_evaluation(
-    store: DocumentStore, source: ResolvedRun, verified: VerifiedRunResult
+    store: DocumentStore,
+    source: ResolvedRun,
+    verified: VerifiedRunResult,
+    *,
+    source_commit: str = "d" * 40,
+    target_commit: str = "e" * 40,
+    attempt_commit: str = "f" * 40,
 ) -> ResolvedRun:
     """Reuse one saved evaluation, retaining references to its producing run."""
     source_attempt = fetch_attempt(store, source.attempts[-1])
@@ -4173,7 +4179,7 @@ def _policy_reused_evaluation(
     run = verified.plan.run
     run_root = str(source.spec.stored_at.path).removesuffix("/spec.yaml")
     source_raw = yaml_bytes(source)
-    source_run_location = hf_file("d" * 40, f"{run_root}/resolved.yaml")
+    source_run_location = hf_file(source_commit, f"{run_root}/resolved.yaml")
     store.put(source_run_location, source_raw)
     source_run = ResolvedRunRef(
         stored_at=source_run_location, sha256=sha256(source_raw), bytes=len(source_raw)
@@ -4218,7 +4224,7 @@ def _policy_reused_evaluation(
         completed_at=source_result.completed_at,
     )
     raw = yaml_bytes(reuse)
-    location = hf_file("e" * 40, f"{run_root}/stages/evaluate/reuse.yaml")
+    location = hf_file(target_commit, f"{run_root}/stages/evaluate/reuse.yaml")
     store.put(location, raw)
     target = source_result.model_copy(
         update={
@@ -4231,12 +4237,12 @@ def _policy_reused_evaluation(
         }
     )
     # Preserve the original snapshot: the target refers back to its source.
-    copy_snapshot_files(store, snapshot_revision(source_stage.snapshot), "e" * 40)
+    copy_snapshot_files(store, snapshot_revision(source_stage.snapshot), target_commit)
     target_stage = publish_resolved_stage(
         store,
         run_root_path=run_root,
         stage_id="evaluate",
-        snapshot_commit="e" * 40,
+        snapshot_commit=target_commit,
         resolved_spec=target,
     )
     target_attempt = source_attempt.model_copy(
@@ -4247,7 +4253,7 @@ def _policy_reused_evaluation(
         }
     )
     target_reference = publish_attempt(
-        store, run_root_path=run_root, attempt=target_attempt, commit="f" * 40
+        store, run_root_path=run_root, attempt=target_attempt, commit=attempt_commit
     )
     return source.model_copy(update={"attempts": (target_reference,)})
 
@@ -4268,3 +4274,51 @@ def test_policy_rejects_reused_producer_reading() -> None:
         VerificationError, match="startup.controls: deterministic_algorithms"
     ):
         verify_run_result(changed_target, policy=POLICY, fetcher=store.fetch)
+
+
+def test_benchmark_accepts_reused_evaluation_without_new_measurement() -> None:
+    """Bind a reused candidate score to its source receipt and fresh confirmation."""
+    result, source, store = build_benchmark_fixture()
+    original = verify_run_result(source, policy=POLICY, fetcher=store.fetch)
+    target = _policy_reused_evaluation(
+        store,
+        source,
+        original,
+        source_commit="7" * 40,
+        target_commit="8" * 40,
+        attempt_commit="9" * 40,
+    )
+    target_attempt = fetch_attempt(store, target.attempts[0]).model_copy(
+        update={"measurement_files": ()}
+    )
+    target_reference = publish_attempt(
+        store,
+        run_root_path=str(target.spec.stored_at.path).removesuffix("/spec.yaml"),
+        attempt=target_attempt,
+        commit="0" * 40,
+    )
+    target = target.model_copy(update={"attempts": (target_reference,)})
+    verified = verify_run_result(target, policy=POLICY, fetcher=store.fetch)
+    selected = verified.attempts[0]
+    assert not selected.measurement_files
+    assert not selected.metric_verification_files
+    assert "evaluate" in verified.reuse
+    raw = yaml_bytes(target)
+    store.put(result.run.stored_at, raw)
+    target_reference = result.run.model_copy(
+        update={"sha256": sha256(raw), "bytes": len(raw)}
+    )
+    selected_refs = {stage.stage_id: stage for stage in selected.resolved_stages}
+    updated = result.model_copy(
+        update={
+            "run": target_reference,
+            "artifacts": tuple(
+                receipt.model_copy(
+                    update={"candidate_stage": selected_refs[receipt.artifact.stage_id]}
+                )
+                for receipt in result.artifacts
+            ),
+        }
+    )
+    benchmark = verify_benchmark_result(updated, policy=POLICY, fetcher=store.fetch)
+    assert benchmark.result.metrics[0].matched

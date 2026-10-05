@@ -12,6 +12,7 @@ from typing import Literal
 from .. import keys
 from .._source import RunFetcher
 from .._verification.attempt import verify_attempt_stages
+from .._verification.metrics import eval_metric_receipts
 from .._verification.storage import fetch_storage_bytes
 from ..artifacts import StageArtifactRef
 from ..benchmark import (
@@ -32,7 +33,7 @@ from ..references import (
     ResolvedRunRef,
     storage_file,
 )
-from ..runs import ResolvedRun, RunAttempt, RunSpec
+from ..runs import ResolvedRun, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes, serialize_document
 from ..stages import EvalSpec
 from ..storage import (
@@ -90,22 +91,6 @@ def _benchmark_mirror_path(
         / run_id
         / "benchmark.result.yaml"
     )
-
-
-def _metric_receipts(
-    attempt: RunAttempt,
-    fetcher: RunFetcher,
-    eval_stage_id: str,
-) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
-    """Load the recomputation receipt for each eval metric."""
-    receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
-    for reference in attempt.metric_verification_files:
-        receipt = MetricVerificationReceipt.model_validate(
-            parse_yaml_bytes(fetcher(reference.stored_at))
-        )
-        if receipt.stage_id == eval_stage_id:
-            receipts[receipt.metric_id] = (reference, receipt)
-    return receipts
 
 
 def _benchmark_metric_results(
@@ -318,11 +303,17 @@ def benchmark(
             )
         )
 
-    candidate_metrics = _metric_receipts(selected_attempt, fetcher, eval_stage_id)
-    confirmation_metrics = _metric_receipts(
-        confirmation,
-        fetcher,
+    candidate_metrics = eval_metric_receipts(
+        selected_attempt,
         eval_stage_id,
+        reused=verified_candidate.reuse.get(eval_stage_id),
+        fetcher=fetcher,
+    )
+    confirmation_metrics = eval_metric_receipts(
+        confirmation,
+        eval_stage_id,
+        reused=None,
+        fetcher=fetcher,
     )
     metric_receipts = _benchmark_metric_results(
         benchmark,

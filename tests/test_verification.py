@@ -1441,6 +1441,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
             run,
             experiment,
             {"train": spec},
+            resolved_stages={},
             fetcher=lambda location: documents[location.path],
         )
 
@@ -1466,6 +1467,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
                 run,
                 experiment,
                 {"train": spec},
+                resolved_stages={},
                 fetcher=lambda location: documents[location.path],
             )
 
@@ -1516,6 +1518,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
             run,
             experiment,
             {"train": spec},
+            resolved_stages={},
             fetcher=lambda _: log_raw,
         )
 

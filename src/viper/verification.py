@@ -18,7 +18,7 @@ from ._verification.attempt import (
     verify_external_inputs,
     verify_measurement_stage_times,
 )
-from ._verification.metrics import verify_recomputed_metrics
+from ._verification.metrics import eval_metric_receipts, verify_recomputed_metrics
 from ._verification.paths import resolved_stage_spec_path, run_root
 from ._verification.plan import verify_run_plan, verify_run_spec
 from ._verification.storage import (
@@ -66,7 +66,6 @@ from .inputs import (
 )
 from .metrics import (
     Measurement,
-    MetricVerificationReceipt,
     compare_metric_values,
     is_recomputed_metric,
 )
@@ -972,6 +971,7 @@ def _verify_reused_stages(
 ) -> dict[int, dict[StageId, StageReuseReceipt]]:
     """Follow and verify every reuse receipt in every recorded attempt."""
     receipts_by_attempt: dict[int, dict[StageId, StageReuseReceipt]] = {}
+    verified_sources: dict[ResolvedRunRef, VerifiedRunResult] = {}
     for attempt in attempts:
         attempt_stages = stages.get(attempt.attempt_id, {})
         attempt_inputs = inputs.get(attempt.attempt_id, {})
@@ -990,17 +990,24 @@ def _verify_reused_stages(
             source_id = receipt.source_run.sha256
             if source_id in ancestors:
                 raise VerificationError("stage reuse sources form a cycle")
-            source_raw = read_resolved_file(receipt.source_run, fetcher=fetcher)
-            try:
-                source_run = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
-            except (yaml.YAMLError, ValueError) as exc:
-                raise VerificationError("stage reuse source run is invalid") from exc
-            source = _verify_run_result(
-                source_run,
-                policy=policy,
-                fetcher=fetcher,
-                ancestors=ancestors | {source_id},
-            )
+            source = verified_sources.get(receipt.source_run)
+            if source is None:
+                source_raw = read_resolved_file(receipt.source_run, fetcher=fetcher)
+                try:
+                    source_run = ResolvedRun.model_validate(
+                        parse_yaml_bytes(source_raw)
+                    )
+                except (yaml.YAMLError, ValueError) as exc:
+                    raise VerificationError(
+                        "stage reuse source run is invalid"
+                    ) from exc
+                source = _verify_run_result(
+                    source_run,
+                    policy=policy,
+                    fetcher=fetcher,
+                    ancestors=ancestors | {source_id},
+                )
+                verified_sources[receipt.source_run] = source
             source_attempt_id = next(
                 (
                     source_attempt.attempt_id
@@ -1743,6 +1750,7 @@ def verify_benchmark_result(
         verified_run.plan.run,
         verified_run.plan.experiment,
         verified_run.plan.stages,
+        resolved_stages=confirmation_stages,
         fetcher=fetcher,
     )
     verify_measurement_stage_times(
@@ -1852,28 +1860,18 @@ def verify_benchmark_result(
                 "benchmark.artifacts: artifact comparison receipt differs"
             )
 
-    def metric_receipts(
-        attempt: RunAttempt,
-    ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
-        """Load the eval metric receipts owned by one attempt."""
-        receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
-        for reference in attempt.metric_verification_files:
-            raw = read_resolved_file(reference, fetcher=fetcher)
-            try:
-                receipt = MetricVerificationReceipt.model_validate(
-                    parse_yaml_bytes(raw)
-                )
-            except (yaml.YAMLError, ValueError) as exc:
-                raise VerificationError(
-                    "benchmark.metrics: metric verification receipt is invalid"
-                ) from exc
-            if receipt.stage_id != eval_stage_id:
-                continue
-            receipts[receipt.metric_id] = (reference, receipt)
-        return receipts
-
-    candidate_metric_receipts = metric_receipts(selected_attempt)
-    confirmation_metric_receipts = metric_receipts(confirmation)
+    candidate_metric_receipts = eval_metric_receipts(
+        selected_attempt,
+        eval_stage_id,
+        reused=verified_run.reuse.get(eval_stage_id),
+        fetcher=fetcher,
+    )
+    confirmation_metric_receipts = eval_metric_receipts(
+        confirmation,
+        eval_stage_id,
+        reused=None,
+        fetcher=fetcher,
+    )
     criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
     received_metrics = {receipt.metric_id: receipt for receipt in result.metrics}
     if set(received_metrics) != set(benchmark.metric_ids):
@@ -2144,6 +2142,7 @@ def _verify_run_result(
             plan.run,
             plan.experiment,
             plan.stages,
+            resolved_stages=verified_stages,
             fetcher=fetcher,
             measurement_references=measurement_references,
         )

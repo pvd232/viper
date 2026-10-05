@@ -26,8 +26,8 @@ from ..metrics import (
     compare_metric_values,
     is_recomputed_metric,
 )
-from ..references import GcsFileRef, HuggingFaceFileRef, LocalFileRef
-from ..reuse import ReusedStageCompletion
+from ..references import GcsFileRef, HuggingFaceFileRef, LocalFileRef, ResolvedFileRef
+from ..reuse import ReusedStageCompletion, StageReuseReceipt
 from ..runs import RunAttempt, RunSpec
 from ..runtime import (
     CUDABackendContext,
@@ -40,6 +40,37 @@ from ..stages import BaseSpec, ResolvedBaseSpec
 from . import storage
 from .paths import run_root
 from .runtime import verify_runtime_controls
+
+
+def eval_metric_receipts(
+    attempt: RunAttempt,
+    stage_id: str,
+    *,
+    reused: StageReuseReceipt | None,
+    fetcher: StorageFetcher | None,
+) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
+    """Read evaluation receipts from this attempt or its verified reuse source."""
+    references = list(attempt.metric_verification_files)
+    if reused is not None:
+        for evidence in reused.metrics:
+            if evidence.verification is None:
+                raise VerificationError("reused evaluation metric lacks verification")
+            references.append(evidence.verification)
+    receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
+    for reference in references:
+        raw = storage.read_resolved_file(reference, fetcher=fetcher)
+        try:
+            receipt = MetricVerificationReceipt.model_validate(parse_yaml_bytes(raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError(
+                "benchmark.metrics: metric verification receipt is invalid"
+            ) from exc
+        if receipt.stage_id != stage_id:
+            continue
+        if receipt.metric_id in receipts:
+            raise VerificationError("benchmark.metrics: duplicate evaluation receipt")
+        receipts[receipt.metric_id] = (reference, receipt)
+    return receipts
 
 
 def _verify_metric_worker_runtime(

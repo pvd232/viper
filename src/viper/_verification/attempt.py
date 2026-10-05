@@ -51,7 +51,7 @@ from ..references import (
     ViperCloudFileRef,
     resolve_snapshot_file_ref,
 )
-from ..reuse import ExecutedStageCompletion
+from ..reuse import ExecutedStageCompletion, ReusedStageCompletion
 from ..runs import RunAttempt, RunSpec
 from ..runtime import (
     ComputeBackendContext,
@@ -917,6 +917,7 @@ def verify_attempt_files(
     experiment: ExperimentSpec,
     stage_specs: Mapping[StageId, BaseSpec],
     *,
+    resolved_stages: Mapping[StageId, ResolvedBaseSpec],
     fetcher: StorageFetcher | None = None,
     measurement_references: list[ResolvedFileRef] | None = None,
 ) -> tuple[Measurement, ...]:
@@ -1025,6 +1026,11 @@ def verify_attempt_files(
         for stage_id in completed_stage_ids:
             stage_spec = stage_specs[stage_id]
             if not isinstance(stage_spec, EvalSpec):
+                continue
+            if isinstance(
+                getattr(resolved_stages[stage_id], "completion", None),
+                ReusedStageCompletion,
+            ):
                 continue
             for metric_id in stage_spec.metric_ids:
                 matches = [
