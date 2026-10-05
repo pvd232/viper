@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import shutil
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -347,10 +350,31 @@ class _RunGraphPromoter:
             raise RunPromotionError("source run graph is unavailable") from error
         finally:
             self.promoting.remove(snapshot)
-        promoted, files = self.cloud.publish(self.destination, sources)
+        promoted, files = self._publish_sources(sources)
         self.snapshots[snapshot] = promoted
         self.snapshot_files[snapshot] = files
         return promoted
+
+    def _publish_sources(
+        self,
+        sources: dict[str, PublicationSource],
+    ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
+        """Stage verified neighboring-store files within the publication root."""
+        staging_root = self.root / ".viper" / "promotion"
+        staging_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=staging_root) as temporary:
+            confined: dict[str, PublicationSource] = {}
+            for path, source in sources.items():
+                if isinstance(source, bytes) or source.is_relative_to(self.root):
+                    confined[path] = source
+                    continue
+                staged = Path(temporary) / str(len(confined))
+                try:
+                    os.link(source, staged)
+                except OSError:
+                    shutil.copyfile(source, staged)
+                confined[path] = staged
+            return self.cloud.publish(self.destination, confined)
 
     def rewrite_snapshot_documents(
         self,

@@ -30,6 +30,7 @@ from tests.fixtures import (
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper import config
+from viper._cloud import resolve_publication_source
 from viper._source import ExecutionRunFetcher, RunFetcher
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
@@ -70,6 +71,7 @@ from viper.execution._materialization import (
     verify_captured_inputs,
 )
 from viper.execution._metric import MetricWorkerResult
+from viper.execution._promotion import _RunGraphPromoter
 from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._stage import (
@@ -2193,6 +2195,51 @@ def test_explicit_cloud_promotion_rejects_missing_source_bytes(
         )
 
     assert provider.upload_calls == []
+
+
+@pytest.mark.parametrize("copy_required", (False, True))
+def test_cloud_promotion_stages_verified_neighboring_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    copy_required: bool,
+) -> None:
+    """Publish neighboring immutable bytes through confined paths without reruns."""
+    root = tmp_path / "consumer"
+    root.mkdir()
+    producer_root = tmp_path / "producer"
+    producer_root.mkdir()
+    store = LocalArtifactStore(producer_root)
+    payload = b"retained measurement"
+    snapshot = store.snapshot({"artifacts/measurement.bin": payload})
+    provider = InMemoryViperCloudProvider(root)
+    cloud = install_in_memory_cloud(monkeypatch, root, provider)
+    original_publish = cloud.publish
+    staged_paths: list[Path] = []
+
+    def confined_publish(destination, sources):
+        """Apply the real publisher's path boundary before the in-memory upload."""
+        for source in sources.values():
+            resolved = resolve_publication_source(root, source)
+            if isinstance(resolved, Path):
+                staged_paths.append(resolved)
+        return original_publish(destination, sources)
+
+    def cross_device_link(source, destination):
+        """Exercise the streaming-copy fallback for distinct filesystems."""
+        raise OSError("cross-device link")
+
+    monkeypatch.setattr(cloud, "publish", confined_publish)
+    if copy_required:
+        monkeypatch.setattr("viper.execution._promotion.os.link", cross_device_link)
+    promoter = _RunGraphPromoter(
+        root, cloud, ViperCloudDestination(owner="machina", workspace="models")
+    )
+    promoted = promoter.promote_snapshot(snapshot)
+
+    assert cloud.fetch(cloud.file_ref(promoted, "artifacts/measurement.bin")) == payload
+    assert staged_paths and all(not path.exists() for path in staged_paths)
+    assert store.list_snapshot_files(snapshot) == ("artifacts/measurement.bin",)
+    assert not tuple((root / ".viper" / "promotion").iterdir())
 
 
 def test_download_source_failure_prevents_consumer_process_start(
