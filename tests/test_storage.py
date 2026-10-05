@@ -349,6 +349,57 @@ def test_run_fetcher_reuses_verified_bytes_across_executions(
     assert fetches == [location]
 
 
+def test_run_fetcher_retains_cloud_service_across_files_and_snapshots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Share manifest caches within a backend while separating buckets and prefixes."""
+    created: list[tuple[str, str]] = []
+
+    class Remote:
+        def fetch(self, location):
+            return b"verified file"
+
+        def list_files(self, snapshot):
+            return (SnapshotFileRef(path="data.bin", sha256="a" * 64, bytes=13),)
+
+    def service(root, reference):
+        created.append((reference.bucket, reference.prefix))
+        return Remote()
+
+    monkeypatch.setattr("viper._source.ViperCloud.for_reference", service)
+    monkeypatch.setattr("viper._source.ViperCloud.for_snapshot", service)
+    fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
+    location = GcsFileRef(
+        bucket="first-bucket",
+        prefix="viper",
+        owner="machina",
+        workspace="models",
+        revision="a" * 64,
+        path="data.bin",
+    )
+    assert fetcher(location) == b"verified file"
+    assert (
+        fetcher(location.model_copy(update={"path": "other.bin"})) == b"verified file"
+    )
+    snapshot = GcsStageResultSnapshotRef(
+        bucket=location.bucket,
+        prefix=location.prefix,
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+    )
+    assert fetcher.list_snapshot_files(snapshot) == ("data.bin",)
+    assert created == [("first-bucket", "viper")]
+    fetcher(location.model_copy(update={"bucket": "second-bucket"}))
+    fetcher(location.model_copy(update={"prefix": "separate"}))
+    assert created == [
+        ("first-bucket", "viper"),
+        ("second-bucket", "viper"),
+        ("first-bucket", "separate"),
+    ]
+
+
 def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
