@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, runtime_checkable
 
 import yaml
@@ -121,6 +122,20 @@ __all__ = [
 ]
 
 
+@dataclass
+class _DownloadSourceRecords:
+    """Keep hash-verified producer records within one fixed-policy audit."""
+
+    runs: dict[ResolvedRunRef, tuple[ResolvedRun, RunSpec]] = field(
+        default_factory=dict
+    )
+    attempts: dict[tuple[ResolvedRunRef, ResolvedAttemptRef], RunAttempt] = field(
+        default_factory=dict
+    )
+    specs: dict[ResolvedFileRef, BaseSpec] = field(default_factory=dict)
+    results: dict[ResolvedFileRef, ResolvedBaseSpec] = field(default_factory=dict)
+
+
 def verify_download_source_closure(
     stage_id: StageId,
     stage: InternalSpec,
@@ -135,6 +150,36 @@ def verify_download_source_closure(
     fetcher: StorageFetcher | None = None,
 ) -> DownloadSourceClosureReceipt:
     """Prove that every transitive input ends at an immutable Download receipt."""
+    return _verify_download_source_closure(
+        stage_id,
+        stage,
+        run=run,
+        attempt_id=attempt_id,
+        resolved_inputs=resolved_inputs,
+        stage_specs=stage_specs,
+        completed_stages=completed_stages,
+        completed_results=completed_results,
+        policy=policy,
+        fetcher=fetcher,
+        records=_DownloadSourceRecords(),
+    )
+
+
+def _verify_download_source_closure(
+    stage_id: StageId,
+    stage: InternalSpec,
+    *,
+    run: RunSpec,
+    attempt_id: int,
+    resolved_inputs: Mapping[InputName, ResolvedInputRef],
+    stage_specs: Mapping[StageId, BaseSpec],
+    completed_stages: Mapping[StageId, ResolvedStageRef],
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+    records: _DownloadSourceRecords,
+) -> DownloadSourceClosureReceipt:
+    """Prove that every transitive input ends at an immutable Download receipt."""
     if not stage.inputs:
         raise VerificationError(
             f"stage {stage_id!r} has no inputs to prove download-rooted"
@@ -144,10 +189,10 @@ def verify_download_source_closure(
 
     spec_adapter = TypeAdapter(Spec)
     resolved_spec_adapter = TypeAdapter(ResolvedSpec)
-    selected_runs: dict[ResolvedRunRef, tuple[ResolvedRun, RunSpec]] = {}
-    parsed_specs: dict[ResolvedFileRef, BaseSpec] = {}
-    parsed_results: dict[ResolvedFileRef, ResolvedBaseSpec] = {}
-    selected_attempts: dict[tuple[ResolvedRunRef, ResolvedAttemptRef], RunAttempt] = {}
+    selected_runs = records.runs
+    parsed_specs = records.specs
+    parsed_results = records.results
+    selected_attempts = records.attempts
     selected_contexts: dict[
         tuple[ResolvedRunRef, ResolvedAttemptRef, StageId],
         tuple[
@@ -987,6 +1032,7 @@ def _verify_reused_stages(
     fetcher: StorageFetcher | None,
     ancestors: frozenset[str],
     verified_sources: dict[ResolvedRunRef, VerifiedRunResult],
+    download_records: _DownloadSourceRecords,
 ) -> dict[int, dict[StageId, StageReuseReceipt]]:
     """Follow and verify every reuse receipt in every recorded attempt."""
     receipts_by_attempt: dict[int, dict[StageId, StageReuseReceipt]] = {}
@@ -1025,6 +1071,7 @@ def _verify_reused_stages(
                     fetcher=fetcher,
                     ancestors=ancestors | {source_id},
                     verified_sources=verified_sources,
+                    download_records=download_records,
                 )
                 verified_sources[receipt.source_run] = source
             source_attempt_id = next(
@@ -1075,6 +1122,7 @@ def verify_run_result(
         fetcher=fetcher,
         ancestors=frozenset(),
         verified_sources={},
+        download_records=_DownloadSourceRecords(),
     )
 
 
@@ -2042,6 +2090,7 @@ def _verify_run_result(
     fetcher: StorageFetcher | None,
     ancestors: frozenset[str],
     verified_sources: dict[ResolvedRunRef, VerifiedRunResult],
+    download_records: _DownloadSourceRecords,
 ) -> VerifiedRunResult:
     """Verify one run while retaining the reuse chain already visited."""
     _verify_cloud_graph(resolved_run)
@@ -2140,7 +2189,7 @@ def _verify_run_result(
                 or resolved_stage.spec.input_roots != "download"
             ):
                 continue
-            rebuilt_closure = verify_download_source_closure(
+            rebuilt_closure = _verify_download_source_closure(
                 stage_id,
                 resolved_stage.spec,
                 run=plan.run,
@@ -2151,6 +2200,7 @@ def _verify_run_result(
                 completed_results=verified_stages,
                 policy=policy,
                 fetcher=fetcher,
+                records=download_records,
             )
             if rebuilt_closure != resolved_stage.download_source_closure:
                 raise VerificationError(
@@ -2204,6 +2254,7 @@ def _verify_run_result(
         fetcher=fetcher,
         ancestors=ancestors,
         verified_sources=verified_sources,
+        download_records=download_records,
     )
     reuse = (
         attempt_reuse.get(resolved_run.successful_attempt_id, {})

@@ -136,6 +136,7 @@ from viper.references import (
     StorageModel,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
+    storage_file,
 )
 from viper.resume import DataLoaderConfiguration
 from viper.reuse import (
@@ -4375,3 +4376,70 @@ def test_download_source_closure_decodes_shared_producer_records_once(
     assert all(roots[0].stage_id == "download" for roots in receipt.roots.values())
     assert decoded
     assert max(decoded.values()) == 1
+
+
+def test_download_source_records_are_shared_across_one_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse decoded producer stages while retaining both consumers' ancestry."""
+    store = DocumentStore()
+    producer, records = publish_producer_run(store, download_rooted=True)
+    producer_run = RunSpec.model_validate(
+        yaml.safe_load(store.fetch(records["run"].spec.stored_at))
+    )
+    producer_attempt = fetch_attempt(store, records["run"].attempts[0])
+    inputs: dict[str, StoredInputRef] = {}
+    resolved_inputs: dict[str, ResolvedStoredInputRef] = {}
+    for name, stage_id, artifact_name in (
+        ("prior", "train", TrainKeys.MODEL),
+        ("raw", "download", "dataset"),
+    ):
+        pointer = resolved_pointer(
+            store,
+            MAIN_SOURCE_COMMIT,
+            f".viper/pointers/{producer.sha256}/{stage_id}/{artifact_name}.pointer.yaml",
+            ArtifactPointer(
+                run=producer,
+                artifact=StageArtifactRef(
+                    stage_id=stage_id, artifact_name=artifact_name
+                ),
+            ),
+        )
+        inputs[name] = StoredInputRef(
+            pointer=pointer, path=f"inputs/{name}.bin", data_role="training"
+        )
+        resolved_inputs[name] = ResolvedStoredInputRef(pointer=pointer)
+    decoded: dict[bytes, int] = {}
+    parse = verification.parse_yaml_bytes
+
+    def observe_parse(raw: bytes) -> Any:
+        decoded[raw] = decoded.get(raw, 0) + 1
+        return parse(raw)
+
+    monkeypatch.setattr(verification, "parse_yaml_bytes", observe_parse)
+    cache = verification._DownloadSourceRecords()
+    for consumer in ("consumer_a", "consumer_b"):
+        receipt = verification._verify_download_source_closure(
+            consumer,
+            BuildSpec.model_construct(inputs=inputs),
+            run=RunSpec.model_construct(run_id="01ARZ3NDEKTSV4RRFFQ69G5FAF"),
+            attempt_id=1,
+            resolved_inputs=resolved_inputs,
+            stage_specs={},
+            completed_stages={},
+            completed_results={},
+            policy=POLICY,
+            fetcher=store.fetch,
+            records=cache,
+        )
+    assert set(receipt.roots) == {"prior", "raw"}
+    assert all(roots[0].stage_id == "download" for roots in receipt.roots.values())
+    assert decoded
+    for stage in producer_run.stages:
+        raw = store.fetch(storage_file(records["run"].spec.stored_at, stage.spec))
+        assert decoded[raw] == 1
+    for stage in producer_attempt.resolved_stages:
+        raw = store.fetch(
+            hf_file(snapshot_revision(stage.snapshot), stage.resolved_spec.path)
+        )
+        assert decoded[raw] == 1
