@@ -2608,6 +2608,82 @@ def test_download_source_closure_rejects_future_cycle() -> None:
         )
 
 
+def test_download_source_closure_visits_shared_ancestry_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bound a repeated diamond graph by its nodes while retaining all edges."""
+    store = DocumentStore()
+    _, records = publish_producer_run(store)
+    verified = verify_run_result(records["run"], policy=POLICY, fetcher=store.fetch)
+    references = {
+        stage.stage_id: stage for stage in verified.attempts[0].resolved_stages
+    }
+    specs = dict(verified.plan.stages)
+    results = dict(verified.resolved_stages)
+    template = results["train"]
+    assert isinstance(template, ResolvedTrainSpec)
+    previous = "download"
+    output_name = "dataset"
+    depth = 20
+    for level in range(depth):
+        stage_id = f"join_{level}"
+        stage_ref = references["train"].model_copy(update={"stage_id": stage_id})
+        spec = BuildSpec.model_construct(
+            inputs={
+                name: FutureInputRef(producer_stage_id=previous, name=output_name)
+                for name in ("left", "right")
+            },
+            outputs={"out": template.spec.outputs[TrainKeys.MODEL]},
+        )
+        result = ResolvedBuildSpec.model_construct(
+            spec=spec,
+            completion=template.completion,
+            inputs={
+                name: ResolvedFutureInputRef(producer=references[previous])
+                for name in ("left", "right")
+            },
+            artifacts={"out": template.artifacts[TrainKeys.MODEL]},
+        )
+        references[stage_id], specs[stage_id], results[stage_id] = (
+            stage_ref,
+            spec,
+            result,
+        )
+        previous, output_name = stage_id, "out"
+    consumer = BuildSpec.model_construct(
+        inputs={"source": FutureInputRef(producer_stage_id=previous, name="out")}
+    )
+    visited = 0
+    node_type = verification.DownloadSourceNode
+
+    def bounded_node(**fields: object) -> DownloadSourceNode:
+        nonlocal visited
+        visited += 1
+        if visited > 9 * depth:
+            pytest.fail("Shared ancestry was traversed repeatedly")
+        return node_type.model_validate(fields)
+
+    monkeypatch.setattr(verification, "DownloadSourceNode", bounded_node)
+    receipt = verification.verify_download_source_closure(
+        "consumer",
+        consumer,
+        run=verified.plan.run,
+        attempt_id=1,
+        resolved_inputs={
+            "source": ResolvedFutureInputRef(producer=references[previous])
+        },
+        stage_specs=specs,
+        completed_stages=references,
+        completed_results=results,
+        policy=POLICY,
+        fetcher=lambda _location: pytest.fail("closure fetched a payload"),
+    )
+    assert len(receipt.roots["source"]) == 1
+    assert receipt.roots["source"][0].stage_id == "download"
+    assert sum(edge.relation == "produced_from" for edge in receipt.edges) == 2 * depth
+    assert sum(edge.relation == "future" for edge in receipt.edges) == 2 * depth + 1
+
+
 def test_download_source_closure_rejects_cross_run_stored_cycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

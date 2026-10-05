@@ -6,11 +6,14 @@ import hashlib
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
+import torch
 import yaml
 from pydantic import HttpUrl, TypeAdapter
 
@@ -813,6 +816,51 @@ class FileVerificationTests(unittest.TestCase):
                 policy=POLICY,
                 fetcher=lambda _: loader_raw,
             )
+
+    def test_resume_state_loader_accepts_numpy_sampling_counters(self) -> None:
+        """Load a frozen weights-only callable over NumPy-backed resume bytes."""
+        loader_raw = (
+            b"import torch\n"
+            b"def load(path):\n"
+            b"    return torch.load(path, map_location='cpu', weights_only=True)\n"
+        )
+        base = train_spec()
+        outputs = dict(base.outputs)
+        outputs[TrainKeys.RESUME_STATE] = outputs[TrainKeys.RESUME_STATE].model_copy(
+            update={"loader": loader_ref("resume_state", loader_raw)}
+        )
+        spec = base.model_copy(
+            update={"outputs": type(base.outputs).model_validate(outputs)}
+        )
+        run, _ = run_spec([("train", spec)])
+        declaration = spec.outputs[TrainKeys.RESUME_STATE]
+        saved = resume_state()
+        saved.dataloader.state_dict["pool_seen"] = np.array([1, 0], dtype=np.int32)
+        buffer = BytesIO()
+        torch.save(saved.model_dump(mode="python"), buffer)
+        content = buffer.getvalue()
+        resolved = ResolvedSingleFileArtifact(
+            relative_path=declaration.relative_path,
+            file=SnapshotFileRef(
+                path=str(declaration.path),
+                sha256=sha256(content),
+                bytes=len(content),
+            ),
+        )
+        verified = VerifiedArtifact(
+            artifact=resolved,
+            data_role=declaration.data_role,
+            files=(VerifiedSnapshotFile(reference=resolved.file, content=content),),
+        )
+        validation = load_verified_artifact(
+            run,
+            declaration,
+            TrainKeys.RESUME_STATE,
+            verified,
+            policy=POLICY,
+            fetcher=lambda _: loader_raw,
+        )
+        self.assertEqual(validation.guarantee, "artifact.semantic.resume_state")
 
     def test_resume_state_must_match_run_dataloader(self) -> None:
         """Verify that resume state must match run dataloader."""

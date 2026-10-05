@@ -157,6 +157,9 @@ def verify_download_source_closure(
         ],
     ] = {}
     active: set[tuple[str, int, StageId, str, str]] = set()
+    completed: dict[
+        tuple[str, int, StageId, str, str], tuple[VerifiedDownloadSource, ...]
+    ] = {}
     nodes: dict[str, DownloadSourceNode] = {}
     edges: dict[tuple[str, str, str], DownloadSourceEdge] = {}
 
@@ -374,6 +377,8 @@ def verify_download_source_closure(
         )
         if key in active:
             raise VerificationError("download source graph contains a cycle")
+        if key in completed:
+            return completed[key]
         active.add(key)
         try:
             result = selected_results.get(producer_stage_id)
@@ -403,7 +408,7 @@ def verify_download_source_closure(
                     raise VerificationError(
                         "download source body differs from its artifact receipt"
                     )
-                return (
+                download_roots = (
                     VerifiedDownloadSource(
                         run_id=selected_run.run_id,
                         attempt_id=selected_attempt,
@@ -414,6 +419,8 @@ def verify_download_source_closure(
                         body=retrieval.body,
                     ),
                 )
+                completed[key] = download_roots
+                return download_roots
 
             if not isinstance(result, ResolvedInternalSpec) or not isinstance(
                 spec, InternalSpec
@@ -479,7 +486,7 @@ def verify_download_source_closure(
                     source_reference,
                 )
                 connect(reuse_node, source_output, "selects")
-                return walk_stage(
+                reused_roots = walk_stage(
                     selected_output,
                     selected_run=source_run,
                     selected_attempt=source_attempt_id,
@@ -488,6 +495,8 @@ def verify_download_source_closure(
                     selected_results=source_results,
                     producer_stage_id=producer_stage_id,
                 )
+                completed[key] = reused_roots
+                return reused_roots
             if not result.inputs:
                 raise VerificationError(
                     "download source internal producer has no transitive inputs"
@@ -524,7 +533,18 @@ def verify_download_source_closure(
                         consumer_stage_id=producer_stage_id,
                     )
                 )
-            return tuple(roots)
+            unique_roots = {
+                (
+                    root.run_id,
+                    root.attempt_id,
+                    root.stage_id,
+                    root.input_name,
+                    root.stage_receipt.resolved_spec.sha256,
+                ): root
+                for root in roots
+            }
+            completed[key] = tuple(unique_roots[name] for name in sorted(unique_roots))
+            return completed[key]
         finally:
             active.remove(key)
 

@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from . import keys
 from ._schema import ArtifactName
 from .artifacts import ArtifactLoaderRef
-from .resume import ResumeState
+from .resume import ResumeState, resume_state_load_context
 from .runs import RunSpec
 from .worker import ExecutionPolicy, WorkerRequest, execute_worker
 
@@ -139,10 +139,12 @@ def validate_artifact_context(
     context: ArtifactLoaderWorkerContext,
 ) -> ArtifactValidationResult:
     """Invoke one loader and apply the reserved validator when applicable."""
-    value = _load_artifact_value(context)
     if context.artifact_name == keys.Train.RESUME_STATE:
+        with resume_state_load_context():
+            value = _load_artifact_value(context)
         _validate_resume_state(value, context.run)
         return ArtifactValidationResult(guarantee="artifact.semantic.resume_state")
+    _load_artifact_value(context)
     return ArtifactValidationResult(guarantee="artifact.loadability")
 
 
