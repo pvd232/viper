@@ -18,6 +18,7 @@ from ..artifacts import ArtifactPointer
 from ..benchmark import BenchmarkResult, BenchmarkSpec
 from ..cloud import ViperCloud
 from ..evidence import VerificationPolicy
+from ..inputs import DownloadSourceClosureReceipt
 from ..metrics import MetricVerificationReceipt
 from ..references import (
     CloudStageResultSnapshotRef,
@@ -80,6 +81,7 @@ class _RunGraphPromoter:
             dict[str, BaseModel],
         ] = {}
         self.promoting: set[LocalStageResultSnapshotRef] = set()
+        self.receipt_hashes: dict[str, str] = {}
 
     @staticmethod
     def snapshot_for(location: LocalFileRef) -> LocalStageResultSnapshotRef:
@@ -423,10 +425,67 @@ class _RunGraphPromoter:
         )
         if len(matches) != 1:
             raise RunPromotionError("source run graph is unavailable")
+        self.receipt_hashes[value.resolved_spec.sha256] = matches[0].sha256
         return ResolvedStageRef(
             stage_id=value.stage_id,
             snapshot=promoted_snapshot,
             resolved_spec=matches[0],
+        )
+
+    def _rewrite_source_node_id(self, node_id: str) -> str:
+        """Replace only receipt hashes in canonical source-graph identities."""
+        if node_id.startswith(("pointer:", "reuse:")):
+            kind, digest = node_id.split(":", 1)
+            return f"{kind}:{self.receipt_hashes.get(digest, digest)}"
+        prefix, separator, suffix = node_id.partition("/receipt:")
+        if not separator:
+            return node_id
+        digest, slash, direction = suffix.partition("/")
+        return (
+            f"{prefix}{separator}{self.receipt_hashes.get(digest, digest)}"
+            f"{slash}{direction}"
+        )
+
+    def _rewrite_source_closure(
+        self, value: DownloadSourceClosureReceipt
+    ) -> DownloadSourceClosureReceipt:
+        """Keep source-graph links aligned with promoted immutable receipts."""
+        roots = {
+            name: tuple(
+                sorted(
+                    (self.rewrite_typed(root) for root in selected),
+                    key=lambda root: (
+                        root.run_id,
+                        root.attempt_id,
+                        root.stage_id,
+                        root.input_name,
+                        root.stage_receipt.resolved_spec.sha256,
+                    ),
+                )
+            )
+            for name, selected in value.roots.items()
+        }
+        nodes = {
+            rewritten: node.model_copy(update={"node_id": rewritten})
+            for node in value.nodes
+            for rewritten in (self._rewrite_source_node_id(node.node_id),)
+        }
+        edges = {
+            (source, target, edge.relation): edge.model_copy(
+                update={"source": source, "target": target}
+            )
+            for edge in value.edges
+            for source, target in (
+                (
+                    self._rewrite_source_node_id(edge.source),
+                    self._rewrite_source_node_id(edge.target),
+                ),
+            )
+        }
+        return DownloadSourceClosureReceipt(
+            roots=roots,
+            nodes=tuple(nodes[key] for key in sorted(nodes)),
+            edges=tuple(edges[key] for key in sorted(edges)),
         )
 
     def rewrite_typed(self, value: Any) -> Any:
@@ -435,11 +494,15 @@ class _RunGraphPromoter:
             return self.promote_stage_reference(value)
         if isinstance(value, ResolvedFileRef):
             promoted = self.promote_reference(value)
+            if isinstance(value, (ResolvedArtifactPointerRef, ResolvedStageReuseRef)):
+                self.receipt_hashes[value.sha256] = promoted.sha256
             payload = value.model_dump(mode="python")
             payload.update(promoted.model_dump(mode="python"))
             return type(value).model_validate(payload)
         if isinstance(value, LocalStageResultSnapshotRef):
             return self.promote_snapshot(value)
+        if isinstance(value, DownloadSourceClosureReceipt):
+            return self._rewrite_source_closure(value)
         if isinstance(value, BaseModel):
             updates = {
                 name: self.rewrite_typed(getattr(value, name))

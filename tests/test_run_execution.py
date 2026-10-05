@@ -44,6 +44,7 @@ from viper.artifacts import (
 )
 from viper.authoring import (
     FrozenPlanFiles,
+    download,
     experiment,
     freeze_run_plan,
     plan,
@@ -110,7 +111,7 @@ from viper.metrics import (
 from viper.metrics import (
     min as minimize,
 )
-from viper.outputs import OutputSpec, output
+from viper.outputs import OutputSpec, StageOutputs, output
 from viper.references import (
     GcsFileRef,
     GitFileRef,
@@ -1707,8 +1708,9 @@ def _freeze_retry_plan(
     *,
     download_rooted: bool = False,
     cloud_native: bool = False,
+    download_source: tuple[str, int] | None = None,
 ) -> FrozenPlanFiles:
-    """Freeze a two-stage plan whose second stage has a configurable failure budget."""
+    """Freeze a retry graph with an optional HTTP Download root."""
     root.mkdir(exist_ok=True)
     run_git(root, "init", "--quiet")
     run_git(root, "config", "user.email", "viper@example.com")
@@ -1778,8 +1780,26 @@ def _freeze_retry_plan(
     assert module_spec is not None and module_spec.loader is not None
     module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
+    downloaded = None
+    if download_source is not None:
+        host, port = download_source
+        downloaded = download(
+            inputs={
+                "prior": http_request(url=f"http://{host}:{port}/prior", body=b"prior")
+            },
+            outputs=StageOutputs.model_validate(
+                {
+                    "prior": output(
+                        path="prior.bin", loader=module.load, data_role="training"
+                    )
+                }
+            ),
+            policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
+        )
     prepared = stage(
         module.prepare,
+        inputs={} if downloaded is None else {"prior": downloaded.outputs["prior"]},
+        input_roots="any" if downloaded is None else "download",
         outputs={  # pyright: ignore[reportArgumentType]
             "features": output(
                 path="features.bin",
@@ -1798,14 +1818,18 @@ def _freeze_retry_plan(
                 data_role="training",
             )
         },
-        input_roots="download" if download_rooted else "any",
+        input_roots="download" if download_rooted or downloaded is not None else "any",
     )
     authored = experiment(
         experiment_id="retry",
         variants={
             "baseline": variant(
                 levels={},
-                stages={"prepare": prepared, "embed": embedded},
+                stages={
+                    **({} if downloaded is None else {"download": downloaded}),
+                    "prepare": prepared,
+                    "embed": embedded,
+                },
                 estimator=embedded.outputs["embedding"],
             )
         },
@@ -2145,13 +2169,18 @@ def test_cloud_native_retry_replaces_the_verified_terminal_reference(
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
+@pytest.mark.parametrize("download_rooted", (False, True))
 def test_explicit_cloud_promotion_preserves_local_run_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    http_source: tuple[str, int],
+    download_rooted: bool,
 ) -> None:
-    """Promote one completed local graph without rerunning either stage."""
+    """Promote a completed graph and its source links without rerunning stages."""
     root = tmp_path / "project"
-    frozen = _freeze_retry_plan(root)
+    frozen = _freeze_retry_plan(
+        root, download_source=http_source if download_rooted else None
+    )
     with pytest.raises(RunError, match="attempt 1 failed"):
         execute_run(frozen.files[-1], repository_root=root)
     result = execute_retry(root, frozen.files[-1])
