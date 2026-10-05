@@ -44,11 +44,13 @@ from viper.artifacts import (
 )
 from viper.authoring import (
     FrozenPlanFiles,
+    RunArtifactDraft,
     download,
     experiment,
     freeze_run_plan,
     plan,
     replicate,
+    run_artifact,
     stage,
     variant,
 )
@@ -1709,6 +1711,7 @@ def _freeze_retry_plan(
     download_rooted: bool = False,
     cloud_native: bool = False,
     download_source: tuple[str, int] | None = None,
+    stored_prior: RunArtifactDraft | None = None,
 ) -> FrozenPlanFiles:
     """Freeze a retry graph with an optional HTTP Download root."""
     root.mkdir(exist_ok=True)
@@ -1798,7 +1801,13 @@ def _freeze_retry_plan(
         )
     prepared = stage(
         module.prepare,
-        inputs={} if downloaded is None else {"prior": downloaded.outputs["prior"]},
+        inputs=(
+            {"prior": stored_prior}
+            if stored_prior is not None
+            else {}
+            if downloaded is None
+            else {"prior": downloaded.outputs["prior"]}
+        ),
         input_roots="any" if downloaded is None else "download",
         outputs={  # pyright: ignore[reportArgumentType]
             "features": output(
@@ -2219,6 +2228,73 @@ def test_explicit_cloud_promotion_preserves_local_run_mode(
         (root / "build_calls.txt").read_text(encoding="utf-8"),
         (root / "embed_calls.txt").read_text(encoding="utf-8"),
     ) == calls_before
+
+
+def test_cloud_promotion_rebinds_reuse_key_for_stored_pointer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify promoted reuse when a local input pointer's document hash changes."""
+    producer_root = tmp_path / "producer"
+    producer_plan = _freeze_retry_plan(producer_root)
+    with pytest.raises(RunError):
+        execute_attempt(
+            producer_root, producer_plan.files[-1], plan=producer_plan.reference
+        )
+    producer = execute_retry(producer_root, producer_plan.files[-1])
+    root = tmp_path / "consumer"
+    frozen = _freeze_retry_plan(
+        root,
+        stored_prior=run_artifact(
+            producer.reference,
+            StageArtifactRef(stage_id="prepare", artifact_name="features"),
+            path="inputs/raw/prior.bin",
+            data_role="training",
+        ),
+    )
+    run_git(root, "fetch", "--quiet", str(producer_root), "HEAD")
+    with pytest.raises(RunError):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+    result = execute_retry(root, frozen.files[-1])
+    calls_before = (root / "build_calls.txt").read_bytes()
+    local = verify_run_result(
+        result.record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
+    )
+    assert "prepare" in local.reuse
+    (root / "viper.toml").write_text(
+        "[workspace]\nschema_version = 2\n"
+        '[viper_cloud]\nprovider = "gcs"\nbucket = "test-bucket"\n'
+    )
+    provider = InMemoryViperCloudProvider(root)
+    cloud = install_in_memory_cloud(monkeypatch, root, provider)
+    monkeypatch.setattr(
+        "viper.execution._promotion.ViperCloud", lambda selected_root, repository: cloud
+    )
+    promoted = execution_module.promote_run_to_cloud(
+        root,
+        result.reference,
+        ViperCloudDestination(owner="machina", workspace="models"),
+    )
+    assert isinstance(promoted.stored_at, GcsFileRef)
+    record = ResolvedRun.model_validate(
+        parse_yaml_bytes(cloud.fetch(promoted.stored_at))
+    )
+    verified = verify_run_result(
+        record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
+    )
+    old_key = local.reuse["prepare"].key
+    new_key = verified.reuse["prepare"].key
+    assert old_key.stage_sha256 != new_key.stage_sha256
+    assert old_key.model_copy(update={"stage_sha256": new_key.stage_sha256}) == new_key
+    assert (root / "build_calls.txt").read_bytes() == calls_before == b"1\n"
+    assert (
+        local.resolved_stages["prepare"].artifacts
+        == verified.resolved_stages["prepare"].artifacts
+    )
 
 
 def test_explicit_cloud_promotion_rejects_missing_source_bytes(

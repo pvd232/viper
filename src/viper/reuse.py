@@ -385,13 +385,18 @@ def build_stage_reuse_key(
     selected_metrics = tuple(metrics[metric_id] for metric_id in stage.metric_ids)
     return StageReuseKey(
         stage_id=stage_id,
-        stage_sha256=_canonical_sha256(_normalized_stage(stage)),
+        stage_sha256=stage_spec_sha256(stage),
         inputs=tuple(sorted(inputs, key=lambda item: item.input_name)),
         seed=seed,
         env_sha256=_canonical_sha256(_normalized_environment(env, lockfile)),
         reproducibility_sha256=_canonical_sha256(reproducibility),
         metric_sha256s=tuple(_canonical_sha256(metric) for metric in selected_metrics),
     )
+
+
+def stage_spec_sha256(stage: _ParameterizedStage) -> SHA256:
+    """Hash the normalized stage definition, including stored pointer identities."""
+    return _canonical_sha256(_normalized_stage(stage))
 
 
 def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:
