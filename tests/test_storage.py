@@ -12,7 +12,7 @@ from viper import execution
 from viper._cloud import GcsRepository, ViperCloudProvider, manifest_revision
 from viper._schema import SHA256, RepoRelPath
 from viper._source import RunFetcher
-from viper._verification.storage import read_resolved_file
+from viper._verification.storage import read_resolved_file, read_snapshot_file
 from viper.artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
 from viper.cloud import ViperCloud
 from viper.evidence import VerificationError, VerificationPolicy
@@ -386,6 +386,73 @@ def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     )
     assert cache_path.read_bytes() == payload
     assert fetches == [location, location]
+
+
+@pytest.mark.parametrize("corrupt_cache", [False, True])
+def test_snapshot_reads_reuse_verified_cache_across_executions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    corrupt_cache: bool,
+) -> None:
+    """Fetch GCS snapshot metadata once, or refetch if its cached identity changes."""
+    payload = b"immutable stage metadata"
+    snapshot = GcsStageResultSnapshotRef(
+        bucket="example-evidence",
+        prefix="viper",
+        owner="example",
+        workspace="study",
+        revision="a" * 64,
+    )
+    reference = SnapshotFileRef(
+        path="stages/build/resolved.yaml",
+        sha256=hashlib.sha256(payload).hexdigest(),
+        bytes=len(payload),
+    )
+    fetches: list[GcsFileRef] = []
+
+    class Remote:
+        """Count the cloud requests made for the fixture's stage snapshot."""
+
+        def fetch(self, location: GcsFileRef) -> bytes:
+            """Return the original metadata from the simulated cloud store."""
+            fetches.append(location)
+            return payload
+
+    remote = Remote()
+    monkeypatch.setattr(
+        ViperCloud,
+        "for_reference",
+        classmethod(lambda cls, root, reference: remote),
+    )
+    store = LocalArtifactStore(tmp_path)
+    assert (
+        read_snapshot_file(
+            snapshot,
+            reference,
+            fetcher=RunFetcher(tmp_path, store, CONSUMER_REPOSITORY),
+        )
+        == payload
+    )
+    cache = (
+        tmp_path
+        / ".viper/cache/verified-objects"
+        / reference.sha256[:2]
+        / reference.sha256
+    )
+    if corrupt_cache:
+        cache.write_bytes(b"changed metadata")
+    assert (
+        read_snapshot_file(
+            snapshot,
+            reference,
+            fetcher=RunFetcher(tmp_path, store, CONSUMER_REPOSITORY),
+        )
+        == payload
+    )
+    assert len(fetches) == (2 if corrupt_cache else 1)
+    assert cache.read_bytes() == payload
+    assert all(location.revision == snapshot.revision for location in fetches)
+    assert all(location.path == reference.path for location in fetches)
 
 
 def test_run_fetcher_does_not_duplicate_local_store_objects(tmp_path: Path) -> None:
