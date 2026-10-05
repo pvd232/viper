@@ -23,7 +23,7 @@ class UniqueKeySafeLoader(yaml.SafeLoader):
 
 
 def _construct_unique_mapping(
-    loader: UniqueKeySafeLoader,
+    loader: yaml.SafeLoader | yaml.CSafeLoader,
     node: MappingNode,
     deep: bool = False,
 ) -> dict[Any, Any]:
@@ -45,6 +45,18 @@ UniqueKeySafeLoader.add_constructor(
     BaseResolver.DEFAULT_MAPPING_TAG,
     _construct_unique_mapping,
 )
+
+_YAML_LOADER: type[yaml.SafeLoader] | type[yaml.CSafeLoader] = UniqueKeySafeLoader
+if yaml.__with_libyaml__:
+
+    class _UniqueKeyCSafeLoader(yaml.CSafeLoader):
+        """Parse safe YAML with LibYAML while retaining duplicate-key rejection."""
+
+    _UniqueKeyCSafeLoader.add_constructor(
+        BaseResolver.DEFAULT_MAPPING_TAG,
+        _construct_unique_mapping,
+    )
+    _YAML_LOADER = _UniqueKeyCSafeLoader
 
 _SPEC_ADAPTER = TypeAdapter(Spec)
 _RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
@@ -117,7 +129,7 @@ def parse_yaml_bytes(raw: bytes) -> Any:
     """Parse YAML bytes while rejecting duplicate mapping keys."""
     if not isinstance(raw, bytes):
         raise TypeError("YAML content must be bytes")
-    return yaml.load(raw, Loader=UniqueKeySafeLoader)
+    return yaml.load(raw, Loader=_YAML_LOADER)
 
 
 def _load_yaml(path: Path) -> Any:

@@ -69,7 +69,11 @@ from viper.runs import (
 )
 from viper.runtime import CUDABackendContext, ReproducibilitySpec
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
-from viper.serialization import load_stage_spec, semantic_document_digest
+from viper.serialization import (
+    load_stage_spec,
+    parse_yaml_bytes,
+    semantic_document_digest,
+)
 from viper.stages import (
     DownloadSpec,
     ParameterizedSpec,
@@ -1190,6 +1194,29 @@ class ArtifactAndVariantTests(unittest.TestCase):
 
 class YAMLLoadingTests(unittest.TestCase):
     """Verify canonical examples and YAML parsing boundaries."""
+
+    def test_safe_parser_preserves_nested_values_and_aliases(self) -> None:
+        """Keep scalar interpretation and aliases identical to the safe YAML parser."""
+        raw = (
+            b"base: &base [1, null, true, 1.25, '0123']\ncopy: *base\n"
+            b"nested: {date: 2026-10-05, value: [x, y]}\n"
+        )
+        self.assertEqual(parse_yaml_bytes(raw), yaml.safe_load(raw))
+
+    def test_safe_parser_rejects_object_construction(self) -> None:
+        """Reject executable YAML tags with the native and Python parser backends."""
+        with self.assertRaises(yaml.constructor.ConstructorError):
+            parse_yaml_bytes(b"!!python/object/apply:builtins.eval ['1 + 1']\n")
+
+    def test_safe_parser_rejects_duplicate_nested_and_merged_keys(self) -> None:
+        """Preserve duplicate rejection after expanding YAML merge aliases."""
+        for raw in (
+            b"nested: {value: 1, value: 2}\n",
+            b"base: &base {value: 1}\nnested: {<<: *base, value: 2}\n",
+        ):
+            with self.subTest(raw=raw):
+                with self.assertRaisesRegex(ValueError, "duplicate YAML key"):
+                    parse_yaml_bytes(raw)
 
     def test_download_stage_fixture_loads(self) -> None:
         """Load the canonical download-stage parser fixture."""
