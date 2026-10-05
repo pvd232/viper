@@ -4322,3 +4322,56 @@ def test_benchmark_accepts_reused_evaluation_without_new_measurement() -> None:
     )
     benchmark = verify_benchmark_result(updated, policy=POLICY, fetcher=store.fetch)
     assert benchmark.result.metrics[0].matched
+
+
+def test_download_source_closure_decodes_shared_producer_records_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Decode each immutable stage once across two branches of one producer."""
+    store = DocumentStore()
+    producer, _ = publish_producer_run(store, download_rooted=True)
+    inputs: dict[str, StoredInputRef] = {}
+    resolved_inputs: dict[str, ResolvedStoredInputRef] = {}
+    for name, stage_id, artifact_name in (
+        ("prior", "train", TrainKeys.MODEL),
+        ("raw", "download", "dataset"),
+    ):
+        pointer = resolved_pointer(
+            store,
+            MAIN_SOURCE_COMMIT,
+            f".viper/pointers/{producer.sha256}/{stage_id}/{artifact_name}.pointer.yaml",
+            ArtifactPointer(
+                run=producer,
+                artifact=StageArtifactRef(
+                    stage_id=stage_id, artifact_name=artifact_name
+                ),
+            ),
+        )
+        inputs[name] = StoredInputRef(
+            pointer=pointer, path=f"inputs/{name}.bin", data_role="training"
+        )
+        resolved_inputs[name] = ResolvedStoredInputRef(pointer=pointer)
+    decoded: dict[bytes, int] = {}
+    parse = verification.parse_yaml_bytes
+
+    def observe_parse(raw: bytes) -> Any:
+        decoded[raw] = decoded.get(raw, 0) + 1
+        return parse(raw)
+
+    monkeypatch.setattr(verification, "parse_yaml_bytes", observe_parse)
+    receipt = verification.verify_download_source_closure(
+        "consumer",
+        BuildSpec.model_construct(inputs=inputs),
+        run=RunSpec.model_construct(run_id="01ARZ3NDEKTSV4RRFFQ69G5FAF"),
+        attempt_id=1,
+        resolved_inputs=resolved_inputs,
+        stage_specs={},
+        completed_stages={},
+        completed_results={},
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+    assert set(receipt.roots) == {"prior", "raw"}
+    assert all(roots[0].stage_id == "download" for roots in receipt.roots.values())
+    assert decoded
+    assert max(decoded.values()) == 1
