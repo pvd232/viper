@@ -11,7 +11,8 @@ from pydantic import HttpUrl, ValidationError
 from viper import execution
 from viper._cloud import GcsRepository, ViperCloudProvider, manifest_revision
 from viper._schema import SHA256, RepoRelPath
-from viper._verification.storage import read_resolved_file
+from viper._source import RunFetcher
+from viper._verification.storage import read_resolved_file, read_snapshot_file
 from viper.artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
 from viper.cloud import ViperCloud
 from viper.evidence import VerificationError, VerificationPolicy
@@ -22,7 +23,6 @@ from viper.execution._restore import (
     _PlannedFile,
     _restore_files,
 )
-from viper.execution._source import RunFetcher
 from viper.execution.errors import RestoreError, RunError
 from viper.gcs import GcsProgressEvent
 from viper.ids import HumanId
@@ -228,7 +228,7 @@ def test_run_fetcher_reuses_one_external_git_file_within_an_execution(
         fetched.append(location)
         return b"source"
 
-    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
     fetcher = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),
@@ -256,8 +256,8 @@ def test_run_fetcher_does_not_retain_an_external_git_file_over_its_budget(
         fetched.append(location)
         return b"checkpoint"
 
-    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
-    monkeypatch.setattr("viper.execution._source._MAX_EXTERNAL_GIT_CACHE_BYTES", 5)
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
+    monkeypatch.setattr("viper._source._MAX_EXTERNAL_GIT_CACHE_BYTES", 5)
     fetcher = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),
@@ -288,7 +288,7 @@ def test_run_fetcher_reuses_one_checkout_for_files_from_the_same_commit(
         checkouts.append(checkout)
         return str(location.path).encode()
 
-    monkeypatch.setattr("viper.execution._source.fetch_git_file_bytes", fetch)
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
     fetcher = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),
@@ -349,6 +349,57 @@ def test_run_fetcher_reuses_verified_bytes_across_executions(
     assert fetches == [location]
 
 
+def test_run_fetcher_retains_cloud_service_across_files_and_snapshots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Share manifest caches within a backend while separating buckets and prefixes."""
+    created: list[tuple[str, str]] = []
+
+    class Remote:
+        def fetch(self, location):
+            return b"verified file"
+
+        def list_files(self, snapshot):
+            return (SnapshotFileRef(path="data.bin", sha256="a" * 64, bytes=13),)
+
+    def service(root, reference):
+        created.append((reference.bucket, reference.prefix))
+        return Remote()
+
+    monkeypatch.setattr("viper._source.ViperCloud.for_reference", service)
+    monkeypatch.setattr("viper._source.ViperCloud.for_snapshot", service)
+    fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
+    location = GcsFileRef(
+        bucket="first-bucket",
+        prefix="viper",
+        owner="machina",
+        workspace="models",
+        revision="a" * 64,
+        path="data.bin",
+    )
+    assert fetcher(location) == b"verified file"
+    assert (
+        fetcher(location.model_copy(update={"path": "other.bin"})) == b"verified file"
+    )
+    snapshot = GcsStageResultSnapshotRef(
+        bucket=location.bucket,
+        prefix=location.prefix,
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+    )
+    assert fetcher.list_snapshot_files(snapshot) == ("data.bin",)
+    assert created == [("first-bucket", "viper")]
+    fetcher(location.model_copy(update={"bucket": "second-bucket"}))
+    fetcher(location.model_copy(update={"prefix": "separate"}))
+    assert created == [
+        ("first-bucket", "viper"),
+        ("second-bucket", "viper"),
+        ("first-bucket", "separate"),
+    ]
+
+
 def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -386,6 +437,73 @@ def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     )
     assert cache_path.read_bytes() == payload
     assert fetches == [location, location]
+
+
+@pytest.mark.parametrize("corrupt_cache", [False, True])
+def test_snapshot_reads_reuse_verified_cache_across_executions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    corrupt_cache: bool,
+) -> None:
+    """Fetch GCS snapshot metadata once, or refetch if its cached identity changes."""
+    payload = b"immutable stage metadata"
+    snapshot = GcsStageResultSnapshotRef(
+        bucket="example-evidence",
+        prefix="viper",
+        owner="example",
+        workspace="study",
+        revision="a" * 64,
+    )
+    reference = SnapshotFileRef(
+        path="stages/build/resolved.yaml",
+        sha256=hashlib.sha256(payload).hexdigest(),
+        bytes=len(payload),
+    )
+    fetches: list[GcsFileRef] = []
+
+    class Remote:
+        """Count the cloud requests made for the fixture's stage snapshot."""
+
+        def fetch(self, location: GcsFileRef) -> bytes:
+            """Return the original metadata from the simulated cloud store."""
+            fetches.append(location)
+            return payload
+
+    remote = Remote()
+    monkeypatch.setattr(
+        ViperCloud,
+        "for_reference",
+        classmethod(lambda cls, root, reference: remote),
+    )
+    store = LocalArtifactStore(tmp_path)
+    assert (
+        read_snapshot_file(
+            snapshot,
+            reference,
+            fetcher=RunFetcher(tmp_path, store, CONSUMER_REPOSITORY),
+        )
+        == payload
+    )
+    cache = (
+        tmp_path
+        / ".viper/cache/verified-objects"
+        / reference.sha256[:2]
+        / reference.sha256
+    )
+    if corrupt_cache:
+        cache.write_bytes(b"changed metadata")
+    assert (
+        read_snapshot_file(
+            snapshot,
+            reference,
+            fetcher=RunFetcher(tmp_path, store, CONSUMER_REPOSITORY),
+        )
+        == payload
+    )
+    assert len(fetches) == (2 if corrupt_cache else 1)
+    assert cache.read_bytes() == payload
+    assert all(location.revision == snapshot.revision for location in fetches)
+    assert all(location.path == reference.path for location in fetches)
 
 
 def test_run_fetcher_does_not_duplicate_local_store_objects(tmp_path: Path) -> None:
@@ -836,6 +954,97 @@ def test_cloud_fetcher_streams_one_verified_path_per_execution(
     assert first == second
     assert first.read_bytes() == raw
     assert client.fetch_to_path_calls == [location]
+
+
+def test_cloud_fetcher_rejects_corrupt_verified_cache_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rehash a cross-execution cache hit before returning its local path."""
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
+    raw = b"large artifact"
+    location = GcsFileRef(
+        bucket=client.bucket,
+        prefix=client.prefix,
+        owner="machina",
+        workspace="weekend_models",
+        revision="1" * 64,
+        path="runs/example/large.bin",
+    )
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=location,
+    )
+    client.upload(
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+        path=location.path,
+        source=raw,
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+    )
+    client.seal(
+        owner=location.owner,
+        workspace=location.workspace,
+        revision=location.revision,
+        files=(
+            SnapshotFileRef(
+                path=location.path,
+                sha256=reference.sha256,
+                bytes=reference.bytes,
+            ),
+        ),
+    )
+    first = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        CONSUMER_REPOSITORY,
+    ).read_verified_path(reference)
+    first.write_bytes(b"wrong artifact")
+
+    repaired = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        CONSUMER_REPOSITORY,
+    ).read_verified_path(reference)
+
+    assert repaired.read_bytes() == raw
+    assert client.fetch_to_path_calls == [location, location]
+
+
+def test_run_fetcher_reuses_remembered_verified_path_for_cloud_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse a just-published local file without restoring it from cloud."""
+    client = InMemoryViperCloudProvider(tmp_path)
+    install_in_memory_cloud(monkeypatch, tmp_path, client)
+    raw = b"published artifact"
+    source = tmp_path / "outputs/artifact.bin"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(raw)
+    location = GcsFileRef(
+        bucket=client.bucket,
+        prefix=client.prefix,
+        owner="machina",
+        workspace="weekend_models",
+        revision="2" * 64,
+        path="runs/example/artifact.bin",
+    )
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=location,
+    )
+    fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
+
+    fetcher.remember_verified_path(reference, source)
+
+    assert fetcher.read_verified_path(reference) == source
+    assert client.fetch_to_path_calls == []
 
 
 def test_execution_fetcher_trusts_sealed_local_payload_until_strict_verification(

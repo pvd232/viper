@@ -85,9 +85,7 @@ journal_path = Path("<JOURNAL_PATH>")
 trusted = frozenset({str(read_source(root).repository)})
 print(attempt_status(journal_path).state)
 graph = api.lineage(
-    api.LineageRequest(
-        root=root, path=run_path, trusted_source_repositories=trusted
-    )
+    api.LineageRequest(root=root, path=run_path, trusted_source_repositories=trusted)
 )
 for edge in graph.edges:
     print(edge)
@@ -105,13 +103,19 @@ from viper import api
 from viper.repository import read_source, resolve_root
 
 root = resolve_root()
-baseline_path = root / "experiments/cpu_quickstart/runs/baseline/<FIRST_RUN_ID>/resolved.yaml"
-candidate_path = root / "experiments/cpu_quickstart/runs/baseline/<SECOND_RUN_ID>/resolved.yaml"
+baseline_path = (
+    root / "experiments/cpu_quickstart/runs/baseline/<FIRST_RUN_ID>/resolved.yaml"
+)
+candidate_path = (
+    root / "experiments/cpu_quickstart/runs/baseline/<SECOND_RUN_ID>/resolved.yaml"
+)
 trusted = frozenset({str(read_source(root).repository)})
 comparison = api.compare_runs(
     api.CompareRunsRequest(
-        left_root=root, right_root=root,
-        left_path=baseline_path, right_path=candidate_path,
+        left_root=root,
+        right_root=root,
+        left_path=baseline_path,
+        right_path=candidate_path,
         trusted_source_repositories=trusted,
     )
 )
@@ -124,6 +128,24 @@ different IDs and timestamps even when their artifact bytes match. Inspect the
 artifact digests when comparing the produced files.
 
 The [CLI reference](../reference/cli.md) documents equivalent terminal commands.
+
+## Export portable evidence
+
+Run the complete [export program](../../examples/export_run.py):
+
+```bash
+python -m examples.export_run
+```
+
+The program trains once, calls `execution.export_run()` with the saved result
+path and explicit source trust, then calls `execution.verify_run_bundle()` with
+the returned `bundle_path` and `manifest_sha256`. Verification uses the exported
+files rather than the original workspace or immutable store. Neither operation
+executes the training stage again. Preserve the manifest digest separately when
+transferring a bundle so the recipient can check the expected identity.
+
+The export result exposes `bundle_path`, `manifest_path`, `manifest_sha256`,
+`file_count`, and `total_bytes`; it is not a `RunResult` and has no `.path` property.
 
 ## Resume training from a checkpoint
 
@@ -156,7 +178,10 @@ from torch.utils.data import TensorDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from viper.resume import (
-    capture_resume_state, load_resume_state, restore_resume_state, save_resume_state,
+    capture_resume_state,
+    load_resume_state,
+    restore_resume_state,
+    save_resume_state,
 )
 
 
@@ -195,7 +220,10 @@ with TemporaryDirectory() as directory:
     resumed_loader = make_loader()
     resumed_model.load_state_dict(torch.load(model_path, weights_only=True))
     restore_resume_state(
-        load_resume_state(state_path), resumed_optimizer, resumed_loader, {},
+        load_resume_state(state_path),
+        resumed_optimizer,
+        resumed_loader,
+        {},
     )
     actual_batch = next(iter(resumed_loader))[0]
     assert torch.equal(actual_batch, expected_batch)

@@ -64,6 +64,7 @@ from viper.outputs import TrainOutputs, output
 from viper.randomness import capture_main_process_rng
 from viper.references import GitFileRef
 from viper.repository import read_source
+from viper.restoration import ArtifactRestoreSelector
 from viper.resume import (
     DataLoaderConfiguration,
     DataLoaderResumeState,
@@ -224,7 +225,13 @@ def main() -> None:
         env=environment,
     )
     resolved_run = execution.run(draft)
-    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+    restored = execution.restore(
+        Path.cwd(),
+        resolved_run.reference,
+        artifacts=(ArtifactRestoreSelector(stage_id="train", artifact_name="model"),),
+        output=Path.cwd() / "restored" / f"{draft.run_id}.json",
+    )
+    model_path = restored.artifacts[0].files[0].path
     print(f"status: {resolved_run.status}")
     print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
     print(f"result: {resolved_run.path}")

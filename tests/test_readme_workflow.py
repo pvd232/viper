@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,10 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
         "stages.py",
         "download_training.py",
         "recovery.py",
+        "reuse.py",
+        "knowledge_search.py",
+        "export_run.py",
+        "journal_search.py",
     ),
 )
 def test_extended_examples_execute_complete_workflows(
@@ -61,6 +67,7 @@ def test_extended_examples_execute_complete_workflows(
         "variants.py": "docs/how-to/variants-and-replicates.md",
         "inspect_results.py": "docs/tutorials/inspect-results.md",
         "stages.py": "docs/tutorials/stages.md",
+        "knowledge_search.py": "docs/tutorials/knowledge-search.md",
     }
     if example in documents:
         # Execute the code readers copy, including its imports and main().
@@ -102,7 +109,34 @@ def test_extended_examples_execute_complete_workflows(
         timeout=240,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    if example == "variants.py":
+    if example == "reuse.py":
+        assert "first: succeeded; reused stages: 0" in completed.stdout
+        assert "default: succeeded; reused stages: 1" in completed.stdout
+        assert "forced: succeeded; reused stages: 0" in completed.stdout
+        assert "All three model files have identical bytes." in completed.stdout
+    elif example == "knowledge_search.py":
+        assert "observations: 1" in completed.stdout
+        assert "similarity matches: 1" in completed.stdout
+        assert "The measured run remains indexed" in completed.stdout
+        with closing(sqlite3.connect(root / ".viper/catalog.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+            assert (
+                connection.execute("SELECT COUNT(*) FROM stage_reuse_keys").fetchone()[
+                    0
+                ]
+                > 0
+            )
+    elif example == "journal_search.py":
+        assert "captured passages: 5" in completed.stdout
+        assert (
+            "encoder revision: 97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+            in completed.stdout
+        )
+    elif example == "export_run.py":
+        assert "bundle:" in completed.stdout
+        assert "manifest:" in completed.stdout
+        assert len(list((root / "exports").glob("*/manifest.json"))) == 1
+    elif example == "variants.py":
         assert completed.stdout.count(": succeeded ") == 4, completed.stdout
         weights = [
             json.loads(path.read_text())["weight"]
@@ -164,9 +198,29 @@ def test_extended_examples_execute_complete_workflows(
         assert "indexed runs: 2" in completed.stdout
         assert "successful runs: 2" in completed.stdout
         assert "model artifacts: 2" in completed.stdout
-        assert "indexed measurements: 40" in completed.stdout
+        assert "indexed measurements: 20" in completed.stdout
         assert "selected run measurements: 20" in completed.stdout
         assert "observations: 1" in completed.stdout
+        stages = list(
+            (root / ".viper/store").glob(
+                "*/experiments/cpu_quickstart/runs/baseline/*/stages/train/resolved.yaml"
+            )
+        )
+        assert len(stages) == 2
+        assert sum("kind: reused" in path.read_text() for path in stages) == 1
+        # The second run reuses the first stage; retain its 20 executed measurements.
+        with closing(sqlite3.connect(root / ".viper/catalog.sqlite3")) as connection:
+            assert connection.execute("SELECT count(*) FROM runs").fetchone() == (2,)
+            assert connection.execute(
+                "SELECT count(*) FROM measurements"
+            ).fetchone() == (20,)
+            reuse_count = connection.execute(
+                "SELECT count(*) FROM stage_reuse_keys"
+            ).fetchone()[0]
+            assert reuse_count > 0
+            assert connection.execute(
+                "SELECT count(*) FROM knowledge_records"
+            ).fetchone() == (1,)
         restored = list((root / "restored").glob("*.json"))
         assert len(restored) == 1
         assert json.loads(restored[0].read_text())["weight"] == pytest.approx(
@@ -271,6 +325,21 @@ def test_cpu_quickstart_executes_and_verifies_one_run(
         result_path.parent / "artifacts/train/resume_state/resume_state.pt"
     )
     assert checkpoint.optimizer_state["loss"] == measurements[-1]["value"]
+    repeated = subprocess.run(
+        (sys.executable, "examples/cpu_quickstart.py"),
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+    assert "status: succeeded" in repeated.stdout
+    first_model = next(
+        line for line in completed.stdout.splitlines() if line.startswith("model: ")
+    )
+    assert first_model in repeated.stdout
+    assert len(tuple(root.glob("restored/*.json"))) == 2
 
 
 def test_documented_config_stage_writes_the_selected_rows(tmp_path: Path) -> None:
@@ -412,7 +481,7 @@ import json
 import sys
 from pathlib import Path
 
-from viper.execution._source import RunFetcher
+from viper._source import RunFetcher
 from viper.runs import ResolvedRun, RunSpec
 from viper.serialization import parse_yaml_bytes
 from viper.storage import LocalArtifactStore
@@ -429,13 +498,21 @@ policy = VerificationPolicy(
 )
 verified = verify_run_result(result, policy=policy, fetcher=fetcher)
 stage = verified.resolved_stages["train"]
+completion = stage.completion
+if completion.kind == "reused":
+    receipt = verified.reuse["train"]
+    source_raw = fetcher(receipt.source_run.stored_at)
+    source_result = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
+    original = verify_run_result(source_result, policy=policy, fetcher=fetcher)
+    completion = original.resolved_stages["train"].completion
+assert completion.kind == "executed"
 reference = verified.attempts[-1].resolved_stages[0]
 model = stage.artifacts["model"].file
 model_path = root / reference.snapshot.store / reference.snapshot.commit / model.path
 print(json.dumps({
     "run_id": run.run_id,
     "policy": run.execution_policy.mode,
-    "controls": stage.completion.startup.observed_controls.model_dump(),
+    "controls": completion.startup.observed_controls.model_dump(),
     "model_sha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
     "model_path": str(model_path),
 }))

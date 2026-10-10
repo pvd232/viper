@@ -43,6 +43,57 @@ Replace both absolute paths. The interpreter directory and experiment workspace
 may differ. Other clients expose the same command and arguments through their
 own settings. `viper mcp --root ... --access read` is an equivalent launcher.
 
+### Run a Python MCP client
+
+After completing the CPU quickstart, run this program from that experiment
+workspace with the server's environment active. It starts a read-only server,
+discovers its tools and live schema, then queries the saved runs. It supplies no
+client-side `root` request field and executes no experiment:
+
+```python
+import sys
+
+import anyio
+from mcp.client import Client
+from mcp.client.stdio import StdioServerParameters
+
+from viper.repository import resolve_root
+
+
+async def main() -> None:
+    root = resolve_root()
+    server = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "viper.mcp", "--root", str(root), "--access", "read"],
+    )
+    async with Client(server, read_timeout_seconds=30) as client:
+        names = {tool.name for tool in (await client.list_tools()).tools}
+        assert "search_runs" in names and "run" not in names
+        schema = await client.call_tool("get_schema", {"name": "RunSpec"})
+        assert not schema.is_error
+        assert schema.structured_content is not None
+        print("schema:", schema.structured_content["json_schema"]["title"])
+        result = await client.call_tool(
+            "search_runs", {"query": {"statuses": ["succeeded"], "limit": 10}}
+        )
+        assert not result.is_error, result.structured_content
+        assert result.structured_content is not None
+        page = result.structured_content["page"]
+        print("indexed successful runs:", len(page["items"]))
+        for row in page["items"]:
+            print(row["run_id"], row["run"])
+        print("next cursor:", page["next_cursor"])
+
+
+if __name__ == "__main__":
+    anyio.run(main)
+```
+
+The count depends on the workspace catalog. Continue pagination with the same
+filters and the returned cursor as described below. The client and server run
+from the same verified interpreter; external agent clients use its absolute
+path in their configuration.
+
 ## Discover the installed interface
 
 1. Read the server instructions and call MCP `tools/list`. Its results contain
@@ -69,10 +120,18 @@ contains contributor instructions for modifying VIPER itself.
 
 ## Inspect a completed run
 
-The user first populates the catalog using the
-[inspection tutorial](../tutorials/inspect-results.md), or grants execute access
-for `catalog_refresh`. Search tools query that index. Refresh replaces its
-contents, so include every run that should remain searchable.
+Successful execution registers its verified result in the workspace catalog.
+When its experiment contains `JOURNAL.md`, default-on capture also indexes the
+original prose and its pinned learned vectors. Use `publish_run_journal` in
+execute mode to capture later edits without rerunning the experiment; see
+[journal JSON requests and exact-source behavior](../how-to/journals.md).
+Search tools query that index. To index older or imported runs, rebuild a deleted
+catalog, or recover from a registration warning, the user can follow the
+[inspection tutorial](../tutorials/inspect-results.md) or grant execute access
+for `catalog_refresh`. Refresh replaces the index's contents, so include every
+run that should remain searchable. Registration supplies candidates;
+[verified reuse](../how-to/stages.md#reuse-a-verified-stage-result) is the default
+for workspace stages. Set `reuse="never"` to force fresh computation in a new run.
 
 Call `search_runs` with:
 

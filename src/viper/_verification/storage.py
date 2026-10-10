@@ -471,18 +471,22 @@ def read_snapshot_file(
     snapshot_observer = getattr(fetcher, "observe_snapshot", None)
     if snapshot_observer is not None:
         snapshot_observer(snapshot, reference)
-    try:
-        raw = retrieve(location)
-    except Exception as exc:
-        raise VerificationError(
-            f"artifact.representation: snapshot file is unavailable: {reference.path}"
-        ) from exc
-
     resolved_reference = ResolvedFileRef(
         sha256=reference.sha256,
         bytes=reference.bytes,
         stored_at=location,
     )
+    try:
+        raw = (
+            fetcher.read_verified(resolved_reference)
+            if isinstance(fetcher, _VerifiedStorageFetcher)
+            else retrieve(location)
+        )
+    except Exception as exc:
+        raise VerificationError(
+            f"artifact.representation: snapshot file is unavailable: {reference.path}"
+        ) from exc
+
     return verify_resolved_file_bytes(resolved_reference, raw)
 
 

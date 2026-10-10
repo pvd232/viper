@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from pathlib import Path
+from threading import Lock
 from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
 from google.api_core.exceptions import PreconditionFailed
+from requests import RequestException
 
 from viper._cloud import ViperCloudError, manifest_revision
 from viper.gcs import (
@@ -76,12 +79,24 @@ class _Blob:
             timeout=timeout,
         )
 
-    def download_as_bytes(self, *, checksum: str, timeout: float) -> bytes:
+    def download_as_bytes(
+        self,
+        *,
+        checksum: str | None,
+        timeout: float,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> bytes:
         """Return the current object bytes."""
-        assert checksum == "auto"
+        assert checksum in {"auto", None}
         assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
         self.bucket.download_calls.append(self.name)
-        return self.bucket.objects[self.name][0]
+        raw = self.bucket.objects[self.name][0]
+        if start is None and end is None:
+            return raw
+        lower = 0 if start is None else start
+        upper = len(raw) - 1 if end is None else end
+        return raw[lower : upper + 1]
 
     def download_to_filename(
         self,
@@ -93,6 +108,7 @@ class _Blob:
         """Model a streamed object download to one local file."""
         assert checksum == "auto"
         assert timeout == GCS_OPERATION_TIMEOUT_SECONDS
+        self.bucket.file_download_calls.append(self.name)
         with Path(filename).open("wb") as stream:
             stream.write(self.bucket.objects[self.name][0])
 
@@ -130,6 +146,7 @@ class _Bucket:
         self.next_generation = 0
         self.copy_calls: list[tuple[str, str]] = []
         self.download_calls: list[str] = []
+        self.file_download_calls: list[str] = []
         self.stream_download_calls: list[str] = []
 
     def blob(self, name: str) -> _Blob:
@@ -172,6 +189,89 @@ class _Client:
         """Record and return the selected bucket."""
         self.selected_bucket = name
         return self.value
+
+
+class _RangeResponse:
+    """Model one successful authorized range response."""
+
+    def __init__(self, raw: bytes) -> None:
+        """Store the bytes returned by iter_content."""
+        self.status_code = 206
+        self.raw = raw
+
+    def iter_content(self, *, chunk_size: int) -> list[bytes]:
+        """Return the response bytes as one chunk."""
+        assert chunk_size == 1024 * 1024
+        return [self.raw]
+
+
+class _FlakyRangeSession:
+    """Fail the first range request and succeed on retry."""
+
+    def __init__(self, raw: bytes) -> None:
+        """Record the payload returned after one transient failure."""
+        self.raw = raw
+        self.calls = 0
+        self.timeouts: list[object] = []
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        stream: bool,
+        timeout: object,
+    ) -> _RangeResponse:
+        """Model the authorized requests session used by the range downloader."""
+        assert method == "GET"
+        assert "alt=media" in url
+        assert headers == {"Range": f"bytes=0-{len(self.raw) - 1}"}
+        assert stream is True
+        self.calls += 1
+        self.timeouts.append(timeout)
+        if self.calls == 1:
+            raise RequestException("transient range stall")
+        return _RangeResponse(self.raw)
+
+
+class _ConcurrentRangeSession:
+    """Record the maximum number of simultaneous range requests."""
+
+    def __init__(self, raw: bytes) -> None:
+        """Store the payload and initialize the concurrency counters."""
+        self.raw = raw
+        self.active = 0
+        self.max_active = 0
+        self.lock = Lock()
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        stream: bool,
+        timeout: object,
+    ) -> _RangeResponse:
+        """Return one requested byte range while counting active requests."""
+        assert method == "GET"
+        assert "alt=media" in url
+        assert headers["Range"].startswith("bytes=")
+        assert stream is True
+        del timeout
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.01)
+            start_text, stop_text = headers["Range"].removeprefix("bytes=").split("-")
+            start = int(start_text)
+            stop = int(stop_text) + 1
+            return _RangeResponse(self.raw[start:stop])
+        finally:
+            with self.lock:
+                self.active -= 1
 
 
 def _client(root: Path) -> tuple[GcsProvider, _Client]:
@@ -433,11 +533,42 @@ def test_reuses_loaded_manifest_for_repeated_snapshot_reads(tmp_path: Path) -> N
     assert {event.bytes for event in fetch_events} == {len(b"alpha")}
 
 
+def test_fetch_streams_payload_through_temporary_file(tmp_path: Path) -> None:
+    """Restore byte-returning payloads through bounded authorized range reads."""
+    fake = _Client()
+    fake._http = _FlakyRangeSession(b"alpha")  # type: ignore[attr-defined]
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        sliced_fetch_min_bytes=1,
+        range_fetch_read_timeout=7,
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, _ = client.publish(destination, {"runs/source/a.bin": b"alpha"})
+    assert isinstance(snapshot, GcsStageResultSnapshotRef)
+    reference = client.file_ref(snapshot, "runs/source/a.bin")
+    key = f"viper/machina/mantra/{snapshot.revision}/runs/source/a.bin"
+    fake.value.download_calls.clear()
+    fake.value.file_download_calls.clear()
+
+    assert client.fetch(reference) == b"alpha"
+
+    assert key not in fake.value.download_calls
+    assert key not in fake.value.file_download_calls
+    assert fake._http.calls == 2  # type: ignore[attr-defined]
+    assert fake._http.timeouts == [  # type: ignore[attr-defined]
+        (GCS_OPERATION_TIMEOUT_SECONDS, 7),
+        (GCS_OPERATION_TIMEOUT_SECONDS, 7),
+    ]
+
+
 def test_stream_restore_emits_source_and_destination_progress(
     tmp_path: Path,
 ) -> None:
     """Report streamed restore start and completion for one exact GCS object."""
-    client, _, events = _client_with_progress(tmp_path)
+    client, fake, events = _client_with_progress(tmp_path)
     destination = ViperCloudDestination(owner="machina", workspace="mantra")
     snapshot, files = client.publish(destination, {"data/large.bin": b"bounded"})
     assert isinstance(snapshot, GcsStageResultSnapshotRef)
@@ -452,10 +583,12 @@ def test_stream_restore_emits_source_and_destination_progress(
 
     assert restored.read_bytes() == b"bounded"
     key = f"viper/machina/mantra/{snapshot.revision}/data/large.bin"
+    assert fake.value.file_download_calls == [key]
     stream_events = [
         event
         for event in events
-        if event.key == key and event.phase.startswith("stream")
+        if event.key == key
+        and event.phase in {"stream_fetch_start", "stream_fetch_done"}
     ]
     assert [event.phase for event in stream_events] == [
         "stream_fetch_start",
@@ -463,6 +596,160 @@ def test_stream_restore_emits_source_and_destination_progress(
     ]
     assert {event.path for event in stream_events} == {"data/large.bin"}
     assert {event.bytes for event in stream_events} == {len(b"bounded")}
+
+
+def test_large_restore_uses_sliced_ranges_and_verifies_bytes(
+    tmp_path: Path,
+) -> None:
+    """Restore large GCS objects through byte ranges and verify the result."""
+    fake = _Client()
+    fake._http = _ConcurrentRangeSession(b"bounded")  # type: ignore[attr-defined]
+    events: list[GcsProgressEvent] = []
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        sliced_fetch_min_bytes=1,
+        sliced_fetch_chunk_bytes=3,
+        sliced_fetch_max_workers=2,
+        progress=events.append,
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, files = client.publish(destination, {"data/large.bin": b"bounded"})
+    assert isinstance(snapshot, GcsStageResultSnapshotRef)
+    reference = client.file_ref(snapshot, "data/large.bin")
+    identity = files[0]
+    key = f"viper/machina/mantra/{snapshot.revision}/data/large.bin"
+
+    restored = client.fetch_to_path(
+        reference,
+        identity,
+        destination=tmp_path / "restored/large.bin",
+    )
+
+    assert restored.read_bytes() == b"bounded"
+    assert fake.value.download_calls.count(key) == 0
+    assert fake._http.max_active == 2  # type: ignore[attr-defined]
+    stream_events = [
+        event
+        for event in events
+        if event.key == key
+        and event.phase in {"stream_fetch_sliced_start", "stream_fetch_sliced_done"}
+    ]
+    assert [event.phase for event in stream_events] == [
+        "stream_fetch_sliced_start",
+        "stream_fetch_sliced_done",
+    ]
+
+
+def test_large_fetch_uses_sliced_ranges_and_verifies_bytes(
+    tmp_path: Path,
+) -> None:
+    """Restore large byte-returning fetches through the same sliced path."""
+    fake = _Client()
+    events: list[GcsProgressEvent] = []
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        sliced_fetch_min_bytes=1,
+        sliced_fetch_chunk_bytes=3,
+        progress=events.append,
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, _ = client.publish(destination, {"data/large.bin": b"bounded"})
+    assert isinstance(snapshot, GcsStageResultSnapshotRef)
+    reference = client.file_ref(snapshot, "data/large.bin")
+    key = f"viper/machina/mantra/{snapshot.revision}/data/large.bin"
+
+    assert client.fetch(reference) == b"bounded"
+
+    assert fake.value.download_calls.count(key) == 3
+    stream_events = [
+        event
+        for event in events
+        if event.key == key
+        and event.phase in {"stream_fetch_sliced_start", "stream_fetch_sliced_done"}
+    ]
+    assert [event.phase for event in stream_events] == [
+        "stream_fetch_sliced_start",
+        "stream_fetch_sliced_done",
+    ]
+
+
+def test_sliced_range_fetch_retries_transient_read_failure(
+    tmp_path: Path,
+) -> None:
+    """Retry one transient authorized range-read failure before succeeding."""
+    fake = _Client()
+    fake._http = _FlakyRangeSession(b"bounded")  # type: ignore[attr-defined]
+    events: list[GcsProgressEvent] = []
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        range_fetch_read_timeout=7,
+        progress=events.append,
+    )
+    progress: list[int] = []
+    destination = tmp_path / "range.bin"
+    destination.write_bytes(b"\0" * len(b"bounded"))
+
+    written = client._download_range_to_path(
+        key="viper/machina/mantra/revision/data/large.bin",
+        start=0,
+        stop=len(b"bounded"),
+        destination=destination,
+        progress=progress.append,
+    )
+
+    assert written == len(b"bounded")
+    assert destination.read_bytes() == b"bounded"
+    assert progress == [len(b"bounded")]
+    assert fake._http.calls == 2  # type: ignore[attr-defined]
+    assert fake._http.timeouts == [  # type: ignore[attr-defined]
+        (GCS_OPERATION_TIMEOUT_SECONDS, 7),
+        (GCS_OPERATION_TIMEOUT_SECONDS, 7),
+    ]
+    retry_events = [
+        event for event in events if event.phase == "stream_fetch_range_retry"
+    ]
+    assert len(retry_events) == 1
+    assert retry_events[0].bytes == len(b"bounded")
+
+
+def test_large_restore_rejects_bad_sliced_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject a sliced restore whose final bytes differ from the manifest."""
+    fake = _Client()
+    client = GcsProvider(
+        tmp_path,
+        "mantra-fixture",
+        prefix="viper",
+        client=cast(Any, fake),
+        sliced_fetch_min_bytes=1,
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="mantra")
+    snapshot, files = client.publish(destination, {"data/large.bin": b"bounded"})
+    reference = client.file_ref(snapshot, "data/large.bin")
+    identity = files[0]
+
+    def corrupt_download(*, key: str, size: int, destination: Path) -> None:
+        destination.write_bytes(b"changed")
+
+    monkeypatch.setattr(client, "_download_sliced_to_path", corrupt_download)
+
+    with pytest.raises(ViperCloudError, match="identity changed"):
+        client.fetch_to_path(
+            reference,
+            identity,
+            destination=tmp_path / "restored/large.bin",
+        )
 
 
 def test_rejects_changed_or_missing_cloud_object(tmp_path: Path) -> None:

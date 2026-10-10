@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from .._source import RunFetcher, resolve_git_file
 from ..artifacts import ResolvedArtifact
 from ..http import ResolvedHttpRetrieval
 from ..ids import InputName
@@ -31,7 +32,6 @@ from ..stages import (
     ResolvedSpec,
     ResolvedTrainSpec,
 )
-from ._source import RunFetcher, resolve_git_file
 from ._stage import StageProcessResult
 from .errors import RunError
 

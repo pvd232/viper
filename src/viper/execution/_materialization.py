@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .._source import RunFetcher
 from ..artifacts import (
     ArtifactPointer,
     ResolvedArtifact,
@@ -67,7 +68,6 @@ from ..workspace import (
     stored_input_path,
 )
 from ._downloads import publish_download_body
-from ._source import RunFetcher
 from .errors import RunError
 
 
@@ -96,7 +96,12 @@ def _write_materialized_file(
         target.write_bytes(verified_file.content)
     else:
         assert verified_file.local_path is not None
-        shutil.copyfile(verified_file.local_path, target)
+        try:
+            os.link(verified_file.local_path, target)
+        except OSError:
+            shutil.copyfile(verified_file.local_path, target)
+        mode = verified_file.local_path.stat().st_mode
+        os.chmod(target, mode & ~0o222)
 
 
 def _materialize_verified_artifact(

@@ -7,11 +7,12 @@ from pathlib import Path
 
 import viper._subprocess as subprocess
 
-from .._schema import RepoRelPath
-from .._verification.storage import fetch_git_file_bytes, verify_resolved_file_bytes
-from ..cloud import ViperCloud
-from ..evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
-from ..references import (
+from ._schema import RepoRelPath
+from ._verification.storage import fetch_git_file_bytes, verify_resolved_file_bytes
+from ._verified_cache import VerifiedObjectCache
+from .cloud import CloudReference, ViperCloud
+from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
+from .references import (
     GcsFileRef,
     GcsStageResultSnapshotRef,
     GitFileRef,
@@ -26,9 +27,7 @@ from ..references import (
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
-from ..storage import LocalArtifactStore, local_artifact_store, viper_cloud
-from ._verified_cache import VerifiedObjectCache
-from .errors import RunError
+from .storage import LocalArtifactStore, local_artifact_store, viper_cloud
 
 _MAX_EXTERNAL_GIT_CACHE_BYTES = 64 * 1024**2
 
@@ -42,7 +41,7 @@ def run_git(repository_root: Path, *arguments: str) -> bytes:
             capture_output=True,
         ).stdout
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        raise RunError("local Git evidence could not be read") from exc
+        raise VerificationError("local Git evidence could not be read") from exc
 
 
 class RunFetcher:
@@ -77,6 +76,29 @@ class RunFetcher:
             tuple[ResolvedRunRef, VerificationPolicy],
             VerifiedProducerRun,
         ] = {}
+        self._cloud_services: dict[tuple[str, str, str], ViperCloud] = {}
+
+    def _cloud_service(self, reference: CloudReference) -> ViperCloud:
+        """Keep a provider's sealed-manifest cache for this fetcher's lifetime."""
+        if isinstance(reference, (GcsFileRef, GcsStageResultSnapshotRef)):
+            key = ("gcs", reference.bucket, reference.prefix)
+        elif isinstance(
+            reference, (HuggingFaceFileRef, HuggingFaceStageResultSnapshotRef)
+        ):
+            key = ("hf", str(reference.repository), reference.repo_type)
+        else:
+            key = ("configured", "", "")
+        remembered = self._cloud_services.get(key)
+        if remembered is not None:
+            return remembered
+        if isinstance(reference, (ViperCloudFileRef, ViperCloudStageResultSnapshotRef)):
+            cloud = viper_cloud(self.repository_root)
+        elif isinstance(reference, (GcsFileRef, HuggingFaceFileRef)):
+            cloud = ViperCloud.for_reference(self.repository_root, reference)
+        else:
+            cloud = ViperCloud.for_snapshot(self.repository_root, reference)
+        self._cloud_services[key] = cloud
+        return cloud
 
     def __call__(self, location: StorageModel) -> bytes:
         """Retrieve one file from its declared immutable backend."""
@@ -106,11 +128,7 @@ class RunFetcher:
             location,
             (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
         ):
-            cloud = (
-                viper_cloud(self.repository_root)
-                if isinstance(location, ViperCloudFileRef)
-                else ViperCloud.for_reference(self.repository_root, location)
-            )
+            cloud = self._cloud_service(location)
             return cloud.fetch(location)
         if isinstance(location, LocalFileRef):
             return local_artifact_store(location).fetch(location)
@@ -165,21 +183,14 @@ class RunFetcher:
             self._verified_paths[reference] = path
             return path
 
-        cached = self._verified_objects.trusted_path(reference)
+        cached = self._verified_objects.verified_path(reference)
         if cached is not None:
             self._verified_paths[reference] = cached
             return cached
 
         temporary = self._verified_objects.temporary_path(reference)
         try:
-            cloud = (
-                viper_cloud(self.repository_root)
-                if isinstance(reference.stored_at, ViperCloudFileRef)
-                else ViperCloud.for_reference(
-                    self.repository_root,
-                    reference.stored_at,
-                )
-            )
+            cloud = self._cloud_service(reference.stored_at)
             restored = cloud.fetch_to_path(reference, temporary)
             cached = self._verified_objects.adopt_verified_path(reference, restored)
         finally:
@@ -187,6 +198,21 @@ class RunFetcher:
 
         self._verified_paths[reference] = cached
         return cached
+
+    def remember_verified_path(self, reference: ResolvedFileRef, path: Path) -> None:
+        """Reuse a local file already matched to its immutable reference."""
+        if path.stat().st_size != reference.bytes:
+            raise VerificationError(
+                f"byte-count mismatch: expected {reference.bytes}, "
+                f"received {path.stat().st_size}"
+            )
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if digest != reference.sha256:
+            raise VerificationError(
+                f"SHA-256 mismatch: expected {reference.sha256}, received {digest}"
+            )
+        self._verified_paths[reference] = path
 
     def read_verified_producer(
         self,
@@ -218,11 +244,7 @@ class RunFetcher:
                 ViperCloudStageResultSnapshotRef,
             ),
         ):
-            cloud = (
-                viper_cloud(self.repository_root)
-                if isinstance(snapshot, ViperCloudStageResultSnapshotRef)
-                else ViperCloud.for_snapshot(self.repository_root, snapshot)
-            )
+            cloud = self._cloud_service(snapshot)
             return tuple(file.path for file in cloud.list_files(snapshot))
         return local_artifact_store(snapshot).list_snapshot_files(snapshot)
 

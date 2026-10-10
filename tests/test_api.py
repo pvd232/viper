@@ -5,7 +5,7 @@ import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast, get_type_hints
+from typing import Any, cast, get_type_hints
 
 import pytest
 from mcp import types
@@ -120,7 +120,7 @@ def test_mcp_tool_schemas_match_typed_operations() -> None:
                     "format": "date-time",
                 }
         assert tool.input_schema == schema
-        output = TypeAdapter(success | ViperFailure).json_schema()
+        output = TypeAdapter(cast(Any, success | ViperFailure)).json_schema()
         output["type"] = "object"
         assert tool.output_schema == output
 

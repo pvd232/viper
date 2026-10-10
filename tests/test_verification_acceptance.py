@@ -136,6 +136,7 @@ from viper.references import (
     StorageModel,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
+    storage_file,
 )
 from viper.resume import DataLoaderConfiguration
 from viper.reuse import (
@@ -2608,6 +2609,82 @@ def test_download_source_closure_rejects_future_cycle() -> None:
         )
 
 
+def test_download_source_closure_visits_shared_ancestry_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bound a repeated diamond graph by its nodes while retaining all edges."""
+    store = DocumentStore()
+    _, records = publish_producer_run(store)
+    verified = verify_run_result(records["run"], policy=POLICY, fetcher=store.fetch)
+    references = {
+        stage.stage_id: stage for stage in verified.attempts[0].resolved_stages
+    }
+    specs = dict(verified.plan.stages)
+    results = dict(verified.resolved_stages)
+    template = results["train"]
+    assert isinstance(template, ResolvedTrainSpec)
+    previous = "download"
+    output_name = "dataset"
+    depth = 20
+    for level in range(depth):
+        stage_id = f"join_{level}"
+        stage_ref = references["train"].model_copy(update={"stage_id": stage_id})
+        spec = BuildSpec.model_construct(
+            inputs={
+                name: FutureInputRef(producer_stage_id=previous, name=output_name)
+                for name in ("left", "right")
+            },
+            outputs={"out": template.spec.outputs[TrainKeys.MODEL]},
+        )
+        result = ResolvedBuildSpec.model_construct(
+            spec=spec,
+            completion=template.completion,
+            inputs={
+                name: ResolvedFutureInputRef(producer=references[previous])
+                for name in ("left", "right")
+            },
+            artifacts={"out": template.artifacts[TrainKeys.MODEL]},
+        )
+        references[stage_id], specs[stage_id], results[stage_id] = (
+            stage_ref,
+            spec,
+            result,
+        )
+        previous, output_name = stage_id, "out"
+    consumer = BuildSpec.model_construct(
+        inputs={"source": FutureInputRef(producer_stage_id=previous, name="out")}
+    )
+    visited = 0
+    node_type = verification.DownloadSourceNode
+
+    def bounded_node(**fields: object) -> DownloadSourceNode:
+        nonlocal visited
+        visited += 1
+        if visited > 9 * depth:
+            pytest.fail("Shared ancestry was traversed repeatedly")
+        return node_type.model_validate(fields)
+
+    monkeypatch.setattr(verification, "DownloadSourceNode", bounded_node)
+    receipt = verification.verify_download_source_closure(
+        "consumer",
+        consumer,
+        run=verified.plan.run,
+        attempt_id=1,
+        resolved_inputs={
+            "source": ResolvedFutureInputRef(producer=references[previous])
+        },
+        stage_specs=specs,
+        completed_stages=references,
+        completed_results=results,
+        policy=POLICY,
+        fetcher=lambda _location: pytest.fail("closure fetched a payload"),
+    )
+    assert len(receipt.roots["source"]) == 1
+    assert receipt.roots["source"][0].stage_id == "download"
+    assert sum(edge.relation == "produced_from" for edge in receipt.edges) == 2 * depth
+    assert sum(edge.relation == "future" for edge in receipt.edges) == 2 * depth + 1
+
+
 def test_download_source_closure_rejects_cross_run_stored_cycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2835,7 +2912,7 @@ def test_external_input_identity_survives_execution() -> None:
     run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
     attempt_id = 1
     stage_id = "train"
-    source = LocalSource(path="inputs/raw/dataset.bin")
+    source = LocalSource(path="inputs/raw/original.bin")
     declared = ExternalInputRef(source=source, data_role="training")
     captured_path = captured_input_snapshot_path(
         stage_id=stage_id,
@@ -2870,7 +2947,16 @@ def test_external_input_identity_survives_execution() -> None:
         snapshot(snapshot_commit),
         fetcher=store.fetch,
     )
-    assert verified["dataset"].path == source.path
+    assert verified["dataset"].path == captured_input_path(
+        run_id=run_id,
+        attempt_id=attempt_id,
+        stage_id=stage_id,
+        input_name="dataset",
+        source_path=source.path,
+    )
+    resolved_input = resolved.inputs["dataset"]
+    assert isinstance(resolved_input, ResolvedExternalInputRef)
+    assert resolved_input.source == source
     assert verified["dataset"].files[0].content == raw
     assert store.fetch(hf_file(snapshot_commit, captured_path)) == raw
 
@@ -4074,7 +4160,13 @@ def test_policy_rejects_saved_metric_reading(execution: str) -> None:
 
 
 def _policy_reused_evaluation(
-    store: DocumentStore, source: ResolvedRun, verified: VerifiedRunResult
+    store: DocumentStore,
+    source: ResolvedRun,
+    verified: VerifiedRunResult,
+    *,
+    source_commit: str = "d" * 40,
+    target_commit: str = "e" * 40,
+    attempt_commit: str = "f" * 40,
 ) -> ResolvedRun:
     """Reuse one saved evaluation, retaining references to its producing run."""
     source_attempt = fetch_attempt(store, source.attempts[-1])
@@ -4088,7 +4180,7 @@ def _policy_reused_evaluation(
     run = verified.plan.run
     run_root = str(source.spec.stored_at.path).removesuffix("/spec.yaml")
     source_raw = yaml_bytes(source)
-    source_run_location = hf_file("d" * 40, f"{run_root}/resolved.yaml")
+    source_run_location = hf_file(source_commit, f"{run_root}/resolved.yaml")
     store.put(source_run_location, source_raw)
     source_run = ResolvedRunRef(
         stored_at=source_run_location, sha256=sha256(source_raw), bytes=len(source_raw)
@@ -4133,7 +4225,7 @@ def _policy_reused_evaluation(
         completed_at=source_result.completed_at,
     )
     raw = yaml_bytes(reuse)
-    location = hf_file("e" * 40, f"{run_root}/stages/evaluate/reuse.yaml")
+    location = hf_file(target_commit, f"{run_root}/stages/evaluate/reuse.yaml")
     store.put(location, raw)
     target = source_result.model_copy(
         update={
@@ -4146,12 +4238,12 @@ def _policy_reused_evaluation(
         }
     )
     # Preserve the original snapshot: the target refers back to its source.
-    copy_snapshot_files(store, snapshot_revision(source_stage.snapshot), "e" * 40)
+    copy_snapshot_files(store, snapshot_revision(source_stage.snapshot), target_commit)
     target_stage = publish_resolved_stage(
         store,
         run_root_path=run_root,
         stage_id="evaluate",
-        snapshot_commit="e" * 40,
+        snapshot_commit=target_commit,
         resolved_spec=target,
     )
     target_attempt = source_attempt.model_copy(
@@ -4162,7 +4254,7 @@ def _policy_reused_evaluation(
         }
     )
     target_reference = publish_attempt(
-        store, run_root_path=run_root, attempt=target_attempt, commit="f" * 40
+        store, run_root_path=run_root, attempt=target_attempt, commit=attempt_commit
     )
     return source.model_copy(update={"attempts": (target_reference,)})
 
@@ -4183,3 +4275,171 @@ def test_policy_rejects_reused_producer_reading() -> None:
         VerificationError, match="startup.controls: deterministic_algorithms"
     ):
         verify_run_result(changed_target, policy=POLICY, fetcher=store.fetch)
+
+
+def test_benchmark_accepts_reused_evaluation_without_new_measurement() -> None:
+    """Bind a reused candidate score to its source receipt and fresh confirmation."""
+    result, source, store = build_benchmark_fixture()
+    original = verify_run_result(source, policy=POLICY, fetcher=store.fetch)
+    target = _policy_reused_evaluation(
+        store,
+        source,
+        original,
+        source_commit="7" * 40,
+        target_commit="8" * 40,
+        attempt_commit="9" * 40,
+    )
+    target_attempt = fetch_attempt(store, target.attempts[0]).model_copy(
+        update={"measurement_files": ()}
+    )
+    target_reference = publish_attempt(
+        store,
+        run_root_path=str(target.spec.stored_at.path).removesuffix("/spec.yaml"),
+        attempt=target_attempt,
+        commit="0" * 40,
+    )
+    target = target.model_copy(update={"attempts": (target_reference,)})
+    verified = verify_run_result(target, policy=POLICY, fetcher=store.fetch)
+    selected = verified.attempts[0]
+    assert not selected.measurement_files
+    assert not selected.metric_verification_files
+    assert "evaluate" in verified.reuse
+    raw = yaml_bytes(target)
+    store.put(result.run.stored_at, raw)
+    target_reference = result.run.model_copy(
+        update={"sha256": sha256(raw), "bytes": len(raw)}
+    )
+    selected_refs = {stage.stage_id: stage for stage in selected.resolved_stages}
+    updated = result.model_copy(
+        update={
+            "run": target_reference,
+            "artifacts": tuple(
+                receipt.model_copy(
+                    update={"candidate_stage": selected_refs[receipt.artifact.stage_id]}
+                )
+                for receipt in result.artifacts
+            ),
+        }
+    )
+    benchmark = verify_benchmark_result(updated, policy=POLICY, fetcher=store.fetch)
+    assert benchmark.result.metrics[0].matched
+
+
+def test_download_source_closure_decodes_shared_producer_records_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Decode each immutable stage once across two branches of one producer."""
+    store = DocumentStore()
+    producer, _ = publish_producer_run(store, download_rooted=True)
+    inputs: dict[str, StoredInputRef] = {}
+    resolved_inputs: dict[str, ResolvedStoredInputRef] = {}
+    for name, stage_id, artifact_name in (
+        ("prior", "train", TrainKeys.MODEL),
+        ("raw", "download", "dataset"),
+    ):
+        pointer = resolved_pointer(
+            store,
+            MAIN_SOURCE_COMMIT,
+            f".viper/pointers/{producer.sha256}/{stage_id}/{artifact_name}.pointer.yaml",
+            ArtifactPointer(
+                run=producer,
+                artifact=StageArtifactRef(
+                    stage_id=stage_id, artifact_name=artifact_name
+                ),
+            ),
+        )
+        inputs[name] = StoredInputRef(
+            pointer=pointer, path=f"inputs/{name}.bin", data_role="training"
+        )
+        resolved_inputs[name] = ResolvedStoredInputRef(pointer=pointer)
+    decoded: dict[bytes, int] = {}
+    parse = verification.parse_yaml_bytes
+
+    def observe_parse(raw: bytes) -> Any:
+        decoded[raw] = decoded.get(raw, 0) + 1
+        return parse(raw)
+
+    monkeypatch.setattr(verification, "parse_yaml_bytes", observe_parse)
+    receipt = verification.verify_download_source_closure(
+        "consumer",
+        BuildSpec.model_construct(inputs=inputs),
+        run=RunSpec.model_construct(run_id="01ARZ3NDEKTSV4RRFFQ69G5FAF"),
+        attempt_id=1,
+        resolved_inputs=resolved_inputs,
+        stage_specs={},
+        completed_stages={},
+        completed_results={},
+        policy=POLICY,
+        fetcher=store.fetch,
+    )
+    assert set(receipt.roots) == {"prior", "raw"}
+    assert all(roots[0].stage_id == "download" for roots in receipt.roots.values())
+    assert decoded
+    assert max(decoded.values()) == 1
+
+
+def test_download_source_records_are_shared_across_one_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse decoded producer stages while retaining both consumers' ancestry."""
+    store = DocumentStore()
+    producer, records = publish_producer_run(store, download_rooted=True)
+    producer_run = RunSpec.model_validate(
+        yaml.safe_load(store.fetch(records["run"].spec.stored_at))
+    )
+    producer_attempt = fetch_attempt(store, records["run"].attempts[0])
+    inputs: dict[str, StoredInputRef] = {}
+    resolved_inputs: dict[str, ResolvedStoredInputRef] = {}
+    for name, stage_id, artifact_name in (
+        ("prior", "train", TrainKeys.MODEL),
+        ("raw", "download", "dataset"),
+    ):
+        pointer = resolved_pointer(
+            store,
+            MAIN_SOURCE_COMMIT,
+            f".viper/pointers/{producer.sha256}/{stage_id}/{artifact_name}.pointer.yaml",
+            ArtifactPointer(
+                run=producer,
+                artifact=StageArtifactRef(
+                    stage_id=stage_id, artifact_name=artifact_name
+                ),
+            ),
+        )
+        inputs[name] = StoredInputRef(
+            pointer=pointer, path=f"inputs/{name}.bin", data_role="training"
+        )
+        resolved_inputs[name] = ResolvedStoredInputRef(pointer=pointer)
+    decoded: dict[bytes, int] = {}
+    parse = verification.parse_yaml_bytes
+
+    def observe_parse(raw: bytes) -> Any:
+        decoded[raw] = decoded.get(raw, 0) + 1
+        return parse(raw)
+
+    monkeypatch.setattr(verification, "parse_yaml_bytes", observe_parse)
+    cache = verification._DownloadSourceRecords()
+    for consumer in ("consumer_a", "consumer_b"):
+        receipt = verification._verify_download_source_closure(
+            consumer,
+            BuildSpec.model_construct(inputs=inputs),
+            run=RunSpec.model_construct(run_id="01ARZ3NDEKTSV4RRFFQ69G5FAF"),
+            attempt_id=1,
+            resolved_inputs=resolved_inputs,
+            stage_specs={},
+            completed_stages={},
+            completed_results={},
+            policy=POLICY,
+            fetcher=store.fetch,
+            records=cache,
+        )
+    assert set(receipt.roots) == {"prior", "raw"}
+    assert all(roots[0].stage_id == "download" for roots in receipt.roots.values())
+    assert decoded
+    for stage in producer_run.stages:
+        raw = store.fetch(storage_file(records["run"].spec.stored_at, stage.spec))
+        assert decoded[raw] == 1
+    for stage in producer_attempt.resolved_stages:
+        raw = store.fetch(
+            hf_file(snapshot_revision(stage.snapshot), stage.resolved_spec.path)
+        )
+        assert decoded[raw] == 1

@@ -83,7 +83,8 @@ def _remap_artifacts(
     artifacts: dict[ArtifactName, ResolvedArtifact] = {}
     receipt_files = []
     publication_files: dict[RepoRelPath, SnapshotFileRef] = {}
-    for name, source_artifact in source.artifacts.items():
+    for name in sorted(source.artifacts):
+        source_artifact = source.artifacts[name]
         target_spec = target.outputs[name]
         if source_artifact.kind != target_spec.kind:
             raise ValueError("reuse source artifact kind differs from the target")

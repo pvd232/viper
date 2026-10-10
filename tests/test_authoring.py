@@ -1492,6 +1492,27 @@ def test_stage_uses_the_decorators_config_defaults() -> None:
     assert selected.spec.config == example_training.spec.config
 
 
+def test_stage_defaults_to_verified_reuse_with_explicit_opt_out() -> None:
+    """Preserve default reuse and explicit recomputation in Python stage drafts."""
+    assert isinstance(example_training.spec, TrainSpecDraft)
+    arguments = {
+        "inputs": example_training.spec.inputs,
+        "outputs": example_training.spec.outputs,
+        "metrics": example_training.spec.metrics,
+        "objective": example_training.spec.objective,
+    }
+    selected = stage(example_training.spec.implementation, **arguments)
+    recomputed = stage(example_training.spec.implementation, reuse="never", **arguments)
+    assert isinstance(selected.spec, TrainSpecDraft)
+    assert isinstance(recomputed.spec, TrainSpecDraft)
+    assert selected.spec.reuse == "verified"
+    assert recomputed.spec.reuse == "never"
+
+    draft_values = example_training.spec.model_dump()
+    draft_values.pop("reuse")
+    assert TrainSpecDraft.model_validate(draft_values).reuse == "verified"
+
+
 def test_upstream_input_tuples_preserve_producers_and_allow_aliases() -> None:
     """Keep upstream identity when inheriting or changing the receiving input name."""
     assert isinstance(example_training.spec, TrainSpecDraft)

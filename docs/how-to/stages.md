@@ -112,7 +112,6 @@ def sort_rows(context: StageContext[BuildConfig]) -> None:
 prepared = stage(
     sort_rows,
     stage_id="prepare",
-
     inputs=(input("source", path="examples/data/tiny.csv", data_role="training"),),
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
@@ -227,7 +226,12 @@ from viper.authoring import StageDraft, input, stage
 from viper.benchmark import RunArtifactDraft
 from viper.config import EvalConfig, MetricConfig
 from viper.metrics import (
-    FloatComparator, MetricContext, MetricDependency, measure, metric, min,
+    FloatComparator,
+    MetricContext,
+    MetricDependency,
+    measure,
+    metric,
+    min,
 )
 from viper.outputs import EvalOutputs, output
 from viper.stages import StageContext, eval
@@ -241,10 +245,7 @@ def predict(context: StageContext[EvalConfig]) -> None:
         for row in load_text(context.inputs["test"]).splitlines()[1:]
     ]
     indices = json.loads(load_text(context.inputs["holdout"]))
-    pairs = [
-        [model["weight"] * rows[index][0], rows[index][1]]
-        for index in indices
-    ]
+    pairs = [[model["weight"] * rows[index][0], rows[index][1]] for index in indices]
     destination = context.outputs["predictions"]
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(pairs), encoding="utf-8")
@@ -263,12 +264,11 @@ def root_mean_squared_error(context: MetricContext[MetricConfig]) -> float:
 rmse = measure(
     root_mean_squared_error,
     dependencies=(
-        MetricDependency(
-            source="artifact", name="predictions", data_role="benchmark"
-        ),
+        MetricDependency(source="artifact", name="predictions", data_role="benchmark"),
     ),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
 )
+
 
 def evaluation_stage(
     test_data: RunArtifactDraft, test_split: RunArtifactDraft
@@ -277,7 +277,6 @@ def evaluation_stage(
     return stage(
         predict,
         stage_id="eval",
-
         eval_id="holdout",
         inputs=(
             training.outputs["model"],
@@ -335,7 +334,6 @@ def count_rows(context: StageContext[DiagnosticConfig]) -> None:
 report = stage(
     count_rows,
     stage_id="report",
-
     inputs=(prepared.outputs["dataset"],),
     outputs=StageOutputs(
         report=output(path="rows.txt", loader=load_text, data_role="training")
@@ -348,13 +346,54 @@ report = stage(
 The [complete recovery example](../../examples/recovery.py) demonstrates a
 successful retry followed by reuse in a new run.
 
-Set `reuse="verified"` in a workspace stage's `stage()` call to allow reuse.
-The default is `reuse="never"`. Index the completed source run through
-[the Python catalog refresh](catalog-knowledge-mcp.md#build-the-local-catalog) before
-executing another plan that might reuse its stages.
+Workspace stages default to `reuse="verified"` in Python authoring and parsed
+stage specifications. Set `reuse="never"` to execute the stage even when a matching
+result is indexed. Existing specifications that record `reuse="never"` retain
+that policy. After saving a successful verified run, VIPER automatically
+adds its stages to the workspace catalog and retains earlier entries.
+A later run discovers an identical stage through that automatic registration.
+Runs completed before automatic registration, imported runs, and a deleted
+catalog still need [a catalog refresh](catalog-knowledge-mcp.md#build-the-local-catalog).
+
+Run [the complete reuse program](../../examples/reuse.py) with:
+
+```bash
+python -m examples.reuse
+```
+
+It executes the CPU experiment twice with the default, then declares a training
+stage with `reuse="never"` and executes it. It reads reuse keys from lineage,
+verifies each result, restores each referenced model, and asserts that all three
+model files have identical bytes. Reused artifacts are available through the
+saved snapshot; do not assume another materialized copy exists under the new
+run's `artifacts` directory. Use `execution.restore()` with the returned reference.
+In a fresh workspace, the first and forced runs each execute training; the second
+run reuses it. An existing matching candidate can make the first run reuse too.
+These results demonstrate worker skipping and exact model parity, not a general
+timing claim. Use fresh run IDs when forcing another execution of a saved plan.
+
+Reused stages remain searchable as run evidence. Registration retains an existing
+reuse target to avoid growing chains of reused runs. A successful retry can also
+provide the first catalog candidate for a stage recovered from a failed attempt.
+Registration uses the verification already performed at run completion. An
+unavailable or busy catalog produces a warning and leaves the saved run
+successful; index that result later with `catalog_refresh`. Automatic registration
+adds local indexing work. Its runtime cost and workload speedups remain
+dependent on the stage's computation and artifact sizes; reused runs still
+verify the source and materialize its outputs.
 
 VIPER looks for a candidate with matching stage, config, inputs, runtime,
 randomness, and metric identities. A matching candidate is verified and its
 artifacts are copied into the new run's snapshot; otherwise the stage executes.
+Input identities use the filenames supplied to the consuming stage. Verification
+uses the declared filename for stored files and the captured filename for local
+inputs; the original source remains in the input receipt. Retries reconstruct the
+same identity even when the original filename differs. This adds no user action
+or artifact read.
 The new run records whether each stage executed or reused earlier work. A
 benchmark confirmation executes the candidate stages independently.
+
+Record every output-affecting input in the stage specification. Use
+`reuse="never"` for a stage that must repeat an external action or read mutable
+state outside its declared inputs: verified reuse skips the worker and its
+side effects.

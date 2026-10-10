@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.1.0 — 2026-10-10
+
+- Capture scientific `JOURNAL.md` files after successful runs by default, with
+  an explicit opt-out. Preserve Markdown revisions, exact passage spans,
+  scientific fields, and saved measurement references.
+- Encode exact journal text with pinned Qwen3-Embedding-0.6B, retain model-file
+  and runtime identities, and expose explicit historical/edit publication in
+  Python, CLI, and MCP. Add a real learned-encoder exact-source MCP regression.
+- Restore reused quickstart/policy artifacts instead of assuming copied outputs.
+  Detach read-only or hard-linked output copies before independent attempts so
+  benchmark confirmation can write without changing immutable stored artifacts.
+- Save and reconstruct real checkpoint bytes in generated workspaces instead of
+  returning fabricated RNG state from a placeholder file.
+
+- Default workspace stages to verified reuse, automatically index successful
+  runs, and keep `reuse="never"` as the explicit fresh-computation policy.
+- Preserve run, measurement, benchmark, and reuse indexes during knowledge refresh.
+- Add executable examples for default reuse, forced computation, measured vector
+  search, and portable evidence export. Exercise download-root enforcement and
+  declared Python file access in the existing complete pipelines.
+- Check current documentation imports, callable arguments, and model field names
+  against the live public API. Document automatic journal capture separately from
+  manual knowledge publication and projection-only refresh.
+
 - Add a production Google Cloud Storage client that preserves workspace-relative
   artifact paths, exposes only sealed content revisions, and verifies restored bytes.
 - Add a publish-and-restore probe receipt for checking durable storage before an

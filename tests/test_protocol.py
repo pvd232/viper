@@ -69,7 +69,11 @@ from viper.runs import (
 )
 from viper.runtime import CUDABackendContext, ReproducibilitySpec
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
-from viper.serialization import load_stage_spec, semantic_document_digest
+from viper.serialization import (
+    load_stage_spec,
+    parse_yaml_bytes,
+    semantic_document_digest,
+)
 from viper.stages import (
     DownloadSpec,
     ParameterizedSpec,
@@ -1191,6 +1195,29 @@ class ArtifactAndVariantTests(unittest.TestCase):
 class YAMLLoadingTests(unittest.TestCase):
     """Verify canonical examples and YAML parsing boundaries."""
 
+    def test_safe_parser_preserves_nested_values_and_aliases(self) -> None:
+        """Keep scalar interpretation and aliases identical to the safe YAML parser."""
+        raw = (
+            b"base: &base [1, null, true, 1.25, '0123']\ncopy: *base\n"
+            b"nested: {date: 2026-10-05, value: [x, y]}\n"
+        )
+        self.assertEqual(parse_yaml_bytes(raw), yaml.safe_load(raw))
+
+    def test_safe_parser_rejects_object_construction(self) -> None:
+        """Reject executable YAML tags with the native and Python parser backends."""
+        with self.assertRaises(yaml.constructor.ConstructorError):
+            parse_yaml_bytes(b"!!python/object/apply:builtins.eval ['1 + 1']\n")
+
+    def test_safe_parser_rejects_duplicate_nested_and_merged_keys(self) -> None:
+        """Preserve duplicate rejection after expanding YAML merge aliases."""
+        for raw in (
+            b"nested: {value: 1, value: 2}\n",
+            b"base: &base {value: 1}\nnested: {<<: *base, value: 2}\n",
+        ):
+            with self.subTest(raw=raw):
+                with self.assertRaisesRegex(ValueError, "duplicate YAML key"):
+                    parse_yaml_bytes(raw)
+
     def test_download_stage_fixture_loads(self) -> None:
         """Load the canonical download-stage parser fixture."""
         stage_path = (
@@ -1332,7 +1359,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
         metrics={metric.metric_id: metric},
     )
 
-    assert stage.reuse == "never"
+    assert stage.reuse == "verified"
     assert enabled.reuse == "verified"
     assert len(stage_reuse_key_sha256(key)) == 64
     assert key.inputs == (selected_input,)
@@ -1353,6 +1380,21 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             source=source_file,
             target=target.model_copy(update={"sha256": SHA_B}),
         )
+
+
+def test_stage_reuse_default_and_explicit_opt_out_roundtrip() -> None:
+    """Default omitted reuse to verified and preserve a recorded recompute policy."""
+    payload = train_payload()
+    selected = TrainSpec.model_validate(payload)
+    assert selected.reuse == "verified"
+    reuse_schema = ParameterizedSpec.model_json_schema()["properties"]["reuse"]
+    assert reuse_schema["default"] == "verified"
+    assert reuse_schema["description"]
+
+    payload["reuse"] = "never"
+    recomputed = TrainSpec.model_validate(payload)
+    assert recomputed.reuse == "never"
+    assert TrainSpec.model_validate_json(recomputed.model_dump_json()) == recomputed
 
 
 def test_stage_context_digest_ignores_absent_schema_extensions() -> None:

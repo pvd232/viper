@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from viper.outputs import OutputDraft, StageOutputs, output, run_output_path
+from viper.execution._stage import StageExecutionError, _resolved_output_paths
+from viper.outputs import OutputDraft, OutputSpec, StageOutputs, output, run_output_path
 from viper.references import output_pointer_path
 
 PAIR_BLOCK_ID = "P1-PAC-03"
@@ -76,3 +78,70 @@ def test_generated_paths_do_not_contain_retired_categories() -> None:
         stage_id="build", output_name="features", relative_path="values.bin"
     )
     assert not {"datasets", "models", "priors", "evals"} & set(path.split("/"))
+
+
+def test_repeated_output_detaches_readonly_snapshot_inode(tmp_path: Path) -> None:
+    """Allow a new attempt to write without mutating retained artifact bytes."""
+    stored = tmp_path / "immutable.bin"
+    stored.write_bytes(b"original measurement")
+    stored.chmod(0o444)
+    (tmp_path / "outputs").mkdir()
+    output_path = tmp_path / "outputs/output.bin"
+    os.link(stored, output_path)
+    declaration = OutputSpec.model_validate(
+        {
+            "kind": "file",
+            "path": "outputs/output.bin",
+            "relative_path": "output.bin",
+            "loader": {
+                "path": "loader.py",
+                "symbol": "load",
+                "sha256": "b" * 64,
+                "bytes": 1,
+            },
+            "data_role": "training",
+        }
+    )
+    resolved = _resolved_output_paths(tmp_path, {"model": declaration})
+    assert resolved["model"].read_bytes() == b"original measurement"
+    output_path.write_bytes(b"new measurement")
+    assert stored.read_bytes() == b"original measurement"
+    assert stored.stat().st_mode & 0o222 == 0
+    assert stored.stat().st_ino != output_path.stat().st_ino
+
+
+@pytest.mark.parametrize("link", ("parent", "file"))
+def test_output_preparation_rejects_symlinks_without_touching_store(
+    tmp_path: Path, link: str
+) -> None:
+    """Reject aliases into retained storage before replacing any output inode."""
+    retained = tmp_path / "retained"
+    retained.mkdir()
+    stored = retained / "output.bin"
+    stored.write_bytes(b"immutable result")
+    stored.chmod(0o444)
+    inode = stored.stat().st_ino
+    outputs = tmp_path / "outputs"
+    if link == "parent":
+        outputs.symlink_to(retained, target_is_directory=True)
+    else:
+        outputs.mkdir()
+        (outputs / "output.bin").symlink_to(stored)
+    declaration = OutputSpec.model_validate(
+        {
+            "path": "outputs/output.bin",
+            "relative_path": "output.bin",
+            "loader": {
+                "path": "loader.py",
+                "symbol": "load",
+                "sha256": "b" * 64,
+                "bytes": 1,
+            },
+            "data_role": "training",
+        }
+    )
+    with pytest.raises(StageExecutionError, match="symlink"):
+        _resolved_output_paths(tmp_path, {"model": declaration})
+    assert stored.read_bytes() == b"immutable result"
+    assert stored.stat().st_ino == inode
+    assert stored.stat().st_mode & 0o222 == 0

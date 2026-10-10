@@ -8,6 +8,7 @@ from typing import Any, Literal, cast
 
 import numpy as np
 import torch
+from numpy._core.multiarray import _reconstruct, scalar
 from pydantic import Field, model_validator
 from torch.optim import Optimizer
 from torchdata.stateful_dataloader import StatefulDataLoader
@@ -123,9 +124,45 @@ def save_resume_state(
 
 def load_resume_state(path: Path) -> ResumeState:
     """Load and validate a resume-state artifact without executing its contents."""
-    loaded = torch.load(
-        path,
-        map_location="cpu",
-        weights_only=True,
-    )
+    with resume_state_load_context():
+        loaded = torch.load(
+            path,
+            map_location="cpu",
+            weights_only=True,
+        )
     return ResumeState.model_validate(loaded)
+
+
+def resume_state_load_context() -> torch.serialization.safe_globals:
+    """Permit NumPy numeric arrays in restricted resume-state deserialization.
+
+    DataLoader state may contain NumPy counters. Object, structured and custom
+    dtypes remain outside this context, as do arbitrary Python globals.
+    """
+    return torch.serialization.safe_globals(
+        [
+            _reconstruct,
+            scalar,
+            np.ndarray,
+            np.dtype,
+            *(
+                type(np.dtype(dtype))
+                for dtype in (
+                    np.bool_,
+                    np.int8,
+                    np.int16,
+                    np.int32,
+                    np.int64,
+                    np.uint8,
+                    np.uint16,
+                    np.uint32,
+                    np.uint64,
+                    np.float16,
+                    np.float32,
+                    np.float64,
+                    np.complex64,
+                    np.complex128,
+                )
+            ),
+        ]
+    )

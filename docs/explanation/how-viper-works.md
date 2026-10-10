@@ -79,7 +79,6 @@ stateful metrics and recomputation from saved files.
 training = stage(
     fit,
     stage_id="train",
-
     inputs=(input("dataset", path="examples/data/tiny.csv", data_role="training"),),
     outputs=TrainOutputs(
         model=output(

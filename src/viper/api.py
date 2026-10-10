@@ -25,6 +25,7 @@ from pydantic import (
     field_validator,
 )
 
+from ._source import RunFetcher, run_git
 from .artifacts import (
     ArtifactPointer,
     ResolvedArtifact,
@@ -50,7 +51,6 @@ from .execution._benchmark import benchmark as execute_benchmark_run
 from .execution._export import export_run as execute_run_export
 from .execution._restore import restore as restore_run_artifacts
 from .execution._run import run as execute_run
-from .execution._source import RunFetcher, run_git
 from .execution._stage import StageExecutionError, execute_stage_process
 from .execution.errors import (
     BenchmarkExecutionError,
@@ -72,6 +72,8 @@ from .inspection import compare_runs as compare_verified_runs
 from .inspection import lineage as build_lineage
 from .inspection import plan_diff as compare_frozen_plans
 from .journal import AttemptState
+from .journals import JournalPublicationResult
+from .journals import publish_run_journal as publish_saved_journal
 from .knowledge import (
     AssertionQuery,
     AssignmentQuery,
@@ -166,6 +168,7 @@ OperationName = Literal[
     "search_measurements",
     "search_benchmarks",
     "knowledge_refresh",
+    "publish_run_journal",
     "search_primitives",
     "search_assignments",
     "search_modulations",
@@ -737,6 +740,28 @@ class KnowledgeRefreshRequest(APIModel):
     heads: tuple[ResolvedFileRef, ...] = ()
 
 
+class PublishRunJournalRequest(APIModel):
+    """Select a saved run whose current journal should be parsed and encoded."""
+
+    root: Path = Field(description="Workspace containing the saved run and journal.")
+    resolved_run: Path = Field(
+        description="Saved terminal result, absolute or relative to the workspace."
+    )
+    trusted_source_repositories: frozenset[str] = Field(
+        min_length=1,
+        description="Trusted repositories whose saved artifact loaders may run.",
+    )
+
+
+class PublishRunJournalSuccess(SuccessModel):
+    """Return the retained journal and immutable parsed/vector records."""
+
+    operation: Literal["publish_run_journal"] = "publish_run_journal"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: JournalPublicationResult = Field(
+        description="Retained source and exact-source assertion/vector references."
+    )
+
+
 class KnowledgeRefreshSuccess(SuccessModel):
     """Return the rebuilt catalog identity and source counts."""
 
@@ -803,6 +828,8 @@ KNOWLEDGE_QUERY_REGISTRY: dict[OperationName, type[BaseModel]] = {
 
 
 SCHEMA_REGISTRY: dict[str, Any] = {
+    "PublishRunJournalRequest": PublishRunJournalRequest,
+    "PublishRunJournalSuccess": PublishRunJournalSuccess,
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
     "CapabilitiesRequest": CapabilitiesRequest,
@@ -907,6 +934,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "search_measurements",
     "search_benchmarks",
     "knowledge_refresh",
+    "publish_run_journal",
     "search_primitives",
     "search_assignments",
     "search_modulations",
@@ -1753,10 +1781,21 @@ def search_benchmarks(
 
 
 def knowledge_refresh(request: KnowledgeRefreshRequest) -> KnowledgeRefreshSuccess:
-    """Rebuild the knowledge projection from local and supplied manifest heads."""
+    """Refresh knowledge from manifest heads while retaining execution indexes."""
     repository_root = _root(request.root, "knowledge_refresh")
-    result = catalog(root=repository_root).refresh(knowledge=request.heads)
+    result = catalog(root=repository_root).refresh_knowledge(request.heads)
     return KnowledgeRefreshSuccess(result=result)
+
+
+def publish_run_journal(request: PublishRunJournalRequest) -> PublishRunJournalSuccess:
+    """Parse and encode a saved run's current journal without stage execution."""
+    root = _root(request.root, "publish_run_journal")
+    result = publish_saved_journal(
+        root,
+        request.resolved_run,
+        trusted_source_repositories=request.trusted_source_repositories,
+    )
+    return PublishRunJournalSuccess(result=result)
 
 
 def search_primitives(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
@@ -1964,6 +2003,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "search_measurements": SearchMeasurementsRequest,
     "search_benchmarks": SearchBenchmarksRequest,
     "knowledge_refresh": KnowledgeRefreshRequest,
+    "publish_run_journal": PublishRunJournalRequest,
     "search_primitives": KnowledgeSearchRequest,
     "search_assignments": KnowledgeSearchRequest,
     "search_modulations": KnowledgeSearchRequest,
@@ -2015,6 +2055,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "search_measurements": search_measurements,
     "search_benchmarks": search_benchmarks,
     "knowledge_refresh": knowledge_refresh,
+    "publish_run_journal": publish_run_journal,
     "search_primitives": search_primitives,
     "search_assignments": search_assignments,
     "search_modulations": search_modulations,
@@ -2333,6 +2374,9 @@ __all__ = [
     "init_workspace",
     "get_schema",
     "knowledge_refresh",
+    "PublishRunJournalRequest",
+    "PublishRunJournalSuccess",
+    "publish_run_journal",
     "lineage",
     "plan_diff",
     "preflight",

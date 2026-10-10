@@ -154,9 +154,13 @@ def test_built_distributions_exclude_experimental_surfaces(tmp_path: Path) -> No
     source_members = next(
         members for name, members in inventories.items() if name.endswith(".tar.gz")
     )
-    assert {"viper/catalog.py", "viper/knowledge.py", "viper/mcp.py"} <= set(
-        wheel_members
-    )
+    assert {
+        "viper/catalog.py",
+        "viper/knowledge.py",
+        "viper/mcp.py",
+        "viper/journals.py",
+        "viper/_journal_encoder.py",
+    } <= set(wheel_members)
     assert {
         "llms.txt",
         "CHANGELOG.md",
@@ -174,6 +178,14 @@ def test_built_distributions_exclude_experimental_surfaces(tmp_path: Path) -> No
         "examples/workflow_functions.py",
         "examples/data/tiny.csv",
         "examples/data/held_out.csv",
+        "examples/journal_search.py",
+        "examples/data/JOURNAL.md",
+        "examples/reuse.py",
+        "examples/knowledge_search.py",
+        "examples/export_run.py",
+        "docs/how-to/journals.md",
+        "docs/how-to/cloud-storage.md",
+        "docs/how-to/test-selection.md",
     } <= set(source_members)
     for distribution in distributions:
         metadata = _distribution_metadata(distribution)

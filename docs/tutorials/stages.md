@@ -50,6 +50,7 @@ prepared = stage(
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
     ),
+    file_access="declared",
 )
 
 

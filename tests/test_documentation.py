@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
+import shlex
 import tomllib
 
 import pytest
@@ -12,10 +14,11 @@ from tests._documentation import (
     ROOT,
     decoded_local_link,
     github_anchors,
+    invocation_errors,
     local_links,
     python_blocks,
 )
-from viper.api import OPERATIONS
+from viper.api import OPERATIONS, REQUEST_REGISTRY, OperationName
 from viper.cli import build_parser
 from viper.mcp import prompt_registry
 
@@ -72,6 +75,85 @@ def test_public_python_examples_are_syntactically_valid() -> None:
     for document in PUBLIC_MARKDOWN:
         for block in python_blocks(document.read_text()):
             ast.parse(block, filename=str(document), feature_version=(3, 11))
+
+
+def test_current_documentation_imports_and_calls_match_the_live_api() -> None:
+    """Reject retired imports, missing arguments, and misspelled model fields."""
+    documents = (
+        ROOT / "README.md",
+        *sorted((ROOT / "docs/tutorials").glob("*.md")),
+        *sorted((ROOT / "docs/how-to").glob("*.md")),
+        *sorted((ROOT / "docs/reference").glob("*.md")),
+        *sorted((ROOT / "docs/explanation").glob("*.md")),
+    )
+    failures = []
+    for document in documents:
+        program = "\n\n".join(python_blocks(document.read_text()))
+        failures.extend(
+            f"{document.relative_to(ROOT)}: {error}"
+            for error in invocation_errors(program)
+        )
+    for example in sorted((ROOT / "examples").glob("*.py")):
+        failures.extend(
+            f"{example.relative_to(ROOT)}: {error}"
+            for error in invocation_errors(example.read_text())
+        )
+    assert failures == []
+
+
+@pytest.mark.parametrize(
+    "program",
+    (
+        "from viper.authoring import retired_stage",
+        "from viper.authoring import stage\nstage()",
+        "from viper.knowledge import AssertionQuery\n"
+        'AssertionQuery(assertion_ids=("missing",))',
+        "from viper.metrics import FloatComparator\n"
+        'FloatComparator(mode="exact", tolerence=0)',
+        "from viper import execution\nexecution.retired_run()",
+    ),
+)
+def test_invocation_checker_rejects_stale_or_incomplete_examples(program: str) -> None:
+    """Prove the checker detects import, signature, model-key, and module-call drift."""
+    assert invocation_errors(program)
+
+
+def test_current_documented_cli_invocations_match_the_parser() -> None:
+    """Parse displayed commands without executing workspace mutations."""
+    documents = (
+        ROOT / "README.md",
+        *sorted((ROOT / "docs/tutorials").glob("*.md")),
+        *sorted((ROOT / "docs/how-to").glob("*.md")),
+        *sorted((ROOT / "docs/reference").glob("*.md")),
+    )
+    parser = build_parser()
+    for document in documents:
+        blocks = re.findall(r"```bash\n(.*?)\n```", document.read_text(), re.DOTALL)
+        for block in blocks:
+            for line in block.replace("\\\n", " ").splitlines():
+                if not line.startswith("viper "):
+                    continue
+                arguments = shlex.split(line)[1:]
+                if "--help" in arguments:
+                    with pytest.raises(SystemExit) as exited:
+                        parser.parse_args(arguments)
+                    assert exited.value.code == 0, (document, line)
+                else:
+                    parser.parse_args(arguments)
+
+
+@pytest.mark.parametrize(
+    ("operation", "block"), (("search_assertions", 0), ("search_diagnostics", 1))
+)
+def test_documented_mcp_knowledge_queries_match_live_requests(
+    operation: OperationName, block: int
+) -> None:
+    """Validate copied JSON filters against the server's typed request owners."""
+    document = ROOT / "docs/how-to/catalog-knowledge-mcp.md"
+    programs = re.findall(r"```json\n(.*?)\n```", document.read_text(), re.DOTALL)
+    arguments = json.loads(programs[block])
+    request = REQUEST_REGISTRY[operation].model_validate({"root": ROOT, **arguments})
+    assert request.model_dump(mode="json")["query"]["limit"] == 20
 
 
 def test_public_markdown_links_resolve() -> None:
@@ -133,6 +215,8 @@ def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
             expected[operation] = "env doctor"
         elif operation == "knowledge_refresh":
             expected[operation] = "knowledge refresh"
+        elif operation == "publish_run_journal":
+            expected[operation] = "knowledge journal"
         elif operation.startswith("publish_"):
             expected[operation] = f"knowledge publish {operation}"
         elif expected[operation].startswith("search-") and operation not in {
@@ -415,6 +499,7 @@ def test_documentation_navigation_separates_reader_and_internal_routes() -> None
         ("docs/tutorials/getting-started.md", "examples/cpu_quickstart.py", None),
         ("docs/tutorials/inspect-results.md", "examples/inspect_results.py", (0,)),
         ("docs/tutorials/stages.md", "examples/stages.py", (0,)),
+        ("docs/tutorials/knowledge-search.md", "examples/knowledge_search.py", (0,)),
         ("docs/how-to/variants-and-replicates.md", "examples/variants.py", (0,)),
     ),
 )
@@ -429,6 +514,13 @@ def test_complete_documented_programs_match_executed_sources(
     documented = ast.parse("\n\n".join(selected))
     source = ast.parse((ROOT / program).read_text())
     assert ast.dump(documented) == ast.dump(source), document
+
+
+def test_documented_test_selection_executes() -> None:
+    """Check the printed graph selects its observer and reports an unknown owner."""
+    document = ROOT / "docs/how-to/test-selection.md"
+    program = python_blocks(document.read_text())[0]
+    exec(compile(program, str(document), "exec"), {})
 
 
 def test_all_documentation_pages_are_reachable_from_the_readme() -> None:

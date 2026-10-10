@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import signal
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,8 +11,9 @@ from pathlib import Path
 from threading import current_thread, main_thread
 from typing import Literal
 
+from .._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
 from .._verification.storage import read_attempt_reference
-from ..catalog import Catalog
+from ..catalog import Catalog, CatalogRunSource
 from ..evidence import VerificationError, VerificationPolicy, VerifiedRunResult
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
@@ -21,6 +23,7 @@ from ..inputs import (
     ResolvedInputRef,
 )
 from ..journal import DurableJournal
+from ..journals import capture_completed_journal
 from ..metrics import is_recomputed_metric
 from ..preflight import preflight_plan
 from ..references import (
@@ -33,6 +36,7 @@ from ..references import (
     ResolvedStageRef,
     SnapshotFileRef,
     ViperCloudFileRef,
+    resolve_snapshot_file_ref,
     storage_file,
 )
 from ..reuse import (
@@ -40,6 +44,7 @@ from ..reuse import (
     StageReuseCandidate,
     attempt_reuse_candidates,
     build_stage_reuse_key,
+    catalog_reuse_candidates,
 )
 from ..runs import (
     AttemptFailure,
@@ -91,7 +96,6 @@ from ._resolution import (
 )
 from ._restore import resolve_run_reference
 from ._reuse import reuse_stage
-from ._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
 from ._stage import (
     StageExecutionError,
     StageProcessInterrupted,
@@ -99,6 +103,31 @@ from ._stage import (
 )
 from .errors import RestoreError, RunError
 from .results import ConfirmationRunResult, RunResult
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _index_completed_run(
+    root: Path, reference: ResolvedRunRef, verified: VerifiedRunResult
+) -> None:
+    """Index reusable stages after closure while preserving the saved run."""
+    try:
+        Catalog(root).register_run(
+            CatalogRunSource(
+                reference=reference,
+                verified=verified,
+                reuse_candidates=catalog_reuse_candidates(reference, verified),
+            )
+        )
+    except (Exception, KeyboardInterrupt) as exc:
+        # The saved run is authoritative; a derived-index failure must never
+        # invalidate completed measurements or require another worker execution.
+        _LOGGER.warning(
+            "Completed run %s could not enter the reuse catalog: %s. "
+            "Use catalog_refresh to index the saved result.",
+            verified.plan.run.run_id,
+            exc,
+        )
 
 
 def _verification_policy(
@@ -335,6 +364,7 @@ def execute_attempt(
             root,
             run_path,
             plan=plan,
+            fetcher=fetcher,
         )
         preflight_path = workspace.control / "preflight.json"
         write_synchronized(
@@ -665,6 +695,20 @@ def execute_attempt(
                 resolved_stage=resolved_raw,
                 files=snapshot_paths,
             )
+            for path, source_path in snapshot_paths.items():
+                with source_path.open("rb") as stream:
+                    source_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+                fetcher.remember_verified_path(
+                    resolve_snapshot_file_ref(
+                        snapshot,
+                        SnapshotFileRef(
+                            path=path,
+                            sha256=source_sha256,
+                            bytes=source_path.stat().st_size,
+                        ),
+                    ),
+                    source_path,
+                )
             resolved_stage_ref = ResolvedStageRef(
                 stage_id=stage_reference.stage_id,
                 snapshot=snapshot,
@@ -784,7 +828,7 @@ def execute_attempt(
             completed_at=datetime.now(UTC),
         )
         terminal_raw = serialize_document(resolved_run)
-        verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+        verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
         replace_synchronized(terminal_path, terminal_raw)
         write_synchronized(workspace.terminal, terminal_raw)
         terminal_reference = publish_resolved_files(
@@ -802,6 +846,8 @@ def execute_attempt(
             run_reference,
             replace_existing=previous_run is not None,
         )
+        _index_completed_run(root, run_reference, verified_run)
+        capture_completed_journal(root, run_reference, verified_run)
         return RunResult(
             record=resolved_run,
             reference=run_reference,

@@ -58,13 +58,6 @@ class _ParameterizedStage(Protocol):
     def model_dump(self, *, mode: Literal["json"]) -> dict[str, Any]: ...
 
 
-class _VerifiedSnapshot(Protocol):
-    """Expose one verified file reference used by input identity."""
-
-    @property
-    def reference(self) -> SnapshotFileRef: ...
-
-
 class _VerifiedInput(Protocol):
     """Expose verified input evidence used by reuse-key construction."""
 
@@ -75,7 +68,7 @@ class _VerifiedInput(Protocol):
     def data_role(self) -> DataRole: ...
 
     @property
-    def files(self) -> tuple[_VerifiedSnapshot, ...]: ...
+    def artifact(self) -> ResolvedArtifact: ...
 
 
 class _VerifiedPlan(Protocol):
@@ -368,30 +361,12 @@ def verified_input_identity(
     input_name: InputName,
     value: _VerifiedInput,
 ) -> ReuseInputIdentity:
-    """Build one reuse identity from input bytes already accepted by verification."""
-    files = []
-    for file in value.files:
-        path = Path(file.reference.path)
-        root = Path(value.path)
-        # A single-file input uses its filename; relative_to would produce ".".
-        if path == root:
-            relative = path.name
-        else:
-            try:
-                relative = path.relative_to(root).as_posix()
-            except ValueError:
-                relative = path.name
-        files.append(
-            ReuseFileIdentity(
-                relative_path=relative,
-                sha256=file.reference.sha256,
-                bytes=file.reference.bytes,
-            )
-        )
-    return ReuseInputIdentity(
-        input_name=input_name,
-        data_role=value.data_role,
-        files=tuple(sorted(files, key=lambda item: item.relative_path)),
+    """Identify verified bytes under the same consumer paths used at execution."""
+    return artifact_input_identity(
+        input_name,
+        value.data_role,
+        value.path,
+        value.artifact,
     )
 
 
@@ -410,13 +385,18 @@ def build_stage_reuse_key(
     selected_metrics = tuple(metrics[metric_id] for metric_id in stage.metric_ids)
     return StageReuseKey(
         stage_id=stage_id,
-        stage_sha256=_canonical_sha256(_normalized_stage(stage)),
+        stage_sha256=stage_spec_sha256(stage),
         inputs=tuple(sorted(inputs, key=lambda item: item.input_name)),
         seed=seed,
         env_sha256=_canonical_sha256(_normalized_environment(env, lockfile)),
         reproducibility_sha256=_canonical_sha256(reproducibility),
         metric_sha256s=tuple(_canonical_sha256(metric) for metric in selected_metrics),
     )
+
+
+def stage_spec_sha256(stage: _ParameterizedStage) -> SHA256:
+    """Hash the normalized stage definition, including stored pointer identities."""
+    return _canonical_sha256(_normalized_stage(stage))
 
 
 def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:

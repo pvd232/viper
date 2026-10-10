@@ -1,5 +1,7 @@
 """Download a pinned CSV and train a linear model from its verified bytes."""
 
+from pydantic import HttpUrl
+
 from examples.cpu_quickstart import fit, load_json, load_state, mse
 from examples.workflow_functions import load_text
 from viper import execution
@@ -16,8 +18,10 @@ fetch_data = download(
     inputs={
         "dataset": HttpRequestSpec(
             url=(
-                "https://raw.githubusercontent.com/pvd232/viper/"
-                "327d1f89ad38d855e500f5386bdd2894d049a899/examples/data/tiny.csv"
+                HttpUrl(
+                    "https://raw.githubusercontent.com/pvd232/viper/"
+                    "327d1f89ad38d855e500f5386bdd2894d049a899/examples/data/tiny.csv"
+                )
             ),
             version="327d1f89ad38d855e500f5386bdd2894d049a899",
             expected_body_sha256="5962ba6c35b56dabeb8121dd6656aba7b1e60afe0d2ddec498feb191057d15fe",
@@ -53,6 +57,7 @@ training = stage(
     ),
     metrics=(mse,),
     objective=min(mse),
+    input_roots="download",
 )
 study = experiment(
     experiment_id="download_training",

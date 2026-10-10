@@ -17,15 +17,15 @@ from ._config.validation import (
     validate_stage_config,
     verify_config_type_bytes,
 )
+from ._source import RunFetcher
 from ._verification.plan import (
     verify_benchmark_spec,
     verify_experiment_and_variant,
     verify_run_plan_relationships,
 )
-from ._verification.storage import fetch_storage_bytes, verify_resolved_file_bytes
+from ._verification.storage import verify_resolved_file_bytes
 from .artifacts import ArtifactPointer
-from .cloud import ViperCloud
-from .evidence import VerificationError, VerificationPolicy
+from .evidence import StorageFetcher, VerificationError, VerificationPolicy
 from .http import (
     HttpRetrievalError,
     WorkspaceHttpImplementationSpec,
@@ -36,14 +36,9 @@ from .ids import StageId
 from .inputs import FutureInputRef, StoredInputRef, pointer_location
 from .metrics import MetricError, validate_metric_definition
 from .references import (
-    GcsFileRef,
     GitFileRef,
-    HuggingFaceFileRef,
-    LocalFileRef,
     ResolvedArtifactPointerRef,
     ResolvedRunSpecRef,
-    StorageModel,
-    ViperCloudFileRef,
 )
 from .runs import RunSpec
 from .runtime import (
@@ -63,7 +58,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
-from .storage import local_artifact_store, viper_cloud
+from .storage import LocalArtifactStore
 from .verification import verify_artifact_in_run, verify_pointer_producer
 
 PreflightStatus = Literal["pass", "warning", "failure"]
@@ -147,6 +142,7 @@ def preflight_plan(
     run_spec_path: Path,
     *,
     plan: ResolvedRunSpecRef | None = None,
+    fetcher: StorageFetcher | None = None,
 ) -> PreflightReport:
     """Validate plan bytes, host requirements, and same-run dependencies."""
     root = repository_root.resolve()
@@ -167,42 +163,10 @@ def preflight_plan(
         )
     checks.append(_check("plan.document", run_spec_path.as_posix(), True, ""))
 
-    def fetch(location: StorageModel) -> bytes:
-        """Retrieve source-repository files locally and dispatch other backends."""
-        if (
-            isinstance(location, GitFileRef)
-            and location.repository == run.source.repository
-        ):
-            return _git_bytes(root, location.commit, location.path)
-        if isinstance(location, LocalFileRef):
-            return local_artifact_store(location).fetch(location)
-        if isinstance(
-            location,
-            (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
-        ):
-            cloud = (
-                viper_cloud(root)
-                if isinstance(location, ViperCloudFileRef)
-                else ViperCloud.for_reference(root, location)
-            )
-            return cloud.fetch(location)
-        return fetch_storage_bytes(location)
-
-    class _CachedFetcher:
-        def __init__(self, fetch_fn):
-            self._fetch = fetch_fn
-            self._producers = {}
-
-        def __call__(self, loc: StorageModel) -> bytes:
-            return self._fetch(loc)
-
-        def read_verified_producer(self, ref, policy):
-            return self._producers.get((ref, policy))
-
-        def remember_verified_producer(self, ref, policy, prod):
-            self._producers[(ref, policy)] = prod
-
-    fetch = _CachedFetcher(fetch)
+    if fetcher is None:
+        fetch = RunFetcher(root, LocalArtifactStore(root), str(run.source.repository))
+    else:
+        fetch = fetcher
 
     try:
         if plan is None:

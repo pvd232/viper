@@ -24,12 +24,17 @@ def _redundant_private_modules(source_root: Path) -> list[Path]:
 
 
 def _shared_private_symbols(source_root: Path) -> list[tuple[Path, int, str]]:
-    """Find single-underscore symbols imported across module boundaries."""
+    """Find Viper-owned private symbols imported across its module boundaries."""
     violations: list[tuple[Path, int, str]] = []
     for path in source_root.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
+                continue
+            if (
+                node.level == 0
+                and (node.module or "").split(".")[0] != source_root.name
+            ):
                 continue
             for imported in node.names:
                 if imported.name.startswith("_") and not imported.name.startswith("__"):
@@ -72,19 +77,43 @@ def test_private_package_rejects_an_underscored_module(tmp_path: Path) -> None:
     assert _redundant_private_modules(source_root) == [Path("_runtime/_process.py")]
 
 
-def test_cross_module_import_rejects_an_underscored_symbol(tmp_path: Path) -> None:
-    """Reject a private symbol imported by another module."""
+@pytest.mark.parametrize(
+    "declaration",
+    (
+        "from ._attempt import _execute_attempt\n",
+        "from viper.execution._attempt import _execute_attempt\n",
+    ),
+)
+def test_cross_module_import_rejects_an_underscored_symbol(
+    tmp_path: Path, declaration: str
+) -> None:
+    """Reject relative and absolute imports of a Viper-owned private symbol."""
     source_root = tmp_path / "viper"
     module = source_root / "execution" / "_run.py"
     module.parent.mkdir(parents=True)
     module.write_text(
-        "from ._attempt import _execute_attempt\n",
+        declaration,
         encoding="utf-8",
     )
 
     assert _shared_private_symbols(source_root) == [
         (Path("execution/_run.py"), 1, "_execute_attempt")
     ]
+
+
+def test_external_private_imports_do_not_define_viper_access_boundaries(
+    tmp_path: Path,
+) -> None:
+    """Accept NumPy constructors without exempting Viper's private helpers."""
+    source_root = tmp_path / "viper"
+    source_root.mkdir()
+    (source_root / "resume.py").write_text(
+        "from numpy._core.multiarray import _reconstruct\n"
+        "from viper_like.module import _external\n"
+        "from viper.resume import _restore\n",
+        encoding="utf-8",
+    )
+    assert _shared_private_symbols(source_root) == [(Path("resume.py"), 3, "_restore")]
 
 
 def test_project_paths_reject_symlinks(tmp_path: Path) -> None:

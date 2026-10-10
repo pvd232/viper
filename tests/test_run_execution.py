@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import inspect
 import os
+import sqlite3
 import threading
 import time
 from collections.abc import Iterator
@@ -30,6 +31,8 @@ from tests.fixtures import (
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper import config
+from viper._cloud import resolve_publication_source
+from viper._source import ExecutionRunFetcher, RunFetcher
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
 from viper.api import compare_runs as compare_runs_application
@@ -42,10 +45,14 @@ from viper.artifacts import (
 )
 from viper.authoring import (
     FrozenPlanFiles,
+    RunArtifactDraft,
+    TrainSpecDraft,
+    download,
     experiment,
     freeze_run_plan,
     plan,
     replicate,
+    run_artifact,
     stage,
     variant,
 )
@@ -57,9 +64,11 @@ from viper.evidence import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
+    VerifiedInput,
+    VerifiedRunResult,
     VerifiedSnapshotFile,
 )
-from viper.execution import _batch
+from viper.execution import _attempt, _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
 from viper.execution._attempt import _verification_policy, execute_attempt
@@ -69,9 +78,9 @@ from viper.execution._materialization import (
     verify_captured_inputs,
 )
 from viper.execution._metric import MetricWorkerResult
+from viper.execution._promotion import _RunGraphPromoter
 from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
-from viper.execution._source import RunFetcher
 from viper.execution._stage import (
     StageExecutionError,
     _resolve_artifact,
@@ -107,7 +116,7 @@ from viper.metrics import (
 from viper.metrics import (
     min as minimize,
 )
-from viper.outputs import OutputSpec, output
+from viper.outputs import OutputSpec, StageOutputs, output
 from viper.references import (
     GcsFileRef,
     GitFileRef,
@@ -124,6 +133,7 @@ from viper.references import (
 from viper.reuse import (
     ReusedStageCompletion,
     catalog_reuse_candidates,
+    verified_input_identity,
 )
 from viper.runs import (
     AttemptFailure,
@@ -167,6 +177,33 @@ from viper.workspace import (
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
+
+
+@pytest.mark.parametrize("consumer_name", ("original.npz", "bank.npz", "bank"))
+def test_reuse_identity_preserves_the_consumer_filename(consumer_name: str) -> None:
+    """Keep a renamed stored input reusable without changing its byte identity."""
+    payload = b"saved control program bank"
+    reference = SnapshotFileRef(
+        path="experiments/producer/artifacts/original.npz",
+        sha256=hashlib.sha256(payload).hexdigest(),
+        bytes=len(payload),
+    )
+    artifact = ResolvedSingleFileArtifact(relative_path="original.npz", file=reference)
+    value = VerifiedInput(
+        path=f"inputs/control/{consumer_name}",
+        data_role="training",
+        artifact=artifact,
+        files=(VerifiedSnapshotFile(reference=reference, content=payload),),
+    )
+
+    identity = verified_input_identity("control_program_bank", value)
+
+    assert identity.input_name == "control_program_bank"
+    assert identity.data_role == "training"
+    assert len(identity.files) == 1
+    assert identity.files[0].relative_path == consumer_name
+    assert identity.files[0].sha256 == hashlib.sha256(payload).hexdigest()
+    assert identity.files[0].bytes == len(payload)
 
 
 def test_bundle_resolution_sorts_serialized_member_paths(tmp_path: Path) -> None:
@@ -924,6 +961,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert confirmation.attempt.purpose == "benchmark_confirmation"
     assert confirmation.attempt.status == "succeeded"
     assert confirmation.attempt_path.is_file()
+    assert verified_train.spec.reuse == "verified"
+    assert confirmation.attempt.invocations
     assert result.path.read_bytes() == candidate_run_raw
     candidate_snapshots = {
         snapshot_identity(stage.snapshot)
@@ -1385,7 +1424,11 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
     )
     assert paths["reference_predictions"] == root / expected
     assert paths["reference_predictions"].read_bytes() == b"predictions"
+    assert paths["reference_predictions"].samefile(cached_predictions)
+    assert paths["reference_predictions"].stat().st_mode & 0o222 == 0
     assert paths["reference_predictions_copy"].read_bytes() == b"predictions"
+    assert paths["reference_predictions_copy"].samefile(cached_predictions)
+    assert paths["reference_predictions_copy"].stat().st_mode & 0o222 == 0
     assert len(verified_runs) == 1
     assert not (root / "inputs/parity/historical_predictions.npz").exists()
 
@@ -1672,8 +1715,10 @@ def _freeze_retry_plan(
     *,
     download_rooted: bool = False,
     cloud_native: bool = False,
+    download_source: tuple[str, int] | None = None,
+    stored_prior: RunArtifactDraft | None = None,
 ) -> FrozenPlanFiles:
-    """Freeze a two-stage plan whose second stage has a configurable failure budget."""
+    """Freeze a retry graph with an optional HTTP Download root."""
     root.mkdir(exist_ok=True)
     run_git(root, "init", "--quiet")
     run_git(root, "config", "user.email", "viper@example.com")
@@ -1743,8 +1788,32 @@ def _freeze_retry_plan(
     assert module_spec is not None and module_spec.loader is not None
     module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
+    downloaded = None
+    if download_source is not None:
+        host, port = download_source
+        downloaded = download(
+            inputs={
+                "prior": http_request(url=f"http://{host}:{port}/prior", body=b"prior")
+            },
+            outputs=StageOutputs.model_validate(
+                {
+                    "prior": output(
+                        path="prior.bin", loader=module.load, data_role="training"
+                    )
+                }
+            ),
+            policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
+        )
     prepared = stage(
         module.prepare,
+        inputs=(
+            {"prior": stored_prior}
+            if stored_prior is not None
+            else {}
+            if downloaded is None
+            else {"prior": downloaded.outputs["prior"]}
+        ),
+        input_roots="any" if downloaded is None else "download",
         outputs={  # pyright: ignore[reportArgumentType]
             "features": output(
                 path="features.bin",
@@ -1763,14 +1832,18 @@ def _freeze_retry_plan(
                 data_role="training",
             )
         },
-        input_roots="download" if download_rooted else "any",
+        input_roots="download" if download_rooted or downloaded is not None else "any",
     )
     authored = experiment(
         experiment_id="retry",
         variants={
             "baseline": variant(
                 levels={},
-                stages={"prepare": prepared, "embed": embedded},
+                stages={
+                    **({} if downloaded is None else {"download": downloaded}),
+                    "prepare": prepared,
+                    "embed": embedded,
+                },
                 estimator=embedded.outputs["embedding"],
             )
         },
@@ -2110,13 +2183,18 @@ def test_cloud_native_retry_replaces_the_verified_terminal_reference(
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
+@pytest.mark.parametrize("download_rooted", (False, True))
 def test_explicit_cloud_promotion_preserves_local_run_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    http_source: tuple[str, int],
+    download_rooted: bool,
 ) -> None:
-    """Promote one completed local graph without rerunning either stage."""
+    """Promote a completed graph and its source links without rerunning stages."""
     root = tmp_path / "project"
-    frozen = _freeze_retry_plan(root)
+    frozen = _freeze_retry_plan(
+        root, download_source=http_source if download_rooted else None
+    )
     with pytest.raises(RunError, match="attempt 1 failed"):
         execute_run(frozen.files[-1], repository_root=root)
     result = execute_retry(root, frozen.files[-1])
@@ -2157,6 +2235,73 @@ def test_explicit_cloud_promotion_preserves_local_run_mode(
     ) == calls_before
 
 
+def test_cloud_promotion_rebinds_reuse_key_for_stored_pointer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify promoted reuse when a local input pointer's document hash changes."""
+    producer_root = tmp_path / "producer"
+    producer_plan = _freeze_retry_plan(producer_root)
+    with pytest.raises(RunError):
+        execute_attempt(
+            producer_root, producer_plan.files[-1], plan=producer_plan.reference
+        )
+    producer = execute_retry(producer_root, producer_plan.files[-1])
+    root = tmp_path / "consumer"
+    frozen = _freeze_retry_plan(
+        root,
+        stored_prior=run_artifact(
+            producer.reference,
+            StageArtifactRef(stage_id="prepare", artifact_name="features"),
+            path="inputs/raw/prior.bin",
+            data_role="training",
+        ),
+    )
+    run_git(root, "fetch", "--quiet", str(producer_root), "HEAD")
+    with pytest.raises(RunError):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+    result = execute_retry(root, frozen.files[-1])
+    calls_before = (root / "build_calls.txt").read_bytes()
+    local = verify_run_result(
+        result.record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
+    )
+    assert "prepare" in local.reuse
+    (root / "viper.toml").write_text(
+        "[workspace]\nschema_version = 2\n"
+        '[viper_cloud]\nprovider = "gcs"\nbucket = "test-bucket"\n'
+    )
+    provider = InMemoryViperCloudProvider(root)
+    cloud = install_in_memory_cloud(monkeypatch, root, provider)
+    monkeypatch.setattr(
+        "viper.execution._promotion.ViperCloud", lambda selected_root, repository: cloud
+    )
+    promoted = execution_module.promote_run_to_cloud(
+        root,
+        result.reference,
+        ViperCloudDestination(owner="machina", workspace="models"),
+    )
+    assert isinstance(promoted.stored_at, GcsFileRef)
+    record = ResolvedRun.model_validate(
+        parse_yaml_bytes(cloud.fetch(promoted.stored_at))
+    )
+    verified = verify_run_result(
+        record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
+    )
+    old_key = local.reuse["prepare"].key
+    new_key = verified.reuse["prepare"].key
+    assert old_key.stage_sha256 != new_key.stage_sha256
+    assert old_key.model_copy(update={"stage_sha256": new_key.stage_sha256}) == new_key
+    assert (root / "build_calls.txt").read_bytes() == calls_before == b"1\n"
+    assert (
+        local.resolved_stages["prepare"].artifacts
+        == verified.resolved_stages["prepare"].artifacts
+    )
+
+
 def test_explicit_cloud_promotion_rejects_missing_source_bytes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2189,6 +2334,51 @@ def test_explicit_cloud_promotion_rejects_missing_source_bytes(
         )
 
     assert provider.upload_calls == []
+
+
+@pytest.mark.parametrize("copy_required", (False, True))
+def test_cloud_promotion_stages_verified_neighboring_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    copy_required: bool,
+) -> None:
+    """Publish neighboring immutable bytes through confined paths without reruns."""
+    root = tmp_path / "consumer"
+    root.mkdir()
+    producer_root = tmp_path / "producer"
+    producer_root.mkdir()
+    store = LocalArtifactStore(producer_root)
+    payload = b"retained measurement"
+    snapshot = store.snapshot({"artifacts/measurement.bin": payload})
+    provider = InMemoryViperCloudProvider(root)
+    cloud = install_in_memory_cloud(monkeypatch, root, provider)
+    original_publish = cloud.publish
+    staged_paths: list[Path] = []
+
+    def confined_publish(destination, sources):
+        """Apply the real publisher's path boundary before the in-memory upload."""
+        for source in sources.values():
+            resolved = resolve_publication_source(root, source)
+            if isinstance(resolved, Path):
+                staged_paths.append(resolved)
+        return original_publish(destination, sources)
+
+    def cross_device_link(source, destination):
+        """Exercise the streaming-copy fallback for distinct filesystems."""
+        raise OSError("cross-device link")
+
+    monkeypatch.setattr(cloud, "publish", confined_publish)
+    if copy_required:
+        monkeypatch.setattr("viper.execution._promotion.os.link", cross_device_link)
+    promoter = _RunGraphPromoter(
+        root, cloud, ViperCloudDestination(owner="machina", workspace="models")
+    )
+    promoted = promoter.promote_snapshot(snapshot)
+
+    assert cloud.fetch(cloud.file_ref(promoted, "artifacts/measurement.bin")) == payload
+    assert staged_paths and all(not path.exists() for path in staged_paths)
+    assert store.list_snapshot_files(snapshot) == ("artifacts/measurement.bin",)
+    assert not tuple((root / ".viper" / "promotion").iterdir())
 
 
 def test_download_source_failure_prevents_consumer_process_start(
@@ -2245,6 +2435,31 @@ def test_preflight_failure_exposes_no_completed_stage(
     assert result.failed_stage_id is None
 
 
+def test_attempt_preflight_reuses_execution_fetcher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Share verified object state between preflight and materialization."""
+    root = tmp_path / "project"
+    frozen = _freeze_retry_plan(root)
+    report = SimpleNamespace(
+        ready=False,
+        checks=(SimpleNamespace(code="source_changed", status="failure"),),
+    )
+    captured: dict[str, object] = {}
+
+    def record_preflight(*args: object, **kwargs: object) -> object:
+        captured["fetcher"] = kwargs["fetcher"]
+        return report
+
+    monkeypatch.setattr("viper.execution._attempt.preflight_plan", record_preflight)
+
+    with pytest.raises(RunError, match="attempt 1 failed"):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+
+    assert isinstance(captured["fetcher"], ExecutionRunFetcher)
+
+
 def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> None:
     """Republish a verified completed stage and execute only unfinished work."""
     root = tmp_path / "project"
@@ -2274,6 +2489,11 @@ def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> Non
 
     assert isinstance(completion, ReusedStageCompletion)
     assert verified.reuse["prepare"].source_attempt == failed.record.attempts[-1]
+    candidates = catalog_reuse_candidates(result.reference, verified)
+    recovered_candidate = next(
+        item for item in candidates if item.key.stage_id == "prepare"
+    )
+    assert Catalog(root).reuse_candidate(recovered_candidate.key) == recovered_candidate
     assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
     assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
 
@@ -2397,8 +2617,24 @@ def test_retry_finds_completed_stage_before_empty_failed_retry(
     assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
 
 
-def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
-    """Reuse verified output without invoking the project stage a second time."""
+@pytest.mark.parametrize(
+    "scenario",
+    (
+        "automatic",
+        "manual",
+        "never",
+        "seed_mismatch",
+        "index_failure",
+        "index_interrupt",
+    ),
+)
+def test_verified_reuse_skips_stage_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    scenario: str,
+) -> None:
+    """Reuse exact matches by default; preserve opt-out and failed-index behavior."""
     root = tmp_path / "project"
     root.mkdir()
     run_git(root, "init", "--quiet")
@@ -2470,8 +2706,13 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         },
         metrics=(loss,),
         objective=minimize(loss),
-        reuse="verified",
     )
+    assert isinstance(trained.spec, TrainSpecDraft)
+    assert trained.spec.reuse == "verified"
+    if scenario == "never":
+        trained = trained.model_copy(
+            update={"spec": trained.spec.model_copy(update={"reuse": "never"})}
+        )
     authored = experiment(
         experiment_id="reuse",
         variants={
@@ -2481,7 +2722,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
                 estimator=trained.outputs["model"],
             )
         },
-        replicates={"r1": replicate("r1", seed=7)},
+        replicates={"r1": replicate("r1", seed=7), "r2": replicate("r2", seed=8)},
     )
     source_ref = GitSource.model_validate(
         {"repository": REPOSITORY, "commit": source_commit}
@@ -2504,6 +2745,27 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         reproducibility=reproducibility(),
     )
     first_frozen = freeze_run_plan(root, first_plan)
+    assert not Catalog(root).path.exists()
+    if scenario in ("index_failure", "index_interrupt"):
+
+        def fail_registration(self: Catalog, source: CatalogRunSource) -> None:
+            """Simulate an unavailable derived index after the result is saved."""
+            if scenario == "index_interrupt":
+                raise KeyboardInterrupt("indexing interrupted")
+            raise sqlite3.OperationalError("catalog unavailable")
+
+        monkeypatch.setattr(Catalog, "register_run", fail_registration)
+    verifier_calls: list[ResolvedRun] = []
+    original_verifier = _attempt.verify_run_result
+
+    def count_verification(
+        value: ResolvedRun, *, policy: VerificationPolicy, fetcher: RunFetcher
+    ) -> VerifiedRunResult:
+        """Count calls to the existing completion verifier."""
+        verifier_calls.append(value)
+        return original_verifier(value, policy=policy, fetcher=fetcher)
+
+    monkeypatch.setattr(_attempt, "verify_run_result", count_verification)
     first = execute_attempt(
         root,
         first_frozen.files[-1],
@@ -2518,23 +2780,27 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         policy=policy,
         fetcher=fetcher,
     )
-    Catalog(root).refresh(
-        runs=(
-            CatalogRunSource(
-                reference=first.reference,
-                verified=first_verified,
-                reuse_candidates=catalog_reuse_candidates(
-                    first.reference,
-                    first_verified,
+    if scenario == "manual":
+        Catalog(root).refresh(
+            runs=(
+                CatalogRunSource(
+                    reference=first.reference,
+                    verified=first_verified,
+                    reuse_candidates=catalog_reuse_candidates(
+                        first.reference,
+                        first_verified,
+                    ),
                 ),
-            ),
+            )
         )
-    )
-
+    elif scenario not in ("index_failure", "index_interrupt"):
+        assert Catalog(root).runs().items[0].run == first.reference
+        candidates = catalog_reuse_candidates(first.reference, first_verified)
+        assert Catalog(root).reuse_candidate(candidates[0].key) == candidates[0]
     second_plan = plan(
         experiment=authored,
         variant="baseline",
-        replicate="r1",
+        replicate="r2" if scenario == "seed_mismatch" else "r1",
         source=source_ref,
         env=environment,
         reproducibility=reproducibility(),
@@ -2560,7 +2826,52 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     )
     completion = reused_train.completion
 
-    assert isinstance(completion, ReusedStageCompletion)
-    assert second_verified.attempts[-1].invocations == ()
-    assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
-    assert tuple(second_verified.reuse) == ("train",)
+    assert len(verifier_calls) == 2
+    if scenario in ("automatic", "manual"):
+        assert isinstance(completion, ReusedStageCompletion)
+        assert second_verified.attempts[-1].invocations == ()
+        assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
+        assert tuple(second_verified.reuse) == ("train",)
+        assert second_verified.reuse["train"].source_run == first.reference
+    else:
+        assert not isinstance(completion, ReusedStageCompletion)
+        assert len(second_verified.attempts[-1].invocations) == 1
+        assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
+        assert second_verified.reuse == {}
+    if scenario in ("index_failure", "index_interrupt"):
+        assert "Completed run" in caplog.text
+        message = (
+            "indexing interrupted"
+            if scenario == "index_interrupt"
+            else "catalog unavailable"
+        )
+        assert message in caplog.text
+        assert "catalog_refresh" in caplog.text
+        assert not Catalog(root).path.exists()
+    else:
+        assert {item.run.sha256: item.run for item in Catalog(root).runs().items} == {
+            first.reference.sha256: first.reference,
+            second.reference.sha256: second.reference,
+        }
+    if scenario == "automatic":
+        third_frozen = freeze_run_plan(
+            root,
+            plan(
+                experiment=authored,
+                variant="baseline",
+                replicate="r1",
+                source=source_ref,
+                env=environment,
+                reproducibility=reproducibility(),
+            ),
+        )
+        third = execute_attempt(
+            root, third_frozen.files[-1], plan=third_frozen.reference
+        )
+        assert isinstance(third, RunResult)
+        third_verified = verify_run_result(third.record, policy=policy, fetcher=fetcher)
+        assert third_verified.reuse["train"].source_run == first.reference
+        assert third_verified.attempts[-1].invocations == ()
+        assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
+        assert len(Catalog(root).runs().items) == 3
+        assert len(verifier_calls) == 3

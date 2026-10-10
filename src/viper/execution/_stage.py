@@ -8,6 +8,7 @@ import os
 import shutil
 import signal
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,7 @@ from ..artifacts import (
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
 from ..outputs import OutputSpec
 from ..references import SnapshotFileRef
+from ..repository import PathError, resolve_path
 from ..runs import (
     RunSpec,
     RunStageRef,
@@ -240,12 +242,40 @@ def _resolved_output_paths(
     repository_root: Path,
     outputs: dict[ArtifactName, OutputSpec],
 ) -> dict[ArtifactName, Path]:
-    """Resolve each declared artifact output path inside the repository."""
+    """Reject symlinks and detach immutable inodes before a worker writes outputs."""
     resolved: dict[ArtifactName, Path] = {}
     for name, declaration in outputs.items():
-        physical_path = _workspace_path(repository_root, declaration.path)
-        if not physical_path.is_relative_to(repository_root):
-            raise StageExecutionError("stage output path escapes the repository root")
+        try:
+            physical_path = resolve_path(
+                repository_root, declaration.path, operation="write"
+            )
+        except PathError as error:
+            raise StageExecutionError(str(error)) from error
+        files = (
+            tuple(physical_path.rglob("*"))
+            if physical_path.is_dir()
+            else (physical_path,)
+        )
+        if any(path.is_symlink() for path in files):
+            raise StageExecutionError("stage output path contains a symlink")
+        for path in files:
+            if not path.is_file():
+                continue
+            metadata = path.stat()
+            if metadata.st_nlink == 1 and metadata.st_mode & 0o200:
+                continue
+            # Materialized inputs may share an inode with the immutable store.
+            # Replace the working copy, never chmod or overwrite the stored inode.
+            descriptor, temporary_name = tempfile.mkstemp(
+                dir=path.parent, prefix=".output."
+            )
+            temporary = Path(temporary_name)
+            os.close(descriptor)
+            try:
+                shutil.copyfile(path, temporary)
+                os.replace(temporary, path)
+            finally:
+                temporary.unlink(missing_ok=True)
         resolved[name] = physical_path
     return resolved
 

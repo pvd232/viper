@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, runtime_checkable
 
 import yaml
@@ -18,7 +19,7 @@ from ._verification.attempt import (
     verify_external_inputs,
     verify_measurement_stage_times,
 )
-from ._verification.metrics import verify_recomputed_metrics
+from ._verification.metrics import eval_metric_receipts, verify_recomputed_metrics
 from ._verification.paths import resolved_stage_spec_path, run_root
 from ._verification.plan import verify_run_plan, verify_run_spec
 from ._verification.storage import (
@@ -66,7 +67,6 @@ from .inputs import (
 )
 from .metrics import (
     Measurement,
-    MetricVerificationReceipt,
     compare_metric_values,
     is_recomputed_metric,
 )
@@ -83,6 +83,7 @@ from .references import (
     SnapshotFileRef,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
+    resolve_snapshot_file_ref,
     storage_file,
 )
 from .reuse import (
@@ -121,6 +122,20 @@ __all__ = [
 ]
 
 
+@dataclass
+class _DownloadSourceRecords:
+    """Keep hash-verified producer records within one fixed-policy audit."""
+
+    runs: dict[ResolvedRunRef, tuple[ResolvedRun, RunSpec]] = field(
+        default_factory=dict
+    )
+    attempts: dict[tuple[ResolvedRunRef, ResolvedAttemptRef], RunAttempt] = field(
+        default_factory=dict
+    )
+    specs: dict[ResolvedFileRef, BaseSpec] = field(default_factory=dict)
+    results: dict[ResolvedFileRef, ResolvedBaseSpec] = field(default_factory=dict)
+
+
 def verify_download_source_closure(
     stage_id: StageId,
     stage: InternalSpec,
@@ -135,6 +150,36 @@ def verify_download_source_closure(
     fetcher: StorageFetcher | None = None,
 ) -> DownloadSourceClosureReceipt:
     """Prove that every transitive input ends at an immutable Download receipt."""
+    return _verify_download_source_closure(
+        stage_id,
+        stage,
+        run=run,
+        attempt_id=attempt_id,
+        resolved_inputs=resolved_inputs,
+        stage_specs=stage_specs,
+        completed_stages=completed_stages,
+        completed_results=completed_results,
+        policy=policy,
+        fetcher=fetcher,
+        records=_DownloadSourceRecords(),
+    )
+
+
+def _verify_download_source_closure(
+    stage_id: StageId,
+    stage: InternalSpec,
+    *,
+    run: RunSpec,
+    attempt_id: int,
+    resolved_inputs: Mapping[InputName, ResolvedInputRef],
+    stage_specs: Mapping[StageId, BaseSpec],
+    completed_stages: Mapping[StageId, ResolvedStageRef],
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+    records: _DownloadSourceRecords,
+) -> DownloadSourceClosureReceipt:
+    """Prove that every transitive input ends at an immutable Download receipt."""
     if not stage.inputs:
         raise VerificationError(
             f"stage {stage_id!r} has no inputs to prove download-rooted"
@@ -144,8 +189,10 @@ def verify_download_source_closure(
 
     spec_adapter = TypeAdapter(Spec)
     resolved_spec_adapter = TypeAdapter(ResolvedSpec)
-    selected_runs: dict[ResolvedRunRef, tuple[ResolvedRun, RunSpec]] = {}
-    selected_attempts: dict[tuple[ResolvedRunRef, ResolvedAttemptRef], RunAttempt] = {}
+    selected_runs = records.runs
+    parsed_specs = records.specs
+    parsed_results = records.results
+    selected_attempts = records.attempts
     selected_contexts: dict[
         tuple[ResolvedRunRef, ResolvedAttemptRef, StageId],
         tuple[
@@ -157,6 +204,9 @@ def verify_download_source_closure(
         ],
     ] = {}
     active: set[tuple[str, int, StageId, str, str]] = set()
+    completed: dict[
+        tuple[str, int, StageId, str, str], tuple[VerifiedDownloadSource, ...]
+    ] = {}
     nodes: dict[str, DownloadSourceNode] = {}
     edges: dict[tuple[str, str, str], DownloadSourceEdge] = {}
 
@@ -231,11 +281,13 @@ def verify_download_source_closure(
         if attempt_reference is None:
             # Find the attempt that actually resolved the selected stage
             for candidate in reversed(result.attempts):
-                candidate_attempt = read_attempt_reference(
-                    candidate,
-                    selected_run,
-                    fetcher=fetcher,
-                )
+                attempt_key = (reference, candidate)
+                candidate_attempt = selected_attempts.get(attempt_key)
+                if candidate_attempt is None:
+                    candidate_attempt = read_attempt_reference(
+                        candidate, selected_run, fetcher=fetcher
+                    )
+                    selected_attempts[attempt_key] = candidate_attempt
                 if any(
                     item.stage_id == selected_stage_id
                     for item in candidate_attempt.resolved_stages
@@ -245,16 +297,19 @@ def verify_download_source_closure(
                     break
             if attempt_reference is None or source_attempt is None:
                 raise VerificationError(
-                    f"download source stage {selected_stage_id!r} not found in run attempts"
+                    f"download source stage {selected_stage_id!r} "
+                    "not found in run attempts"
                 )
         elif attempt_reference not in result.attempts:
             raise VerificationError("download source reuse attempt is unavailable")
         else:
-            source_attempt = read_attempt_reference(
-                attempt_reference,
-                selected_run,
-                fetcher=fetcher,
-            )
+            attempt_key = (reference, attempt_reference)
+            source_attempt = selected_attempts.get(attempt_key)
+            if source_attempt is None:
+                source_attempt = read_attempt_reference(
+                    attempt_reference, selected_run, fetcher=fetcher
+                )
+                selected_attempts[attempt_key] = source_attempt
 
         cache_key = (reference, attempt_reference, selected_stage_id)
         cached = selected_contexts.get(cache_key)
@@ -307,21 +362,30 @@ def verify_download_source_closure(
                 bytes=planned.bytes,
                 stored_at=storage_file(result.spec.stored_at, planned.spec),
             )
+            result_reference = resolve_snapshot_file_ref(
+                resolved.snapshot, resolved.resolved_spec
+            )
             try:
-                stage_spec = spec_adapter.validate_python(
-                    parse_yaml_bytes(
-                        read_resolved_file(planned_reference, fetcher=fetcher)
-                    )
-                )
-                stage_result = resolved_spec_adapter.validate_python(
-                    parse_yaml_bytes(
-                        read_snapshot_file(
-                            resolved.snapshot,
-                            resolved.resolved_spec,
-                            fetcher=fetcher,
+                stage_spec = parsed_specs.get(planned_reference)
+                if stage_spec is None:
+                    stage_spec = spec_adapter.validate_python(
+                        parse_yaml_bytes(
+                            read_resolved_file(planned_reference, fetcher=fetcher)
                         )
                     )
-                )
+                    parsed_specs[planned_reference] = stage_spec
+                stage_result = parsed_results.get(result_reference)
+                if stage_result is None:
+                    stage_result = resolved_spec_adapter.validate_python(
+                        parse_yaml_bytes(
+                            read_snapshot_file(
+                                resolved.snapshot,
+                                resolved.resolved_spec,
+                                fetcher=fetcher,
+                            )
+                        )
+                    )
+                    parsed_results[result_reference] = stage_result
             except (yaml.YAMLError, ValueError) as exc:
                 raise VerificationError(
                     "download source stage receipt is invalid"
@@ -333,8 +397,10 @@ def verify_download_source_closure(
             selected_specs[branch_stage_id] = stage_spec
             selected_refs[branch_stage_id] = resolved
             selected_results[branch_stage_id] = stage_result
-            if isinstance(stage_result, ResolvedInternalSpec) and not isinstance(
-                stage_result.completion, ReusedStageCompletion
+            if (
+                isinstance(stage_spec, InternalSpec)
+                and isinstance(stage_result, ResolvedInternalSpec)
+                and not isinstance(stage_result.completion, ReusedStageCompletion)
             ):
                 for input_ref in stage_spec.inputs.values():
                     if isinstance(input_ref, FutureInputRef):
@@ -373,6 +439,8 @@ def verify_download_source_closure(
         )
         if key in active:
             raise VerificationError("download source graph contains a cycle")
+        if key in completed:
+            return completed[key]
         active.add(key)
         try:
             result = selected_results.get(producer_stage_id)
@@ -402,7 +470,7 @@ def verify_download_source_closure(
                     raise VerificationError(
                         "download source body differs from its artifact receipt"
                     )
-                return (
+                download_roots = (
                     VerifiedDownloadSource(
                         run_id=selected_run.run_id,
                         attempt_id=selected_attempt,
@@ -413,6 +481,8 @@ def verify_download_source_closure(
                         body=retrieval.body,
                     ),
                 )
+                completed[key] = download_roots
+                return download_roots
 
             if not isinstance(result, ResolvedInternalSpec) or not isinstance(
                 spec, InternalSpec
@@ -478,7 +548,7 @@ def verify_download_source_closure(
                     source_reference,
                 )
                 connect(reuse_node, source_output, "selects")
-                return walk_stage(
+                reused_roots = walk_stage(
                     selected_output,
                     selected_run=source_run,
                     selected_attempt=source_attempt_id,
@@ -487,6 +557,8 @@ def verify_download_source_closure(
                     selected_results=source_results,
                     producer_stage_id=producer_stage_id,
                 )
+                completed[key] = reused_roots
+                return reused_roots
             if not result.inputs:
                 raise VerificationError(
                     "download source internal producer has no transitive inputs"
@@ -523,7 +595,18 @@ def verify_download_source_closure(
                         consumer_stage_id=producer_stage_id,
                     )
                 )
-            return tuple(roots)
+            unique_roots = {
+                (
+                    root.run_id,
+                    root.attempt_id,
+                    root.stage_id,
+                    root.input_name,
+                    root.stage_receipt.resolved_spec.sha256,
+                ): root
+                for root in roots
+            }
+            completed[key] = tuple(unique_roots[name] for name in sorted(unique_roots))
+            return completed[key]
         finally:
             active.remove(key)
 
@@ -948,6 +1031,8 @@ def _verify_reused_stages(
     policy: VerificationPolicy,
     fetcher: StorageFetcher | None,
     ancestors: frozenset[str],
+    verified_sources: dict[ResolvedRunRef, VerifiedRunResult],
+    download_records: _DownloadSourceRecords,
 ) -> dict[int, dict[StageId, StageReuseReceipt]]:
     """Follow and verify every reuse receipt in every recorded attempt."""
     receipts_by_attempt: dict[int, dict[StageId, StageReuseReceipt]] = {}
@@ -969,17 +1054,26 @@ def _verify_reused_stages(
             source_id = receipt.source_run.sha256
             if source_id in ancestors:
                 raise VerificationError("stage reuse sources form a cycle")
-            source_raw = read_resolved_file(receipt.source_run, fetcher=fetcher)
-            try:
-                source_run = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
-            except (yaml.YAMLError, ValueError) as exc:
-                raise VerificationError("stage reuse source run is invalid") from exc
-            source = _verify_run_result(
-                source_run,
-                policy=policy,
-                fetcher=fetcher,
-                ancestors=ancestors | {source_id},
-            )
+            source = verified_sources.get(receipt.source_run)
+            if source is None:
+                source_raw = read_resolved_file(receipt.source_run, fetcher=fetcher)
+                try:
+                    source_run = ResolvedRun.model_validate(
+                        parse_yaml_bytes(source_raw)
+                    )
+                except (yaml.YAMLError, ValueError) as exc:
+                    raise VerificationError(
+                        "stage reuse source run is invalid"
+                    ) from exc
+                source = _verify_run_result(
+                    source_run,
+                    policy=policy,
+                    fetcher=fetcher,
+                    ancestors=ancestors | {source_id},
+                    verified_sources=verified_sources,
+                    download_records=download_records,
+                )
+                verified_sources[receipt.source_run] = source
             source_attempt_id = next(
                 (
                     source_attempt.attempt_id
@@ -1027,6 +1121,8 @@ def verify_run_result(
         policy=policy,
         fetcher=fetcher,
         ancestors=frozenset(),
+        verified_sources={},
+        download_records=_DownloadSourceRecords(),
     )
 
 
@@ -1722,6 +1818,7 @@ def verify_benchmark_result(
         verified_run.plan.run,
         verified_run.plan.experiment,
         verified_run.plan.stages,
+        resolved_stages=confirmation_stages,
         fetcher=fetcher,
     )
     verify_measurement_stage_times(
@@ -1831,28 +1928,18 @@ def verify_benchmark_result(
                 "benchmark.artifacts: artifact comparison receipt differs"
             )
 
-    def metric_receipts(
-        attempt: RunAttempt,
-    ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
-        """Load the eval metric receipts owned by one attempt."""
-        receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
-        for reference in attempt.metric_verification_files:
-            raw = read_resolved_file(reference, fetcher=fetcher)
-            try:
-                receipt = MetricVerificationReceipt.model_validate(
-                    parse_yaml_bytes(raw)
-                )
-            except (yaml.YAMLError, ValueError) as exc:
-                raise VerificationError(
-                    "benchmark.metrics: metric verification receipt is invalid"
-                ) from exc
-            if receipt.stage_id != eval_stage_id:
-                continue
-            receipts[receipt.metric_id] = (reference, receipt)
-        return receipts
-
-    candidate_metric_receipts = metric_receipts(selected_attempt)
-    confirmation_metric_receipts = metric_receipts(confirmation)
+    candidate_metric_receipts = eval_metric_receipts(
+        selected_attempt,
+        eval_stage_id,
+        reused=verified_run.reuse.get(eval_stage_id),
+        fetcher=fetcher,
+    )
+    confirmation_metric_receipts = eval_metric_receipts(
+        confirmation,
+        eval_stage_id,
+        reused=None,
+        fetcher=fetcher,
+    )
     criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
     received_metrics = {receipt.metric_id: receipt for receipt in result.metrics}
     if set(received_metrics) != set(benchmark.metric_ids):
@@ -2002,6 +2089,8 @@ def _verify_run_result(
     policy: VerificationPolicy,
     fetcher: StorageFetcher | None,
     ancestors: frozenset[str],
+    verified_sources: dict[ResolvedRunRef, VerifiedRunResult],
+    download_records: _DownloadSourceRecords,
 ) -> VerifiedRunResult:
     """Verify one run while retaining the reuse chain already visited."""
     _verify_cloud_graph(resolved_run)
@@ -2100,7 +2189,7 @@ def _verify_run_result(
                 or resolved_stage.spec.input_roots != "download"
             ):
                 continue
-            rebuilt_closure = verify_download_source_closure(
+            rebuilt_closure = _verify_download_source_closure(
                 stage_id,
                 resolved_stage.spec,
                 run=plan.run,
@@ -2111,6 +2200,7 @@ def _verify_run_result(
                 completed_results=verified_stages,
                 policy=policy,
                 fetcher=fetcher,
+                records=download_records,
             )
             if rebuilt_closure != resolved_stage.download_source_closure:
                 raise VerificationError(
@@ -2123,6 +2213,7 @@ def _verify_run_result(
             plan.run,
             plan.experiment,
             plan.stages,
+            resolved_stages=verified_stages,
             fetcher=fetcher,
             measurement_references=measurement_references,
         )
@@ -2162,6 +2253,8 @@ def _verify_run_result(
         policy=policy,
         fetcher=fetcher,
         ancestors=ancestors,
+        verified_sources=verified_sources,
+        download_records=download_records,
     )
     reuse = (
         attempt_reuse.get(resolved_run.successful_attempt_id, {})

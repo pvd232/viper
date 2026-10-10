@@ -63,7 +63,36 @@ workspace retrieve the referenced bytes without confusing the producer store wit
 own. Git and Hugging Face references use repository commits. See
 [`viper.references`](../../src/viper/references.py).
 
+## Automatic reuse discovery
+
+After verification and immutable terminal publication, successful run execution
+registers its stages with `Catalog.register_run()`. The catalog
+retains earlier runs and knowledge. Reused stages remain indexed as run evidence;
+automatic registration retains an existing reuse target. A stage recovered from
+a failed attempt can enter the catalog through the successful retry when the
+catalog is missing that key.
+
+Workspace stages default to `reuse="verified"`, which permits skipping computation
+in a new run. An explicit `reuse="never"` forces computation in that run.
+Lookup uses the complete `StageReuseKey`, and the existing verifier checks the
+selected source again before publishing a reuse receipt. Stored inputs continue
+to materialize verified filesystem paths. Benchmark confirmation still invokes
+stages independently.
+
+The catalog is a derived index. A registration failure emits a warning and
+preserves the successful run. `catalog_refresh` can index that saved result or
+rebuild the catalog. Registration and refresh exclude concurrent writers through
+the same lock. The [reuse guide](../how-to/stages.md#reuse-a-verified-stage-result)
+states the default, recomputation, and recovery behavior.
+
 ## Workspace and cloud paths
+
+Scientific journals use `JournalSource` for immutable Markdown revisions and
+byte spans, and `JournalEncoding`/`JournalEncoderSpec` for exact text and learned
+encoder identities. `JournalAssertion.source` and `KnowledgeVector.encoding`
+are optional for older manually authored records. Learned journal views include
+the complete encoder/runtime digest in their version. See the
+[journal guide](../how-to/journals.md) for the writer and reader operations.
 
 `viper.repository.init_workspace()` creates the starter files returned by
 [`workspace_files()`](../../src/viper/repository.py). A run then writes its records and

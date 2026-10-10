@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pickle
 import random
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ from torch.optim import Adam
 from torch.utils.data import TensorDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
+from tests.fixtures import resume_state
 from viper.randomness import (
     capture_main_process_rng,
     restore_main_process_rng,
@@ -68,6 +70,38 @@ def train_updates(
 
 class ResumeTests(unittest.TestCase):
     """Verify exact process and DataLoader resume state."""
+
+    def test_numpy_sampling_counters_round_trip(self) -> None:
+        """Preserve numeric NumPy state without leaving safe globals enabled."""
+        for dtype in (np.int32, np.uint64, np.float32, np.bool_):
+            with self.subTest(dtype=dtype), tempfile.TemporaryDirectory() as directory:
+                saved = resume_state()
+                counters = np.array([0, 1, 1], dtype=dtype)
+                saved.dataloader.state_dict["pool_seen"] = counters
+                saved.optimizer_state["scalar"] = counters[0]
+                path = Path(directory) / "resume.pt"
+                globals_before = torch.serialization.get_safe_globals()
+                save_resume_state(path, saved)
+                loaded = load_resume_state(path)
+                np.testing.assert_array_equal(
+                    loaded.dataloader.state_dict["pool_seen"], counters
+                )
+                self.assertEqual(loaded.optimizer_state["scalar"], counters[0])
+                self.assertCountEqual(
+                    torch.serialization.get_safe_globals(), globals_before
+                )
+                with self.assertRaises(pickle.UnpicklingError):
+                    torch.load(path, weights_only=True)
+
+    def test_object_arrays_remain_rejected(self) -> None:
+        """Keep arbitrary object state outside restricted resume deserialization."""
+        with tempfile.TemporaryDirectory() as directory:
+            saved = resume_state()
+            saved.dataloader.state_dict["objects"] = np.array([1], dtype=object)
+            path = Path(directory) / "resume.pt"
+            save_resume_state(path, saved)
+            with self.assertRaises(pickle.UnpicklingError):
+                load_resume_state(path)
 
     def test_main_process_rng_round_trip(self) -> None:
         """Restore the next Python, NumPy, and PyTorch random values exactly."""

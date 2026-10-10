@@ -21,7 +21,8 @@ def test_release_metadata_matches_the_approved_public_identity() -> None:
     ]
 
     assert project["name"] == "viper-provenance"
-    assert project["version"] == "0.1.0a5"
+    assert project["version"] == "0.1.0"
+    assert "Development Status :: 5 - Production/Stable" in project["classifiers"]
     assert project["description"] == (
         "Run ML experiments and verify their source, inputs, outputs, and measurements."
     )
@@ -47,6 +48,7 @@ def test_release_metadata_matches_the_approved_public_identity() -> None:
         "PyYAML>=6,<7",
         "torch>=2.6,<3",
         "torchdata==0.11.0",
+        "transformers>=5.19,<6",
     ]
 
 

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import shutil
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -10,10 +13,12 @@ from typing import Any
 from pydantic import BaseModel, TypeAdapter
 
 from .._cloud import PublicationSource, manifest_revision
+from .._source import RunFetcher
 from ..artifacts import ArtifactPointer
 from ..benchmark import BenchmarkResult, BenchmarkSpec
 from ..cloud import ViperCloud
 from ..evidence import VerificationPolicy
+from ..inputs import DownloadSourceClosureReceipt
 from ..metrics import MetricVerificationReceipt
 from ..references import (
     CloudStageResultSnapshotRef,
@@ -31,10 +36,10 @@ from ..references import (
     ResolvedStageRef,
     SnapshotFileRef,
 )
-from ..reuse import ResolvedStageReuseRef, StageReuseReceipt
+from ..reuse import ResolvedStageReuseRef, StageReuseReceipt, stage_spec_sha256
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import parse_yaml_bytes, serialize_document
-from ..stages import ResolvedSpec, Spec
+from ..stages import InternalSpec, ResolvedSpec, Spec
 from ..storage import (
     LocalArtifactStore,
     ViperCloudDestination,
@@ -43,7 +48,6 @@ from ..storage import (
 )
 from ..verification import verify_run_result
 from ._restore import resolve_run_reference
-from ._source import RunFetcher
 from .errors import RunPromotionError
 
 _SPEC_ADAPTER = TypeAdapter(Spec)
@@ -77,6 +81,7 @@ class _RunGraphPromoter:
             dict[str, BaseModel],
         ] = {}
         self.promoting: set[LocalStageResultSnapshotRef] = set()
+        self.receipt_hashes: dict[str, str] = {}
 
     @staticmethod
     def snapshot_for(location: LocalFileRef) -> LocalStageResultSnapshotRef:
@@ -347,10 +352,31 @@ class _RunGraphPromoter:
             raise RunPromotionError("source run graph is unavailable") from error
         finally:
             self.promoting.remove(snapshot)
-        promoted, files = self.cloud.publish(self.destination, sources)
+        promoted, files = self._publish_sources(sources)
         self.snapshots[snapshot] = promoted
         self.snapshot_files[snapshot] = files
         return promoted
+
+    def _publish_sources(
+        self,
+        sources: dict[str, PublicationSource],
+    ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
+        """Stage verified neighboring-store files within the publication root."""
+        staging_root = self.root / ".viper" / "promotion"
+        staging_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=staging_root) as temporary:
+            confined: dict[str, PublicationSource] = {}
+            for path, source in sources.items():
+                if isinstance(source, bytes) or source.is_relative_to(self.root):
+                    confined[path] = source
+                    continue
+                staged = Path(temporary) / str(len(confined))
+                try:
+                    os.link(source, staged)
+                except OSError:
+                    shutil.copyfile(source, staged)
+                confined[path] = staged
+            return self.cloud.publish(self.destination, confined)
 
     def rewrite_snapshot_documents(
         self,
@@ -399,23 +425,86 @@ class _RunGraphPromoter:
         )
         if len(matches) != 1:
             raise RunPromotionError("source run graph is unavailable")
+        self.receipt_hashes[value.resolved_spec.sha256] = matches[0].sha256
         return ResolvedStageRef(
             stage_id=value.stage_id,
             snapshot=promoted_snapshot,
             resolved_spec=matches[0],
         )
 
+    def _rewrite_source_node_id(self, node_id: str) -> str:
+        """Replace only receipt hashes in canonical source-graph identities."""
+        if node_id.startswith(("pointer:", "reuse:")):
+            kind, digest = node_id.split(":", 1)
+            return f"{kind}:{self.receipt_hashes.get(digest, digest)}"
+        prefix, separator, suffix = node_id.partition("/receipt:")
+        if not separator:
+            return node_id
+        digest, slash, direction = suffix.partition("/")
+        return (
+            f"{prefix}{separator}{self.receipt_hashes.get(digest, digest)}"
+            f"{slash}{direction}"
+        )
+
+    def _rewrite_source_closure(
+        self, value: DownloadSourceClosureReceipt
+    ) -> DownloadSourceClosureReceipt:
+        """Keep source-graph links aligned with promoted immutable receipts."""
+        roots = {
+            name: tuple(
+                sorted(
+                    (self.rewrite_typed(root) for root in selected),
+                    key=lambda root: (
+                        root.run_id,
+                        root.attempt_id,
+                        root.stage_id,
+                        root.input_name,
+                        root.stage_receipt.resolved_spec.sha256,
+                    ),
+                )
+            )
+            for name, selected in value.roots.items()
+        }
+        nodes = {
+            rewritten: node.model_copy(update={"node_id": rewritten})
+            for node in value.nodes
+            for rewritten in (self._rewrite_source_node_id(node.node_id),)
+        }
+        edges = {
+            (source, target, edge.relation): edge.model_copy(
+                update={"source": source, "target": target}
+            )
+            for edge in value.edges
+            for source, target in (
+                (
+                    self._rewrite_source_node_id(edge.source),
+                    self._rewrite_source_node_id(edge.target),
+                ),
+            )
+        }
+        return DownloadSourceClosureReceipt(
+            roots=roots,
+            nodes=tuple(nodes[key] for key in sorted(nodes)),
+            edges=tuple(edges[key] for key in sorted(edges)),
+        )
+
     def rewrite_typed(self, value: Any) -> Any:
         """Promote storage references while preserving protocol model types."""
+        if isinstance(value, StageReuseReceipt):
+            return self._rewrite_reuse_receipt(value)
         if isinstance(value, ResolvedStageRef):
             return self.promote_stage_reference(value)
         if isinstance(value, ResolvedFileRef):
             promoted = self.promote_reference(value)
+            if isinstance(value, (ResolvedArtifactPointerRef, ResolvedStageReuseRef)):
+                self.receipt_hashes[value.sha256] = promoted.sha256
             payload = value.model_dump(mode="python")
             payload.update(promoted.model_dump(mode="python"))
             return type(value).model_validate(payload)
         if isinstance(value, LocalStageResultSnapshotRef):
             return self.promote_snapshot(value)
+        if isinstance(value, DownloadSourceClosureReceipt):
+            return self._rewrite_source_closure(value)
         if isinstance(value, BaseModel):
             updates = {
                 name: self.rewrite_typed(getattr(value, name))
@@ -435,6 +524,26 @@ class _RunGraphPromoter:
         if isinstance(value, dict):
             return {key: self.rewrite_typed(item) for key, item in value.items()}
         return value
+
+    def _rewrite_reuse_receipt(self, value: StageReuseReceipt) -> StageReuseReceipt:
+        """Bind the reuse key to its promoted source stage's pointer identities."""
+        source = value.source_stage
+        if not isinstance(source.snapshot, LocalStageResultSnapshotRef):
+            return value
+        original = self.documents[source.snapshot][source.resolved_spec.path]
+        rewritten_source = self.rewrite_typed(original)
+        spec = getattr(rewritten_source, "spec", None)
+        if not isinstance(spec, InternalSpec):
+            raise RunPromotionError("reuse source is not an internal stage")
+        updates = {
+            name: self.rewrite_typed(getattr(value, name))
+            for name in type(value).model_fields
+            if name != "key"
+        }
+        updates["key"] = value.key.model_copy(
+            update={"stage_sha256": stage_spec_sha256(spec)}
+        )
+        return value.model_copy(update=updates)
 
 
 def _source_repository(root: Path, run: ResolvedRun) -> str:

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import base64
+import fcntl
 import hashlib
 import json
 import math
 import os
 import sqlite3
 import tempfile
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, Literal, TypeVar
@@ -554,6 +556,96 @@ def _validate_reuse_candidate(
         raise ValueError("reuse candidate stage is absent from its attempt")
 
 
+@contextmanager
+def _catalog_write_lock(path: Path) -> Iterator[None]:
+    """Exclude another writer while registering or replacing the catalog."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix(".lock").open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def _write_run_source(
+    connection: sqlite3.Connection,
+    source: CatalogRunSource,
+    *,
+    preserve_reuse_sources: bool = False,
+) -> bool:
+    """Write the run projection and candidates using the refresh checks."""
+    key = _reference_key(source.reference)
+    error = _source_error(source)
+    connection.execute(
+        "INSERT INTO sources VALUES (?, ?, ?, ?)",
+        (key, _json(source.reference), error is None, error),
+    )
+    if error is not None:
+        return False
+    row = _run_row(source)
+    run_lineage = lineage(source.verified)
+    connection.execute(
+        "INSERT INTO runs VALUES (?, ?, ?)",
+        (key, _json(row), _json(run_lineage)),
+    )
+    for stage_id in source.verified.resolved_stages:
+        connection.execute("INSERT INTO stages VALUES (?, ?)", (key, str(stage_id)))
+    resolved_stages = source.verified.resolved_stages.values()
+    inputs = tuple(
+        stage.spec.inputs
+        for stage in resolved_stages
+        if isinstance(stage.spec, (DownloadSpec, InternalSpec))
+    )
+    for digest in sorted(set(_digests(inputs))):
+        connection.execute("INSERT INTO inputs VALUES (?, ?)", (key, digest))
+    for artifact in _artifact_rows(source):
+        connection.execute(
+            "INSERT INTO artifacts VALUES (?, ?)", (key, _json(artifact))
+        )
+        for item in artifact.files:
+            connection.execute(
+                "INSERT INTO files VALUES (?, ?, ?)",
+                (key, str(artifact.artifact_name), item.file.sha256),
+            )
+    for measurement in _measurement_rows(source):
+        connection.execute(
+            "INSERT INTO measurements VALUES (?, ?)", (key, _json(measurement))
+        )
+    for edge in run_lineage.edges:
+        catalog_edge = CatalogEdge(
+            run=source.reference,
+            source=edge.source,
+            target=edge.target,
+            relation=edge.relation,
+        )
+        connection.execute(
+            "INSERT INTO edges VALUES (?, ?)", (key, _json(catalog_edge))
+        )
+    for candidate in source.reuse_candidates:
+        _validate_reuse_candidate(source, candidate)
+        key_sha256 = stage_reuse_key_sha256(candidate.key)
+        if preserve_reuse_sources and candidate.key.stage_id in source.verified.reuse:
+            existing = connection.execute(
+                "SELECT 1 FROM stage_reuse_keys WHERE key_sha256 = ? LIMIT 1",
+                (key_sha256,),
+            ).fetchone()
+            if existing is not None:
+                continue
+        connection.execute(
+            "INSERT INTO stage_reuse_keys VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                key_sha256,
+                key,
+                candidate.completed_at.isoformat(),
+                str(row.run_id),
+                candidate.attempt_id,
+                _json(candidate),
+            ),
+        )
+    return True
+
+
 def _knowledge_bytes(root: Path, reference: ResolvedFileRef) -> bytes:
     """Load one local immutable file and verify its recorded identity."""
     if not isinstance(reference.stored_at, LocalFileRef):
@@ -618,6 +710,66 @@ class Catalog:
         knowledge: tuple[ResolvedFileRef, ...] = (),
     ) -> CatalogRefreshResult:
         """Rebuild the complete catalog and atomically replace the old index."""
+        with _catalog_write_lock(self.path):
+            return self._refresh(runs=runs, benchmarks=benchmarks, knowledge=knowledge)
+
+    def register_run(self, source: CatalogRunSource) -> None:
+        """Atomically index one verified run while retaining all other records.
+
+        Repeating registration replaces only this immutable run's projection.
+        A conflicting writer raises ``BlockingIOError`` immediately.
+        Invalid references and unsupported schemas raise ``ValueError``.
+        """
+        error = _source_error(source)
+        if error is not None:
+            raise ValueError(error)
+        with _catalog_write_lock(self.path):
+            with closing(sqlite3.connect(self.path, timeout=0.1)) as connection:
+                with connection:
+                    version = connection.execute("PRAGMA user_version").fetchone()[0]
+                    if version not in (0, 1):
+                        raise ValueError("catalog schema version is unsupported")
+                    # Refresh publishes a replacement file; the shared writer lock
+                    # keeps registration attached to the current database inode.
+                    schema = _SCHEMA.replace(
+                        "CREATE TABLE ", "CREATE TABLE IF NOT EXISTS "
+                    )
+                    connection.executescript("BEGIN IMMEDIATE;\n" + schema)
+                    key = _reference_key(source.reference)
+                    for table in (
+                        "sources",
+                        "runs",
+                        "stages",
+                        "inputs",
+                        "artifacts",
+                        "files",
+                        "measurements",
+                        "edges",
+                        "stage_reuse_keys",
+                    ):
+                        connection.execute(
+                            f"DELETE FROM {table} WHERE source_key = ?", (key,)
+                        )
+                    _write_run_source(connection, source, preserve_reuse_sources=True)
+
+    def refresh_knowledge(
+        self, heads: tuple[ResolvedFileRef, ...] = ()
+    ) -> CatalogRefreshResult:
+        """Replace knowledge rows while preserving execution and reuse indexes."""
+        with _catalog_write_lock(self.path):
+            return self._refresh(
+                runs=(), benchmarks=(), knowledge=heads, preserve_execution=True
+            )
+
+    def _refresh(
+        self,
+        *,
+        runs: tuple[CatalogRunSource, ...],
+        benchmarks: tuple[CatalogBenchmarkSource, ...],
+        knowledge: tuple[ResolvedFileRef, ...],
+        preserve_execution: bool = False,
+    ) -> CatalogRefreshResult:
+        """Build and publish a replacement while holding the catalog writer lock."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(
             prefix=".catalog.",
@@ -632,88 +784,23 @@ class Catalog:
         try:
             connection = sqlite3.connect(temporary_path)
             try:
-                connection.executescript(_SCHEMA)
+                if preserve_execution and self.path.is_file():
+                    with closing(sqlite3.connect(self.path)) as previous:
+                        version = previous.execute("PRAGMA user_version").fetchone()[0]
+                        if version != 1:
+                            raise ValueError("catalog schema version is unsupported")
+                        previous.backup(connection)
+                    connection.execute("DELETE FROM knowledge_records")
+                    connection.execute("DELETE FROM knowledge_primitives")
+                else:
+                    connection.executescript(_SCHEMA)
                 for source in runs:
                     key = _reference_key(source.reference)
-                    error = _source_error(source)
-                    connection.execute(
-                        "INSERT INTO sources VALUES (?, ?, ?, ?)",
-                        (key, _json(source.reference), error is None, error),
-                    )
-                    if error is not None:
+                    if not _write_run_source(connection, source):
                         rejected += 1
                         continue
                     accepted += 1
                     accepted_runs.add(key)
-                    row = _run_row(source)
-                    run_lineage = lineage(source.verified)
-                    connection.execute(
-                        "INSERT INTO runs VALUES (?, ?, ?)",
-                        (key, _json(row), _json(run_lineage)),
-                    )
-                    for stage_id in source.verified.resolved_stages:
-                        connection.execute(
-                            "INSERT INTO stages VALUES (?, ?)",
-                            (key, str(stage_id)),
-                        )
-                    resolved_stages = source.verified.resolved_stages.values()
-                    for digest in sorted(
-                        set(
-                            _digests(
-                                tuple(
-                                    stage.spec.inputs
-                                    for stage in resolved_stages
-                                    if isinstance(
-                                        stage.spec,
-                                        (DownloadSpec, InternalSpec),
-                                    )
-                                )
-                            )
-                        )
-                    ):
-                        connection.execute(
-                            "INSERT INTO inputs VALUES (?, ?)",
-                            (key, digest),
-                        )
-                    for artifact in _artifact_rows(source):
-                        connection.execute(
-                            "INSERT INTO artifacts VALUES (?, ?)",
-                            (key, _json(artifact)),
-                        )
-                        for item in artifact.files:
-                            connection.execute(
-                                "INSERT INTO files VALUES (?, ?, ?)",
-                                (key, str(artifact.artifact_name), item.file.sha256),
-                            )
-                    for measurement in _measurement_rows(source):
-                        connection.execute(
-                            "INSERT INTO measurements VALUES (?, ?)",
-                            (key, _json(measurement)),
-                        )
-                    for edge in run_lineage.edges:
-                        catalog_edge = CatalogEdge(
-                            run=source.reference,
-                            source=edge.source,
-                            target=edge.target,
-                            relation=edge.relation,
-                        )
-                        connection.execute(
-                            "INSERT INTO edges VALUES (?, ?)",
-                            (key, _json(catalog_edge)),
-                        )
-                    for candidate in source.reuse_candidates:
-                        _validate_reuse_candidate(source, candidate)
-                        connection.execute(
-                            "INSERT INTO stage_reuse_keys VALUES (?, ?, ?, ?, ?, ?)",
-                            (
-                                stage_reuse_key_sha256(candidate.key),
-                                key,
-                                candidate.completed_at.isoformat(),
-                                str(row.run_id),
-                                candidate.attempt_id,
-                                _json(candidate),
-                            ),
-                        )
                 for source in benchmarks:
                     key = _reference_key(source.reference)
                     error = _benchmark_error(source, accepted_runs)

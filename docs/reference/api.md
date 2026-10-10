@@ -65,6 +65,17 @@ For saved plans, retries, batch outcomes, and benchmark execution, see
 [Execute a plan](../how-to/execution.md). For artifact retrieval, see
 [Restore from Python](../how-to/retry-restore-compare.md#restore-verified-artifacts).
 
+## Scientific journals
+
+Scientific journal parsing and encoding belong to
+[`viper.journals`](../../src/viper/journals.py). `parse_journal(raw)` returns
+exact-source `JournalPassage` records. `encode_journal(texts)` returns vectors
+and a pinned `JournalEncoderSpec`. `publish_run_journal(root, resolved_run,
+trusted_source_repositories=...)` verifies a saved run and publishes its current
+notes without executing stages. Run completion invokes capture automatically;
+`JournalSettings.enabled=False` disables it. The
+[journal guide](../how-to/journals.md) shows complete Python, CLI, and MCP usage.
+
 ## Authoring constructors
 
 | Constructor | Returns | Purpose |
@@ -156,7 +167,13 @@ VIPER constructs `StageContext` and passes it to the stage function. The
 [context attribute reference](../how-to/stages.md#use-the-stage-context)
 lists each field, its value, and the declaration that supplies it.
 
-## Metrics and benchmarks
+`stage()` and parsed workspace stage specifications default to `reuse="verified"`.
+An exact matching result can replace worker execution after source verification.
+Set `reuse="never"` to force fresh computation in a new run. Benchmark confirmation
+executes independently of this setting. See
+[Reuse a verified stage result](../how-to/stages.md#reuse-a-verified-stage-result).
+
+## Stage configuration and input roots
 
 `stage()` uses the decorated config class's defaults when `config` is omitted.
 A custom config with required fields still requires an instance supplying them.
@@ -165,6 +182,14 @@ Download stage. Execution calls `verify_download_source_closure()` before stage 
 or process startup and retains its `DownloadSourceClosureReceipt` in the resolved stage
 record. The walk reads only immutable provenance receipts; it does not retrieve artifact
 bodies again.
+
+The [download-and-training program](../../examples/download_training.py) enables
+this policy. [Declared file access](../how-to/stages.md#enforce-declared-file-access)
+is a separate stage setting: it observes supported Python open calls rather than
+the input's provenance origin.
+
+## Metrics and benchmarks
+
 `measure()` defaults to `MetricConfig()`; supply a custom instance when the
 calculation has settings.
 
@@ -188,8 +213,20 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 
 `viper.catalog.catalog()` opens the derived local catalog. Its `runs()`, `artifacts()`,
 `measurements()`, and `benchmarks()` methods accept typed query models.
+Successful execution automatically registers its verified result with
+`Catalog.register_run(CatalogRunSource(...))`, preserving other indexed records.
+`Catalog.refresh()` rebuilds the index from the explicitly supplied sources.
+See [automatic registration and refresh](../how-to/catalog-knowledge-mcp.md#build-the-local-catalog).
 `viper.knowledge.knowledge()` opens the immutable knowledge publisher;
 `catalog().knowledge` opens exact and similarity queries over indexed knowledge records.
+`catalog().refresh_knowledge()` replaces knowledge rows and retains the execution
+and stage-reuse indexes. The `knowledge_refresh` API operation uses this path.
+
+See the [measured-vector program](../tutorials/knowledge-search.md) for complete
+publication and retrieval. [Scientific Markdown journals](../how-to/journals.md)
+are captured after successful runs by default; `publish_run_journal` captures
+edited notes explicitly. `knowledge_refresh` indexes already published records
+without parsing journals or invoking an encoder.
 
 ## Public modules
 
@@ -219,6 +256,7 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 | `viper.restoration` | Artifact restore selectors and results |
 | `viper.catalog` | Verified-run indexing and exact evidence queries |
 | `viper.knowledge` | Typed scientific knowledge publication and models |
+| `viper.journals` | Exact scientific Markdown passages, pinned encoding, and saved-run publication |
 | `viper.inspection` | Plan diff, run comparison, status, and lineage models |
 | `viper.evidence` | Verified files, artifacts, runs, and source acceptance policy |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
@@ -268,6 +306,19 @@ contract. After accepting a result, call
 `viper.retention.evict_cloud_backed_run_files()` with the completed `RunResult` or its
 retained `ResolvedRunRef`. VIPER resolves the configured provider itself.
 
+The [cloud guide](../how-to/cloud-storage.md) shows provider setup, ordinary
+publication, promotion, restoration, and explicitly requested local eviction.
+The [portable export program](../../examples/export_run.py) demonstrates
+`export_run()` and `verify_run_bundle()` without a cloud account.
+
+## Select observing tests
+
+`viper.test_impact.select_tests()` follows application-supplied declaration
+relationships and returns `TestSelection.tests` and `TestSelection.unresolved`.
+The [test-selection guide](../how-to/test-selection.md) includes a complete
+accepted and unresolved example and distinguishes the wheel API from the
+checkout-owned CodeQL adapters.
+
 ## Typed operations
 
 `viper.api` defines each operation name, request model, success model, failure model,
@@ -305,6 +356,7 @@ operations.
 | `search_measurements` | `SearchMeasurementsRequest` | `SearchMeasurementsSuccess` | `search-measurements` |
 | `search_benchmarks` | `SearchBenchmarksRequest` | `SearchBenchmarksSuccess` | `search-benchmarks` |
 | `knowledge_refresh` | `KnowledgeRefreshRequest` | `KnowledgeRefreshSuccess` | `knowledge refresh` |
+| `publish_run_journal` | `PublishRunJournalRequest` | `PublishRunJournalSuccess` | `knowledge journal` |
 | `search_primitives` | `KnowledgeSearchRequest` | `KnowledgeSearchSuccess` | `knowledge search search_primitives` |
 | `search_assignments` | `KnowledgeSearchRequest` | `KnowledgeSearchSuccess` | `knowledge search search_assignments` |
 | `search_modulations` | `KnowledgeSearchRequest` | `KnowledgeSearchSuccess` | `knowledge search search_modulations` |
