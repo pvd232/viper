@@ -63,10 +63,14 @@ class _RunGraphPromoter:
         root: Path,
         cloud: ViperCloud,
         destination: ViperCloudDestination,
+        *,
+        fetcher: RunFetcher,
     ) -> None:
+        """Bind rewriting to one destination and a verified source reader."""
         self.root = root
         self.cloud = cloud
         self.destination = destination
+        self.fetcher = fetcher
         self.files: dict[LocalFileRef, ResolvedFileRef] = {}
         self.snapshots: dict[
             LocalStageResultSnapshotRef,
@@ -93,21 +97,12 @@ class _RunGraphPromoter:
             commit=location.commit,
         )
 
-    def read_local(self, reference: ResolvedFileRef) -> bytes:
-        """Read and verify one immutable local file once."""
-        location = reference.stored_at
-        if not isinstance(location, LocalFileRef):
-            raise RunPromotionError("source run graph is unavailable")
+    def read_document(self, reference: ResolvedFileRef) -> bytes:
+        """Read an identified document through the supplied verified fetcher."""
         try:
-            raw = local_artifact_store(location).fetch(location)
-        except (OSError, RuntimeError) as error:
+            return self.fetcher.read_verified(reference)
+        except Exception as error:
             raise RunPromotionError("source run graph is unavailable") from error
-        if (
-            len(raw) != reference.bytes
-            or hashlib.sha256(raw).hexdigest() != reference.sha256
-        ):
-            raise RunPromotionError("source run graph is unavailable")
-        return raw
 
     @staticmethod
     def source_identity(path: str, source: PublicationSource) -> SnapshotFileRef:
@@ -161,7 +156,7 @@ class _RunGraphPromoter:
         documents = self.documents.setdefault(snapshot, {})
         if location.path in documents:
             return
-        raw = self.read_local(reference)
+        raw = self.read_document(reference)
         try:
             document = selected_decoder(parse_yaml_bytes(raw))
         except (UnicodeDecodeError, ValueError) as error:
@@ -608,6 +603,7 @@ def promote_run_to_cloud(
         root,
         ViperCloud(root, settings.repository),
         destination,
+        fetcher=fetcher,
     )
     promoter.discover_reference(reference, ResolvedRun.model_validate)
     promoted = promoter.promote_reference(reference)

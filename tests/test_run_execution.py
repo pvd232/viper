@@ -125,10 +125,12 @@ from viper.references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
+    ResolvedFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    StorageModel,
 )
 from viper.reuse import (
     ReusedStageCompletion,
@@ -2183,6 +2185,128 @@ def test_cloud_native_retry_replaces_the_verified_terminal_reference(
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
+def _promotion_document_case(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+    response: bytes | Exception,
+) -> tuple[_RunGraphPromoter, ResolvedFileRef, list[StorageModel]]:
+    """Keep real byte verification while controlling the source transport."""
+    payload = b"status: succeeded\n"
+    store = LocalArtifactStore(root)
+    (reference,) = store.resolved_files({"run.yaml": payload})
+    if backend == "gcs":
+        location: StorageModel = GcsFileRef(
+            bucket="source-bucket",
+            owner="machina",
+            workspace="models",
+            revision="a" * 64,
+            path="run.yaml",
+        )
+    elif backend == "huggingface":
+        location = HuggingFaceFileRef(
+            repository="machina/source-models",
+            repo_type="dataset",
+            commit="b" * 40,
+            path="run.yaml",
+        )
+    else:
+        assert backend == "local"
+        location = reference.stored_at
+    reference = reference.model_copy(update={"stored_at": location})
+    fetcher = RunFetcher(root, store, REPOSITORY)
+    reads: list[StorageModel] = []
+
+    def read_source(owner: RunFetcher, selected: StorageModel) -> bytes:
+        """Expose transport calls without bypassing RunFetcher verification."""
+        assert owner is fetcher
+        assert selected == location
+        reads.append(selected)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(RunFetcher, "__call__", read_source)
+    provider = InMemoryViperCloudProvider(root)
+    cloud = install_in_memory_cloud(monkeypatch, root, provider)
+    promoter = _RunGraphPromoter(
+        root,
+        cloud,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=fetcher,
+    )
+    return promoter, reference, reads
+
+
+@pytest.mark.parametrize("backend", ("local", "gcs", "huggingface"))
+def test_promotion_document_reader_uses_verified_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+) -> None:
+    """Read each backend through the supplied fetcher and retain exact bytes."""
+    payload = b"status: succeeded\n"
+    promoter, reference, reads = _promotion_document_case(
+        tmp_path, monkeypatch, backend, payload
+    )
+
+    assert promoter.read_document(reference) == payload
+    assert reads == [reference.stored_at]
+
+
+@pytest.mark.parametrize("backend", ("local", "gcs", "huggingface"))
+@pytest.mark.parametrize("failure", ("missing", "size", "sha256"))
+def test_promotion_document_reader_rejects_invalid_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+    failure: str,
+) -> None:
+    """Reject missing or altered bytes and preserve the underlying cause."""
+    payload = b"status: succeeded\n"
+    response: bytes | Exception
+    if failure == "missing":
+        response = FileNotFoundError("source document is missing")
+    elif failure == "size":
+        response = payload + b"x"
+    else:
+        response = b"S" + payload[1:]
+    promoter, reference, reads = _promotion_document_case(
+        tmp_path, monkeypatch, backend, response
+    )
+
+    with pytest.raises(
+        RunPromotionError, match="^source run graph is unavailable$"
+    ) as raised:
+        promoter.read_document(reference)
+
+    assert reads == [reference.stored_at]
+    if isinstance(response, Exception):
+        assert raised.value.__cause__ is response
+    else:
+        assert isinstance(raised.value.__cause__, VerificationError)
+        expected = "byte-count mismatch" if failure == "size" else "SHA-256 mismatch"
+        assert expected in str(raised.value.__cause__)
+
+
+@pytest.mark.parametrize("backend", ("gcs", "huggingface"))
+def test_promotion_document_reader_keeps_cloud_roots_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+) -> None:
+    """Keep public cloud-root promotion disabled during the reader refactor."""
+    promoter, reference, reads = _promotion_document_case(
+        tmp_path, monkeypatch, backend, b"status: succeeded\n"
+    )
+    run = ResolvedRunRef.model_validate(reference.model_dump(mode="python"))
+
+    with pytest.raises(RunPromotionError, match="^source run graph is unavailable$"):
+        execution_module.promote_run_to_cloud(tmp_path, run, promoter.destination)
+
+    assert reads == []
+
+
 @pytest.mark.parametrize("download_rooted", (False, True))
 def test_explicit_cloud_promotion_preserves_local_run_mode(
     tmp_path: Path,
@@ -2371,7 +2495,10 @@ def test_cloud_promotion_stages_verified_neighboring_store(
     if copy_required:
         monkeypatch.setattr("viper.execution._promotion.os.link", cross_device_link)
     promoter = _RunGraphPromoter(
-        root, cloud, ViperCloudDestination(owner="machina", workspace="models")
+        root,
+        cloud,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
     )
     promoted = promoter.promote_snapshot(snapshot)
 
