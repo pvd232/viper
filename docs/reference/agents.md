@@ -75,8 +75,8 @@ catalog, or recover from a registration warning, the user can follow the
 [inspection tutorial](../tutorials/inspect-results.md) or grant execute access
 for `catalog_refresh`. Refresh replaces the index's contents, so include every
 run that should remain searchable. Registration supplies candidates;
-[verified reuse](../how-to/stages.md#reuse-a-verified-stage-result) requires
-`reuse="verified"`.
+[verified reuse](../how-to/stages.md#reuse-a-verified-stage-result) is the default
+for workspace stages. Set `reuse="never"` to force fresh computation in a new run.
 
 Call `search_runs` with:
 

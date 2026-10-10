@@ -46,6 +46,7 @@ from viper.artifacts import (
 from viper.authoring import (
     FrozenPlanFiles,
     RunArtifactDraft,
+    TrainSpecDraft,
     download,
     experiment,
     freeze_run_plan,
@@ -960,6 +961,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert confirmation.attempt.purpose == "benchmark_confirmation"
     assert confirmation.attempt.status == "succeeded"
     assert confirmation.attempt_path.is_file()
+    assert verified_train.spec.reuse == "verified"
+    assert confirmation.attempt.invocations
     assert result.path.read_bytes() == candidate_run_raw
     candidate_snapshots = {
         snapshot_identity(stage.snapshot)
@@ -2631,7 +2634,7 @@ def test_verified_reuse_skips_stage_process(
     caplog: pytest.LogCaptureFixture,
     scenario: str,
 ) -> None:
-    """Discover exact matches; preserve opt-in and failed-index behavior."""
+    """Reuse exact matches by default; preserve opt-out and failed-index behavior."""
     root = tmp_path / "project"
     root.mkdir()
     run_git(root, "init", "--quiet")
@@ -2703,8 +2706,13 @@ def test_verified_reuse_skips_stage_process(
         },
         metrics=(loss,),
         objective=minimize(loss),
-        reuse="never" if scenario == "never" else "verified",
     )
+    assert isinstance(trained.spec, TrainSpecDraft)
+    assert trained.spec.reuse == "verified"
+    if scenario == "never":
+        trained = trained.model_copy(
+            update={"spec": trained.spec.model_copy(update={"reuse": "never"})}
+        )
     authored = experiment(
         experiment_id="reuse",
         variants={

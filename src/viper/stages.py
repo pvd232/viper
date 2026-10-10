@@ -229,7 +229,13 @@ class ParameterizedSpec(BaseSpec):
 
     implementation: StageImplementationRef
     config_type: ConfigTypeRef
-    reuse: StageReuseMode = "never"
+    reuse: StageReuseMode = Field(
+        default="verified",
+        description=(
+            "Reuse a fully verified matching stage result by default; "
+            "never forces computation in a new run."
+        ),
+    )
     file_access: StageFileAccessMode = Field(
         default="unrestricted",
         description=(

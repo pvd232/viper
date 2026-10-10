@@ -15,8 +15,9 @@ excerpt belongs inside that program's `main()`; keep its imports at module scope
 
 Successful verified runs automatically enter their workspace's catalog after
 their immutable terminal result is saved. Registration preserves the catalog's
-other runs and knowledge records. Skipping computation remains restricted to
-stages that declare `reuse="verified"`.
+other runs and knowledge records. Workspace stages default to `reuse="verified"`;
+an exact verified match can skip computation. Set `reuse="never"` to force fresh
+computation in a new run.
 
 Use a refresh to index older or imported runs, rebuild a deleted catalog, or
 recover from a registration warning. `runs` contains the two results returned by

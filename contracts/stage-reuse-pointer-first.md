@@ -8,7 +8,10 @@
 
 Successful execution now registers fully verified stages in the
 existing catalog through `Catalog.register_run()`. A later stage with
-`reuse="verified"` discovers an identical stage through automatic registration. The
+`reuse="verified"` discovers an identical stage through automatic registration.
+Python authoring and parsed workspace stage specifications select verified reuse
+by default. An explicit `reuse="never"` forces computation in a new run, and
+benchmark confirmation always executes independently. The
 [execution test](../tests/test_run_execution.py) covers automatic discovery,
 explicit refresh, `reuse="never"`, a changed seed, and a failed catalog write.
 The [catalog tests](../tests/test_inspection.py) cover preservation, rollback,

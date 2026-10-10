@@ -156,6 +156,12 @@ VIPER constructs `StageContext` and passes it to the stage function. The
 [context attribute reference](../how-to/stages.md#use-the-stage-context)
 lists each field, its value, and the declaration that supplies it.
 
+`stage()` and parsed workspace stage specifications default to `reuse="verified"`.
+An exact matching result can replace worker execution after source verification.
+Set `reuse="never"` to force fresh computation in a new run. Benchmark confirmation
+executes independently of this setting. See
+[Reuse a verified stage result](../how-to/stages.md#reuse-a-verified-stage-result).
+
 ## Metrics and benchmarks
 
 `stage()` uses the decorated config class's defaults when `config` is omitted.

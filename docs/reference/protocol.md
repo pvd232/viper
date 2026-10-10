@@ -72,7 +72,8 @@ automatic registration retains an existing reuse target. A stage recovered from
 a failed attempt can enter the catalog through the successful retry when the
 catalog is missing that key.
 
-Only a stage declaring `reuse="verified"` may skip computation in a new run.
+Workspace stages default to `reuse="verified"`, which permits skipping computation
+in a new run. An explicit `reuse="never"` forces computation in that run.
 Lookup uses the complete `StageReuseKey`, and the existing verifier checks the
 selected source again before publishing a reuse receipt. Stored inputs continue
 to materialize verified filesystem paths. Benchmark confirmation still invokes
@@ -82,7 +83,7 @@ The catalog is a derived index. A registration failure emits a warning and
 preserves the successful run. `catalog_refresh` can index that saved result or
 rebuild the catalog. Registration and refresh exclude concurrent writers through
 the same lock. The [reuse guide](../how-to/stages.md#reuse-a-verified-stage-result)
-states the opt-in and recovery behavior.
+states the default, recomputation, and recovery behavior.
 
 ## Workspace and cloud paths
 

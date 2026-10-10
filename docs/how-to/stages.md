@@ -348,9 +348,10 @@ report = stage(
 The [complete recovery example](../../examples/recovery.py) demonstrates a
 successful retry followed by reuse in a new run.
 
-Set `reuse="verified"` in a workspace stage's `stage()` call to allow reuse.
-The default is `reuse="never"`, which executes the stage even when a matching
-result is indexed. After saving a successful verified run, VIPER automatically
+Workspace stages default to `reuse="verified"` in Python authoring and parsed
+stage specifications. Set `reuse="never"` to execute the stage even when a matching
+result is indexed. Existing specifications that record `reuse="never"` retain
+that policy. After saving a successful verified run, VIPER automatically
 adds its stages to the workspace catalog and retains earlier entries.
 A later run discovers an identical stage through that automatic registration.
 Runs completed before automatic registration, imported runs, and a deleted
@@ -376,3 +377,8 @@ same identity even when the original filename differs. This adds no user action
 or artifact read.
 The new run records whether each stage executed or reused earlier work. A
 benchmark confirmation executes the candidate stages independently.
+
+Record every output-affecting input in the stage specification. Use
+`reuse="never"` for a stage that must repeat an external action or read mutable
+state outside its declared inputs: verified reuse skips the worker and its
+side effects.

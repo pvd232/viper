@@ -1359,7 +1359,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
         metrics={metric.metric_id: metric},
     )
 
-    assert stage.reuse == "never"
+    assert stage.reuse == "verified"
     assert enabled.reuse == "verified"
     assert len(stage_reuse_key_sha256(key)) == 64
     assert key.inputs == (selected_input,)
@@ -1380,6 +1380,21 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             source=source_file,
             target=target.model_copy(update={"sha256": SHA_B}),
         )
+
+
+def test_stage_reuse_default_and_explicit_opt_out_roundtrip() -> None:
+    """Default omitted reuse to verified and preserve a recorded recompute policy."""
+    payload = train_payload()
+    selected = TrainSpec.model_validate(payload)
+    assert selected.reuse == "verified"
+    reuse_schema = ParameterizedSpec.model_json_schema()["properties"]["reuse"]
+    assert reuse_schema["default"] == "verified"
+    assert reuse_schema["description"]
+
+    payload["reuse"] = "never"
+    recomputed = TrainSpec.model_validate(payload)
+    assert recomputed.reuse == "never"
+    assert TrainSpec.model_validate_json(recomputed.model_dump_json()) == recomputed
 
 
 def test_stage_context_digest_ignores_absent_schema_extensions() -> None:

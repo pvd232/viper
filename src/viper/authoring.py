@@ -237,7 +237,13 @@ class ParameterizedSpecDraft(BaseSpecDraft):
     implementation: Callable[[StageContext[Any]], None]
     config: Config
     metrics: tuple[MetricDraft[Any], ...] = ()
-    reuse: StageReuseMode = "never"
+    reuse: StageReuseMode = Field(
+        default="verified",
+        description=(
+            "Reuse a fully verified matching stage result by default; "
+            "never forces computation in a new run."
+        ),
+    )
     file_access: StageFileAccessMode = "unrestricted"
 
 
@@ -1310,7 +1316,7 @@ def stage(
     env: EnvSpec | None = None,
     eval_id: EvalId | None = None,
     split_inputs: tuple[InputName, ...] = (),
-    reuse: StageReuseMode = "never",
+    reuse: StageReuseMode = "verified",
     file_access: StageFileAccessMode = "unrestricted",
     input_roots: Literal["any", "download"] = "any",
 ) -> StageDraft:
@@ -1326,7 +1332,8 @@ def stage(
     are terminal and must be omitted from downstream input selections.
 
     Returned output handles connect this stage to later stages. env overrides
-    the run environment; reuse="verified" permits a verified catalog candidate.
+    the run environment. Verified reuse is the default; `reuse="never"` forces
+    computation in a new run. Benchmark confirmation always executes independently.
     file_access="declared" requires a successful Python read-open for every
     input and checks CPython-visible open attempts against the declared paths.
     input_roots="download" requires every transitive input to end at an immutable
