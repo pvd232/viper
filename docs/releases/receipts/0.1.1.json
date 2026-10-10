@@ -1,0 +1,111 @@
+{
+  "version": "0.1.1",
+  "status": "published",
+  "source_commit": "57b77b418f67d20fdf1a71817b4f9848449417f0",
+  "tag": "v0.1.1",
+  "tag_object": "e8de3a3d5498c15630f1f8ed61a0a89ed9326799",
+  "tag_signature_verified": true,
+  "publication_run": 38041518904,
+  "publication_conclusion": "success",
+  "published_at": "2026-10-10T09:35:09.440780Z",
+  "distributions": [
+    {
+      "filename": "viper_provenance-0.1.1-py3-none-any.whl",
+      "bytes": 308976,
+      "sha256": "5cf1a8b08ef87f719769d36d72d8ef0cb77c166145abe810b0a8d08fcaa5125f"
+    },
+    {
+      "filename": "viper_provenance-0.1.1.tar.gz",
+      "bytes": 578685,
+      "sha256": "882ae7dcf4211d1d3a68d54f63cdece6d6d6562012975d5a26089e86879613ad"
+    }
+  ],
+  "registry_hashes_match": {
+    "testpypi": true,
+    "pypi": true
+  },
+  "trusted_publisher": {
+    "kind": "GitHub",
+    "repository": "pvd232/viper",
+    "workflow": "release.yml",
+    "environment": "pypi",
+    "wheel_attestation_subject_matches": true,
+    "attestation_url": "https://pypi.org/integrity/viper-provenance/0.1.1/viper_provenance-0.1.1-py3-none-any.whl/provenance"
+  },
+  "release_exception": {
+    "owner_authorized": true,
+    "scope": "Publish without waiting for the full integration suite; retain TestPyPI installation and generated-project gates.",
+    "initial_candidate_ci_run": 38039665230,
+    "initial_candidate_ci_conclusion": "cancelled",
+    "release_commit_ci_run": 38041518218,
+    "release_commit_ci_conclusion": "failure",
+    "release_commit_ci_results": {
+      "passed": 562,
+      "failed": 1,
+      "subtests_passed": 11,
+      "failure": "test_release_downloads_distributions_from_successful_ci rejected the one-off release workflow's build command."
+    },
+    "repair": "Remove the one-off build exception and restore exact-commit successful-CI artifact retrieval for future releases.",
+    "repair_focused_tests_passed": 67,
+    "full_integration_completed_at_publication": false
+  },
+  "packaging_repair": {
+    "prior_candidate": "0.1.0",
+    "prior_candidate_testpypi_only": true,
+    "prior_publication_run": 38040977075,
+    "prior_installation_failure": "ModuleNotFoundError: No module named 'google'",
+    "fix": "Declare google-cloud-storage>=3.4,<4 as a base dependency because the public API imports the provider.",
+    "runtime_package_files_byte_identical_to_candidate": true,
+    "candidate_source_commit": "ae13b4194265ecfadc47f3cb8c0429f51fe69932"
+  },
+  "tests": {
+    "local_python": "3.12",
+    "prepublication_focused_passed": 62,
+    "postpublication_workflow_and_documentation_focused_passed": 67,
+    "pyright_errors": 0,
+    "pyright_warnings": 0,
+    "ruff_format_check": "passed",
+    "ruff_check": "passed",
+    "testpypi_python": "3.14.8",
+    "testpypi_default_dependencies_resolved": true,
+    "testpypi_installed_public_api_passed": 14,
+    "testpypi_generated_project_passed": 1,
+    "testpypi_generated_project_seconds": 143.11,
+    "pypi_installed_public_api_passed": 14,
+    "sdist_installed_public_api_passed": 14,
+    "local_installed_import_checks_reused_existing_dependencies": true
+  },
+  "gpu_acceptance": {
+    "device": "NVIDIA L4",
+    "python": "3.13",
+    "torch": "2.14.0+cu130",
+    "cuda": "13.0",
+    "cudnn": 92400,
+    "wheel_sha256": "5cf1a8b08ef87f719769d36d72d8ef0cb77c166145abe810b0a8d08fcaa5125f",
+    "passed": 3,
+    "deselected": 3,
+    "seconds": 35.69,
+    "reproducible_fresh_process_bytes_equal": true,
+    "reproducible_unsupported_operation_rejected": true,
+    "relaxed_and_custom_results_are_observations_not_general_determinism_guarantees": true,
+    "evidence": [
+      {
+        "path": "0.1.1-cuda-reproducible.json",
+        "sha256": "634e5693bad4dcc7dd5da18812b1bf95563cc9466075596669baa662b6cb8f04",
+        "captured_source_sha256": "2a692c973dc262e3dd098b96e633f52e16fa6c55642b794a83a9eee9ecb057bc"
+      },
+      {
+        "path": "0.1.1-cuda-relaxed.json",
+        "sha256": "aeaa7ffb8c8ad44b59ef7f834f4876eda7d957b3f9ffa48aab766027cab8c4b6",
+        "captured_source_sha256": "b45ee6dd8a39f94590f50b7bee1c2e997f321213fb3a069e9886abd70a0ec260"
+      },
+      {
+        "path": "0.1.1-cuda-custom.json",
+        "sha256": "6fdac9e7dc370a0e402f8b1741e9c96e3caa96382e8ddedd993dd1ff5b5a076d",
+        "captured_source_sha256": "a5e2c5448be9dc16836f0f28cacea774b655c4be7eb90610359764019857ffc2"
+      }
+    ],
+    "evidence_serialization": "Retained JSON adds one final newline to the captured files; every other byte is unchanged. Prediction hashes are unchanged.",
+    "gpu_instance_stopped_after_acceptance": true
+  }
+}
