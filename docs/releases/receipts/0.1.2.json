@@ -1,0 +1,151 @@
+{
+  "version": "0.1.2",
+  "status": "published",
+  "source_commit": "f859a32bbd041f15aa5c3ced343f6cbb03fdc612",
+  "fix_commit": "65968fded77c77b3da0a6d0027fd7ed6642b14f1",
+  "merge_pull_request": "https://github.com/pvd232/viper/pull/3",
+  "tag": "v0.1.2",
+  "tag_object": "3cdd9deb424a42f51bf288f097b23cf61708cf7e",
+  "tag_signature_verified": true,
+  "ci_run": 38045935633,
+  "ci_conclusion": "success",
+  "ci_artifact": {
+    "id": 11666839067,
+    "name": "python-package-distributions",
+    "zip_sha256": "60bae1d864f60ec1e434d903739795ffe3137476e096d75ad19066e7f3ae0718"
+  },
+  "publication_run": 38048089992,
+  "publication_conclusion": "success",
+  "published_at": "2026-10-10T11:27:00.756729Z",
+  "distributions": [
+    {
+      "filename": "viper_provenance-0.1.2-py3-none-any.whl",
+      "bytes": 309075,
+      "sha256": "1661e35d2af6ee876db0141dfb6323e41f9fec1863823c12ebc3e846335a00fb"
+    },
+    {
+      "filename": "viper_provenance-0.1.2.tar.gz",
+      "bytes": 586131,
+      "sha256": "a1034185c3db1ea00fa920c770c7c07633e5dc955afa50958db08b1e0d09dfc6"
+    }
+  ],
+  "registry_hashes_match": {
+    "testpypi": true,
+    "pypi": true
+  },
+  "trusted_publisher": {
+    "kind": "GitHub",
+    "repository": "pvd232/viper",
+    "workflow": "release.yml",
+    "environment": "pypi",
+    "wheel_attestation_subject_matches": true,
+    "sdist_attestation_subject_matches": true,
+    "attestation_urls": [
+      "https://pypi.org/integrity/viper-provenance/0.1.2/viper_provenance-0.1.2-py3-none-any.whl/provenance",
+      "https://pypi.org/integrity/viper-provenance/0.1.2/viper_provenance-0.1.2.tar.gz/provenance"
+    ]
+  },
+  "artifact_verification": {
+    "wheel_members": 90,
+    "sdist_members": 250,
+    "runtime_python_files_byte_identical_to_release_source": 83,
+    "experimental_members": 0,
+    "twine": "passed"
+  },
+  "tests": {
+    "local": {
+      "pyright_errors": 0,
+      "pyright_warnings": 0,
+      "focused_passed": 46,
+      "unit_contract_passed": 565,
+      "subtests_passed": 11,
+      "ruff_format": "passed",
+      "ruff_lint": "passed"
+    },
+    "ci": {
+      "fast_passed": 565,
+      "fast_subtests_passed": 11,
+      "integration_passed": 197,
+      "integration_subtests_passed": 28,
+      "integration_warnings": 3,
+      "integration_seconds": 1835.93,
+      "release_passed": 3,
+      "release_seconds": 118.37,
+      "installed_wheel_public_api_passed": 14,
+      "minimum_pydantic_passed": 11,
+      "compatible_python": [
+        "3.11",
+        "3.12",
+        "3.13",
+        "3.14"
+      ]
+    },
+    "testpypi": {
+      "python": "3.14",
+      "default_dependencies_resolved": true,
+      "installed_public_api_passed": 14,
+      "generated_project_passed": 1,
+      "generated_project_seconds": 126.77
+    },
+    "clean_installation": {
+      "wheel_public_api_passed": 14,
+      "sdist_public_api_passed": 14,
+      "python": "3.12.14",
+      "mcp": "2.3.0",
+      "pytest": "9.1.1",
+      "candidate_cpu_quickstart_status": "succeeded",
+      "candidate_cpu_quickstart_run_id": "01M4JQ4YPTD6V9G7AV5W17RJMG",
+      "sdist_saved_run_verified": true,
+      "saved_measurements_verified": 20,
+      "pypi_public_api_passed": 14,
+      "pypi_cpu_quickstart_status": "succeeded",
+      "pypi_cpu_quickstart_run_id": "01M4JS5JQWRNFAJMCA7HDQG7A8",
+      "pypi_initial_lookup_did_not_list_new_version": true,
+      "pypi_uncached_retry_installed_successfully": true,
+      "pypi_installation_reused_existing_dependencies": true
+    }
+  },
+  "documentation": {
+    "testpypi_render_inspected": true,
+    "published_readme_file_links_pin_tag": "v0.1.2",
+    "http_links_checked": 23,
+    "http_links_passed": 23,
+    "repository_readme_relative_links_preserved": true,
+    "pypi_render_inspected": true,
+    "checks": "Built metadata retains version-tag URLs; repository Markdown retains relative links; documentation tests check local paths and anchors."
+  },
+  "gpu_acceptance": {
+    "device": "NVIDIA L4",
+    "python": "3.13",
+    "torch": "2.14.0+cu130",
+    "cuda": "13.0",
+    "cudnn": 92400,
+    "passed": 3,
+    "deselected": 3,
+    "seconds": 35.35,
+    "wheel_sha256": "1661e35d2af6ee876db0141dfb6323e41f9fec1863823c12ebc3e846335a00fb",
+    "reproducible_fresh_process_bytes_equal": true,
+    "unsupported_operation_rejected": true,
+    "instance_stopped": true,
+    "parsed_reports_identical_to_0_1_1": true,
+    "evidence": [
+      {
+        "path": "0.1.2-cuda-reproducible.json",
+        "sha256": "634e5693bad4dcc7dd5da18812b1bf95563cc9466075596669baa662b6cb8f04",
+        "captured_source_sha256": "2a692c973dc262e3dd098b96e633f52e16fa6c55642b794a83a9eee9ecb057bc"
+      },
+      {
+        "path": "0.1.2-cuda-relaxed.json",
+        "sha256": "aeaa7ffb8c8ad44b59ef7f834f4876eda7d957b3f9ffa48aab766027cab8c4b6",
+        "captured_source_sha256": "b45ee6dd8a39f94590f50b7bee1c2e997f321213fb3a069e9886abd70a0ec260"
+      },
+      {
+        "path": "0.1.2-cuda-custom.json",
+        "sha256": "6fdac9e7dc370a0e402f8b1741e9c96e3caa96382e8ddedd993dd1ff5b5a076d",
+        "captured_source_sha256": "a5e2c5448be9dc16836f0f28cacea774b655c4be7eb90610359764019857ffc2"
+      }
+    ],
+    "evidence_serialization": "Retained JSON adds one final newline to the captured files; every other byte is unchanged.",
+    "relaxed_and_custom_results_are_observations_not_general_determinism_guarantees": true
+  }
+}
