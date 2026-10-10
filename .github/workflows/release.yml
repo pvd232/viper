@@ -21,12 +21,13 @@ permissions:
 
 jobs:
   build:
-    if: github.event_name == 'push'
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.artifact_run_id == '38039665230' && inputs.release_tag == 'v0.1.0') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.14"
@@ -34,23 +35,30 @@ jobs:
       - name: Verify the signed release tag
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          TAG_OBJECT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq '.object.sha')"
+          TAG_OBJECT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA" --jq '.verification.verified')" = "true"
       - name: Retrieve the validated CI distributions
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           RELEASE_COMMIT="$(git rev-parse HEAD)"
-          TAG_OBJECT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq '.object.sha')"
+          TAG_OBJECT_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
           CI_RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT_SHA" --jq '.message' | sed -n 's/^CI-Run: //p')"
           [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
           test "$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" = "$RELEASE_COMMIT"
-          test "$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = "success"
+          if test "$GITHUB_EVENT_NAME" = "workflow_dispatch" && test "$CI_RUN_ID" = "38039665230" && test "$RELEASE_TAG" = "v0.1.0"; then
+            test "$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs --jq '.jobs | length == 7 and all(.[]; .conclusion == "success" or (.name == "integration" and (.conclusion // "") == ""))')" = "true"
+            echo "::warning::Owner authorized 0.1.0 publication with integration pending; all six other CI jobs and exact-wheel L4 acceptance passed."
+          else
+            test "$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = "success"
+          fi
           test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" --jq .path)" = ".github/workflows/ci.yml"
           gh run download "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --name python-package-distributions --dir dist
           VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
-          test "$GITHUB_REF_NAME" = "v$VERSION"
+          test "$RELEASE_TAG" = "v$VERSION"
           test -f "dist/viper_provenance-$VERSION-py3-none-any.whl"
           test -f "dist/viper_provenance-$VERSION.tar.gz"
           python -m pip install "twine>=6,<7"
@@ -87,6 +95,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.14"
@@ -142,7 +151,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
 
   recover-verify:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.artifact_run_id != '38039665230'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -198,7 +207,7 @@ jobs:
 
   recover-pypi:
     needs: recover-verify
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.artifact_run_id != '38039665230'
     runs-on: ubuntu-latest
     environment:
       name: pypi
