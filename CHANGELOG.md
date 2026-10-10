@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0 — 2026-10-10
+
 - Capture scientific `JOURNAL.md` files after successful runs by default, with
   an explicit opt-out. Preserve Markdown revisions, exact passage spans,
   scientific fields, and saved measurement references.

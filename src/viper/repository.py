@@ -188,7 +188,7 @@ build-backend = "setuptools.build_meta"
 name = "{package.replace("_", "-")}"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["viper-provenance>=0.1.0a3"]
+dependencies = ["viper-provenance>=0.1.0"]
 
 [project.optional-dependencies]
 test = ["pytest>=9,<10"]

@@ -50,6 +50,9 @@ public interfaces and distinguishes contributor instructions.
 
 ## Release notes
 
+[0.1.0](releases/0.1.0.md) adds default verified stage reuse, automatic scientific
+journal capture, pinned learned vectors, and preserving knowledge refresh.
+
 [0.1.0a5](releases/0.1.0a5.md) unifies file identity and makes VIPER's
 graph-based test selection available to other Python repositories.
 

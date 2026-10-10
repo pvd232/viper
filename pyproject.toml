@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "viper-provenance"
-version = "0.1.0a5"
+version = "0.1.0"
 description = "Run ML experiments and verify their source, inputs, outputs, and measurements."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,7 +17,7 @@ maintainers = [
     { name = "Peter Driscoll", email = "peterdriscoll27@gmail.com" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
