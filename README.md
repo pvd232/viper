@@ -272,8 +272,9 @@ git commit -m "Initialize VIPER workspace"
 ```
 
 Replace the remote URL with your workspace's HTTP(S) repository URL. Install
-`viper-provenance[mcp]` for MCP or `viper-provenance[gcs]` for Google Cloud
-Storage support. The new workspace keeps its own environment and source history.
+`viper-provenance[mcp]` for MCP. The Google Cloud Storage client is a base
+dependency; the `[gcs]` extra remains accepted. The new workspace keeps its own
+environment and source history.
 
 Replace the generated stage templates with your model's implementation and commit
 the changes before authoring a plan. The generated checkpoint loader reconstructs

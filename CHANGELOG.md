@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-## 0.1.0 — 2026-10-10
+## 0.1.1 — 2026-10-10
+
+- Declare Google Cloud Storage as a base dependency because the public API
+  imports its provider. Preserve the `gcs` extra for existing installation commands.
+- Ship the features below in the first stable PyPI release. The 0.1.0 candidate
+  reached TestPyPI only; its default-install check exposed the missing dependency.
+
+## 0.1.0 candidate — 2026-10-10
 
 - Capture scientific `JOURNAL.md` files after successful runs by default, with
   an explicit opt-out. Preserve Markdown revisions, exact passage spans,

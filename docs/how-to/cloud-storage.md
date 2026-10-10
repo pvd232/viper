@@ -1,16 +1,16 @@
 # Publish, restore, and retain cloud-backed runs
 
 Cloud publication is optional. Local execution needs no cloud account. Configure
-an existing repository, install its provider dependency, and authenticate before
+an existing repository and authenticate before
 selecting a cloud destination. VIPER does not provision a machine or bucket.
 
 ## Choose a repository and destination
 
-For GCS, install the provider extra in the environment that runs VIPER. From the
-checkout with its virtual environment active:
+VIPER installs the GCS client as a base dependency. From the checkout with its
+virtual environment active, install VIPER and authenticate:
 
 ```bash
-python -m pip install -e '.[gcs]'
+python -m pip install -e .
 gcloud auth application-default login
 ```
 

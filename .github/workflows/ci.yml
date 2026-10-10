@@ -86,7 +86,7 @@ jobs:
       - name: Smoke-test the built wheel
         run: |
           python -m pip install --force-reinstall --no-deps dist/*.whl
-          python -I -m pytest tests/test_public_api.py -q
+          python -I -m pytest tests/test_public_api.py -q -o pythonpath=
           python -I -c "from viper import api; assert all(getattr(api, name) for name in api.__all__)"
           python -I -c "from viper.api import CapabilitiesRequest, get_capabilities; result = get_capabilities(CapabilitiesRequest()); assert 'run' in result.operations and 'init_workspace' in result.operations and 'RunSpec' in result.schemas"
           viper --json capabilities
@@ -125,5 +125,5 @@ jobs:
       - name: Smoke-test the built wheel
         run: |
           python -m pip install --force-reinstall --no-deps dist/*.whl
-          python -I -m pytest tests/test_public_api.py -q
+          python -I -m pytest tests/test_public_api.py -q -o pythonpath=
           viper --json capabilities

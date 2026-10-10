@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "viper-provenance"
-version = "0.1.0"
+version = "0.1.1"
 description = "Run ML experiments and verify their source, inputs, outputs, and measurements."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,6 +28,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "google-cloud-storage>=3.4,<4",
     "huggingface_hub>=1,<2",
     "httpx>=0.28,<1",
     "numpy>=2,<3",
