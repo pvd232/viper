@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -164,9 +166,29 @@ def test_extended_examples_execute_complete_workflows(
         assert "indexed runs: 2" in completed.stdout
         assert "successful runs: 2" in completed.stdout
         assert "model artifacts: 2" in completed.stdout
-        assert "indexed measurements: 40" in completed.stdout
+        assert "indexed measurements: 20" in completed.stdout
         assert "selected run measurements: 20" in completed.stdout
         assert "observations: 1" in completed.stdout
+        stages = list(
+            (root / ".viper/store").glob(
+                "*/experiments/cpu_quickstart/runs/baseline/*/stages/train/resolved.yaml"
+            )
+        )
+        assert len(stages) == 2
+        assert sum("kind: reused" in path.read_text() for path in stages) == 1
+        # The second run reuses the first stage; retain its 20 executed measurements.
+        with closing(sqlite3.connect(root / ".viper/catalog.sqlite3")) as connection:
+            assert connection.execute("SELECT count(*) FROM runs").fetchone() == (2,)
+            assert connection.execute(
+                "SELECT count(*) FROM measurements"
+            ).fetchone() == (20,)
+            reuse_count = connection.execute(
+                "SELECT count(*) FROM stage_reuse_keys"
+            ).fetchone()[0]
+            assert reuse_count > 0
+            assert connection.execute(
+                "SELECT count(*) FROM knowledge_records"
+            ).fetchone() == (1,)
         restored = list((root / "restored").glob("*.json"))
         assert len(restored) == 1
         assert json.loads(restored[0].read_text())["weight"] == pytest.approx(

@@ -109,8 +109,7 @@ def main() -> None:
             created_at=datetime.now(UTC),
         )
     )
-    # This rebuild replaces the run index with the selected knowledge records.
-    index.refresh(knowledge=(publication.manifest,))
+    index.refresh_knowledge((publication.manifest,))
     observations = index.knowledge.assertions(AssertionQuery(statuses=("proposed",)))
     print(f"observations: {len(observations.items)}")
 
