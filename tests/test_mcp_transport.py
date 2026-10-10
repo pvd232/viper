@@ -4,6 +4,7 @@ import hashlib
 import json
 import shutil
 import sqlite3
+import struct
 import sys
 from contextlib import closing
 from datetime import UTC, datetime
@@ -20,9 +21,11 @@ from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
 from viper.catalog import catalog
 from viper.journal import DurableJournal
-from viper.journals import encode_journal, parse_journal
+from viper.journals import JournalSettings, encode_journal, parse_journal
 from viper.knowledge import (
     JournalAssertion,
+    JournalEvidence,
+    JournalSource,
     JournalVectorView,
     KnowledgeRecordEnvelope,
     KnowledgeVector,
@@ -30,10 +33,14 @@ from viper.knowledge import (
     PrimitiveSpec,
 )
 from viper.mcp import call_tool, get_prompt, prompt_registry, tool_registry
-from viper.references import LocalFileRef
+from viper.references import LocalFileRef, ResolvedFileRef
 from viper.reuse import StageReuseCandidate
-from viper.serialization import parse_yaml_bytes
-from viper.storage import local_artifact_store
+from viper.serialization import document_digest, parse_yaml_bytes
+from viper.storage import (
+    LocalStorageDestination,
+    local_artifact_store,
+    publish_resolved_files,
+)
 
 
 def test_documented_mcp_client_uses_the_live_stdio_server(
@@ -155,6 +162,156 @@ def test_mcp_prompts_require_task_specific_inputs() -> None:
     assert not tools["get_schema"].annotations.open_world_hint
 
 
+def test_stdio_semantic_search_ranks_paraphrases_from_pinned_journal_vectors(
+    tmp_path: Path,
+) -> None:
+    """Retrieve three intended passages through MCP using real learned embeddings."""
+    root = tmp_path / "workspace"
+    root.mkdir()
+    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    subprocess.run(("git", "init", "--quiet", str(root)), check=True)
+    raw = (
+        b"## Interpretation and decision\r\n"
+        b"Training fit alone does not establish held-out generalization. "
+        b"Evaluate on unseen examples before accepting the model.\r\n\r\n"
+        b"## Comparison and methods\r\n"
+        b"All optimizer updates used a fixed learning rate of 0.05 and seed 7.\r\n\r\n"
+        b"## Notes\r\n"
+        b"Model checkpoints and per-epoch loss values are retained "
+        b"in immutable artifact files.\r\n"
+    )
+    questions = (
+        "Does good performance on the training set prove the model works on new data?",
+        "Which step size was used to adjust weights?",
+        "Where can I recover the saved parameters and error history?",
+    )
+    passages = parse_journal(raw)
+    encoded = encode_journal(tuple(p.text for p in passages) + questions)
+    assert encoded.encoder.model_id == "Qwen/Qwen3-Embedding-0.6B"
+    assert encoded.encoder.revision == "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+    view = JournalVectorView(
+        view_id="journal-qwen3-0.6b",
+        version=document_digest(encoded.encoder),
+        embedder=encoded.encoder,
+        dimensions=encoded.encoder.dimensions,
+    )
+    document = publish_resolved_files(
+        root, LocalStorageDestination(), {"knowledge/semantic-fixture.md": raw}
+    )["knowledge/semantic-fixture.md"]
+    catalog(root=root).refresh()
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+
+    async def exercise() -> None:
+        """Publish exact-source vectors and test ranked retrieval over stdio."""
+        server = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "viper.mcp", "--root", str(root), "--access", "execute"],
+            cwd=tmp_path,
+        )
+        async with Client(server, read_timeout_seconds=30) as client:
+            for index, passage in enumerate(passages):
+                assertion = JournalAssertion(
+                    assertion_id=f"semantic-{index}",
+                    kind=passage.kind,
+                    text=passage.text,
+                    evidence=(JournalEvidence(kind="artifact", reference=document),),
+                    status="proposed",
+                    authored_by="retrieval test fixture",
+                    created_at=created_at,
+                    source=JournalSource(
+                        document=document,
+                        byte_start=passage.byte_start,
+                        byte_end=passage.byte_end,
+                        text_sha256=hashlib.sha256(passage.text.encode()).hexdigest(),
+                        section=passage.section,
+                    ),
+                )
+                published = await client.call_tool(
+                    "publish_assertion",
+                    {
+                        "record": {
+                            "record_kind": "assertion",
+                            "value": assertion.model_dump(mode="json"),
+                        }
+                    },
+                )
+                assert not published.is_error, published.structured_content
+                assert published.structured_content is not None
+                reference = ResolvedFileRef.model_validate(
+                    published.structured_content["publication"]["record"]
+                )
+                vector = KnowledgeVector(
+                    view=view,
+                    source=reference,
+                    values=encoded.values[index],
+                    encoding=encoded.encodings[index],
+                    created_at=created_at,
+                )
+                saved = await client.call_tool(
+                    "publish_vector",
+                    {
+                        "record": {
+                            "record_kind": "vector",
+                            "value": vector.model_dump(mode="json"),
+                        }
+                    },
+                )
+                assert not saved.is_error, saved.structured_content
+            assert not (await client.call_tool("knowledge_refresh", {})).is_error
+            for index, _question in enumerate(questions):
+                query = {
+                    "view_id": view.view_id,
+                    "view_version": view.version,
+                    "values": encoded.values[len(passages) + index],
+                    "assertion_statuses": ["proposed"],
+                    "limit": 3,
+                }
+                result = await client.call_tool("search_similar", {"query": query})
+                assert not result.is_error, result.structured_content
+                assert result.structured_content is not None
+                matches = result.structured_content["page"]["items"]
+                assert len(matches) == 3
+                returned = JournalAssertion.model_validate(
+                    matches[0]["source"]["record"]["value"]
+                )
+                assert returned.assertion_id == f"semantic-{index}", matches
+                assert (
+                    returned.text.encode()
+                    == raw[passages[index].byte_start : passages[index].byte_end]
+                )
+                assert [item["distance"] for item in matches] == sorted(
+                    item["distance"] for item in matches
+                )
+                location = LocalFileRef.model_validate(
+                    matches[0]["vector"]["stored_at"]
+                )
+                retained = KnowledgeRecordEnvelope.model_validate(
+                    parse_yaml_bytes(local_artifact_store(location).fetch(location))
+                ).value
+                assert isinstance(retained, KnowledgeVector)
+                assert retained.values == encoded.values[index]
+                assert struct.pack("<1024f", *retained.values) == struct.pack(
+                    "<1024f", *encoded.values[index]
+                )
+                assert retained.encoding == encoded.encodings[index]
+                assert retained.view == view
+                query["assertion_statuses"] = ["reviewed"]
+                filtered = await client.call_tool("search_similar", {"query": query})
+                assert not filtered.is_error, filtered.structured_content
+                assert filtered.structured_content is not None
+                assert filtered.structured_content["page"]["items"] == []
+                query["assertion_statuses"] = ["proposed"]
+                query["view_version"] = "different-encoder-runtime"
+                incompatible = await client.call_tool(
+                    "search_similar", {"query": query}
+                )
+                assert not incompatible.is_error, incompatible.structured_content
+                assert incompatible.structured_content is not None
+                assert incompatible.structured_content["page"]["items"] == []
+
+    anyio.run(exercise)
+
+
 @pytest.mark.parametrize(
     "refresh_knowledge,journal", ((False, False), (True, False), (False, True))
 )
@@ -252,7 +409,12 @@ print(json.dumps({"path": frozen.reference.stored_at.path, "run_id": draft.run_i
             args=["-m", "viper.mcp", "--root", str(root), "--access", "execute"],
             cwd=tmp_path,
         )
-        async with Client(server, read_timeout_seconds=120) as client:
+        async with Client(
+            server,
+            read_timeout_seconds=JournalSettings().timeout_seconds + 120
+            if journal
+            else 120,
+        ) as client:
             result = await client.call_tool("run", {"run_spec": prepared["path"]})
             assert not result.is_error, result.structured_content
             assert result.structured_content["run_id"] == prepared["run_id"]
@@ -309,6 +471,9 @@ print(json.dumps({"path": frozen.reference.stored_at.path, "run_id": draft.run_i
                 assert isinstance(vector, KnowledgeVector)
                 assert isinstance(vector.view, JournalVectorView)
                 assert vector.values == expected.values[0]
+                assert struct.pack("<1024f", *vector.values) == struct.pack(
+                    "<1024f", *expected.values[0]
+                )
                 assert vector.encoding == expected.encodings[0]
                 assert vector.view.embedder == expected.encoder
                 assert (

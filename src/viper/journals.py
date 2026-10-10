@@ -37,6 +37,7 @@ from .storage import LocalArtifactStore, LocalStorageDestination, publish_resolv
 from .verification import verify_run_result
 
 _LOGGER = logging.getLogger(__name__)
+_DEFAULT_ENCODER_TIMEOUT_SECONDS = 600
 _HEADING = re.compile(rb" {0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*(?:\r?\n)?$")
 _FIELD = re.compile(r"^([A-Za-z][A-Za-z _-]*):[ \t]*(.*)$")
 _FENCE = re.compile(rb" {0,3}(`{3,}|~{3,})([^\r\n]*)(?:\r?\n)?$")
@@ -63,7 +64,7 @@ class JournalSettings(ProtocolModel):
         description="Attribution without an Author field; not a reviewer identity.",
     )
     timeout_seconds: float = Field(
-        default=120,
+        default=_DEFAULT_ENCODER_TIMEOUT_SECONDS,
         gt=0,
         description="Encoder subprocess limit, including the first model download.",
     )
@@ -214,7 +215,9 @@ def parse_journal(raw: bytes) -> tuple[JournalPassage, ...]:
 
 
 def encode_journal(
-    texts: tuple[str, ...], *, timeout_seconds: float = 120
+    texts: tuple[str, ...],
+    *,
+    timeout_seconds: float = _DEFAULT_ENCODER_TIMEOUT_SECONDS,
 ) -> JournalEncodingResult:
     """Encode exact passages in an isolated CPU worker with pinned Qwen weights.
 

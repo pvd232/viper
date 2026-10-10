@@ -17,6 +17,7 @@ from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
 from viper.artifacts import StageArtifactRef
 from viper.authoring import run_artifact
+from viper.journals import JournalSettings
 from viper.metrics import MeasurementSink, MetricContext, MetricHandle
 from viper.references import LocalFileRef, ResolvedRunRef
 from viper.repository import RootError, read_source
@@ -106,7 +107,9 @@ def test_extended_examples_execute_complete_workflows(
         env=environment,
         capture_output=True,
         text=True,
-        timeout=240,
+        timeout=2 * JournalSettings().timeout_seconds + 120
+        if example == "journal_search.py"
+        else 240,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     if example == "reuse.py":

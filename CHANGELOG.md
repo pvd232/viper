@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.2 — 2026-10-10
+
+- Raise the default journal encoder budget from 120 to 600 seconds for the
+  complete download, model-loading, and CPU-encoding batch. Preserve explicit
+  timeout overrides, the pinned encoder, exact source text, and vector bytes.
+- Verify semantic retrieval through live MCP using three paraphrased questions,
+  exact retained vectors, review filters, and encoder/runtime separation.
+- Document complete semantic-search usage and MCP client timeouts. Render
+  package-index README file links against the signed version tag while keeping
+  repository README links relative.
+
 ## 0.1.1 — 2026-10-10
 
 - Declare Google Cloud Storage as a base dependency because the public API

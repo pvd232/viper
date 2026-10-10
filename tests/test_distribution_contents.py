@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -191,6 +193,17 @@ def test_built_distributions_exclude_experimental_surfaces(tmp_path: Path) -> No
         metadata = _distribution_metadata(distribution)
         assert b"Provides-Extra: knowledge" not in metadata
         assert b"usearch" not in metadata
+        version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"][
+            "version"
+        ]
+        base = f"https://github.com/pvd232/viper/blob/v{version}/"
+        assert (base + "docs/how-to/journals.md").encode() in metadata
+        assert (base + "examples/cpu_quickstart.py").encode() in metadata
+        assert (
+            base + "docs/how-to/stages.md#use-the-stage-context"
+        ).encode() in metadata
+        assert not re.search(rb"\]\((?:docs|examples)/", metadata)
+        assert b"](docs/how-to/journals.md)" in (ROOT / "README.md").read_bytes()
 
         package_prefix = "" if distribution.suffix == ".whl" else "src/"
         for module in ("api.py", "cli.py", "mcp.py"):
