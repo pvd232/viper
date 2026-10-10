@@ -26,7 +26,9 @@ illustrates the scientific structure below. Existing journals are not overwritte
 The first invocation downloads about 1.2 GB of weights. Float32 encoding requires
 roughly 2.4 GB for weights plus activation memory. Encoding runs on CPU with one
 thread in a separate process, not on the experiment's GPU. The default
-120-second encoder limit includes download time. Pre-download the immutable
+600-second encoder limit covers the entire passage batch, including download
+time, model loading, and CPU inference. Explicit `timeout_seconds` settings
+still override that limit. Pre-download the immutable
 revision when preparing a slow or offline host:
 
 ```bash
@@ -123,13 +125,13 @@ Disable automatic and explicit publication in `viper.toml`:
 enabled = false
 ```
 
-To keep capture enabled but allow a longer first download:
+Keep capture enabled and allow a longer first download or a larger journal:
 
 ```toml
 [journals]
 enabled = true
 authored_by = "Research team"
-timeout_seconds = 300
+timeout_seconds = 1200
 ```
 
 `Author` overrides attribution for a paragraph; it does not grant reviewer
@@ -189,8 +191,50 @@ For execute-mode MCP, call `publish_run_journal` with:
 ```
 
 Replace the path and source URL. Read `result.source`, `result.assertions`,
-`result.vectors`, and `result.skipped`. Read-only clients can retrieve assertions
-and search vectors but cannot publish them.
+`result.vectors`, and `result.skipped` inside the tool response's `result`.
+Read-only clients can retrieve assertions and search vectors. Publication
+requires execute-mode clients.
+
+Set the MCP client's read timeout above `timeout_seconds` when calling
+`publish_run_journal` or executing a run with a journal. For the default encoder
+budget, allow 720 seconds for publication; run execution also needs time for its
+stages. The encoder limit remains bounded even when the client allows more time.
+
+## Ask a semantic question
+
+After publishing the structured journal above, run this complete program from
+the same Python environment used for publication:
+
+```python
+from viper.catalog import catalog
+from viper.journals import encode_journal
+from viper.knowledge import SimilarityQuery
+
+question = "Does fitting the training data prove performance on unseen examples?"
+encoded = encode_journal((question,))
+matches = catalog().knowledge.similar(
+    SimilarityQuery(
+        view_id="journal-qwen3-0.6b",
+        view_version=encoded.encodings[0].encoder_sha256,
+        values=encoded.values[0],
+        assertion_statuses=("proposed",),
+        limit=3,
+    )
+)
+if not matches.items:
+    raise RuntimeError("Publish journal vectors with this exact encoder/runtime first.")
+for match in matches.items:
+    print("cosine distance:", match.distance)
+    print("source:", match.source.reference)
+    print("passage:", match.source.record.value.text)
+```
+
+`search_similar` through MCP accepts the same query fields, with `values` set to
+the encoded question vector. The tool ranks already-published vectors; callers
+encode their question first. A different encoder/runtime version returns no
+matches from this view. Proposed notes stay proposed when retrieved.
+Similarity is a ranking signal. Inspect the returned passage and its saved
+evidence before treating the passage as an answer.
 
 ## Recover from publication failure
 

@@ -12,9 +12,23 @@ import pytest
 
 import viper.journals as journals
 from viper.evidence import VerifiedRunResult
-from viper.journals import JournalPublicationResult, JournalSettings, parse_journal
-from viper.knowledge import JournalAssertion, JournalEvidence, JournalSource, knowledge
+from viper.journals import (
+    JournalEncodingResult,
+    JournalPublicationResult,
+    JournalSettings,
+    parse_journal,
+)
+from viper.knowledge import (
+    JournalAssertion,
+    JournalEncoderFile,
+    JournalEncoderSpec,
+    JournalEncoding,
+    JournalEvidence,
+    JournalSource,
+    knowledge,
+)
 from viper.references import ResolvedRunRef
+from viper.serialization import document_digest
 from viper.storage import (
     LocalArtifactStore,
     LocalStorageDestination,
@@ -89,6 +103,50 @@ def test_journal_publication_is_default_on_with_strict_optout() -> None:
     assert not JournalSettings(enabled=False).enabled
     with pytest.raises(ValueError):
         JournalSettings.model_validate({"enable": False})
+
+
+@pytest.mark.parametrize("timeout_seconds", (None, 12.0))
+def test_encoder_budget_covers_slow_startup_and_preserves_explicit_limits(
+    monkeypatch: pytest.MonkeyPatch, timeout_seconds: float | None
+) -> None:
+    """Allow a simulated 180-second worker only with the new default budget."""
+    text = "Exact journal text.\r\n"
+    encoder = JournalEncoderSpec(
+        files=(JournalEncoderFile(path="model.safetensors", sha256="0" * 64, bytes=1),),
+        transformers_version="test",
+        torch_version="test",
+        python_version="test",
+        platform="test",
+        tokenizers_version="test",
+        safetensors_version="test",
+    )
+    expected = JournalEncodingResult(
+        encoder=encoder,
+        values=((1.0,) + (0.0,) * 1023,),
+        encodings=(
+            JournalEncoding(
+                text_sha256=hashlib.sha256(text.encode()).hexdigest(),
+                encoder_sha256=document_digest(encoder),
+                token_count=5,
+            ),
+        ),
+    )
+
+    def worker(command: tuple[str, ...], **options: object) -> SimpleNamespace:
+        """Represent a 180-second worker by checking its deadline."""
+        budget = cast(float, options["timeout"])
+        assert budget == (600 if timeout_seconds is None else timeout_seconds)
+        if budget < 180:
+            raise journals.subprocess.TimeoutExpired(command, budget)
+        return SimpleNamespace(returncode=0, stdout=expected.model_dump_json())
+
+    monkeypatch.setattr(journals.subprocess, "run", worker)
+    assert JournalSettings().timeout_seconds == 600
+    if timeout_seconds is None:
+        assert journals.encode_journal((text,)) == expected
+    else:
+        with pytest.raises(journals.subprocess.TimeoutExpired):
+            journals.encode_journal((text,), timeout_seconds=timeout_seconds)
 
 
 def test_optout_does_not_read_journal_or_invoke_encoder(tmp_path: Path) -> None:
