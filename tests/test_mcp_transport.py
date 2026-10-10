@@ -15,12 +15,32 @@ from mcp.client import Client
 from mcp.client.stdio import StdioServerParameters
 from mcp.shared.exceptions import MCPError
 
+from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
 from viper.catalog import catalog
 from viper.journal import DurableJournal
 from viper.knowledge import KnowledgeRecordEnvelope, OntologySpec, PrimitiveSpec
 from viper.mcp import call_tool, get_prompt, prompt_registry, tool_registry
 from viper.reuse import StageReuseCandidate
+
+
+def test_documented_mcp_client_uses_the_live_stdio_server(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Execute the printed read-only client against a real workspace server."""
+    source_root = Path(__file__).parents[1]
+    program = python_blocks((source_root / "docs/reference/agents.md").read_text())[0]
+    root = tmp_path / "workspace"
+    root.mkdir()
+    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    subprocess.run(("git", "init", "--quiet", str(root)), check=True)
+    catalog(root=root).refresh()
+    monkeypatch.chdir(root)
+    exec(compile(program, "documented_mcp_client", "exec"), {"__name__": "__main__"})
+    output = capsys.readouterr().out
+    assert "schema: RunSpec" in output
+    assert "indexed successful runs: 0" in output
+    assert "next cursor: None" in output
 
 
 @pytest.mark.parametrize("access", ("read", "execute"))

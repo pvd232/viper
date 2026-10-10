@@ -14,6 +14,9 @@ Each run reads committed source and writes results under `experiments`.
 | [Inspection and queries](inspect_results.py) | `python -m examples.inspect_results` | Verifies, compares, restores, paginates measurements, and publishes an observation. |
 | [HTTP training](download_training.py) | `python -m examples.download_training` | Downloads the pinned CSV before training. |
 | [Recovery and reuse](recovery.py) | `python -m examples.recovery` | Retries an intentional first-attempt failure, then reuses the verified result. |
+| [Default reuse and forced computation](reuse.py) | `python -m examples.reuse` | Shows skipped versus executed stages and checks exact model-file parity. |
+| [Measured knowledge and vector search](knowledge_search.py) | `python -m examples.knowledge_search` | Publishes actual measurements, a diagnostic vector, and an observation, then retrieves them without dropping run indexes. |
+| [Portable evidence export](export_run.py) | `python -m examples.export_run` | Exports and independently verifies the saved run graph without repeating training. |
 
 [workflow_functions.py](workflow_functions.py) contains the CSV preparation,
 output loader, prediction, and RMSE functions used by the extended examples.

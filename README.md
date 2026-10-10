@@ -273,6 +273,10 @@ Continue from a saved plan or run result:
 | Reference a completed local run | `viper.execution.resolve_run_reference()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Inspect lineage or compare runs | `viper.api.lineage()` and `viper.api.compare_runs()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Search completed measurements | `viper.api.catalog_refresh()` and `catalog().measurements()` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
+| Reuse verified stages or force computation | `stage(reuse="never")` overrides default verified reuse | [Reuse example](examples/reuse.py) |
+| Publish and search measured knowledge | `knowledge()` and `catalog().knowledge` | [Measured vector search](docs/tutorials/knowledge-search.md) |
+| Export a portable evidence graph | `execution.export_run()` and `execution.verify_run_bundle()` | [Export example](examples/export_run.py) |
+| Publish, promote, restore, and retain cloud runs | `execution.promote_run_to_cloud()` and `retention.evict_cloud_backed_run_files()` | [Cloud storage](docs/how-to/cloud-storage.md) |
 | Give an agent typed access | `viper mcp --root .` | [Agent interface](docs/reference/agents.md) |
 
 Place `--json` before a CLI command when another program needs one typed result

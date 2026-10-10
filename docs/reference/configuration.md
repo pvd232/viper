@@ -46,7 +46,7 @@ def limit_rows(context: StageContext[RowLimit]) -> None:
     destination = context.outputs["dataset"]
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
-        "\n".join([header, *rows[:context.config.rows]]) + "\n",
+        "\n".join([header, *rows[: context.config.rows]]) + "\n",
         encoding="utf-8",
     )
 

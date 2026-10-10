@@ -8,8 +8,12 @@ slope. Run this from the repository root after the
 The program imports `study` from the [CPU quickstart](../../examples/cpu_quickstart.py).
 `execution.run()` returns each run's record, file path, and immutable reference.
 The inspection requests below consume those returned values. The catalog's
-query methods return pages; the loop follows `next_cursor` until all forty
-measurements have been read.
+query methods return pages; the loop follows `next_cursor` until all indexed
+measurements have been read. In a fresh workspace, the first run computes twenty
+training measurements and the second run reuses that verified stage. The catalog
+therefore contains twenty executed measurements, not forty independent measurements.
+Reuse records link the second run to its producer; they do not invent another
+execution or another set of observations.
 
 The two runs can have equal model bytes while their records differ: run IDs,
 timestamps, and measurement locations identify separate executions.

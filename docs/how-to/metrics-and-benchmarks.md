@@ -113,7 +113,11 @@ import json
 
 from viper.config import MetricConfig
 from viper.metrics import (
-    FloatComparator, MetricContext, MetricDependency, measure, metric,
+    FloatComparator,
+    MetricContext,
+    MetricDependency,
+    measure,
+    metric,
 )
 
 
@@ -133,7 +137,7 @@ rmse = measure(
         MetricDependency(
             source="artifact",
             name="predictions",
-            data_role="eval",
+            data_role="benchmark",
         ),
     ),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
@@ -147,6 +151,12 @@ Supply `dependencies` and `comparator` together; the function must accept its
 context alone. The dependency's data role must match the output. This comparator
 allows an absolute difference of `1e-12`; `exact` requires equality, and
 `relative` applies a positive relative tolerance.
+
+This declaration matches the benchmark-role predictions in the linked evaluation
+example. For standalone evaluation, change the test, split, predictions, and
+dependency roles together to `eval`; changing the dependency alone fails validation.
+For bit-exact score checks, use `FloatComparator(mode="exact")`. A tolerance is an
+explicit acceptance choice, not exact parity.
 
 ## Add benchmark criteria
 

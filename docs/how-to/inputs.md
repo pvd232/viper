@@ -65,6 +65,7 @@ and reads the retrieved CSV as UTF-8 text.
 
 ```python
 from examples.workflow_functions import load_text
+from pydantic import HttpUrl
 from viper.outputs import StageOutputs, output
 from viper.authoring import download
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
@@ -75,8 +76,10 @@ fetch_data = download(
     inputs={
         "dataset": HttpRequestSpec(
             url=(
-                "https://raw.githubusercontent.com/pvd232/viper/"
-                "327d1f89ad38d855e500f5386bdd2894d049a899/examples/data/tiny.csv"
+                HttpUrl(
+                    "https://raw.githubusercontent.com/pvd232/viper/"
+                    "327d1f89ad38d855e500f5386bdd2894d049a899/examples/data/tiny.csv"
+                )
             ),
             version="327d1f89ad38d855e500f5386bdd2894d049a899",
             expected_body_sha256="5962ba6c35b56dabeb8121dd6656aba7b1e60afe0d2ddec498feb191057d15fe",
@@ -119,12 +122,19 @@ training = stage(
     outputs=training_outputs,
     metrics=(mse,),
     objective=min(mse),
+    input_roots="download",
 )
 ```
 
 Include both stages in the variant, with the download before training. Freezing turns
 the output reference into a same-run dependency. The download input and output names
 must match: `"dataset"` selects the retrieved body in this example.
+
+`input_roots="download"` requires every transitive input to end at a verified
+Download receipt. VIPER checks this before reuse or worker startup and saves the
+closure in the resolved stage. Passing a local `input(..., path=...)` to this
+stage fails the check, even if its file happens to contain the same bytes.
+Omit this setting, or use `input_roots="any"`, when local files are intentional.
 
 For the complete HTTP protocol and credential model, use the [Python API
 reference](../reference/api.md) and [`viper.http`](../../src/viper/http.py).

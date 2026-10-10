@@ -47,6 +47,9 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
         "stages.py",
         "download_training.py",
         "recovery.py",
+        "reuse.py",
+        "knowledge_search.py",
+        "export_run.py",
     ),
 )
 def test_extended_examples_execute_complete_workflows(
@@ -63,6 +66,7 @@ def test_extended_examples_execute_complete_workflows(
         "variants.py": "docs/how-to/variants-and-replicates.md",
         "inspect_results.py": "docs/tutorials/inspect-results.md",
         "stages.py": "docs/tutorials/stages.md",
+        "knowledge_search.py": "docs/tutorials/knowledge-search.md",
     }
     if example in documents:
         # Execute the code readers copy, including its imports and main().
@@ -104,7 +108,28 @@ def test_extended_examples_execute_complete_workflows(
         timeout=240,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    if example == "variants.py":
+    if example == "reuse.py":
+        assert "first: succeeded; reused stages: 0" in completed.stdout
+        assert "default: succeeded; reused stages: 1" in completed.stdout
+        assert "forced: succeeded; reused stages: 0" in completed.stdout
+        assert "All three model files have identical bytes." in completed.stdout
+    elif example == "knowledge_search.py":
+        assert "observations: 1" in completed.stdout
+        assert "similarity matches: 1" in completed.stdout
+        assert "The measured run remains indexed" in completed.stdout
+        with closing(sqlite3.connect(root / ".viper/catalog.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+            assert (
+                connection.execute("SELECT COUNT(*) FROM stage_reuse_keys").fetchone()[
+                    0
+                ]
+                > 0
+            )
+    elif example == "export_run.py":
+        assert "bundle:" in completed.stdout
+        assert "manifest:" in completed.stdout
+        assert len(list((root / "exports").glob("*/manifest.json"))) == 1
+    elif example == "variants.py":
         assert completed.stdout.count(": succeeded ") == 4, completed.stdout
         weights = [
             json.loads(path.read_text())["weight"]

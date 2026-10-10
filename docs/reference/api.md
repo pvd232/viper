@@ -162,7 +162,7 @@ Set `reuse="never"` to force fresh computation in a new run. Benchmark confirmat
 executes independently of this setting. See
 [Reuse a verified stage result](../how-to/stages.md#reuse-a-verified-stage-result).
 
-## Metrics and benchmarks
+## Stage configuration and input roots
 
 `stage()` uses the decorated config class's defaults when `config` is omitted.
 A custom config with required fields still requires an instance supplying them.
@@ -171,6 +171,14 @@ Download stage. Execution calls `verify_download_source_closure()` before stage 
 or process startup and retains its `DownloadSourceClosureReceipt` in the resolved stage
 record. The walk reads only immutable provenance receipts; it does not retrieve artifact
 bodies again.
+
+The [download-and-training program](../../examples/download_training.py) enables
+this policy. [Declared file access](../how-to/stages.md#enforce-declared-file-access)
+is a separate stage setting: it observes supported Python open calls rather than
+the input's provenance origin.
+
+## Metrics and benchmarks
+
 `measure()` defaults to `MetricConfig()`; supply a custom instance when the
 calculation has settings.
 
@@ -202,6 +210,11 @@ See [automatic registration and refresh](../how-to/catalog-knowledge-mcp.md#buil
 `catalog().knowledge` opens exact and similarity queries over indexed knowledge records.
 `catalog().refresh_knowledge()` replaces knowledge rows and retains the execution
 and stage-reuse indexes. The `knowledge_refresh` API operation uses this path.
+
+See the [measured-vector program](../tutorials/knowledge-search.md) for complete
+publication and retrieval. Scientific Markdown journals and Qwen encoding are
+[pending integration](../how-to/journals.md),
+not effects of `knowledge_refresh` in this version.
 
 ## Public modules
 
@@ -279,6 +292,19 @@ restores it, compares the digest, and writes a local receipt. See
 contract. After accepting a result, call
 `viper.retention.evict_cloud_backed_run_files()` with the completed `RunResult` or its
 retained `ResolvedRunRef`. VIPER resolves the configured provider itself.
+
+The [cloud guide](../how-to/cloud-storage.md) shows provider setup, ordinary
+publication, promotion, restoration, and explicitly requested local eviction.
+The [portable export program](../../examples/export_run.py) demonstrates
+`export_run()` and `verify_run_bundle()` without a cloud account.
+
+## Select observing tests
+
+`viper.test_impact.select_tests()` follows application-supplied declaration
+relationships and returns `TestSelection.tests` and `TestSelection.unresolved`.
+The [test-selection guide](../how-to/test-selection.md) includes a complete
+accepted and unresolved example and distinguishes the wheel API from the
+checkout-owned CodeQL adapters.
 
 ## Typed operations
 

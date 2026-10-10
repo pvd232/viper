@@ -3,11 +3,70 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import re
 from pathlib import Path
+from types import ModuleType
 from urllib.parse import unquote
 
+from pydantic import BaseModel
+
+import viper.api as api
+import viper.artifacts as artifacts
+import viper.authoring as authoring
+import viper.benchmark as benchmark
+import viper.catalog as catalog
+import viper.config as config
+import viper.execution as execution
+import viper.execution.errors as execution_errors
+import viper.http as http
+import viper.inspection as inspection
+import viper.knowledge as knowledge
+import viper.metrics as metrics
+import viper.outputs as outputs
+import viper.randomness as randomness
+import viper.references as references
+import viper.repository as repository
+import viper.restoration as restoration
+import viper.resume as resume
+import viper.retention as retention
+import viper.runtime as runtime
+import viper.serialization as serialization
+import viper.stages as stages
+import viper.storage as storage
+import viper.test_impact as test_impact
+
 ROOT = Path(__file__).parents[1]
+
+DOCUMENTED_MODULES = {
+    module.__name__: module
+    for module in (
+        api,
+        artifacts,
+        authoring,
+        benchmark,
+        catalog,
+        config,
+        execution,
+        execution_errors,
+        http,
+        inspection,
+        knowledge,
+        metrics,
+        outputs,
+        randomness,
+        references,
+        repository,
+        restoration,
+        resume,
+        retention,
+        runtime,
+        serialization,
+        stages,
+        storage,
+        test_impact,
+    )
+}
 
 _FENCED_CODE = re.compile(r"^```[^\n]*\n.*?^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
@@ -15,6 +74,89 @@ _FENCED_CODE = re.compile(r"^```[^\n]*\n.*?^```[ \t]*$", re.MULTILINE | re.DOTAL
 def python_blocks(markdown: str) -> tuple[str, ...]:
     """Return every complete Python fence from one Markdown document."""
     return tuple(re.findall(r"```python\n(.*?)\n```", markdown, flags=re.DOTALL))
+
+
+def invocation_errors(program: str) -> tuple[str, ...]:
+    """Check explicit VIPER imports and direct calls without executing a snippet.
+
+    Resolve documented imports against a fixed inventory of public modules.
+    Signature binding checks positional and named arguments; Pydantic fields
+    additionally reject unknown keys. Instance methods and names supplied by a
+    linked preceding program remain the execution tests' responsibility.
+    """
+    tree = ast.parse(program)
+    bindings: dict[str, object] = {}
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "viper":
+                for alias in node.names:
+                    module = DOCUMENTED_MODULES.get(f"viper.{alias.name}")
+                    if module is None:
+                        errors.append(
+                            f"line {node.lineno}: missing module {alias.name}"
+                        )
+                    else:
+                        bindings[alias.asname or alias.name] = module
+            elif node.module.startswith("viper."):
+                module = DOCUMENTED_MODULES.get(node.module)
+                if module is None:
+                    errors.append(
+                        f"line {node.lineno}: unregistered module {node.module}"
+                    )
+                    continue
+                for alias in node.names:
+                    value = getattr(module, alias.name, None)
+                    if value is None:
+                        errors.append(
+                            f"line {node.lineno}: missing {node.module}.{alias.name}"
+                        )
+                    else:
+                        bindings[alias.asname or alias.name] = value
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("viper.") and alias.asname:
+                    module = DOCUMENTED_MODULES.get(alias.name)
+                    if module is None:
+                        errors.append(
+                            f"line {node.lineno}: unregistered module {alias.name}"
+                        )
+                    else:
+                        bindings[alias.asname] = module
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        value = None
+        if isinstance(node.func, ast.Name):
+            value = bindings.get(node.func.id)
+        elif isinstance(node.func, ast.Attribute) and isinstance(
+            node.func.value, ast.Name
+        ):
+            parent = bindings.get(node.func.value.id)
+            if isinstance(parent, ModuleType):
+                value = getattr(parent, node.func.attr, None)
+                if value is None:
+                    name = f"{parent.__name__}.{node.func.attr}"
+                    errors.append(f"line {node.lineno}: missing {name}")
+                    continue
+        if not callable(value):
+            continue
+        if any(isinstance(arg, ast.Starred) for arg in node.args) or any(
+            keyword.arg is None for keyword in node.keywords
+        ):
+            continue
+        keywords = {keyword.arg: object() for keyword in node.keywords if keyword.arg}
+        try:
+            inspect.signature(value).bind(*[object() for _ in node.args], **keywords)
+            if inspect.isclass(value) and issubclass(value, BaseModel):
+                if value.model_config.get("extra") == "forbid":
+                    unknown = set(keywords) - set(value.model_fields)
+                    if unknown:
+                        raise TypeError(f"unknown fields: {sorted(unknown)}")
+        except (TypeError, ValueError) as error:
+            errors.append(f"line {node.lineno}: {ast.unparse(node.func)}: {error}")
+    return tuple(errors)
 
 
 def dotted_name(node: ast.AST) -> str | None:

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Default workspace stages to verified reuse, automatically index successful
+  runs, and keep `reuse="never"` as the explicit fresh-computation policy.
+- Preserve run, measurement, benchmark, and reuse indexes during knowledge refresh.
+- Add executable examples for default reuse, forced computation, measured vector
+  search, and portable evidence export. Exercise download-root enforcement and
+  declared Python file access in the existing complete pipelines.
+- Check current documentation imports, callable arguments, and model field names
+  against the live public API. Separate approved journal integration from working
+  manual knowledge publication.
+
 - Add a production Google Cloud Storage client that preserves workspace-relative
   artifact paths, exposes only sealed content revisions, and verifies restored bytes.
 - Add a publish-and-restore probe receipt for checking durable storage before an

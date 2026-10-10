@@ -11,6 +11,9 @@ Continue with [a pipeline of stages](tutorials/stages.md) or
 [inspection and catalog queries](tutorials/inspect-results.md). Both tutorials
 provide complete Python programs.
 
+[Measured knowledge and vector search](tutorials/knowledge-search.md) publishes
+actual measurements and retrieves their diagnostic vectors without dropping runs.
+
 ## How-to guides
 
 | Task | Guide |
@@ -22,6 +25,9 @@ provide complete Python programs.
 | Generate and execute several runs | [Run variants and replicates](how-to/variants-and-replicates.md) |
 | Recover or inspect completed work | [Retry, restore, and compare runs](how-to/retry-restore-compare.md) |
 | Search evidence and publish observations | [Search runs and publish observations](how-to/catalog-knowledge-mcp.md) |
+| Keep scientific notes separate from execution logs | [Experiment journals](how-to/journals.md) |
+| Publish to cloud and release verified local copies | [Cloud storage](how-to/cloud-storage.md) |
+| Select tests from known declaration relationships | [Test selection](how-to/test-selection.md) |
 | Diagnose a failed command or run | [Troubleshoot VIPER](how-to/troubleshooting.md) |
 
 ## Explanation

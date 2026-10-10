@@ -130,6 +130,41 @@ The query vector must have the view's dimensions. Exact filters are applied
 before cosine-distance ranking; similarity expresses proximity in the selected
 view. Assess scientific agreement separately.
 
+The [complete measured-vector tutorial](../tutorials/knowledge-search.md) reads
+actual measurements, publishes their signature and vector, searches that exact
+view, and proves the run remains indexed after refresh. It uses diagnostic
+coordinates, not journal embeddings. The [journal guide](journals.md) explains
+manual publication and marks the approved parser and encoder as pending work.
+
+## Query knowledge through MCP
+
+Start the server with execute access as shown in the
+[agent reference](../reference/agents.md#connect-a-client). Call `knowledge_refresh`
+with `{}` to project the local knowledge head while preserving indexed runs and
+reuse candidates. Then call `search_assertions` with:
+
+```json
+{"query": {"kinds": ["observation"], "statuses": ["proposed"], "limit": 20}}
+```
+
+Each item returns `reference` and `record`; `record.value` contains the assertion
+and its evidence. For another page, copy `page.next_cursor` into `query.cursor`
+and retain the filters. `search_assertions` does not accept an `assertion_ids`
+filter. Query kind, status, evidence kind, or primitive IDs, then inspect the
+returned assertion IDs.
+
+After the knowledge-search example, call `search_diagnostics` with:
+
+```json
+{"query": {"metric_ids": ["mean_squared_error", "slope_error"], "limit": 20}}
+```
+
+Copy the two actual `record.value.components[].value` values in their recorded
+order into `search_similar`'s `query.values`, with `view_id="training_errors"`
+and `view_version="1"`. `get_schema` with `{"name":"SimilarityQuery"}` returns
+the exact fields. The same operations are available through CLI and Python;
+MCP requests omit root fields because the server owns the workspace.
+
 
 ## Give an agent access
 

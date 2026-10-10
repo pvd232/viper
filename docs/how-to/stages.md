@@ -112,7 +112,6 @@ def sort_rows(context: StageContext[BuildConfig]) -> None:
 prepared = stage(
     sort_rows,
     stage_id="prepare",
-
     inputs=(input("source", path="examples/data/tiny.csv", data_role="training"),),
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
@@ -227,7 +226,12 @@ from viper.authoring import StageDraft, input, stage
 from viper.benchmark import RunArtifactDraft
 from viper.config import EvalConfig, MetricConfig
 from viper.metrics import (
-    FloatComparator, MetricContext, MetricDependency, measure, metric, min,
+    FloatComparator,
+    MetricContext,
+    MetricDependency,
+    measure,
+    metric,
+    min,
 )
 from viper.outputs import EvalOutputs, output
 from viper.stages import StageContext, eval
@@ -241,10 +245,7 @@ def predict(context: StageContext[EvalConfig]) -> None:
         for row in load_text(context.inputs["test"]).splitlines()[1:]
     ]
     indices = json.loads(load_text(context.inputs["holdout"]))
-    pairs = [
-        [model["weight"] * rows[index][0], rows[index][1]]
-        for index in indices
-    ]
+    pairs = [[model["weight"] * rows[index][0], rows[index][1]] for index in indices]
     destination = context.outputs["predictions"]
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(pairs), encoding="utf-8")
@@ -263,12 +264,11 @@ def root_mean_squared_error(context: MetricContext[MetricConfig]) -> float:
 rmse = measure(
     root_mean_squared_error,
     dependencies=(
-        MetricDependency(
-            source="artifact", name="predictions", data_role="benchmark"
-        ),
+        MetricDependency(source="artifact", name="predictions", data_role="benchmark"),
     ),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
 )
+
 
 def evaluation_stage(
     test_data: RunArtifactDraft, test_split: RunArtifactDraft
@@ -277,7 +277,6 @@ def evaluation_stage(
     return stage(
         predict,
         stage_id="eval",
-
         eval_id="holdout",
         inputs=(
             training.outputs["model"],
@@ -335,7 +334,6 @@ def count_rows(context: StageContext[DiagnosticConfig]) -> None:
 report = stage(
     count_rows,
     stage_id="report",
-
     inputs=(prepared.outputs["dataset"],),
     outputs=StageOutputs(
         report=output(path="rows.txt", loader=load_text, data_role="training")
@@ -356,6 +354,23 @@ adds its stages to the workspace catalog and retains earlier entries.
 A later run discovers an identical stage through that automatic registration.
 Runs completed before automatic registration, imported runs, and a deleted
 catalog still need [a catalog refresh](catalog-knowledge-mcp.md#build-the-local-catalog).
+
+Run [the complete reuse program](../../examples/reuse.py) with:
+
+```bash
+python -m examples.reuse
+```
+
+It executes the CPU experiment twice with the default, then declares a training
+stage with `reuse="never"` and executes it. It reads reuse keys from lineage,
+verifies each result, restores each referenced model, and asserts that all three
+model files have identical bytes. Reused artifacts are available through the
+saved snapshot; do not assume another materialized copy exists under the new
+run's `artifacts` directory. Use `execution.restore()` with the returned reference.
+In a fresh workspace, the first and forced runs each execute training; the second
+run reuses it. An existing matching candidate can make the first run reuse too.
+These results demonstrate worker skipping and exact model parity, not a general
+timing claim. Use fresh run IDs when forcing another execution of a saved plan.
 
 Reused stages remain searchable as run evidence. Registration retains an existing
 reuse target to avoid growing chains of reused runs. A successful retry can also
