@@ -50,6 +50,10 @@ public interfaces and distinguishes contributor instructions.
 
 ## Release notes
 
+[0.1.2](releases/0.1.2.md) increases the journal encoder's default time limit,
+checks learned semantic search through MCP, and repairs package-description
+links while retaining relative repository links.
+
 [0.1.1](releases/0.1.1.md) is the first stable PyPI release. It declares the
 Google Cloud client required by the public API and ships the
 [0.1.0 candidate's features](releases/0.1.0.md): default verified stage reuse, automatic scientific
