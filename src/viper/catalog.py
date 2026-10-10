@@ -752,12 +752,22 @@ class Catalog:
                         )
                     _write_run_source(connection, source, preserve_reuse_sources=True)
 
+    def refresh_knowledge(
+        self, heads: tuple[ResolvedFileRef, ...] = ()
+    ) -> CatalogRefreshResult:
+        """Replace knowledge rows while preserving execution and reuse indexes."""
+        with _catalog_write_lock(self.path):
+            return self._refresh(
+                runs=(), benchmarks=(), knowledge=heads, preserve_execution=True
+            )
+
     def _refresh(
         self,
         *,
         runs: tuple[CatalogRunSource, ...],
         benchmarks: tuple[CatalogBenchmarkSource, ...],
         knowledge: tuple[ResolvedFileRef, ...],
+        preserve_execution: bool = False,
     ) -> CatalogRefreshResult:
         """Build and publish a replacement while holding the catalog writer lock."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -774,7 +784,16 @@ class Catalog:
         try:
             connection = sqlite3.connect(temporary_path)
             try:
-                connection.executescript(_SCHEMA)
+                if preserve_execution and self.path.is_file():
+                    with closing(sqlite3.connect(self.path)) as previous:
+                        version = previous.execute("PRAGMA user_version").fetchone()[0]
+                        if version != 1:
+                            raise ValueError("catalog schema version is unsupported")
+                        previous.backup(connection)
+                    connection.execute("DELETE FROM knowledge_records")
+                    connection.execute("DELETE FROM knowledge_primitives")
+                else:
+                    connection.executescript(_SCHEMA)
                 for source in runs:
                     key = _reference_key(source.reference)
                     if not _write_run_source(connection, source):

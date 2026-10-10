@@ -200,6 +200,8 @@ Successful execution automatically registers its verified result with
 See [automatic registration and refresh](../how-to/catalog-knowledge-mcp.md#build-the-local-catalog).
 `viper.knowledge.knowledge()` opens the immutable knowledge publisher;
 `catalog().knowledge` opens exact and similarity queries over indexed knowledge records.
+`catalog().refresh_knowledge()` replaces knowledge rows and retains the execution
+and stage-reuse indexes. The `knowledge_refresh` API operation uses this path.
 
 ## Public modules
 

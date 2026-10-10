@@ -2,7 +2,9 @@
 
 import json
 import shutil
+import sqlite3
 import sys
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,7 +18,9 @@ from mcp.shared.exceptions import MCPError
 from viper import _subprocess as subprocess
 from viper.catalog import catalog
 from viper.journal import DurableJournal
+from viper.knowledge import KnowledgeRecordEnvelope, OntologySpec, PrimitiveSpec
 from viper.mcp import call_tool, get_prompt, prompt_registry, tool_registry
+from viper.reuse import StageReuseCandidate
 
 
 @pytest.mark.parametrize("access", ("read", "execute"))
@@ -119,8 +123,11 @@ def test_mcp_prompts_require_task_specific_inputs() -> None:
     assert not tools["get_schema"].annotations.open_world_hint
 
 
-def test_stdio_executes_a_saved_training_plan(tmp_path: Path) -> None:
-    """Execute real training through MCP and inspect the resulting model bytes."""
+@pytest.mark.parametrize("refresh_knowledge", (False, True))
+def test_stdio_executes_a_saved_training_plan(
+    tmp_path: Path, refresh_knowledge: bool
+) -> None:
+    """Execute training through MCP and retain its index during knowledge refresh."""
     root = tmp_path / "workspace"
     source_root = Path(__file__).parents[1]
     shutil.copytree(
@@ -210,5 +217,82 @@ print(json.dumps({"path": frozen.reference.stored_at.path, "run_id": draft.run_i
             resolved = Path(result.structured_content["resolved_run"])
             model = resolved.parent / "artifacts/train/model/model.json"
             assert json.loads(model.read_text())["weight"] == pytest.approx(2, abs=1e-5)
+            if refresh_knowledge:
+                index = catalog(root=root)
+                before_runs = index.runs()
+                assert before_runs.items
+                with closing(sqlite3.connect(index.path)) as connection:
+                    execution_tables = tuple(
+                        name
+                        for (name,) in connection.execute(
+                            "SELECT name FROM sqlite_master WHERE type = 'table'"
+                        )
+                        if name not in {"knowledge_records", "knowledge_primitives"}
+                    )
+                    before_rows = {
+                        table: connection.execute(f"SELECT * FROM {table}").fetchall()
+                        for table in execution_tables
+                    }
+                    candidates = tuple(
+                        StageReuseCandidate.model_validate_json(payload)
+                        for (payload,) in connection.execute(
+                            "SELECT payload_json FROM stage_reuse_keys"
+                        )
+                    )
+                assert candidates
+                empty = await client.call_tool("knowledge_refresh", {})
+                assert not empty.is_error, empty.structured_content
+                assert index.runs() == before_runs
+                for candidate in candidates:
+                    assert index.reuse_candidate(candidate.key) == candidate
+                ontology = OntologySpec(
+                    ontology_id="regression",
+                    version="1",
+                    primitives=(
+                        PrimitiveSpec(
+                            primitive_id="hopfield",
+                            dimension="model-family",
+                            label="Hopfield",
+                            definition="Associative retrieval model.",
+                        ),
+                    ),
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                )
+                published = await client.call_tool(
+                    "publish_ontology",
+                    {
+                        "record": KnowledgeRecordEnvelope(
+                            record_kind="ontology", value=ontology
+                        ).model_dump(mode="json")
+                    },
+                )
+                assert not published.is_error, published.structured_content
+                manifest = published.structured_content["publication"]["manifest"]
+                for arguments in ({}, {"heads": [manifest]}):
+                    refreshed = await client.call_tool("knowledge_refresh", arguments)
+                    assert not refreshed.is_error, refreshed.structured_content
+                    assert index.runs() == before_runs
+                    for candidate in candidates:
+                        assert index.reuse_candidate(candidate.key) == candidate
+                    with closing(sqlite3.connect(index.path)) as connection:
+                        assert {
+                            table: connection.execute(
+                                f"SELECT * FROM {table}"
+                            ).fetchall()
+                            for table in execution_tables
+                        } == before_rows
+                    found = await client.call_tool(
+                        "search_primitives", {"query": {"primitive_ids": ["hopfield"]}}
+                    )
+                    assert not found.is_error
+                    assert len(found.structured_content["page"]["items"]) == 1
+                before_failure = index.path.read_bytes()
+                invalid_manifest = dict(manifest)
+                invalid_manifest["sha256"] = "0" * 64
+                failed = await client.call_tool(
+                    "knowledge_refresh", {"heads": [invalid_manifest]}
+                )
+                assert failed.is_error
+                assert index.path.read_bytes() == before_failure
 
     anyio.run(execute)

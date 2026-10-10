@@ -99,6 +99,11 @@ links this publication to its predecessors. The refresh above creates a
 knowledge-only index and replaces the run index. To index both together, pass
 verified `CatalogRunSource` objects through `refresh(runs=..., knowledge=...)`.
 
+Use `index.refresh_knowledge((publication.manifest,))` to refresh knowledge while
+preserving indexed runs, benchmarks, measurements, and stage-reuse candidates.
+The Python API, CLI, and MCP `knowledge_refresh` operation use this preserving
+path. A failed knowledge refresh leaves the existing catalog intact.
+
 Use your author identity in `authored_by`. A reviewed assertion also requires
 `reviewed_by` and `reviewed_at`. Publication records an interpretation; the
 referenced run supplies the experimental evidence supporting it.

@@ -1753,9 +1753,9 @@ def search_benchmarks(
 
 
 def knowledge_refresh(request: KnowledgeRefreshRequest) -> KnowledgeRefreshSuccess:
-    """Rebuild the knowledge projection from local and supplied manifest heads."""
+    """Refresh knowledge from manifest heads while retaining execution indexes."""
     repository_root = _root(request.root, "knowledge_refresh")
-    result = catalog(root=repository_root).refresh(knowledge=request.heads)
+    result = catalog(root=repository_root).refresh_knowledge(request.heads)
     return KnowledgeRefreshSuccess(result=result)
 
 
