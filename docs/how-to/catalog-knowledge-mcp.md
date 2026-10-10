@@ -13,8 +13,15 @@ excerpt belongs inside that program's `main()`; keep its imports at module scope
 
 ## Build the local catalog
 
-`runs` contains the two results returned by `execution.run()`. `root` is the
-workspace path, and `trusted` contains its source repository URL. Verify and
+Successful verified runs automatically enter their workspace's catalog after
+their immutable terminal result is saved. Registration preserves the catalog's
+other runs and knowledge records. Skipping computation remains restricted to
+stages that declare `reuse="verified"`.
+
+Use a refresh to index older or imported runs, rebuild a deleted catalog, or
+recover from a registration warning. `runs` contains the two results returned by
+`execution.run()`. `root` is the workspace path, and `trusted` contains its source
+repository URL. Verify and
 index the selected runs before querying them:
 
 ```python
@@ -35,6 +42,8 @@ print(refresh.result.accepted)
 Refresh replaces `.viper/catalog.sqlite3`. Supply all runs you want to search.
 Verification checks each run before it enters the index; a rejected source
 raises an error and leaves the existing index intact.
+Refresh and automatic registration share a writer lock; a competing writer
+receives an error and leaves the catalog unchanged.
 
 ## Search and paginate
 

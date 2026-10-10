@@ -4,6 +4,24 @@
 
 **Contract status:** Draft registered in the [Execution storage protocol](../checklists/execution-storage-protocol.md) checklist.
 
+### Implemented increment and remaining draft
+
+Successful execution now registers fully verified stages in the
+existing catalog through `Catalog.register_run()`. A later stage with
+`reuse="verified"` discovers an identical stage through automatic registration. The
+[execution test](../tests/test_run_execution.py) covers automatic discovery,
+explicit refresh, `reuse="never"`, a changed seed, and a failed catalog write.
+The [catalog tests](../tests/test_inspection.py) cover preservation, rollback,
+conflicting writers, schema compatibility, and every reuse-key component.
+
+This increment extends catalog-backed discovery. The producer-only search below
+remains proposed: the producer of a stored input can omit the consumer stage;
+adding the producer's output as a new input also changes the reuse key. Older or
+imported runs and a deleted catalog still require refresh.
+The typed draft's pointer-producer discovery and reference-only requirements
+remain proposed, with PairBlock completion still pending. Ordinary stored inputs
+continue to supply verified filesystem paths.
+
 <!-- contract-protocol:generated:start -->
 **Draft.**
 
@@ -82,7 +100,10 @@ PointerFirst(input, stage) =
 
 ## Current gap
 
-Viper documents and implements manual catalog-backed reuse. [docs/how-to/stages.md](../docs/how-to/stages.md#reuse-a-verified-stage-result) tells users to set `reuse="verified"` and index the completed source run through `catalog_refresh` before another plan can reuse its stages. [docs/how-to/inputs.md](../docs/how-to/inputs.md#use-artifacts-from-another-run) states that execution verifies a pointer and retrieves the artifact before invoking the consumer.
+At the draft baseline, Viper required manual catalog indexing before a new run
+could reuse a stage. The implemented increment above removes that operator step
+for newly completed runs. [Stored-input materialization](../docs/how-to/inputs.md#use-artifacts-from-another-run)
+continues to verify a pointer and retrieve the artifact before invoking the consumer.
 
 The implementation follows that contract. `execute_attempt()` calls `reuse_stage()` with `catalog=Catalog(root)`, and `reuse_stage()` calls `catalog.reuse_candidate(key)` when no explicit retry candidate is supplied. `resolve_inputs()` verifies a stored pointer with `verify_pointer_producer()`, selects the artifact with `verify_artifact_in_run()`, and writes the verified artifact bytes through `_materialize_verified_artifact()` before the stage worker starts.
 

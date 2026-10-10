@@ -349,9 +349,22 @@ The [complete recovery example](../../examples/recovery.py) demonstrates a
 successful retry followed by reuse in a new run.
 
 Set `reuse="verified"` in a workspace stage's `stage()` call to allow reuse.
-The default is `reuse="never"`. Index the completed source run through
-[the Python catalog refresh](catalog-knowledge-mcp.md#build-the-local-catalog) before
-executing another plan that might reuse its stages.
+The default is `reuse="never"`, which executes the stage even when a matching
+result is indexed. After saving a successful verified run, VIPER automatically
+adds its stages to the workspace catalog and retains earlier entries.
+A later run discovers an identical stage through that automatic registration.
+Runs completed before automatic registration, imported runs, and a deleted
+catalog still need [a catalog refresh](catalog-knowledge-mcp.md#build-the-local-catalog).
+
+Reused stages remain searchable as run evidence. Registration retains an existing
+reuse target to avoid growing chains of reused runs. A successful retry can also
+provide the first catalog candidate for a stage recovered from a failed attempt.
+Registration uses the verification already performed at run completion. An
+unavailable or busy catalog produces a warning and leaves the saved run
+successful; index that result later with `catalog_refresh`. Automatic registration
+adds local indexing work. Its runtime cost and workload speedups remain
+dependent on the stage's computation and artifact sizes; reused runs still
+verify the source and materialize its outputs.
 
 VIPER looks for a candidate with matching stage, config, inputs, runtime,
 randomness, and metric identities. A matching candidate is verified and its

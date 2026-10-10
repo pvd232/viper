@@ -69,10 +69,14 @@ contains contributor instructions for modifying VIPER itself.
 
 ## Inspect a completed run
 
-The user first populates the catalog using the
-[inspection tutorial](../tutorials/inspect-results.md), or grants execute access
-for `catalog_refresh`. Search tools query that index. Refresh replaces its
-contents, so include every run that should remain searchable.
+Successful execution registers its verified result in the workspace catalog.
+Search tools query that index. To index older or imported runs, rebuild a deleted
+catalog, or recover from a registration warning, the user can follow the
+[inspection tutorial](../tutorials/inspect-results.md) or grant execute access
+for `catalog_refresh`. Refresh replaces the index's contents, so include every
+run that should remain searchable. Registration supplies candidates;
+[verified reuse](../how-to/stages.md#reuse-a-verified-stage-result) requires
+`reuse="verified"`.
 
 Call `search_runs` with:
 

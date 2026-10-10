@@ -188,6 +188,10 @@ See [Load local and HTTP inputs](../how-to/inputs.md).
 
 `viper.catalog.catalog()` opens the derived local catalog. Its `runs()`, `artifacts()`,
 `measurements()`, and `benchmarks()` methods accept typed query models.
+Successful execution automatically registers its verified result with
+`Catalog.register_run(CatalogRunSource(...))`, preserving other indexed records.
+`Catalog.refresh()` rebuilds the index from the explicitly supplied sources.
+See [automatic registration and refresh](../how-to/catalog-knowledge-mcp.md#build-the-local-catalog).
 `viper.knowledge.knowledge()` opens the immutable knowledge publisher;
 `catalog().knowledge` opens exact and similarity queries over indexed knowledge records.
 

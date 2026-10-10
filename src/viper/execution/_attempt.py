@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import signal
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,7 +13,7 @@ from typing import Literal
 
 from .._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
 from .._verification.storage import read_attempt_reference
-from ..catalog import Catalog
+from ..catalog import Catalog, CatalogRunSource
 from ..evidence import VerificationError, VerificationPolicy, VerifiedRunResult
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
@@ -42,6 +43,7 @@ from ..reuse import (
     StageReuseCandidate,
     attempt_reuse_candidates,
     build_stage_reuse_key,
+    catalog_reuse_candidates,
 )
 from ..runs import (
     AttemptFailure,
@@ -100,6 +102,31 @@ from ._stage import (
 )
 from .errors import RestoreError, RunError
 from .results import ConfirmationRunResult, RunResult
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _index_completed_run(
+    root: Path, reference: ResolvedRunRef, verified: VerifiedRunResult
+) -> None:
+    """Index reusable stages after closure while preserving the saved run."""
+    try:
+        Catalog(root).register_run(
+            CatalogRunSource(
+                reference=reference,
+                verified=verified,
+                reuse_candidates=catalog_reuse_candidates(reference, verified),
+            )
+        )
+    except (Exception, KeyboardInterrupt) as exc:
+        # The saved run is authoritative; a derived-index failure must never
+        # invalidate completed measurements or require another worker execution.
+        _LOGGER.warning(
+            "Completed run %s could not enter the reuse catalog: %s. "
+            "Use catalog_refresh to index the saved result.",
+            verified.plan.run.run_id,
+            exc,
+        )
 
 
 def _verification_policy(
@@ -800,7 +827,7 @@ def execute_attempt(
             completed_at=datetime.now(UTC),
         )
         terminal_raw = serialize_document(resolved_run)
-        verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+        verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
         replace_synchronized(terminal_path, terminal_raw)
         write_synchronized(workspace.terminal, terminal_raw)
         terminal_reference = publish_resolved_files(
@@ -818,6 +845,7 @@ def execute_attempt(
             run_reference,
             replace_existing=previous_run is not None,
         )
+        _index_completed_run(root, run_reference, verified_run)
         return RunResult(
             record=resolved_run,
             reference=run_reference,

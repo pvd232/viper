@@ -1,7 +1,7 @@
 """Retry a controlled failure, then reuse its verified training result."""
 
 from examples.cpu_quickstart import fit, load_json, load_state, mse
-from viper import api, execution
+from viper import execution
 from viper.authoring import experiment, input, plan, replicate, stage, variant
 from viper.config import TrainConfig
 from viper.execution.errors import RunError
@@ -45,7 +45,7 @@ study = experiment(
 
 
 def main() -> None:
-    """Recover the first run and index it before executing the second plan."""
+    """Recover the first run and discover its indexed stages in the second plan."""
     root = resolve_root()
     source = read_source(root)
     environment = LocalEnvSpec(
@@ -70,13 +70,6 @@ def main() -> None:
     else:
         raise RuntimeError("The demonstration expected its first attempt to fail")
     print(f"successful attempt: {recovered.record.successful_attempt_id}")
-    api.catalog_refresh(
-        api.CatalogRefreshRequest(
-            root=root,
-            run_paths=(recovered.path,),
-            trusted_source_repositories=frozenset({str(source.repository)}),
-        )
-    )
     second = execution.run(
         plan(
             experiment=study,

@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import inspect
 import os
+import sqlite3
 import threading
 import time
 from collections.abc import Iterator
@@ -63,9 +64,10 @@ from viper.evidence import (
     VerificationPolicy,
     VerifiedArtifact,
     VerifiedInput,
+    VerifiedRunResult,
     VerifiedSnapshotFile,
 )
-from viper.execution import _batch
+from viper.execution import _attempt, _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
 from viper.execution._attempt import _verification_policy, execute_attempt
@@ -2484,6 +2486,11 @@ def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> Non
 
     assert isinstance(completion, ReusedStageCompletion)
     assert verified.reuse["prepare"].source_attempt == failed.record.attempts[-1]
+    candidates = catalog_reuse_candidates(result.reference, verified)
+    recovered_candidate = next(
+        item for item in candidates if item.key.stage_id == "prepare"
+    )
+    assert Catalog(root).reuse_candidate(recovered_candidate.key) == recovered_candidate
     assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n"
     assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
 
@@ -2607,8 +2614,24 @@ def test_retry_finds_completed_stage_before_empty_failed_retry(
     assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
 
 
-def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
-    """Reuse verified output without invoking the project stage a second time."""
+@pytest.mark.parametrize(
+    "scenario",
+    (
+        "automatic",
+        "manual",
+        "never",
+        "seed_mismatch",
+        "index_failure",
+        "index_interrupt",
+    ),
+)
+def test_verified_reuse_skips_stage_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    scenario: str,
+) -> None:
+    """Discover exact matches; preserve opt-in and failed-index behavior."""
     root = tmp_path / "project"
     root.mkdir()
     run_git(root, "init", "--quiet")
@@ -2680,7 +2703,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         },
         metrics=(loss,),
         objective=minimize(loss),
-        reuse="verified",
+        reuse="never" if scenario == "never" else "verified",
     )
     authored = experiment(
         experiment_id="reuse",
@@ -2691,7 +2714,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
                 estimator=trained.outputs["model"],
             )
         },
-        replicates={"r1": replicate("r1", seed=7)},
+        replicates={"r1": replicate("r1", seed=7), "r2": replicate("r2", seed=8)},
     )
     source_ref = GitSource.model_validate(
         {"repository": REPOSITORY, "commit": source_commit}
@@ -2714,6 +2737,27 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         reproducibility=reproducibility(),
     )
     first_frozen = freeze_run_plan(root, first_plan)
+    assert not Catalog(root).path.exists()
+    if scenario in ("index_failure", "index_interrupt"):
+
+        def fail_registration(self: Catalog, source: CatalogRunSource) -> None:
+            """Simulate an unavailable derived index after the result is saved."""
+            if scenario == "index_interrupt":
+                raise KeyboardInterrupt("indexing interrupted")
+            raise sqlite3.OperationalError("catalog unavailable")
+
+        monkeypatch.setattr(Catalog, "register_run", fail_registration)
+    verifier_calls: list[ResolvedRun] = []
+    original_verifier = _attempt.verify_run_result
+
+    def count_verification(
+        value: ResolvedRun, *, policy: VerificationPolicy, fetcher: RunFetcher
+    ) -> VerifiedRunResult:
+        """Count calls to the existing completion verifier."""
+        verifier_calls.append(value)
+        return original_verifier(value, policy=policy, fetcher=fetcher)
+
+    monkeypatch.setattr(_attempt, "verify_run_result", count_verification)
     first = execute_attempt(
         root,
         first_frozen.files[-1],
@@ -2728,23 +2772,27 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         policy=policy,
         fetcher=fetcher,
     )
-    Catalog(root).refresh(
-        runs=(
-            CatalogRunSource(
-                reference=first.reference,
-                verified=first_verified,
-                reuse_candidates=catalog_reuse_candidates(
-                    first.reference,
-                    first_verified,
+    if scenario == "manual":
+        Catalog(root).refresh(
+            runs=(
+                CatalogRunSource(
+                    reference=first.reference,
+                    verified=first_verified,
+                    reuse_candidates=catalog_reuse_candidates(
+                        first.reference,
+                        first_verified,
+                    ),
                 ),
-            ),
+            )
         )
-    )
-
+    elif scenario not in ("index_failure", "index_interrupt"):
+        assert Catalog(root).runs().items[0].run == first.reference
+        candidates = catalog_reuse_candidates(first.reference, first_verified)
+        assert Catalog(root).reuse_candidate(candidates[0].key) == candidates[0]
     second_plan = plan(
         experiment=authored,
         variant="baseline",
-        replicate="r1",
+        replicate="r2" if scenario == "seed_mismatch" else "r1",
         source=source_ref,
         env=environment,
         reproducibility=reproducibility(),
@@ -2770,7 +2818,52 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     )
     completion = reused_train.completion
 
-    assert isinstance(completion, ReusedStageCompletion)
-    assert second_verified.attempts[-1].invocations == ()
-    assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
-    assert tuple(second_verified.reuse) == ("train",)
+    assert len(verifier_calls) == 2
+    if scenario in ("automatic", "manual"):
+        assert isinstance(completion, ReusedStageCompletion)
+        assert second_verified.attempts[-1].invocations == ()
+        assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
+        assert tuple(second_verified.reuse) == ("train",)
+        assert second_verified.reuse["train"].source_run == first.reference
+    else:
+        assert not isinstance(completion, ReusedStageCompletion)
+        assert len(second_verified.attempts[-1].invocations) == 1
+        assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
+        assert second_verified.reuse == {}
+    if scenario in ("index_failure", "index_interrupt"):
+        assert "Completed run" in caplog.text
+        message = (
+            "indexing interrupted"
+            if scenario == "index_interrupt"
+            else "catalog unavailable"
+        )
+        assert message in caplog.text
+        assert "catalog_refresh" in caplog.text
+        assert not Catalog(root).path.exists()
+    else:
+        assert {item.run.sha256: item.run for item in Catalog(root).runs().items} == {
+            first.reference.sha256: first.reference,
+            second.reference.sha256: second.reference,
+        }
+    if scenario == "automatic":
+        third_frozen = freeze_run_plan(
+            root,
+            plan(
+                experiment=authored,
+                variant="baseline",
+                replicate="r1",
+                source=source_ref,
+                env=environment,
+                reproducibility=reproducibility(),
+            ),
+        )
+        third = execute_attempt(
+            root, third_frozen.files[-1], plan=third_frozen.reference
+        )
+        assert isinstance(third, RunResult)
+        third_verified = verify_run_result(third.record, policy=policy, fetcher=fetcher)
+        assert third_verified.reuse["train"].source_run == first.reference
+        assert third_verified.attempts[-1].invocations == ()
+        assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
+        assert len(Catalog(root).runs().items) == 3
+        assert len(verifier_calls) == 3

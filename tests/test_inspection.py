@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import sqlite3
 from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 from tests.fixtures import python_environment
 from viper.catalog import Catalog, CatalogRunSource, RunQuery
@@ -54,6 +57,8 @@ from viper.references import (
 )
 from viper.reuse import (
     ReusedStageFile,
+    ReuseFileIdentity,
+    ReuseInputIdentity,
     StageReuseCandidate,
     StageReuseKey,
     StageReuseReceipt,
@@ -401,6 +406,99 @@ def test_catalog_results_retain_immutable_sources(tmp_path: Path) -> None:
         raise AssertionError("a cursor was accepted under different filters")
 
 
+def test_catalog_register_run_preserves_existing_records(tmp_path: Path) -> None:
+    """Append a run idempotently while keeping other runs and knowledge rows."""
+    root = tmp_path / "project"
+    first = _catalog_source(_verified_result(root, _write_plan(root, seed=42)))
+    second = _catalog_source(
+        replace(
+            first.verified,
+            result=first.verified.result.model_copy(
+                update={
+                    "completed_at": first.verified.result.completed_at
+                    + timedelta(seconds=1)
+                }
+            ),
+        )
+    )
+    index = Catalog(root)
+    index.register_run(first)
+    assert index.runs().items[0].run == first.reference
+    with closing(sqlite3.connect(index.path)) as connection:
+        with connection:
+            connection.execute(
+                "INSERT INTO knowledge_records VALUES (?, ?, ?, ?)",
+                ("retained", "reference", "assignment", "record"),
+            )
+    index.register_run(second)
+    index.register_run(first)
+    assert {item.run.sha256 for item in index.runs().items} == {
+        first.reference.sha256,
+        second.reference.sha256,
+    }
+    with closing(sqlite3.connect(index.path)) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM runs").fetchone() == (2,)
+        assert connection.execute("SELECT * FROM knowledge_records").fetchall() == [
+            ("retained", "reference", "assignment", "record")
+        ]
+
+
+def test_catalog_register_run_rolls_back_invalid_source(tmp_path: Path) -> None:
+    """Retain the prior projection when references or candidates fail validation."""
+    source = _catalog_source(_verified_result(tmp_path, _write_plan(tmp_path, seed=42)))
+    index = Catalog(tmp_path)
+    index.refresh(runs=(source,))
+    before = index.path.read_bytes()
+    invalid = replace(
+        source, reference=source.reference.model_copy(update={"sha256": "c" * 64})
+    )
+    with pytest.raises(ValueError, match="terminal run digest differs"):
+        index.register_run(invalid)
+    assert index.path.read_bytes() == before
+    receipt = _reuse_receipt()
+    candidate = StageReuseCandidate(
+        key=receipt.key,
+        source_run=source.reference,
+        source_attempt=receipt.source_attempt,
+        attempt_id=1,
+        source_stage=receipt.source_stage,
+        completed_at=receipt.completed_at,
+    )
+    with pytest.raises(ValueError, match="attempt is absent"):
+        index.register_run(replace(source, reuse_candidates=(candidate,)))
+    assert index.path.read_bytes() == before
+    assert index.runs().items[0].run == source.reference
+
+
+def test_catalog_writers_reject_a_conflicting_refresh(tmp_path: Path) -> None:
+    """Keep registration and replacement from writing the same catalog concurrently."""
+    source = _catalog_source(_verified_result(tmp_path, _write_plan(tmp_path, seed=42)))
+    index = Catalog(tmp_path)
+    index.refresh(runs=(source,))
+    before = index.path.read_bytes()
+    with index.path.with_suffix(".lock").open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(BlockingIOError):
+            index.register_run(source)
+        with pytest.raises(BlockingIOError):
+            index.refresh()
+    assert index.path.read_bytes() == before
+
+
+def test_catalog_register_run_rejects_unknown_schema(tmp_path: Path) -> None:
+    """Preserve an unsupported catalog's version and bytes."""
+    source = _catalog_source(_verified_result(tmp_path, _write_plan(tmp_path, seed=42)))
+    index = Catalog(tmp_path)
+    index.refresh(runs=(source,))
+    with closing(sqlite3.connect(index.path)) as connection:
+        with connection:
+            connection.execute("PRAGMA user_version = 99")
+    before = index.path.read_bytes()
+    with pytest.raises(ValueError, match="schema version is unsupported"):
+        index.register_run(source)
+    assert index.path.read_bytes() == before
+
+
 def _reuse_receipt() -> StageReuseReceipt:
     """Build one valid reuse receipt for inspection tests."""
     resolved_file = SnapshotFileRef(
@@ -548,7 +646,31 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
             )
 
     assert catalog.reuse_candidate(key) == candidate
-    assert catalog.reuse_candidate(key.model_copy(update={"seed": 43})) is None
+    changes = (
+        {"stage_id": "other"},
+        {"stage_sha256": "f" * 64},
+        {"seed": 43},
+        {"env_sha256": "f" * 64},
+        {"reproducibility_sha256": "f" * 64},
+        {"metric_sha256s": ("f" * 64,)},
+        {
+            "inputs": (
+                ReuseInputIdentity(
+                    input_name="dataset",
+                    data_role="training",
+                    files=(
+                        ReuseFileIdentity(
+                            relative_path="dataset.bin",
+                            sha256="f" * 64,
+                            bytes=1,
+                        ),
+                    ),
+                ),
+            )
+        },
+    )
+    for change in changes:
+        assert catalog.reuse_candidate(key.model_copy(update=change)) is None
 
 
 def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
