@@ -1,6 +1,7 @@
 """Run the complete CPU example with a selected execution policy."""
 
 from argparse import ArgumentParser
+from pathlib import Path
 
 from cpu_quickstart import study
 
@@ -8,6 +9,7 @@ from viper import execution
 from viper.authoring import plan
 from viper.references import GitFileRef
 from viper.repository import read_source
+from viper.restoration import ArtifactRestoreSelector
 from viper.resume import DataLoaderConfiguration
 from viper.runtime import (
     LocalEnvSpec,
@@ -67,7 +69,13 @@ def main() -> None:
         reproducibility=selection,
     )
     resolved_run = execution.run(draft)
-    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+    restored = execution.restore(
+        Path.cwd(),
+        resolved_run.reference,
+        artifacts=(ArtifactRestoreSelector(stage_id="train", artifact_name="model"),),
+        output=Path.cwd() / "restored" / f"{draft.run_id}.json",
+    )
+    model_path = restored.artifacts[0].files[0].path
     print(f"status: {resolved_run.status}")
     print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
     print(f"result: {resolved_run.path}")

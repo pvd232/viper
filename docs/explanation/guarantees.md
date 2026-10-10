@@ -56,5 +56,12 @@ Knowledge records add author-supplied interpretations, such as an effect estimat
 assertion. Their publication records identify what was written; the interpretation still
 requires scientific review.
 
+Automatic [journal capture](../how-to/journals.md) preserves original Markdown
+bytes and exact passage spans. Its encoder records the pinned model files and
+preprocessing/runtime settings. The hook's MCP regression checks exact vector
+parity with the same source and encoder. These checks establish text/encoding
+lineage, not the truth of a hypothesis or the validity of a causal explanation.
+Manual vector publication trusts the caller's supplied numerical values.
+
 See the [protocol reference](../reference/protocol.md) for record types and [How VIPER
 works](how-viper-works.md) for the execution sequence.

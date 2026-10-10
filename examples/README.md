@@ -1,5 +1,11 @@
 # VIPER examples
 
+[journal_search.py](journal_search.py) executes default-on scientific journal
+capture, retrieves structured exact-source assertions, and searches learned
+Qwen3-Embedding-0.6B vectors. It uses [data/JOURNAL.md](data/JOURNAL.md) and the
+[journal guide](../docs/how-to/journals.md), including the opt-out and first-download
+requirements.
+
 Run these commands from the repository root after following the
 [installation instructions](../docs/tutorials/getting-started.md#install-the-repository).
 Each run reads committed source and writes results under `experiments`.
@@ -16,6 +22,7 @@ Each run reads committed source and writes results under `experiments`.
 | [Recovery and reuse](recovery.py) | `python -m examples.recovery` | Retries an intentional first-attempt failure, then reuses the verified result. |
 | [Default reuse and forced computation](reuse.py) | `python -m examples.reuse` | Shows skipped versus executed stages and checks exact model-file parity. |
 | [Measured knowledge and vector search](knowledge_search.py) | `python -m examples.knowledge_search` | Publishes actual measurements, a diagnostic vector, and an observation, then retrieves them without dropping run indexes. |
+| [Scientific journals and learned retrieval](journal_search.py) | `python -m examples.journal_search` | Captures exact structured prose by default, pins Qwen3-Embedding-0.6B, and searches the matching encoder/runtime view. |
 | [Portable evidence export](export_run.py) | `python -m examples.export_run` | Exports and independently verifies the saved run graph without repeating training. |
 
 [workflow_functions.py](workflow_functions.py) contains the CSV preparation,

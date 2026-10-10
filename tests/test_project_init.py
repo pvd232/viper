@@ -107,3 +107,53 @@ def test_init_generates_importable_python_project(
     assert "freeze-run" not in readme
     assert "viper.execution.run()" in readme
     assert "execution.run(draft, repository_root=root)" in runner
+
+
+def test_generated_checkpoint_loader_reconstructs_saved_state(tmp_path: Path) -> None:
+    """Execute the generated template and restore its actual serialized RNG state."""
+    target = tmp_path / "starter"
+    create_workspace(target, "sample_workspace")
+    environment = environ.copy()
+    environment["PYTHONPATH"] = str(target / "src")
+    program = """
+from pathlib import Path
+from types import SimpleNamespace
+
+from sample_workspace.artifact_loaders.resume_state import load
+from sample_workspace.config import TrainConfig
+from sample_workspace.stages.train import train
+from viper.resume import load_resume_state
+
+dataset = Path("inputs/train.csv")
+dataset.write_bytes(b"x,y\\n1,2\\n")
+model = Path("model.bin")
+checkpoint = Path("resume_state.pt")
+context = SimpleNamespace(
+    inputs={"dataset": dataset},
+    outputs={"model": model, "resume_state": checkpoint},
+    config=TrainConfig(), numpy_generators={},
+    metrics={"training_loss": SimpleNamespace(record=lambda *args, **kwargs: None)},
+)
+train(context)
+saved = load_resume_state(checkpoint)
+assert load(checkpoint) == saved
+assert saved.dataloader.state_dict == {"num_yielded": 1}
+assert len(saved.main_process_rng.torch_cpu) > 100
+assert model.read_bytes() == dataset.read_bytes()
+checkpoint.write_bytes(b"invalid checkpoint")
+try:
+    load(checkpoint)
+except Exception:
+    pass
+else:
+    raise AssertionError("loader accepted an invalid checkpoint")
+"""
+    completed = subprocess.run(
+        (sys.executable, "-c", program),
+        cwd=target,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr

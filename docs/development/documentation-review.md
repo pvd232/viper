@@ -29,6 +29,7 @@ obscure the introductory programs.
 | Catalog indexing, filters, pagination, observations | [Inspection tutorial](../tutorials/inspect-results.md), [catalog guide](../how-to/catalog-knowledge-mcp.md) | Complete inspection workflow; [test_inspection.py](../../tests/test_inspection.py) |
 | Knowledge record types and similarity queries | [Catalog guide](../how-to/catalog-knowledge-mcp.md#choose-a-knowledge-record) | Knowledge publication, filtering, and ranking cases in [test_inspection.py](../../tests/test_inspection.py) and [test_api.py](../../tests/test_api.py) |
 | Measured diagnostic vectors and preserving knowledge refresh | [Knowledge-search tutorial](../tutorials/knowledge-search.md) | Complete knowledge workflow reads saved measurements, publishes a vector, queries it, and checks both run and reuse indexes. MCP preserving-refresh regression in [test_mcp_transport.py](../../tests/test_mcp_transport.py). |
+| Default-on scientific journals, exact source spans, pinned learned vectors, edited revisions, and opt-out | [Journal guide](../how-to/journals.md), [journal_search.py](../../examples/journal_search.py), [input journal](../../examples/data/JOURNAL.md) | [test_journals.py](../../tests/test_journals.py); complete journal workflow; real stdio MCP test `test_stdio_executes_a_saved_training_plan[False-True]` checks exact vector equality, forged identities, unchanged publication, edited revisions, opt-out, and retained runs. |
 | Portable export and offline verification | [Export guide](../how-to/retry-restore-compare.md#export-portable-evidence), [export_run.py](../../examples/export_run.py) | Complete export workflow uses `RunExportResult.bundle_path` and pins the returned manifest digest. |
 | Cloud configuration, promotion, and local retention | [Cloud guide](../how-to/cloud-storage.md) | Controlled provider and retention tests; live account/bucket acceptance remains separate. |
 | Public graph-based test selection | [Test-selection guide](../how-to/test-selection.md) | `test_documented_test_selection_executes` checks the printed program's selected observer and unresolved owner. |
@@ -50,8 +51,10 @@ The printed MCP Python client also executes against a real stdio server.
 
 ## Review of the current checkout
 
-The October 2026 review began at commit
-`944a142c321cf742a5316a7f04c701a108e924d7`. It found and corrected these usage gaps:
+The documentation audit began at commit
+`944a142c321cf742a5316a7f04c701a108e924d7`. The implementation and final-documentation
+follow-up began at `00907e71258a293a899b1764ddd18e11f097116e`.
+Together they found and corrected these usage gaps:
 
 - Recomputed evaluation metrics must use the same data roles as the linked
   stage's test input, split, and predictions.
@@ -67,18 +70,71 @@ The October 2026 review began at commit
   public test selection needed usable entry points. Each now has a guide and
   links to its implementation or complete executable program.
 
-The [journal guide](../how-to/journals.md) retains the approved scientific
-structure. It also states the remaining gap: the Markdown parser, pinned learned
-encoder, default-on hook, opt-out, and exact-source MCP regression are not yet
-implemented. Manual assertion/vector publication must not be described as that
-automatic integration. A non-alpha release claiming those features remains
-blocked on their implementation and focused acceptance checks.
+The [journal guide](../how-to/journals.md) now demonstrates the implemented parser,
+default-on post-run hook, pinned learned encoder, opt-out, and explicit saved-run
+publication. The complete example executes capture and retrieval. The MCP
+regression compares every returned coordinate exactly with an independent
+invocation on the original passage; it uses no tolerance.
+
+The follow-up also repaired concrete failures exposed by executing the docs:
+
+- Independent benchmark confirmation could encounter a read-only output sharing
+  an inode with the immutable store. The worker now receives a writable copy;
+  the regression checks that the original stored bytes and permissions remain
+  unchanged. Symlinked output files and parents are rejected before copying.
+- The quickstart and policy programs assumed a reused run had a fresh local
+  model file. Both now restore the declared artifact before reading it.
+- Generated workspaces wrote placeholder checkpoint bytes and their loader
+  fabricated RNG state. The template now saves real state, and its loader
+  reconstructs that state or rejects invalid bytes.
+- The journal example compared two different Pydantic reference classes as
+  objects. It now compares their file identity and stored location, so passages
+  associated with the returned run are found.
+- Registration, module inventory, and printed import-order checks caught the
+  new API's incomplete wiring. The operation is registered in matching order
+  across Python discovery, dispatch, CLI, MCP, and documentation.
+- The new-workspace instructions omitted a separate environment, its Git root,
+  and an HTTP(S) source remote. The README now provides all three and identifies
+  which package installation supplies VIPER to the new workspace.
+
+Parsing exposes author-written fields; it does not infer conclusions or grant
+review approval. Run links supply context. Explicit measurement selectors bind
+saved results, while `Supports` and `Supersedes` remain author-written labels.
+Legacy manual assertions and embedder-artifact references remain readable.
 
 Historical release reports retain their version-specific APIs. Current API and
 CLI tables are checked against the installed registries; they are not copied
 from those historical reports.
 
-### Validation results
+### Current implementation and documentation validation
+
+The follow-up used the checkout's Python 3.12 `.venv`. These are executed checks,
+not estimates of coverage:
+
+| Check | Observed result |
+| --- | --- |
+| `pyright --pythonpath .venv/bin/python` | 0 errors and warnings. Explicit checks of the six changed executable examples also passed. |
+| `python -m pytest tests -q -m 'unit or contract'` | 563 passed, 208 deselected; 11 subtests passed in 46.03 seconds. |
+| Complete documented workflows, stdio MCP, and distribution contents | 37 passed in 431.38 seconds. The complete workflow checks execute all ten extended examples. |
+| Final documentation, public inventory, and API checks | 57 passed in 4.48 seconds after removing pre-publication wording from the reader guides. |
+| Final output-path guards, generated checkpoint round trip, evaluation workflow, and exact-source Qwen MCP regression | The guards are included in the fast gate. The additional generated-project, evaluation, and MCP checks passed: 7 tests in 99.21 seconds. |
+| Pinned model cache verification | `hf cache verify` checked all ten downloaded files against revision `97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3`; no mismatches or extra files. |
+| Built distribution validation | Wheel and source archive built; `twine check` passed for both. A fresh, noneditable wheel install outside the checkout exposed `publish_run_journal` and encoded an exact source passage into 1024 coordinates with the pinned revision. Dependencies came from the declared project environment; this was not a fresh dependency-resolution test. |
+| `ruff format --check src/viper tests examples docs README.md` | 199 files already formatted. |
+| `ruff check src/viper tests examples` and `git diff --check` | Passed. |
+
+The workflow checks emitted one upstream TorchData deprecation warning. This
+does not replace compatibility testing on other supported Python versions.
+
+The full integration, generated-project release, compatibility matrix, live GPU,
+and live cloud gates were not run in this local follow-up. The request excluded
+the full integration suite. The existing publication workflow requires green CI
+for the exact release commit and a signed tag naming that CI run; these local
+checks do not satisfy that publication gate. The journal features are implemented
+and tested, but this review does not claim PyPI publication or production-release
+approval.
+
+### Earlier documentation-only validation
 
 The review used the checkout's `.venv`, without running the full integration or
 release suite:
@@ -102,7 +158,7 @@ failure's cause and does not certify every runtime edge case.
 A broader `ruff check .` also finds existing style errors in the tracked
 `test_script.py`, outside the Makefile's configured source gate. That scratch
 script was not changed or executed by this documentation task. Live GPU/cloud
-acceptance and the automatic journal feature remain separate obligations.
+acceptance remains separate from these CPU checks.
 
 Run the public-documentation tests with:
 

@@ -62,6 +62,7 @@ EXECUTION_OPERATIONS: tuple[OperationName, ...] = (
     "execute_benchmark",
     "preflight",
     "knowledge_refresh",
+    "publish_run_journal",
     "publish_assertion",
     "publish_assignment",
     "publish_diagnostic",

@@ -30,7 +30,7 @@ from .references import (
     ResolvedFileRef,
     ResolvedRunRef,
 )
-from .serialization import parse_yaml_bytes, serialize_document
+from .serialization import document_digest, parse_yaml_bytes, serialize_document
 from .storage import (
     StorageDestination,
     load_storage_settings,
@@ -417,12 +417,43 @@ class JournalEvidence(ProtocolModel):
     reference: ResolvedFileRef
 
 
+class JournalSource(ProtocolModel):
+    """Locate an exact UTF-8 passage within a retained Markdown revision."""
+
+    document: ResolvedFileRef = Field(
+        description="Retained original UTF-8 Markdown revision."
+    )
+    byte_start: int = Field(
+        ge=0, description="Inclusive byte offset of the exact passage."
+    )
+    byte_end: int = Field(
+        gt=0, description="Exclusive byte offset of the exact passage."
+    )
+    text_sha256: SHA256 = Field(
+        description="Digest of the passage's UTF-8 bytes without normalization."
+    )
+    section: NonEmptyStr = Field(
+        description="Author-written Markdown section containing the passage."
+    )
+    fields: dict[str, str] = Field(
+        default_factory=dict,
+        description="Author-written label:value fields, never inferred conclusions.",
+    )
+
+    @model_validator(mode="after")
+    def validate_span(self) -> Self:
+        """Require a nonempty span within the retained document."""
+        if not self.byte_start < self.byte_end <= self.document.bytes:
+            raise ValueError("journal source span is outside the document")
+        return self
+
+
 class JournalAssertion(ProtocolModel):
     """State one bounded claim and its immutable evidence."""
 
     schema_version: Literal[1] = 1
     assertion_id: AssertionId
-    kind: Literal["observation", "hypothesis", "decision", "exclusion"]
+    kind: Literal["observation", "hypothesis", "decision", "exclusion", "note"]
     text: NonEmptyStr
     evidence: tuple[JournalEvidence, ...] = Field(min_length=1)
     status: Literal["proposed", "reviewed", "rejected"]
@@ -430,6 +461,21 @@ class JournalAssertion(ProtocolModel):
     created_at: AwareDatetime
     reviewed_by: NonEmptyStr | None = None
     reviewed_at: AwareDatetime | None = None
+    source: JournalSource | None = Field(
+        default=None,
+        description="Exact Markdown source; absent for manually authored assertions.",
+    )
+
+    @model_validator(mode="after")
+    def validate_source_text(self) -> Self:
+        """Bind a parsed assertion to the exact encoded passage bytes."""
+        if (
+            self.source is not None
+            and hashlib.sha256(self.text.encode("utf-8")).hexdigest()
+            != self.source.text_sha256
+        ):
+            raise ValueError("journal assertion text differs from its source digest")
+        return self
 
     @model_validator(mode="after")
     def validate_review(self) -> Self:
@@ -468,13 +514,118 @@ class DiagnosticVectorView(ProtocolModel):
         return self
 
 
+class JournalEncoderFile(ProtocolModel):
+    """Record the exact local model or tokenizer file used for encoding."""
+
+    path: NonEmptyStr = Field(description="File path within the pinned model snapshot.")
+    sha256: SHA256 = Field(description="Digest of the loaded file bytes.")
+    bytes: int = Field(ge=0, description="Size of the loaded file.")
+
+
+class JournalEncoderSpec(ProtocolModel):
+    """Pin Qwen weights, preprocessing, and the numerical encoding runtime."""
+
+    model_id: Literal["Qwen/Qwen3-Embedding-0.6B"] = Field(
+        default="Qwen/Qwen3-Embedding-0.6B",
+        description="Selected learned document encoder on Hugging Face.",
+    )
+    revision: Literal["97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"] = Field(
+        default="97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+        description="Immutable Hub commit used to download model and tokenizer.",
+    )
+    pooling: Literal["last_token"] = Field(
+        default="last_token", description="Select the final token's hidden state."
+    )
+    normalization: Literal["l2"] = Field(
+        default="l2",
+        description="Normalize the pooled vector to unit Euclidean length.",
+    )
+    prompt: Literal[""] = Field(
+        default="", description="No instruction is prepended to journal passages."
+    )
+    truncation: Literal[False] = Field(
+        default=False,
+        description="Reject overlong passages instead of silently dropping text.",
+    )
+    max_tokens: Literal[8192] = Field(
+        default=8192, description="Maximum tokens accepted for one untruncated passage."
+    )
+    dimensions: Literal[1024] = Field(
+        default=1024, description="Width of each learned journal vector."
+    )
+    device: Literal["cpu"] = Field(
+        default="cpu", description="Encoding device, isolated from experiment hardware."
+    )
+    dtype: Literal["float32"] = Field(
+        default="float32", description="Model and pooled-vector numerical precision."
+    )
+    attention: Literal["eager"] = Field(
+        default="eager",
+        description="Attention implementation used for repeatable encoding.",
+    )
+    threads: Literal[1] = Field(
+        default=1,
+        description="Intra-op and inter-op CPU thread counts in the encoder process.",
+    )
+    transformers_version: NonEmptyStr = Field(
+        description="Observed Transformers distribution version."
+    )
+    torch_version: NonEmptyStr = Field(
+        description="Observed PyTorch distribution version."
+    )
+    python_version: NonEmptyStr = Field(
+        description="Observed Python version in the encoder process."
+    )
+    platform: NonEmptyStr = Field(
+        description="Observed operating-system and hardware platform."
+    )
+    tokenizers_version: NonEmptyStr = Field(
+        description="Observed native tokenizer distribution version."
+    )
+    safetensors_version: NonEmptyStr = Field(
+        description="Observed model-file loader distribution version."
+    )
+    files: tuple[JournalEncoderFile, ...] = Field(
+        min_length=1,
+        description="Sorted byte identities of model and tokenizer snapshot files.",
+    )
+
+    @model_validator(mode="after")
+    def validate_files(self) -> Self:
+        """Require a unique stable file inventory including trained weights."""
+        paths = tuple(item.path for item in self.files)
+        if paths != tuple(sorted(set(paths))):
+            raise ValueError("journal encoder files must be unique and sorted")
+        if not any(path.endswith(".safetensors") for path in paths):
+            raise ValueError("journal encoder requires trained weight files")
+        return self
+
+
+class JournalEncoding(ProtocolModel):
+    """Bind one encoder invocation to its source and preprocessing identities."""
+
+    text_sha256: SHA256 = Field(
+        description="Digest of the exact UTF-8 input passed to the tokenizer."
+    )
+    encoder_sha256: SHA256 = Field(
+        description="Digest of the pinned encoder, loaded files, and numerical runtime."
+    )
+    token_count: int = Field(
+        ge=1,
+        le=8192,
+        description="Observed input token count; no truncation is permitted.",
+    )
+
+
 class JournalVectorView(ProtocolModel):
     """Define one journal embedding space and its immutable embedder."""
 
     kind: Literal["journal"] = "journal"
     view_id: VectorViewId
     version: NonEmptyStr
-    embedder: ResolvedArtifactPointerRef
+    embedder: ResolvedArtifactPointerRef | JournalEncoderSpec = Field(
+        description="Immutable embedder artifact or pinned learned-encoder settings."
+    )
     dimensions: int = Field(ge=1)
     distance: Literal["cosine"] = "cosine"
 
@@ -493,6 +644,10 @@ class KnowledgeVector(ProtocolModel):
     source: ResolvedFileRef
     values: tuple[float, ...] = Field(min_length=1)
     created_at: AwareDatetime
+    encoding: JournalEncoding | None = Field(
+        default=None,
+        description="Exact-input invocation identity for a learned journal vector.",
+    )
 
     @model_validator(mode="after")
     def validate_values(self) -> Self:
@@ -501,6 +656,18 @@ class KnowledgeVector(ProtocolModel):
             raise ValueError("vector width differs from its view")
         if not all(math.isfinite(value) for value in self.values):
             raise ValueError("vector values must be finite")
+        if isinstance(self.view, JournalVectorView) and isinstance(
+            self.view.embedder, JournalEncoderSpec
+        ):
+            if self.view.dimensions != self.view.embedder.dimensions:
+                raise ValueError("journal vector dimensions differ from the encoder")
+            if self.encoding is None:
+                raise ValueError("learned journal vector requires encoding identity")
+            digest = document_digest(self.view.embedder)
+            if self.view.version != digest or self.encoding.encoder_sha256 != digest:
+                raise ValueError("journal vector encoder identity differs")
+        elif self.encoding is not None:
+            raise ValueError("encoding identity requires a learned journal encoder")
         return self
 
 
@@ -702,7 +869,7 @@ class AssertionQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     kinds: tuple[
-        Literal["observation", "hypothesis", "decision", "exclusion"], ...
+        Literal["observation", "hypothesis", "decision", "exclusion", "note"], ...
     ] = ()
     statuses: tuple[Literal["proposed", "reviewed", "rejected"], ...] = ()
     evidence_kinds: tuple[JournalEvidenceKind, ...] = ()
@@ -934,6 +1101,19 @@ class KnowledgeStore:
 
     def publish_assertion(self, value: JournalAssertion) -> KnowledgePublicationResult:
         """Publish one evidence-backed journal assertion."""
+        if value.source is not None:
+            reference = value.source.document
+            if not isinstance(reference.stored_at, LocalFileRef):
+                raise ValueError("journal source verification requires local files")
+            raw = local_artifact_store(reference.stored_at).fetch(reference.stored_at)
+            if (
+                len(raw) != reference.bytes
+                or hashlib.sha256(raw).hexdigest() != reference.sha256
+            ):
+                raise ValueError("journal source document identity differs")
+            passage = raw[value.source.byte_start : value.source.byte_end]
+            if passage != value.text.encode("utf-8"):
+                raise ValueError("journal source passage differs from assertion text")
         return self._publish("assertion", value, value.created_at)
 
     def publish_vector(self, value: KnowledgeVector) -> KnowledgePublicationResult:
@@ -946,6 +1126,12 @@ class KnowledgeStore:
         )
         if not isinstance(source, expected):
             raise ValueError("knowledge vector source differs from its view")
+        if value.encoding is not None and isinstance(source, JournalAssertion):
+            if (
+                source.source is None
+                or value.encoding.text_sha256 != source.source.text_sha256
+            ):
+                raise ValueError("journal vector text identity differs from its source")
         return self._publish("vector", value, value.created_at)
 
     def publish_retrieval_judgment(
@@ -998,6 +1184,10 @@ __all__ = [
     "ImpactPolicy",
     "InferredPrimitiveAssignment",
     "JournalAssertion",
+    "JournalSource",
+    "JournalEncoderFile",
+    "JournalEncoderSpec",
+    "JournalEncoding",
     "JournalEvidence",
     "JournalEvidenceKind",
     "JournalVectorView",

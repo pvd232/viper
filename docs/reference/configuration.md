@@ -93,6 +93,11 @@ functions are defined in [`viper.runtime`](../../src/viper/runtime.py).
 
 ## Reproducibility
 
+Scientific journal publication uses an independent post-run encoder process.
+Configure its default-on capture, attribution, and timeout under `[journals]`
+in `viper.toml`; see [journal configuration](../how-to/journals.md#opt-out-or-adjust-the-timeout).
+It does not change the experiment's reproducibility controls below.
+
 `plan()` and `expand()` accept `reproducibility` with three choices:
 
 | Selection | Behavior |

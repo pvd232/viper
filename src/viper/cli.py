@@ -364,6 +364,18 @@ def build_parser() -> ArgumentParser:
         dest="knowledge_command",
         required=True,
     )
+    journal_publish = knowledge_commands.add_parser(
+        "journal",
+        help="parse and encode a saved run's current journal",
+    )
+    add_root(journal_publish)
+    journal_publish.add_argument(
+        "--trust-source",
+        dest="trusted_source_repositories",
+        action="append",
+        required=True,
+    )
+    journal_publish.add_argument("resolved_run", type=Path)
     knowledge_refresh = knowledge_commands.add_parser(
         "refresh",
         help="rebuild the local knowledge projection",
@@ -562,6 +574,8 @@ def _operation_and_payload(
         if knowledge_command == "refresh":
             values["heads"] = values.pop("head")
             command = "knowledge-refresh"
+        elif knowledge_command == "journal":
+            command = "publish-run-journal"
         else:
             command = values.pop("kind").replace("_", "-")
     mapping: dict[str, OperationName] = {
@@ -579,6 +593,7 @@ def _operation_and_payload(
         "search-measurements": "search_measurements",
         "search-benchmarks": "search_benchmarks",
         "knowledge-refresh": "knowledge_refresh",
+        "publish-run-journal": "publish_run_journal",
         "search-primitives": "search_primitives",
         "search-assignments": "search_assignments",
         "search-modulations": "search_modulations",
@@ -677,6 +692,12 @@ def _human_success(result: SuccessModel) -> str:
     if result.operation.startswith("search_"):
         page = getattr(result, "page")
         return f"returned {len(page.items)} catalog results"
+    if result.operation == "publish_run_journal":
+        publication = getattr(result, "result")
+        return (
+            f"published {len(publication.assertions)} journal passages "
+            f"and {len(publication.vectors)} vectors; skipped: {publication.skipped}"
+        )
     if result.operation.startswith("publish_"):
         publication = getattr(result, "publication")
         return f"published knowledge record {publication.record.sha256}"

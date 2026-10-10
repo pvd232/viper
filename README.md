@@ -82,6 +82,7 @@ from viper.outputs import TrainOutputs, output
 from viper.randomness import capture_main_process_rng
 from viper.references import GitFileRef
 from viper.repository import read_source
+from viper.restoration import ArtifactRestoreSelector
 from viper.resume import (
     DataLoaderConfiguration,
     DataLoaderResumeState,
@@ -219,7 +220,13 @@ def main() -> None:
         env=environment,
     )
     resolved_run = execution.run(draft)
-    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+    restored = execution.restore(
+        Path.cwd(),
+        resolved_run.reference,
+        artifacts=(ArtifactRestoreSelector(stage_id="train", artifact_name="model"),),
+        output=Path.cwd() / "restored" / f"{draft.run_id}.json",
+    )
+    model_path = restored.artifacts[0].files[0].path
     print(f"status: {resolved_run.status}")
     print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
     print(f"result: {resolved_run.path}")
@@ -246,17 +253,32 @@ how the plan, execution, and result fit together.
 
 ## Start your own workspace
 
-Generate a workspace with example stages and tests:
+Generate a separate workspace with example stages and tests. From the installed
+checkout above, keep the new project outside VIPER's Git repository:
 
 ```bash
+cd ..
 viper init my-workspace --package my_workspace
 cd my-workspace
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install viper-provenance
 python -m pip install -e '.[test]'
 python -m pytest -q
+git init
+git remote add origin https://github.com/YOUR_ACCOUNT/my-workspace.git
+git add .
+git commit -m "Initialize VIPER workspace"
 ```
 
-Commit the workspace before authoring a plan. The commit identifies the exact source
-used by the run.
+Replace the remote URL with your workspace's HTTP(S) repository URL. Install
+`viper-provenance[mcp]` for MCP or `viper-provenance[gcs]` for Google Cloud
+Storage support. The new workspace keeps its own environment and source history.
+
+Replace the generated stage templates with your model's implementation and commit
+the changes before authoring a plan. The generated checkpoint loader reconstructs
+saved state; it does not invent optimizer or RNG values. The commit identifies the
+exact source used by the run.
 
 ## Continue a workflow
 
@@ -275,6 +297,7 @@ Continue from a saved plan or run result:
 | Search completed measurements | `viper.api.catalog_refresh()` and `catalog().measurements()` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
 | Reuse verified stages or force computation | `stage(reuse="never")` overrides default verified reuse | [Reuse example](examples/reuse.py) |
 | Publish and search measured knowledge | `knowledge()` and `catalog().knowledge` | [Measured vector search](docs/tutorials/knowledge-search.md) |
+| Capture structured journals and learned vectors | Default-on `JOURNAL.md` capture; `api.publish_run_journal()` for later edits | [Complete journal workflow](docs/how-to/journals.md) |
 | Export a portable evidence graph | `execution.export_run()` and `execution.verify_run_bundle()` | [Export example](examples/export_run.py) |
 | Publish, promote, restore, and retain cloud runs | `execution.promote_run_to_cloud()` and `retention.evict_cloud_backed_run_files()` | [Cloud storage](docs/how-to/cloud-storage.md) |
 | Give an agent typed access | `viper mcp --root .` | [Agent interface](docs/reference/agents.md) |

@@ -87,6 +87,13 @@ states the default, recomputation, and recovery behavior.
 
 ## Workspace and cloud paths
 
+Scientific journals use `JournalSource` for immutable Markdown revisions and
+byte spans, and `JournalEncoding`/`JournalEncoderSpec` for exact text and learned
+encoder identities. `JournalAssertion.source` and `KnowledgeVector.encoding`
+are optional for older manually authored records. Learned journal views include
+the complete encoder/runtime digest in their version. See the
+[journal guide](../how-to/journals.md) for the writer and reader operations.
+
 `viper.repository.init_workspace()` creates the starter files returned by
 [`workspace_files()`](../../src/viper/repository.py). A run then writes its records and
 artifacts under the same workspace root:

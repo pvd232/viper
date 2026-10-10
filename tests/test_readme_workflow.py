@@ -50,6 +50,7 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
         "reuse.py",
         "knowledge_search.py",
         "export_run.py",
+        "journal_search.py",
     ),
 )
 def test_extended_examples_execute_complete_workflows(
@@ -125,6 +126,12 @@ def test_extended_examples_execute_complete_workflows(
                 ]
                 > 0
             )
+    elif example == "journal_search.py":
+        assert "captured passages: 5" in completed.stdout
+        assert (
+            "encoder revision: 97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+            in completed.stdout
+        )
     elif example == "export_run.py":
         assert "bundle:" in completed.stdout
         assert "manifest:" in completed.stdout
@@ -318,6 +325,21 @@ def test_cpu_quickstart_executes_and_verifies_one_run(
         result_path.parent / "artifacts/train/resume_state/resume_state.pt"
     )
     assert checkpoint.optimizer_state["loss"] == measurements[-1]["value"]
+    repeated = subprocess.run(
+        (sys.executable, "examples/cpu_quickstart.py"),
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+    assert "status: succeeded" in repeated.stdout
+    first_model = next(
+        line for line in completed.stdout.splitlines() if line.startswith("model: ")
+    )
+    assert first_model in repeated.stdout
+    assert len(tuple(root.glob("restored/*.json"))) == 2
 
 
 def test_documented_config_stage_writes_the_selected_rows(tmp_path: Path) -> None:
@@ -476,13 +498,21 @@ policy = VerificationPolicy(
 )
 verified = verify_run_result(result, policy=policy, fetcher=fetcher)
 stage = verified.resolved_stages["train"]
+completion = stage.completion
+if completion.kind == "reused":
+    receipt = verified.reuse["train"]
+    source_raw = fetcher(receipt.source_run.stored_at)
+    source_result = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
+    original = verify_run_result(source_result, policy=policy, fetcher=fetcher)
+    completion = original.resolved_stages["train"].completion
+assert completion.kind == "executed"
 reference = verified.attempts[-1].resolved_stages[0]
 model = stage.artifacts["model"].file
 model_path = root / reference.snapshot.store / reference.snapshot.commit / model.path
 print(json.dumps({
     "run_id": run.run_id,
     "policy": run.execution_policy.mode,
-    "controls": stage.completion.startup.observed_controls.model_dump(),
+    "controls": completion.startup.observed_controls.model_dump(),
     "model_sha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
     "model_path": str(model_path),
 }))

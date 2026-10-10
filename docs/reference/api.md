@@ -65,6 +65,17 @@ For saved plans, retries, batch outcomes, and benchmark execution, see
 [Execute a plan](../how-to/execution.md). For artifact retrieval, see
 [Restore from Python](../how-to/retry-restore-compare.md#restore-verified-artifacts).
 
+## Scientific journals
+
+Scientific journal parsing and encoding belong to
+[`viper.journals`](../../src/viper/journals.py). `parse_journal(raw)` returns
+exact-source `JournalPassage` records. `encode_journal(texts)` returns vectors
+and a pinned `JournalEncoderSpec`. `publish_run_journal(root, resolved_run,
+trusted_source_repositories=...)` verifies a saved run and publishes its current
+notes without executing stages. Run completion invokes capture automatically;
+`JournalSettings.enabled=False` disables it. The
+[journal guide](../how-to/journals.md) shows complete Python, CLI, and MCP usage.
+
 ## Authoring constructors
 
 | Constructor | Returns | Purpose |
@@ -212,9 +223,10 @@ See [automatic registration and refresh](../how-to/catalog-knowledge-mcp.md#buil
 and stage-reuse indexes. The `knowledge_refresh` API operation uses this path.
 
 See the [measured-vector program](../tutorials/knowledge-search.md) for complete
-publication and retrieval. Scientific Markdown journals and Qwen encoding are
-[pending integration](../how-to/journals.md),
-not effects of `knowledge_refresh` in this version.
+publication and retrieval. [Scientific Markdown journals](../how-to/journals.md)
+are captured after successful runs by default; `publish_run_journal` captures
+edited notes explicitly. `knowledge_refresh` indexes already published records
+without parsing journals or invoking an encoder.
 
 ## Public modules
 
@@ -244,6 +256,7 @@ not effects of `knowledge_refresh` in this version.
 | `viper.restoration` | Artifact restore selectors and results |
 | `viper.catalog` | Verified-run indexing and exact evidence queries |
 | `viper.knowledge` | Typed scientific knowledge publication and models |
+| `viper.journals` | Exact scientific Markdown passages, pinned encoding, and saved-run publication |
 | `viper.inspection` | Plan diff, run comparison, status, and lineage models |
 | `viper.evidence` | Verified files, artifacts, runs, and source acceptance policy |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
@@ -343,6 +356,7 @@ operations.
 | `search_measurements` | `SearchMeasurementsRequest` | `SearchMeasurementsSuccess` | `search-measurements` |
 | `search_benchmarks` | `SearchBenchmarksRequest` | `SearchBenchmarksSuccess` | `search-benchmarks` |
 | `knowledge_refresh` | `KnowledgeRefreshRequest` | `KnowledgeRefreshSuccess` | `knowledge refresh` |
+| `publish_run_journal` | `PublishRunJournalRequest` | `PublishRunJournalSuccess` | `knowledge journal` |
 | `search_primitives` | `KnowledgeSearchRequest` | `KnowledgeSearchSuccess` | `knowledge search search_primitives` |
 | `search_assignments` | `KnowledgeSearchRequest` | `KnowledgeSearchSuccess` | `knowledge search search_assignments` |
 | `search_modulations` | `KnowledgeSearchRequest` | `KnowledgeSearchSuccess` | `knowledge search search_modulations` |

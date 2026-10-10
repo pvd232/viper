@@ -215,6 +215,8 @@ def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
             expected[operation] = "env doctor"
         elif operation == "knowledge_refresh":
             expected[operation] = "knowledge refresh"
+        elif operation == "publish_run_journal":
+            expected[operation] = "knowledge journal"
         elif operation.startswith("publish_"):
             expected[operation] = f"knowledge publish {operation}"
         elif expected[operation].startswith("search-") and operation not in {

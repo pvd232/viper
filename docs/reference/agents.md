@@ -121,6 +121,10 @@ contains contributor instructions for modifying VIPER itself.
 ## Inspect a completed run
 
 Successful execution registers its verified result in the workspace catalog.
+When its experiment contains `JOURNAL.md`, default-on capture also indexes the
+original prose and its pinned learned vectors. Use `publish_run_journal` in
+execute mode to capture later edits without rerunning the experiment; see
+[journal JSON requests and exact-source behavior](../how-to/journals.md).
 Search tools query that index. To index older or imported runs, rebuild a deleted
 catalog, or recover from a registration warning, the user can follow the
 [inspection tutorial](../tutorials/inspect-results.md) or grant execute access

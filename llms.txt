@@ -15,7 +15,7 @@
 - [Stage pipeline](docs/tutorials/stages.md): Connect named stages through output handles.
 - [Inspection](docs/tutorials/inspect-results.md): Verify, restore, compare, and query completed runs.
 - [Measured knowledge](docs/tutorials/knowledge-search.md): Publish real diagnostic vectors and preserve indexed runs.
-- [Experiment journals](docs/how-to/journals.md): Current manual publication and the approved journal structure still awaiting implementation.
+- [Experiment journals](docs/how-to/journals.md): Default-on exact-source capture, structured prose, pinned Qwen vectors, opt-out, and edited-journal publication.
 - [Cloud storage](docs/how-to/cloud-storage.md): Publish, promote, restore, and release local output copies.
 - [Documentation index](docs/README.md): All public workflows and references.
 

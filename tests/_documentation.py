@@ -21,6 +21,7 @@ import viper.execution as execution
 import viper.execution.errors as execution_errors
 import viper.http as http
 import viper.inspection as inspection
+import viper.journals as journals
 import viper.knowledge as knowledge
 import viper.metrics as metrics
 import viper.outputs as outputs
@@ -51,6 +52,7 @@ DOCUMENTED_MODULES = {
         execution_errors,
         http,
         inspection,
+        journals,
         knowledge,
         metrics,
         outputs,

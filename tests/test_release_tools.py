@@ -47,6 +47,7 @@ def test_release_metadata_matches_the_approved_public_identity() -> None:
         "PyYAML>=6,<7",
         "torch>=2.6,<3",
         "torchdata==0.11.0",
+        "transformers>=5.19,<6",
     ]
 
 

@@ -23,6 +23,7 @@ from ..inputs import (
     ResolvedInputRef,
 )
 from ..journal import DurableJournal
+from ..journals import capture_completed_journal
 from ..metrics import is_recomputed_metric
 from ..preflight import preflight_plan
 from ..references import (
@@ -846,6 +847,7 @@ def execute_attempt(
             replace_existing=previous_run is not None,
         )
         _index_completed_run(root, run_reference, verified_run)
+        capture_completed_journal(root, run_reference, verified_run)
         return RunResult(
             record=resolved_run,
             reference=run_reference,

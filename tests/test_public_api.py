@@ -28,6 +28,7 @@ import viper.ids as ids
 import viper.inputs as inputs
 import viper.inspection as inspection
 import viper.journal as journal
+import viper.journals as journals
 import viper.keys as keys
 import viper.knowledge as knowledge
 import viper.mcp as mcp
@@ -105,6 +106,7 @@ PUBLIC_MODULES_BY_NAME = {
         inputs,
         inspection,
         journal,
+        journals,
         keys,
         knowledge,
         mcp,

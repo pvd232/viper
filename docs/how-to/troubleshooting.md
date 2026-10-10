@@ -57,6 +57,14 @@ viper --json capabilities
 JSON mode emits one typed success or failure document. Human mode is intended for
 terminal reading.
 
+## The run succeeded but journal capture failed
+
+The warning names the parser or encoder failure. The saved run and measurements
+remain authoritative. Check UTF-8 encoding, duplicate fields, measurement
+selectors, available model-download access, and the encoder timeout. Pre-download
+the pinned model when needed, then call `publish_run_journal` on the saved result.
+See [journal recovery](journals.md#recover-from-publication-failure).
+
 ## Reclaim verification-cache space
 
 VIPER stores reusable remote bytes in `.viper/cache/verified-objects/` and

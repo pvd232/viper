@@ -64,7 +64,7 @@ search. Exact query filters run before ranking.
 
 The [catalog guide](../how-to/catalog-knowledge-mcp.md) explains pagination,
 record types, and the equivalent MCP tools. The [journal guide](../how-to/journals.md)
-separates current manual publication from the approved parser and encoder work.
+demonstrates default-on Markdown capture and exact-source pinned Qwen encoding.
 
 ## Complete program
 

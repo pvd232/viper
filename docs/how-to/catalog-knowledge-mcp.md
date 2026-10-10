@@ -13,6 +13,12 @@ excerpt belongs inside that program's `main()`; keep its imports at module scope
 
 ## Build the local catalog
 
+Successful execution also captures an experiment's `JOURNAL.md` by default.
+The [journal guide](journals.md) shows the structured fields, pinned learned
+encoder, opt-out, and explicit publication of historical or edited notes.
+`knowledge_refresh` preserves runs and reuse candidates; `catalog_refresh`
+below deliberately rebuilds the complete index.
+
 Successful verified runs automatically enter their workspace's catalog after
 their immutable terminal result is saved. Registration preserves the catalog's
 other runs and knowledge records. Workspace stages default to `reuse="verified"`;
@@ -133,8 +139,9 @@ view. Assess scientific agreement separately.
 The [complete measured-vector tutorial](../tutorials/knowledge-search.md) reads
 actual measurements, publishes their signature and vector, searches that exact
 view, and proves the run remains indexed after refresh. It uses diagnostic
-coordinates, not journal embeddings. The [journal guide](journals.md) explains
-manual publication and marks the approved parser and encoder as pending work.
+coordinates, not journal embeddings. The [journal guide](journals.md) demonstrates
+default-on exact-source capture, pinned Qwen vectors, opt-out, and publication
+of historical or edited notes without rerunning training.
 
 ## Query knowledge through MCP
 

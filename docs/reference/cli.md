@@ -22,7 +22,7 @@ viper --json verify-run path/to/resolved.yaml \
 | Verify evidence | `verify-run`, `verify-benchmark`, `verify-pointer`, `execute-benchmark` |
 | Inspect and recover runs | `status`, `plan-diff`, `compare-runs`, `lineage`, `restore`, `export-run` |
 | Build and query the catalog | `catalog-refresh`, `search-runs`, `search-artifacts`, `search-measurements`, `search-benchmarks` |
-| Publish and query knowledge | `knowledge refresh`, `knowledge publish`, `knowledge search` |
+| Publish and query knowledge | `knowledge refresh`, `knowledge journal`, `knowledge publish`, `knowledge search` |
 | Serve agent clients | `mcp` |
 
 ## Discover exact arguments
@@ -58,6 +58,10 @@ The final argument to `knowledge search` selects the typed API operation. For ex
 use `knowledge search search_assertions` to select the `search_assertions` operation.
 See [catalog and knowledge](../how-to/catalog-knowledge-mcp.md) for indexing and
 publication.
+
+`knowledge journal RESOLVED_RUN --trust-source URL` parses and encodes that
+run's current scientific journal without rerunning training. It honors
+`[journals].enabled`; see the [complete journal example](../how-to/journals.md).
 
 ## Exit status
 

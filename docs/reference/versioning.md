@@ -17,7 +17,7 @@ parser and validation contract.
 Alpha releases use PEP 440 pre-release versions such as `0.1.0a1`. During the `0.x`
 series, each release note must identify every incompatible change.
 
-## Current checkout defaults
+## Execution and journal defaults
 
 Workspace stages now default to `reuse="verified"` in Python authoring and
 parsed stage specifications. A specification that explicitly records
@@ -26,9 +26,10 @@ parsed stage specifications. A specification that explicitly records
 explicitly when fresh computation is required. Benchmark confirmation remains
 independent. See [verified reuse](../how-to/stages.md#reuse-a-verified-stage-result).
 
-These changes are listed under Unreleased in the [changelog](../../CHANGELOG.md).
-The approved journal parser and encoder hook are not part of the current API;
-see [the journal guide](../how-to/journals.md).
+Journal capture is also default-on when an experiment has `JOURNAL.md`.
+`[journals].enabled = false` opts out. Parsed assertions retain exact source
+spans; learned vectors pin Qwen3-Embedding-0.6B and its numerical runtime.
+See [the complete journal workflow](../how-to/journals.md).
 
 ## Compatibility in 0.1.0a4
 

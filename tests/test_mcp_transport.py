@@ -1,5 +1,6 @@
 """Exercise discovery and tool calls through the installed MCP stdio client."""
 
+import hashlib
 import json
 import shutil
 import sqlite3
@@ -19,9 +20,20 @@ from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
 from viper.catalog import catalog
 from viper.journal import DurableJournal
-from viper.knowledge import KnowledgeRecordEnvelope, OntologySpec, PrimitiveSpec
+from viper.journals import encode_journal, parse_journal
+from viper.knowledge import (
+    JournalAssertion,
+    JournalVectorView,
+    KnowledgeRecordEnvelope,
+    KnowledgeVector,
+    OntologySpec,
+    PrimitiveSpec,
+)
 from viper.mcp import call_tool, get_prompt, prompt_registry, tool_registry
+from viper.references import LocalFileRef
 from viper.reuse import StageReuseCandidate
+from viper.serialization import parse_yaml_bytes
+from viper.storage import local_artifact_store
 
 
 def test_documented_mcp_client_uses_the_live_stdio_server(
@@ -143,9 +155,11 @@ def test_mcp_prompts_require_task_specific_inputs() -> None:
     assert not tools["get_schema"].annotations.open_world_hint
 
 
-@pytest.mark.parametrize("refresh_knowledge", (False, True))
+@pytest.mark.parametrize(
+    "refresh_knowledge,journal", ((False, False), (True, False), (False, True))
+)
 def test_stdio_executes_a_saved_training_plan(
-    tmp_path: Path, refresh_knowledge: bool
+    tmp_path: Path, refresh_knowledge: bool, journal: bool
 ) -> None:
     """Execute training through MCP and retain its index during knowledge refresh."""
     root = tmp_path / "workspace"
@@ -157,6 +171,14 @@ def test_stdio_executes_a_saved_training_plan(
     )
     shutil.copy(source_root / "pyproject.toml", root / "pyproject.toml")
     (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    journal_raw = (
+        "## Observations\r\nMetric: mean_squared_error\r\nStage: train\r\n"
+        "Epoch: 20\r\nThe saved α-model reached a finite loss.\r\n"
+    ).encode()
+    if journal:
+        journal_path = root / "experiments/cpu_quickstart/JOURNAL.md"
+        journal_path.parent.mkdir(parents=True, exist_ok=True)
+        journal_path.write_bytes(journal_raw)
     for command in (
         ("init", "--quiet"),
         ("remote", "add", "origin", "https://github.com/example/workspace"),
@@ -237,6 +259,138 @@ print(json.dumps({"path": frozen.reference.stored_at.path, "run_id": draft.run_i
             resolved = Path(result.structured_content["resolved_run"])
             model = resolved.parent / "artifacts/train/model/model.json"
             assert json.loads(model.read_text())["weight"] == pytest.approx(2, abs=1e-5)
+            if journal:
+                model_before_publication = model.read_bytes()
+                passages = parse_journal(journal_raw)
+                expected = encode_journal(tuple(passage.text for passage in passages))
+                assertions = await client.call_tool(
+                    "search_assertions", {"query": {"kinds": ["observation"]}}
+                )
+                assert not assertions.is_error, assertions.structured_content
+                assert assertions.structured_content is not None
+                items = assertions.structured_content["page"]["items"]
+                assert len(items) == 1
+                assertion = JournalAssertion.model_validate(items[0]["record"]["value"])
+                assert assertion.text.encode("utf-8") == passages[0].text.encode(
+                    "utf-8"
+                )
+                assert assertion.status == "proposed"
+                assert assertion.source is not None
+                document = assertion.source.document
+                assert isinstance(document.stored_at, LocalFileRef)
+                retained = local_artifact_store(document.stored_at).fetch(
+                    document.stored_at
+                )
+                assert retained == journal_raw
+                assert document.sha256 == hashlib.sha256(journal_raw).hexdigest()
+                assert any(
+                    evidence.kind == "measurement" for evidence in assertion.evidence
+                )
+                found = await client.call_tool(
+                    "search_similar",
+                    {
+                        "query": {
+                            "view_id": "journal-qwen3-0.6b",
+                            "view_version": expected.encodings[0].encoder_sha256,
+                            "values": expected.values[0],
+                        }
+                    },
+                )
+                assert not found.is_error, found.structured_content
+                assert found.structured_content is not None
+                matches = found.structured_content["page"]["items"]
+                assert len(matches) == 1
+                reference = matches[0]["vector"]
+                location = LocalFileRef.model_validate(reference["stored_at"])
+                vector_raw = local_artifact_store(location).fetch(location)
+                vector = KnowledgeRecordEnvelope.model_validate(
+                    parse_yaml_bytes(vector_raw)
+                ).value
+                assert isinstance(vector, KnowledgeVector)
+                assert isinstance(vector.view, JournalVectorView)
+                assert vector.values == expected.values[0]
+                assert vector.encoding == expected.encodings[0]
+                assert vector.view.embedder == expected.encoder
+                assert (
+                    expected.encoder.revision
+                    == "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+                )
+                before_rows = catalog(root=root).runs()
+                refreshed = await client.call_tool("knowledge_refresh", {})
+                assert not refreshed.is_error
+                assert catalog(root=root).runs() == before_rows
+                forged = vector.model_dump(mode="json")
+                forged["encoding"]["text_sha256"] = "0" * 64
+                rejected = await client.call_tool(
+                    "publish_vector",
+                    {"record": {"record_kind": "vector", "value": forged}},
+                )
+                assert rejected.is_error
+                publication_arguments = {
+                    "resolved_run": str(resolved),
+                    "trusted_source_repositories": [
+                        "https://github.com/example/workspace"
+                    ],
+                }
+                repeated = await client.call_tool(
+                    "publish_run_journal", publication_arguments
+                )
+                assert not repeated.is_error, repeated.structured_content
+                assert repeated.structured_content is not None
+                publication = repeated.structured_content["result"]
+                assert publication["source"] == document.model_dump(mode="json")
+                assert publication["assertions"] == [
+                    vector.source.model_dump(mode="json")
+                ]
+                assert publication["vectors"] == [reference]
+
+                # Reject unmatched selectors before any partial assertion publication.
+                journal_path = root / "experiments/cpu_quickstart/JOURNAL.md"
+                journal_path.write_bytes(
+                    b"## Notes\nValid prose.\n\n## Observations\nMetric: absent\n"
+                )
+                invalid = await client.call_tool(
+                    "publish_run_journal", publication_arguments
+                )
+                assert invalid.is_error
+                still_original = await client.call_tool("search_assertions", {})
+                assert still_original.structured_content is not None
+                assert len(still_original.structured_content["page"]["items"]) == 1
+
+                edited_raw = journal_raw.replace(b"finite loss", b"finite final loss")
+                journal_path.write_bytes(edited_raw)
+                (root / "viper.toml").write_text(
+                    "[workspace]\nschema_version = 2\n[journals]\nenabled = false\n"
+                )
+                disabled = await client.call_tool(
+                    "publish_run_journal", publication_arguments
+                )
+                assert not disabled.is_error, disabled.structured_content
+                assert disabled.structured_content is not None
+                assert disabled.structured_content["result"]["skipped"]
+                assert disabled.structured_content["result"]["vectors"] == []
+
+                (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+                revised = await client.call_tool(
+                    "publish_run_journal", publication_arguments
+                )
+                assert not revised.is_error, revised.structured_content
+                assert revised.structured_content is not None
+                revision = revised.structured_content["result"]
+                assert (
+                    revision["source"]["sha256"]
+                    == hashlib.sha256(edited_raw).hexdigest()
+                )
+                assert revision["source"] != publication["source"]
+                assert revision["vectors"] != publication["vectors"]
+                all_notes = await client.call_tool("search_assertions", {})
+                assert all_notes.structured_content is not None
+                assert {
+                    item["record"]["value"]["text"]
+                    for item in all_notes.structured_content["page"]["items"]
+                } == {passages[0].text, parse_journal(edited_raw)[0].text}
+                assert model.read_bytes() == model_before_publication
+                assert catalog(root=root).runs() == before_rows
             if refresh_knowledge:
                 index = catalog(root=root)
                 before_runs = index.runs()
