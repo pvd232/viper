@@ -1,0 +1,191 @@
+{
+  "runs": [
+    {
+      "policy": {
+        "mode": "custom",
+        "version": 1
+      },
+      "startup": {
+        "env": {
+          "CUDA_VISIBLE_DEVICES": "0",
+          "MKL_NUM_THREADS": "6",
+          "OMP_NUM_THREADS": "6",
+          "PYTHONHASHSEED": "7"
+        },
+        "observed_controls": {
+          "backend": "cuda",
+          "deterministic_algorithms": false,
+          "deterministic_warn_only": false,
+          "cudnn_deterministic": false,
+          "cudnn_benchmark": true,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest",
+          "torch_intraop_threads": 6,
+          "torch_interop_threads": 6,
+          "autocast_enabled": false,
+          "autocast_dtype": null
+        },
+        "reproducibility": {
+          "determinism": {
+            "deterministic_algorithms": false,
+            "deterministic_warn_only": false,
+            "cudnn_deterministic": false,
+            "cudnn_benchmark": true,
+            "cublas_workspace_config": null
+          },
+          "precision": {
+            "float32_matmul_precision": "highest",
+            "cudnn_allow_tf32": false,
+            "autocast_enabled": false,
+            "autocast_dtype": null
+          },
+          "parallelism": {
+            "process_count": 1,
+            "torch_intraop_threads": 6,
+            "torch_interop_threads": 6,
+            "dataloader": {
+              "workers": 0,
+              "prefetch_factor": null,
+              "persistent_workers": false,
+              "in_order": true
+            }
+          },
+          "numpy_randomness": {
+            "generators": {},
+            "capture_legacy_global": true
+          }
+        },
+        "generators": [
+          {
+            "family": "python",
+            "seed": 7,
+            "name": null,
+            "device_index": null,
+            "state_sha256": "aad70fe1b683bf4b6251c0690e3a6857605fe2f1f377d28bea6d64ce6e5dfad1"
+          },
+          {
+            "family": "numpy_legacy",
+            "seed": 7,
+            "name": null,
+            "device_index": null,
+            "state_sha256": "511db4cc47d4d939538f874af2a070a212267a1a22d066655024a2aa04fc42ec"
+          },
+          {
+            "family": "torch_cpu",
+            "seed": 7,
+            "name": null,
+            "device_index": null,
+            "state_sha256": "daf9268b18e87b0267a6ad240c6093eb98fe6f03872986bd31a497ba5ea2371a"
+          },
+          {
+            "family": "torch_cuda",
+            "seed": 7,
+            "name": null,
+            "device_index": 0,
+            "state_sha256": "76108f84396dc2d72ce275fdb0e0ef37b229b2898bf5a31d576fea11a766a42b"
+          }
+        ]
+      },
+      "sha256": "7087c867112f9fe152758bb45aa63a6025128db57e9657d60f0b02060d5dfa14",
+      "unsupported_operation_rejected": false,
+      "torch": "2.14.0+cu130",
+      "cuda": "13.0",
+      "cudnn": 92400,
+      "device": "NVIDIA L4"
+    },
+    {
+      "policy": {
+        "mode": "custom",
+        "version": 1
+      },
+      "startup": {
+        "env": {
+          "CUDA_VISIBLE_DEVICES": "0",
+          "MKL_NUM_THREADS": "6",
+          "OMP_NUM_THREADS": "6",
+          "PYTHONHASHSEED": "7"
+        },
+        "observed_controls": {
+          "backend": "cuda",
+          "deterministic_algorithms": false,
+          "deterministic_warn_only": false,
+          "cudnn_deterministic": false,
+          "cudnn_benchmark": true,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest",
+          "torch_intraop_threads": 6,
+          "torch_interop_threads": 6,
+          "autocast_enabled": false,
+          "autocast_dtype": null
+        },
+        "reproducibility": {
+          "determinism": {
+            "deterministic_algorithms": false,
+            "deterministic_warn_only": false,
+            "cudnn_deterministic": false,
+            "cudnn_benchmark": true,
+            "cublas_workspace_config": null
+          },
+          "precision": {
+            "float32_matmul_precision": "highest",
+            "cudnn_allow_tf32": false,
+            "autocast_enabled": false,
+            "autocast_dtype": null
+          },
+          "parallelism": {
+            "process_count": 1,
+            "torch_intraop_threads": 6,
+            "torch_interop_threads": 6,
+            "dataloader": {
+              "workers": 0,
+              "prefetch_factor": null,
+              "persistent_workers": false,
+              "in_order": true
+            }
+          },
+          "numpy_randomness": {
+            "generators": {},
+            "capture_legacy_global": true
+          }
+        },
+        "generators": [
+          {
+            "family": "python",
+            "seed": 7,
+            "name": null,
+            "device_index": null,
+            "state_sha256": "aad70fe1b683bf4b6251c0690e3a6857605fe2f1f377d28bea6d64ce6e5dfad1"
+          },
+          {
+            "family": "numpy_legacy",
+            "seed": 7,
+            "name": null,
+            "device_index": null,
+            "state_sha256": "511db4cc47d4d939538f874af2a070a212267a1a22d066655024a2aa04fc42ec"
+          },
+          {
+            "family": "torch_cpu",
+            "seed": 7,
+            "name": null,
+            "device_index": null,
+            "state_sha256": "daf9268b18e87b0267a6ad240c6093eb98fe6f03872986bd31a497ba5ea2371a"
+          },
+          {
+            "family": "torch_cuda",
+            "seed": 7,
+            "name": null,
+            "device_index": 0,
+            "state_sha256": "76108f84396dc2d72ce275fdb0e0ef37b229b2898bf5a31d576fea11a766a42b"
+          }
+        ]
+      },
+      "sha256": "7087c867112f9fe152758bb45aa63a6025128db57e9657d60f0b02060d5dfa14",
+      "unsupported_operation_rejected": false,
+      "torch": "2.14.0+cu130",
+      "cuda": "13.0",
+      "cudnn": 92400,
+      "device": "NVIDIA L4"
+    }
+  ],
+  "equal_bytes": true
+}
