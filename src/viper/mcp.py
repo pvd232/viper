@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 from collections.abc import Iterator, Mapping
 from contextlib import closing
 from pathlib import Path
-from typing import Any, Literal, get_type_hints
+from typing import Any, Literal, cast, get_type_hints
 
 import anyio
 from mcp import types
@@ -189,7 +189,7 @@ def tool_registry(access: AccessMode = "read") -> tuple[types.Tool, ...]:
                     "type": "string",
                     "format": "date-time",
                 }
-        result_schema = TypeAdapter(success | ViperFailure).json_schema()
+        result_schema = TypeAdapter(cast(Any, success | ViperFailure)).json_schema()
         result_schema["type"] = "object"
         description = HANDLER_REGISTRY[operation].__doc__ or operation
         if operation == "get_capabilities":
