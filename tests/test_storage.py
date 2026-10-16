@@ -39,6 +39,7 @@ from viper.references import (
     ResolvedRunRef,
     ResolvedRunSpecRef,
     SnapshotFileRef,
+    StorageModel,
 )
 from viper.restoration import ArtifactRestoreSelector
 from viper.runs import ResolvedAttemptRef, ResolvedRun
@@ -398,6 +399,67 @@ def test_run_fetcher_retains_cloud_service_across_files_and_snapshots(
         ("second-bucket", "viper"),
         ("first-bucket", "separate"),
     ]
+
+
+@pytest.mark.parametrize("as_path", [False, True])
+@pytest.mark.parametrize("payload", [b"evidence", b"short", b"Evidence"])
+def test_run_fetcher_checks_download_once_before_caching(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    as_path: bool,
+    payload: bytes,
+) -> None:
+    """Hash a valid download once and reject altered bytes before caching."""
+    original = b"evidence"
+    reference = ResolvedFileRef(
+        sha256=hashlib.sha256(original).hexdigest(),
+        bytes=len(original),
+        stored_at=GitFileRef(
+            repository=HttpUrl("https://example.com/source.git"),
+            commit="a" * 40,
+            path="evidence.bin",
+        ),
+    )
+    fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
+    cache_path = (
+        tmp_path
+        / ".viper/cache/verified-objects"
+        / reference.sha256[:2]
+        / reference.sha256
+    )
+    sha256 = hashlib.sha256
+    hashed: list[bytes] = []
+
+    def count_hash(raw: bytes = b"", *, usedforsecurity: bool = True):
+        """Count full byte hashes while computing the actual digest."""
+        hashed.append(raw)
+        return sha256(raw, usedforsecurity=usedforsecurity)
+
+    def read_source(owner: RunFetcher, location: StorageModel) -> bytes:
+        """Return the selected download through the normal verification path."""
+        assert owner is fetcher
+        assert location == reference.stored_at
+        return payload
+
+    monkeypatch.setattr(hashlib, "sha256", count_hash)
+    monkeypatch.setattr(RunFetcher, "__call__", read_source)
+    read = fetcher.read_verified_path if as_path else fetcher.read_verified
+
+    if payload != original:
+        message = (
+            "byte-count mismatch"
+            if len(payload) != len(original)
+            else "SHA-256 mismatch"
+        )
+        with pytest.raises(VerificationError, match=message):
+            read(reference)
+        assert not cache_path.exists()
+        return
+
+    result = read(reference)
+    assert (result.read_bytes() if isinstance(result, Path) else result) == original
+    assert cache_path.read_bytes() == original
+    assert hashed == [original]
 
 
 def test_run_fetcher_repairs_corrupt_verified_cache_entry(
