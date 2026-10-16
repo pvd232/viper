@@ -66,8 +66,12 @@ class VerifiedObjectCache:
         """Return the content-addressed path for one resolved reference."""
         return self._path(reference.sha256)
 
-    def write_verified(self, reference: ResolvedFileRef, raw: bytes) -> None:
-        """Atomically store bytes the caller has checked against the reference."""
+    def write(self, reference: ResolvedFileRef, raw: bytes) -> None:
+        """Atomically store bytes in the cache.
+
+        Callers must verify raw's byte count and SHA-256 against reference
+        before calling write().
+        """
         path = self._path(reference.sha256)
         path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(dir=path.parent)

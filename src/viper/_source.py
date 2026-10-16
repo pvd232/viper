@@ -146,7 +146,7 @@ class RunFetcher:
                 return cached
         raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
         if cacheable:
-            self._verified_objects.write_verified(reference, raw)
+            self._verified_objects.write(reference, raw)
         return raw
 
     def read_verified_path(self, reference: ResolvedFileRef) -> Path:
@@ -178,7 +178,7 @@ class RunFetcher:
             (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
         ):
             raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
-            self._verified_objects.write_verified(reference, raw)
+            self._verified_objects.write(reference, raw)
             path = self._verified_objects.path(reference)
             self._verified_paths[reference] = path
             return path
