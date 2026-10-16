@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -2183,6 +2184,36 @@ def test_cloud_native_retry_replaces_the_verified_terminal_reference(
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
+def test_promotion_document_reader_uses_fetcher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use the supplied reader and preserve the cause of a failed read."""
+    store = LocalArtifactStore(tmp_path)
+    (reference,) = store.resolved_files({"run.yaml": b"status: succeeded\n"})
+    fetcher = RunFetcher(tmp_path, store, REPOSITORY)
+    error = OSError("source unavailable")
+    read = Mock(side_effect=[b"status: succeeded\n", error])
+    monkeypatch.setattr(fetcher, "read", read)
+    cloud = install_in_memory_cloud(
+        monkeypatch, tmp_path, InMemoryViperCloudProvider(tmp_path)
+    )
+    promoter = _RunGraphPromoter(
+        tmp_path,
+        cloud,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=fetcher,
+    )
+
+    assert promoter.read_document(reference) == b"status: succeeded\n"
+    read.assert_called_once_with(reference)
+    with pytest.raises(
+        RunPromotionError, match="^source run graph is unavailable$"
+    ) as raised:
+        promoter.read_document(reference)
+    assert raised.value.__cause__ is error
+
+
 @pytest.mark.parametrize("download_rooted", (False, True))
 def test_explicit_cloud_promotion_preserves_local_run_mode(
     tmp_path: Path,
@@ -2371,7 +2402,10 @@ def test_cloud_promotion_stages_verified_neighboring_store(
     if copy_required:
         monkeypatch.setattr("viper.execution._promotion.os.link", cross_device_link)
     promoter = _RunGraphPromoter(
-        root, cloud, ViperCloudDestination(owner="machina", workspace="models")
+        root,
+        cloud,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
     )
     promoted = promoter.promote_snapshot(snapshot)
 
