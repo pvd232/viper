@@ -1,37 +1,36 @@
 schema_version = 1
 contract_id = "run-graph-republication"
-package_sha256 = "7eae8db63a0e45e4010d78ebdb2f0bc7a441b17ffac6d0da8793905d1248af6c"
+package_sha256 = "0260d2c8c72bd2a65f5138b1bb73efb43c191dcbbc210aefe70bce9e5961465e"
 pair_block_id = "RGP-PB-01"
-baseline_commit = "77acb8382697af7fd5eb975e3afab6791505e626"
+baseline_commit = "27fbcaf8446cbeb2e76d8fee5717c43ce38006f8"
 change_summary = [
-  "Read identified documents through the supplied RunFetcher and preserve source failures as RunPromotionError causes.",
-  "Remove the duplicate local document reader and propagate the required fetcher through every constructor call.",
-  "Exercise local, GCS, and Hugging Face identities, altered or missing bytes, and the unchanged public cloud-root rejection.",
+  "Pass the existing RunFetcher into promotion and call read() for saved run documents.",
+  "Preserve the cause of a failed read and retain ordinary publication behavior.",
 ]
-deviation_summary = "The first block also tests Hugging Face document reads and unchanged cloud-root rejection; full graph relocation remains in later blocks."
+deviation_summary = "The shared RunFetcher was simplified in commit 27fbcaf8 before the promoter change in b1d5d9da. Existing storage tests cover hashing; one new promoter test covers delegation and failure."
 
 [[actions]]
 operation = "patch"
-patch_path = "patches/verified-document-reader.patch"
+patch_path = "patches/document-reader.patch"
 target_paths = ["src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
 
 [[handoff_targets]]
-label = "Complete proposed diff"
+label = "Installed promoter change"
 source = "plan"
-path = "patches/verified-document-reader.patch"
+path = "patches/document-reader.patch"
 line = 1
 
 [[handoff_targets]]
-label = "Verified document reader"
+label = "Document reader"
 source = "repository"
 path = "src/viper/execution/_promotion.py"
-line = 99
+line = 103
 
 [[handoff_targets]]
 label = "Reader and rejection tests"
 source = "repository"
 path = "tests/test_run_execution.py"
-line = 2188
+line = 2187
 
 [gate]
 source_roots = ["pyproject.toml", "pyrightconfig.json", "src/viper"]
@@ -45,7 +44,7 @@ argv = ["pyright", "--pythonpath", "/Users/machina/Developer/ChatGPT/viper/.venv
 [[gate.steps]]
 role = "test"
 working_directory = "."
-argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_run_execution.py", "tests/test_code_style.py", "-k", "promotion or python_imports_are_declared_at_module_scope or repository_has_no_inline_lint_suppressions"]
+argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_run_execution.py::test_promotion_document_reader_uses_fetcher", "tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store", "tests/test_run_execution.py::test_explicit_cloud_promotion_preserves_local_run_mode[False]", "tests/test_storage.py::test_new_execution_checks_a_previously_read_local_file", "tests/test_storage.py::test_run_fetcher_checks_download_once_before_caching", "tests/test_storage.py::test_run_fetcher_shares_first_content_check_between_read_and_path", "tests/test_storage.py::test_local_publication_reuses_hashes_and_preserves_revision"]
 
 [[gate.steps]]
 role = "documentation"

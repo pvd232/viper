@@ -1,0 +1,11 @@
+{
+  "gate_receipt_ref": {
+    "path": "evidence/gates/rgp-pb-01-completed.json",
+    "sha256": "1bdca7968013109186d50e4a85c7f0f376ab100e22ebb0c9f57a6a2c79b2fbd2"
+  },
+  "implementation_repository_commit": "b1d5d9dab58c37524552c4e798282460080e7650",
+  "pair_block_id": "RGP-PB-01",
+  "reviewed_at": "2026-10-16T23:53:21.500460Z",
+  "reviewer": "Codex internal code review",
+  "schema_version": 1
+}

@@ -20,30 +20,43 @@ candidate gate permits review. Installed implementation, real-model acceptance,
 and user approval each require their own evidence. Commit and review each bounded slice
 before the next begins. Future plans are frozen against their actual baseline.
 
-## Inspected baseline
+## Finished
 
-At `77acb8382697af7fd5eb975e3afab6791505e626`, the promoter handles local graphs,
-the verified reader supports provider-specific references, and the Hugging Face
-provider writes a manifest and returns an exact commit. The current discovery
-and promotion shortcuts leave cloud dependencies unchanged. These are source
-observations; the new migration acceptance path is still planned.
+- [x] Use one `RunFetcher` with `read()` and `path()`. Remove the subclass and
+  verification flag. Check pre-existing artifacts once per execution and reuse
+  publication hashes. Committed in
+  [`27fbcaf8`](https://github.com/pvd232/viper/commit/27fbcaf8446cbeb2e76d8fee5717c43ce38006f8).
+- [x] Pass the same fetcher into promotion. Remove the duplicate document reader
+  and preserve the original cause of read failures. Committed in
+  [`b1d5d9da`](https://github.com/pvd232/viper/commit/b1d5d9dab58c37524552c4e798282460080e7650).
+
+The [RGP-PB-01 record](../plans/run-graph-republication/RGP-PB-01/README.md)
+links the checks for both changes. Ordinary local promotion remains supported.
+Cloud graph republication remains planned.
+
+## Next step
+
+RGP-PB-02 will let the caller specify which storage to move. VIPER must then
+follow every dependency from the selected run, including links from Hugging Face
+back to GCS, and list the required files before copying anything. Source reads
+must keep using the original storage settings after a new destination is chosen.
 
 <!-- contract-protocol:generated:start -->
-**Resume here:** [Resume at RGP-PB-01](../contracts/run-graph-republication.md#rgp-pb-01)
+**Resume here:** [Resume at RGP-PB-02](../contracts/run-graph-republication.md#rgp-pb-02)
 
 
 ### Phase 1: Read verified source documents
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>RGP-REQ-01</code></nobr> | in_progress | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-01) | <nobr><code>RGP-PB-01</code></nobr> | None |
+| <nobr><code>RGP-REQ-01</code></nobr> | complete | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-01) | <nobr><code>RGP-PB-01</code></nobr> | None |
 
 ### Phase 2: Select and discover the complete graph
 
 | Requirement | Status | Contract | PairBlocks | Dependencies |
 |---|---|---|---|---|
-| <nobr><code>RGP-REQ-02</code></nobr> | planned | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-02) | <nobr><code>RGP-PB-02</code></nobr> | <nobr><code>RGP-REQ-01</code></nobr> |
-| <nobr><code>RGP-REQ-03</code></nobr> | planned | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-03) | <nobr><code>RGP-PB-02</code></nobr> | <nobr><code>RGP-REQ-02</code></nobr> |
+| <nobr><code>RGP-REQ-02</code></nobr> | in_progress | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-02) | <nobr><code>RGP-PB-02</code></nobr> | <nobr><code>RGP-REQ-01</code></nobr> |
+| <nobr><code>RGP-REQ-03</code></nobr> | in_progress | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-03) | <nobr><code>RGP-PB-02</code></nobr> | <nobr><code>RGP-REQ-02</code></nobr> |
 
 ### Phase 3: Rewrite and publish cloud snapshots
 
@@ -92,11 +105,11 @@ repairs at the materialized target paths before that recorded sequence.
 Discover Python files under the plan's source and test roots for documentation
 coverage; inspect every new or changed schema field when a block introduces one.
 
-The first phase checks the new reader on local, GCS, and Hugging Face references,
-rejects missing and altered bytes, preserves exception causes, and runs existing
-promotion regressions. Later phases must cover the named rejection cases in the
-contract before their candidate gates can pass. Live rehearsal, resource peaks,
-and real-model receipts remain separate from controlled provider tests.
+The first phase reuses storage tests for content checks. One promoter test covers
+fetcher delegation and the cause of a failed read. Existing promotion tests cover
+ordinary publication and staging from neighboring stores. Later phases must
+cover their declared rejection cases before their gates can pass. Measurements
+from real transfers remain part of the rehearsal and model migration.
 
 ## Owner inputs and external actions
 
@@ -109,8 +122,8 @@ and real-model receipts remain separate from controlled provider tests.
 | Application pointer paths and generation | Final cutover | Complete old/new mapping and all selected acceptance references. |
 | Authorization for real publication and pointer cutover | Operational migration | The user authorizes the concrete selected roots, destination, and pointer transition. |
 
-Preparing this contract and its first candidate produces planning and review
-artifacts. Model transfer and pointer cutover belong to the final operational run. Application bindings are required before the final operational
+The first block is installed. Model transfer and pointer cutover belong to the
+final operational run. Application bindings are required before that run's
 plan becomes executable.
 
 ## Deferred work

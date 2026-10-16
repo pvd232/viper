@@ -4,7 +4,7 @@ title = "Run Graph Republication"
 
 [[requirements]]
 id = "RGP-REQ-01"
-claim = "The promoter must read identified protocol documents through its supplied RunFetcher.read_verified(). Local, GCS, and Hugging Face reads must enforce the recorded byte count and SHA-256. Every ordinary retrieval or verification exception must become RunPromotionError(\"source run graph is unavailable\") with the original exception as its cause. RGP-PB-01 retains the public local-root restriction and existing publication behavior."
+claim = "The promoter must read identified protocol documents through its supplied RunFetcher.read(). RunFetcher.path() supplies file paths for payloads. One RunFetcher must check pre-existing artifacts once per execution and reuse hashes for files published during that execution. Local, GCS, and Hugging Face reads must enforce the recorded byte count and SHA-256. Every ordinary retrieval or verification exception must become RunPromotionError(\"source run graph is unavailable\") with the original exception as its cause. RGP-PB-01 retains the public local-root restriction and existing publication behavior."
 depends_on = []
 verifier_ids = ["RGP-VR-01"]
 
@@ -65,11 +65,12 @@ verifier_ids = ["RGP-VR-10"]
 [[verifiers]]
 id = "RGP-VR-01"
 requirement_ids = ["RGP-REQ-01"]
-acceptance_conditions = ["The injected fetcher reads each supported backend and returns the exact bytes.", "Missing bytes, different size, and different SHA-256 are rejected with the exact public message and preserved cause.", "The reader refactor still rejects cloud roots before retrieval or publication."]
-success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_uses_verified_source" }
+acceptance_conditions = ["The promoter calls the supplied fetcher's read() method and returns its bytes.", "A failed document read raises the exact public message and preserves the original cause.", "The fetcher rejects altered content and checks pre-existing artifacts again in a new execution.", "Ordinary local promotion and staging from neighboring stores retain their existing behavior."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_uses_fetcher" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_rejects_invalid_source" },
-  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_keeps_cloud_roots_rejected" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_uses_fetcher" },
+  { repository_id = "viper", path = "tests/test_storage.py", symbol = "test_new_execution_checks_a_previously_read_local_file" },
+  { repository_id = "viper", path = "tests/test_storage.py", symbol = "test_run_fetcher_checks_download_once_before_caching" },
 ]
 
 [[verifiers]]
@@ -167,7 +168,7 @@ id = "RGP-PB-01"
 requirement_ids = ["RGP-REQ-01"]
 depends_on = []
 repository_id = "viper"
-requirement_contribution = "Delegate document reads to the supplied verified fetcher; retain ordinary promotion and reject cloud roots."
+requirement_contribution = "Use one RunFetcher with read() and path(). Reuse content checks within each execution and pass the same fetcher into promotion."
 completion_evidence = ["implementation_review"]
 
 [[pair_blocks]]

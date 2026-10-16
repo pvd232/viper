@@ -2,13 +2,27 @@
 
 ## 1. Status
 
-**Contract status:** The generated region below owns current implementation status.
-The [existing declaration](run-graph-republication.toml) owns requirements,
-verifiers, and PairBlocks. The [checklist](../checklists/run-graph-republication.md)
-orders the work. Only the first block has a frozen code candidate.
+**RGP-PB-01 is implemented.** VIPER uses one `RunFetcher` with `read()` and
+`path()`. Pre-existing artifacts are checked once per execution. Files published
+during the execution reuse their recorded hashes. The promoter uses that same
+fetcher to read saved run documents.
+
+The changes are committed in
+[`27fbcaf8`](https://github.com/pvd232/viper/commit/27fbcaf8446cbeb2e76d8fee5717c43ce38006f8)
+and
+[`b1d5d9da`](https://github.com/pvd232/viper/commit/b1d5d9dab58c37524552c4e798282460080e7650).
+The [completed block](../plans/run-graph-republication/RGP-PB-01/README.md)
+records validation. The [declaration](run-graph-republication.toml) defines the
+remaining requirements; the [checklist](../checklists/run-graph-republication.md)
+orders them.
+
+**Next: RGP-PB-02.** Let the caller specify which storage to move. Then follow
+every dependency from the selected run and list the required files before
+copying anything. A document already on Hugging Face can still point to a file
+in GCS, so discovery must follow that link too.
 
 <!-- contract-protocol:generated:start -->
-**In progress.** [Jump to current PairBlock](#rgp-pb-01)
+**In progress.** [Jump to current PairBlock](#rgp-pb-02)
 
 **Checklist:** [Run Graph Republication](../checklists/run-graph-republication.md)
 
@@ -18,38 +32,37 @@ orders the work. Only the first block has a frozen code candidate.
 
 #### <nobr><code>RGP-PB-01</code></nobr>
 
-**Status:** review
+**Status:** complete
 
-**Requirement contribution:** Delegate document reads to the supplied verified fetcher; retain ordinary promotion and reject cloud roots.
+**Requirement contribution:** Use one RunFetcher with read() and path(). Reuse content checks within each execution and pass the same fetcher into promotion.
 
 **Review handoff**
 
 **What changed**
 
-- Read identified documents through the supplied RunFetcher and preserve source failures as RunPromotionError causes.
-- Remove the duplicate local document reader and propagate the required fetcher through every constructor call.
-- Exercise local, GCS, and Hugging Face identities, altered or missing bytes, and the unchanged public cloud-root rejection.
+- Pass the existing RunFetcher into promotion and call read() for saved run documents.
+- Preserve the cause of a failed read and retain ordinary publication behavior.
 
-**Plan deviations:** The first block also tests Hugging Face document reads and unchanged cloud-root rejection; full graph relocation remains in later blocks.
+**Plan deviations:** The shared RunFetcher was simplified in commit 27fbcaf8 before the promoter change in b1d5d9da. Existing storage tests cover hashing; one new promoter test covers delegation and failure.
 
-**Start review:** [Open tested GitHub comparison](https://github.com/pvd232/viper/compare/77acb8382697af7fd5eb975e3afab6791505e626...a107a9f4e1832b0410d0d9e69e056d36939b10e2)
+**Start review:** [Open tested GitHub comparison](https://github.com/pvd232/viper/compare/b1d5d9dab58c37524552c4e798282460080e7650...5f0750153d866240e02ab725a0f079d22ec3bfde)
 
 **Review these files**
 
-- [Complete proposed diff](../plans/run-graph-republication/RGP-PB-01/patches/verified-document-reader.patch#L1)
-- [Verified document reader](../src/viper/execution/_promotion.py#L99)
-- [Reader and rejection tests](../tests/test_run_execution.py#L2188)
+- [Installed promoter change](../plans/run-graph-republication/RGP-PB-01/patches/document-reader.patch#L1)
+- [Document reader](../src/viper/execution/_promotion.py#L103)
+- [Reader and rejection tests](../tests/test_run_execution.py#L2187)
 
-**Evidence:** [Passing gate receipt](../evidence/gates/rgp-pb-01-20261016-r3.json)
+**Evidence:** [Passing gate receipt](../evidence/gates/rgp-pb-01-completed.json)
 
-**Decision:** Approve <nobr><code>RGP-PB-01</code></nobr>, or return it with findings.
+**Decision:** <nobr><code>RGP-PB-01</code></nobr> is complete; no further decision is required.
 
 <details>
 <summary>Implementation details</summary>
 
 **Plan:** [plan.toml](../plans/run-graph-republication/RGP-PB-01/plan.toml)
 
-**Retained patch:** [patches/verified-document-reader.patch](../plans/run-graph-republication/RGP-PB-01/patches/verified-document-reader.patch)
+**Retained patch:** [patches/document-reader.patch](../plans/run-graph-republication/RGP-PB-01/patches/document-reader.patch)
 
 **Implementation roots:** [pyproject.toml](../pyproject.toml) · [pyrightconfig.json](../pyrightconfig.json) · [src/viper](../src/viper)
 
@@ -63,7 +76,7 @@ orders the work. Only the first block has a frozen code candidate.
 # typecheck
 (cd . && pyright --pythonpath /Users/machina/Developer/ChatGPT/viper/.venv/bin/python src/viper/execution/_promotion.py tests/test_run_execution.py)
 # test
-(cd . && python3 -m pytest -q -p no:cacheprovider tests/test_run_execution.py tests/test_code_style.py -k 'promotion or python_imports_are_declared_at_module_scope or repository_has_no_inline_lint_suppressions')
+(cd . && python3 -m pytest -q -p no:cacheprovider tests/test_run_execution.py::test_promotion_document_reader_uses_fetcher tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store 'tests/test_run_execution.py::test_explicit_cloud_promotion_preserves_local_run_mode[False]' tests/test_storage.py::test_new_execution_checks_a_previously_read_local_file tests/test_storage.py::test_run_fetcher_checks_download_once_before_caching tests/test_storage.py::test_run_fetcher_shares_first_content_check_between_read_and_path tests/test_storage.py::test_local_publication_reuses_hashes_and_preserves_revision)
 # documentation
 (cd . && ruff check --config pyproject.toml --select D src/viper tests)
 # lint
@@ -78,7 +91,7 @@ orders the work. Only the first block has a frozen code candidate.
 
 #### <nobr><code>RGP-PB-02</code></nobr>
 
-**Status:** waiting
+**Status:** drafting
 
 **Requirement contribution:** Bind original sources independently of the destination and discover every required dependency before relocation.
 
@@ -88,7 +101,7 @@ orders the work. Only the first block has a frozen code candidate.
 
 **Dependencies:** <nobr><code>RGP-PB-01</code></nobr>
 
-**Next action:** Wait for the declared dependencies.
+**Next action:** Run the current PairBlock plan.
 
 <a id="rgp-pb-03"></a>
 
@@ -191,9 +204,9 @@ orders the work. Only the first block has a frozen code candidate.
 
 | Requirement | Claim | Progress | Verifiers | PairBlocks |
 |---|---|---|---|---|
-| <nobr><code>RGP-REQ-01</code></nobr> | The promoter must read identified protocol documents through its supplied RunFetcher.read_verified(). Local, GCS, and Hugging Face reads must enforce the recorded byte count and SHA-256. Every ordinary retrieval or verification exception must become RunPromotionError("source run graph is unavailable") with the original exception as its cause. RGP-PB-01 retains the public local-root restriction and existing publication behavior. | in_progress | <nobr><code>RGP-VR-01</code></nobr> | <nobr><code>RGP-PB-01</code></nobr> |
-| <nobr><code>RGP-REQ-02</code></nobr> | An explicit optional RunPromotionPolicy must select cloud repositories to relocate, allowed external storage and Git repositories, the original GCS binding for legacy provider-neutral references, and positive resource limits. Existing three-argument calls retain local promotion semantics. Match GCS repositories by bucket and prefix and Hugging Face repositories by repository and repo_type. Source readers must use the captured original binding independently of the configured destination. Missing legacy bindings and unclassified required references must fail before publication. | planned | <nobr><code>RGP-VR-02</code></nobr> | <nobr><code>RGP-PB-02</code></nobr> |
-| <nobr><code>RGP-REQ-03</code></nobr> | Discovery must traverse typed documents on every reachable supported backend before deciding which snapshots remain external. Enumerate all members of every selected sealed snapshot and reconcile them against a frozen independent inventory. Each required inventory item must map to a graph role or produce a blocking omission. Report additional snapshot members, shared ancestors, total bytes, largest snapshot, file counts, and permitted external dependencies. A retained cloud document whose child changes must itself be republished so the new root reaches the relocated child. | planned | <nobr><code>RGP-VR-03</code></nobr> | <nobr><code>RGP-PB-02</code></nobr> |
+| <nobr><code>RGP-REQ-01</code></nobr> | The promoter must read identified protocol documents through its supplied RunFetcher.read(). RunFetcher.path() supplies file paths for payloads. One RunFetcher must check pre-existing artifacts once per execution and reuse hashes for files published during that execution. Local, GCS, and Hugging Face reads must enforce the recorded byte count and SHA-256. Every ordinary retrieval or verification exception must become RunPromotionError("source run graph is unavailable") with the original exception as its cause. RGP-PB-01 retains the public local-root restriction and existing publication behavior. | complete | <nobr><code>RGP-VR-01</code></nobr> | <nobr><code>RGP-PB-01</code></nobr> |
+| <nobr><code>RGP-REQ-02</code></nobr> | An explicit optional RunPromotionPolicy must select cloud repositories to relocate, allowed external storage and Git repositories, the original GCS binding for legacy provider-neutral references, and positive resource limits. Existing three-argument calls retain local promotion semantics. Match GCS repositories by bucket and prefix and Hugging Face repositories by repository and repo_type. Source readers must use the captured original binding independently of the configured destination. Missing legacy bindings and unclassified required references must fail before publication. | in_progress | <nobr><code>RGP-VR-02</code></nobr> | <nobr><code>RGP-PB-02</code></nobr> |
+| <nobr><code>RGP-REQ-03</code></nobr> | Discovery must traverse typed documents on every reachable supported backend before deciding which snapshots remain external. Enumerate all members of every selected sealed snapshot and reconcile them against a frozen independent inventory. Each required inventory item must map to a graph role or produce a blocking omission. Report additional snapshot members, shared ancestors, total bytes, largest snapshot, file counts, and permitted external dependencies. A retained cloud document whose child changes must itself be republished so the new root reaches the relocated child. | in_progress | <nobr><code>RGP-VR-03</code></nobr> | <nobr><code>RGP-PB-02</code></nobr> |
 | <nobr><code>RGP-REQ-04</code></nobr> | Publication must keep every scientific payload byte-identical and rewrite only identified protocol references and the metadata identities derived from those changes. Preserve stage identities, code commits, parameters, input roles, measurements, and provenance relationships. Update run-plan stage hashes, reuse keys, source-closure links, and cloud-stage references together. Key graph mappings by complete source identity; shared payload hashes must never collapse distinct producing histories. Preserve sealed snapshot membership and reject inconsistent identities. | planned | <nobr><code>RGP-VR-04</code></nobr> | <nobr><code>RGP-PB-03</code></nobr> |
 | <nobr><code>RGP-REQ-05</code></nobr> | Before remote publication, persist an intent bound to the source snapshot, destination, policy digest, expected rewritten manifest, and dependency bindings. Recover the exact verified destination commit after interruption, including a lost response after a successful commit. Publish the completed binding atomically only after verifying that commit. Reuse completed bindings across selected roots and process restarts. Serialize writers for the same publication journal; reject mismatched or corrupt state. Reconcile an uncertain remote outcome before retrying and fail closed when its identity cannot be established. Retain completed children when a parent fails. | planned | <nobr><code>RGP-VR-05</code></nobr> | <nobr><code>RGP-PB-04</code></nobr> |
 | <nobr><code>RGP-REQ-06</code></nobr> | Preflight must measure selected snapshots and available staging capacity before payload verification or transfer. Path-backed payload reads, source verification, publication, and destination verification must obey explicit staging, cache, and connection limits. Count VIPER, Hugging Face, and Xet caches and cross-filesystem copies. Persist verified destination bindings before reclaiming task-owned staged files. A snapshot that cannot fit the declared budget must fail before transfer; all unmodified source bytes and shared caches remain intact. Retry and cancellation must leave recoverable evidence and bounded temporary storage. | planned | <nobr><code>RGP-VR-06</code></nobr> | <nobr><code>RGP-PB-05</code></nobr> |
@@ -206,7 +219,7 @@ orders the work. Only the first block has a frozen code candidate.
 
 | Rule | Requirements | Acceptance conditions | Success case | Rejection cases |
 |---|---|---|---|---|
-| <nobr><code>RGP-VR-01</code></nobr> | <nobr><code>RGP-REQ-01</code></nobr> | The injected fetcher reads each supported backend and returns the exact bytes.<br>Missing bytes, different size, and different SHA-256 are rejected with the exact public message and preserved cause.<br>The reader refactor still rejects cloud roots before retrieval or publication. | [test_promotion_document_reader_uses_verified_source](../tests/test_run_execution.py) | [test_promotion_document_reader_rejects_invalid_source](../tests/test_run_execution.py)<br>[test_promotion_document_reader_keeps_cloud_roots_rejected](../tests/test_run_execution.py) |
+| <nobr><code>RGP-VR-01</code></nobr> | <nobr><code>RGP-REQ-01</code></nobr> | The promoter calls the supplied fetcher's read() method and returns its bytes.<br>A failed document read raises the exact public message and preserves the original cause.<br>The fetcher rejects altered content and checks pre-existing artifacts again in a new execution.<br>Ordinary local promotion and staging from neighboring stores retain their existing behavior. | [test_promotion_document_reader_uses_fetcher](../tests/test_run_execution.py) | [test_promotion_document_reader_uses_fetcher](../tests/test_run_execution.py)<br>[test_new_execution_checks_a_previously_read_local_file](../tests/test_storage.py)<br>[test_run_fetcher_checks_download_once_before_caching](../tests/test_storage.py) |
 | <nobr><code>RGP-VR-02</code></nobr> | <nobr><code>RGP-REQ-02</code></nobr> | The same source graph resolves after the destination is changed to Hugging Face.<br>RunPromotionError contains "legacy source binding is required" for an unbound provider-neutral source.<br>RunPromotionError contains "unclassified graph dependency" for required storage outside the explicit policy; no publication occurs. | [test_promotion_policy_preserves_source_binding](../tests/test_run_execution.py) | [test_promotion_policy_rejects_unbound_legacy_source](../tests/test_run_execution.py)<br>[test_promotion_policy_rejects_unclassified_dependency](../tests/test_run_execution.py) |
 | <nobr><code>RGP-VR-03</code></nobr> | <nobr><code>RGP-REQ-03</code></nobr> | A Hugging Face parent pointing to a retiring GCS prior is traversed and rewritten.<br>RunPromotionError contains "inventory item is unreachable" when a required inventory entry has no graph binding.<br>RunPromotionError contains "storage cycle" for cyclic snapshot dependencies. | [test_promotion_discovers_mixed_cloud_ancestors](../tests/test_run_execution.py) | [test_promotion_rejects_inventory_omission](../tests/test_run_execution.py)<br>[test_promotion_rejects_storage_cycle](../tests/test_run_execution.py) |
 | <nobr><code>RGP-VR-04</code></nobr> | <nobr><code>RGP-REQ-04</code></nobr> | Two producers with identical payloads retain distinct mapped records and consumer edges.<br>RunPromotionError contains "conflicting source identity" for two identities asserted for the same source object.<br>An independently valid substitute ancestor is rejected with "graph relationship changed". | [test_republication_preserves_shared_payload_histories](../tests/test_run_execution.py) | [test_republication_rejects_conflicting_source_identity](../tests/test_run_execution.py)<br>[test_republication_rejects_wrong_valid_ancestor](../tests/test_run_execution.py) |
@@ -302,7 +315,7 @@ flowchart TB
 The first missing connector is discovery through the cloud embedding record.
 RGP-PB-02 owns discovery and source selection, RGP-PB-03 owns cloud rewriting,
 RGP-PB-04 owns durable bindings, RGP-PB-06 owns comparison, and RGP-PB-07 owns
-cold recovery. RGP-PB-01 supplies the shared verified document reader first.
+cold recovery. RGP-PB-01 now reads documents through the shared `RunFetcher`.
 
 ## 3. Models
 
@@ -368,8 +381,8 @@ public interface. The existing provenance format and transfer owners carry this 
 3. Measure free disk and provider constraints. Set explicit resource budgets
    before source payload verification populates caches. An oversized snapshot
    requires a larger staging host or an explicitly reviewed publication change.
-4. Verify source bytes through `RunFetcher`; use `read_verified()` for small
-   documents and `read_verified_path()` for payloads. Reuse provider clients.
+4. Read small documents through `RunFetcher.read()` and obtain payload paths
+   through `RunFetcher.path()`. Reuse content checks within the execution.
 5. Publish dependencies before parents. Persist each publication intent, publish
    through `ViperCloud.publish()`, verify the exact returned commit and manifest,
    then persist the completed mapping before reclaiming staged bytes.
@@ -414,9 +427,10 @@ remains valid independently of later formatting or reporting failures.
 
 ## 6. Verification
 
-The generated verifier table names each success and rejection observer. Those
-tests are proposed until the corresponding block is materialized and checked.
-Only RGP-PB-01 currently supplies executable changes.
+The generated verifier table names each success and rejection test. RGP-PB-01
+uses existing storage tests and one new promoter test. Its implementation and
+checks are recorded in the [completed block](../plans/run-graph-republication/RGP-PB-01/README.md).
+Tests for RGP-PB-02 onward remain proposed.
 
 Comparison must enumerate required roles independently of the rewrite walk. It
 checks the exact old-to-new edge mapping and permits only relocated references,
@@ -441,8 +455,8 @@ measurement once and reuse it when only its verifier or report changes.
 
 | Surface | Required change |
 |---|---|
-| `_RunGraphPromoter.read_local()` | Replace with `read_document()` in RGP-PB-01; remove its duplicate byte/hash validation and update all constructor callers. |
-| `RunFetcher` and `_cloud_service()` | Retain verified reading and provider client reuse; extend original legacy binding and bounded cache ownership in RGP-PB-02/05. |
+| `_RunGraphPromoter.read_document()` | Complete: calls the supplied fetcher's `read()`. Every constructor caller supplies the fetcher; `read_local()` is removed. |
+| `RunFetcher` and `_cloud_service()` | Complete: one fetcher with `read()` and `path()`; checks are reused within an execution. RGP-PB-02/05 add source binding and resource limits. |
 | `snapshot_for()`, `discover_*()`, local snapshot map types | Generalize to provider-specific snapshots in RGP-PB-02; retain one discovery implementation. |
 | `promote_reference()`, `promote_snapshot()`, `promote_stage_reference()` | Replace unconditional cloud pass-through with policy decisions and cloud snapshot publication in RGP-PB-03. |
 | `rewrite_typed()`, `_rewrite_reuse_receipt()`, `_rewrite_source_closure()` | Retain their responsibilities; remove local-only early returns only when cloud equivalents and observing tests exist. |
@@ -489,8 +503,8 @@ The package declares eight dependent PairBlocks, and the checklist places every
 requirement exactly once. Each block includes its implementation, observing
 tests, documentation, removal review, and a task-scoped reviewed commit.
 
-Start with the [RGP-PB-01 plan](../plans/run-graph-republication/RGP-PB-01/plan.toml).
-Then implement source binding and discovery, cloud rewriting, durable recovery,
+RGP-PB-01 is implemented. Continue with source binding and discovery in
+RGP-PB-02, then cloud rewriting, durable recovery,
 resource controls, independent comparison, and the small complete rehearsal.
 Only after those checks pass should a real-model pilot begin. The final block
 requires the exact model roots, inventory, runtime, destination, pointer paths,
@@ -505,18 +519,20 @@ owns the human resume point. Freeze each future candidate and its baseline after
 ## 11. Contract-owned PairBlocks
 
 The generated region presents the authoritative dependency and requirement map.
-The [first handoff](../plans/run-graph-republication/RGP-PB-01/README.md) explains
-the complete reader slice and its internal review. Proposed code lives only in
-the [retained patch](../plans/run-graph-republication/RGP-PB-01/patches/verified-document-reader.patch).
-Later patches are authored from the then-current implementation.
+The [completed first block](../plans/run-graph-republication/RGP-PB-01/README.md)
+links its installed code and test results. Its
+[current patch](../plans/run-graph-republication/RGP-PB-01/patches/document-reader.patch)
+reproduces the installed promoter change for the gate. The
+[earlier patch](../plans/run-graph-republication/RGP-PB-01/history/verified-document-reader.patch)
+is retained as superseded history. Later plans start from the then-current code.
 
 ## 12. ContractTarget
 
 The shared contract protocol materializes the first plan over its exact Git
 baseline, applies only the declared file actions, and verifies the candidate
 manifest. The current patch owns the promoter and its existing test module.
-Generated Markdown owns status; authored prose owns explanation. Preparing this plan changes only its declarations, documentation, candidate
-payloads, and review evidence.
+Generated Markdown owns status; authored prose explains the installed behavior.
+The recorded implementation review binds completion to the tested source files.
 
 ## Sources
 

@@ -1,66 +1,55 @@
-# RGP-PB-01: Reuse RunFetcher to read saved run documents
+# RGP-PB-01: Read saved run documents through RunFetcher
 
-The [patch](patches/verified-document-reader.patch) changes how VIPER reads saved
-run documents before publishing them. It replaces the file-reading code in
-`_RunGraphPromoter.read_local()` with a call to the existing
-[`RunFetcher.read_verified()`](../../../src/viper/_source.py).
+This directory records the completed reader change and the checks used to close
+RGP-PB-01. The implementation is installed and committed.
 
-## Why this change comes first
+## What is finished
 
-The current [`read_local()`](../../../src/viper/execution/_promotion.py) reads a
-file from local storage, then checks its size and SHA-256 against the recorded
-values. `RunFetcher.read_verified()` already performs those checks and can also
-read files from cloud storage. Reusing it removes the duplicate checks and
-prepares the publisher to read the run documents we intend to move to Hugging Face.
+[`RunFetcher`](../../../src/viper/_source.py) exposes `read()` and `path()`.
+The subclass and verification flag are removed. Pre-existing artifacts are
+checked once per execution; files published during that execution reuse the
+hashes already computed for publication. Commit
+[`27fbcaf8`](https://github.com/pvd232/viper/commit/27fbcaf8446cbeb2e76d8fee5717c43ce38006f8)
+contains that change.
 
-For example, a reference to `run.yaml` records where the file is stored. It also
-records the expected byte count and SHA-256. The fetcher retrieves the file and
-checks its bytes against those values before returning them.
+[`_RunGraphPromoter.read_document()`](../../../src/viper/execution/_promotion.py)
+uses the same fetcher that checked the source run. Every constructor caller
+supplies it. A failed read raises `RunPromotionError` with the original exception
+as its cause. Commit
+[`b1d5d9da`](https://github.com/pvd232/viper/commit/b1d5d9dab58c37524552c4e798282460080e7650)
+contains the promoter change and its focused test. The public function still
+requires a local root; cloud graph discovery belongs to RGP-PB-02.
 
-## What the patch changes
+## Files
 
-`promote_run_to_cloud()` already creates a `RunFetcher` to verify the source run.
-The patch passes that same object into `_RunGraphPromoter`. Its new
-`read_document()` method calls `fetcher.read_verified(reference)` and returns
-the checked bytes. If the read fails, it raises `RunPromotionError` and keeps
-the original exception as the cause.
+| File | Purpose |
+|---|---|
+| [plan.toml](plan.toml) | Reproduces the installed promoter change from commit `27fbcaf8` and declares its checks. |
+| [document-reader.patch](patches/document-reader.patch) | Exact promoter and test changes installed by `b1d5d9da`. |
+| [Earlier patch](history/verified-document-reader.patch) | Superseded proposal, retained as history. Its old method names and extra tests are absent from the installed change. |
 
-The patch removes `read_local()` and updates every `_RunGraphPromoter`
-constructor call to supply the new required argument. The public
-`promote_run_to_cloud()` function still accepts only runs whose root record is
-stored locally. Reading and rewriting a complete cloud-backed graph requires
-the later changes in the [contract](../../../contracts/run-graph-republication.md).
+## Validation
 
-The code review also checked nearby code for redundancy. `hashlib` remains in
-use when identifying files for publication. `local_artifact_store` still reads
-the snapshots being published. `_publish_sources()` is needed to stage files
-from neighboring stores, and `source_identity()` hashes those files before
-staging. The [export module's reader](../../../src/viper/execution/_export.py)
-serves the separate archive-export path.
+The [completion gate](../../../evidence/gates/rgp-pb-01-completed.json) records
+15 passing test cases in 21.42 seconds. It checks content reuse and rejection of
+altered bytes through existing storage tests. Promotion tests cover fetcher
+use, including a failed read, and existing publication behavior. This
+documentation update reuses those tests.
 
-## Apply and validate
+The gate also passed Pyright and the source docstring check. Ruff's final format
+and lint checks passed. The [implementation review](../../../evidence/reviews/rgp-pb-01-implementation.json)
+confirms that the installed files match the tested candidate. The
+[completion receipt](../../../evidence/lifecycle/rgp-pb-01-complete.json) closes
+the block. Exact commands and outputs are retained in the gate receipt.
 
-The patch is ready for you to apply. The source files in the active checkout
-still contain the original implementation. From the repository root, apply
-both file changes together:
+The earlier fetcher refactor passed 122 selected tests and four subtests, as
+recorded in commit `27fbcaf8`. Full repository and release gates remain outside
+this block's validation scope. Real model transfers await the later migration
+blocks.
 
-```bash
-rgp_patch=plans/run-graph-republication/RGP-PB-01/patches/verified-document-reader.patch
-git apply --check "$rgp_patch" && git apply "$rgp_patch"
-```
+## Next step
 
-Activate the project's `.venv` and run Ruff's import fixes and formatter on the
-two changed files. Then run the five `gate.steps` commands in
-[plan.toml](plan.toml), in their listed order. Resolve any failure before
-continuing to the next part of the migration.
-
-The [recorded check results](../../../evidence/gates/rgp-pb-01-20261016-r3.json)
-show 22 selected tests passing on the proposed patch. Pyright reported zero
-errors and warnings. Ruff's documentation and lint checks passed, as did its
-format check. These results belong to review commit
-`a107a9f4e1832b0410d0d9e69e056d36939b10e2`.
-
-The added tests check that the publisher uses the supplied fetcher. They also
-check rejection of missing files and content mismatches. Existing promotion
-tests passed alongside them. The cloud cases use simulated downloads; testing
-transfers against live storage remains part of the later migration work.
+[RGP-PB-02](../../../contracts/run-graph-republication.md#rgp-pb-02) will select
+which storage to move and follow every dependency from a chosen run. Discovery
+must include a document on Hugging Face that points back to GCS, so VIPER can
+list every required file before copying anything.
