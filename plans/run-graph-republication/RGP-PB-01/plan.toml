@@ -1,0 +1,63 @@
+schema_version = 1
+contract_id = "run-graph-republication"
+package_sha256 = "7eae8db63a0e45e4010d78ebdb2f0bc7a441b17ffac6d0da8793905d1248af6c"
+pair_block_id = "RGP-PB-01"
+baseline_commit = "77acb8382697af7fd5eb975e3afab6791505e626"
+change_summary = [
+  "Read identified documents through the supplied RunFetcher and preserve source failures as RunPromotionError causes.",
+  "Remove the duplicate local document reader and propagate the required fetcher through every constructor call.",
+  "Exercise local, GCS, and Hugging Face identities, altered or missing bytes, and the unchanged public cloud-root rejection.",
+]
+deviation_summary = "The first block also tests Hugging Face document reads and unchanged cloud-root rejection; full graph relocation remains in later blocks."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/verified-document-reader.patch"
+target_paths = ["src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+
+[[handoff_targets]]
+label = "Complete proposed diff"
+source = "plan"
+path = "patches/verified-document-reader.patch"
+line = 1
+
+[[handoff_targets]]
+label = "Verified document reader"
+source = "repository"
+path = "src/viper/execution/_promotion.py"
+line = 99
+
+[[handoff_targets]]
+label = "Reader and rejection tests"
+source = "repository"
+path = "tests/test_run_execution.py"
+line = 2188
+
+[gate]
+source_roots = ["pyproject.toml", "pyrightconfig.json", "src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = ["pyright", "--pythonpath", "/Users/machina/Developer/ChatGPT/viper/.venv/bin/python", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_run_execution.py", "tests/test_code_style.py", "-k", "promotion or python_imports_are_declared_at_module_scope or repository_has_no_inline_lint_suppressions"]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = ["ruff", "check", "--config", "pyproject.toml", "--select", "D", "src/viper", "tests"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "format", "--check", "--config", "pyproject.toml", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "check", "--config", "pyproject.toml", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]

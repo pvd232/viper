@@ -1,0 +1,70 @@
+schema_version = 1
+checklist_id = "run-graph-republication"
+title = "Run Graph Republication"
+coordination_repository_id = "viper"
+checklist_path = "checklists/run-graph-republication.md"
+contract_paths = ["contracts/run-graph-republication.toml"]
+
+[[phases]]
+number = 1
+title = "Read verified source documents"
+requirement_ids = ["RGP-REQ-01"]
+
+[[phases]]
+number = 2
+title = "Select and discover the complete graph"
+requirement_ids = ["RGP-REQ-02", "RGP-REQ-03"]
+
+[[phases]]
+number = 3
+title = "Rewrite and publish cloud snapshots"
+requirement_ids = ["RGP-REQ-04"]
+
+[[phases]]
+number = 4
+title = "Recover interrupted publication"
+requirement_ids = ["RGP-REQ-05"]
+
+[[phases]]
+number = 5
+title = "Bound transfer resources"
+requirement_ids = ["RGP-REQ-06"]
+
+[[phases]]
+number = 6
+title = "Compare graph meaning"
+requirement_ids = ["RGP-REQ-07"]
+
+[[phases]]
+number = 7
+title = "Rehearse cold recovery"
+requirement_ids = ["RGP-REQ-08", "RGP-REQ-09"]
+
+[[phases]]
+number = 8
+title = "Migrate selected models and switch pointers"
+requirement_ids = ["RGP-REQ-10"]
+
+[[repository_bindings]]
+repository_id = "viper"
+checkout = "/Users/machina/Developer/ChatGPT/viper"
+
+[[repository_bindings.executables]]
+command = "python3"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/python3"
+
+[[repository_bindings.executables]]
+command = "pyright"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/pyright"
+
+[[repository_bindings.executables]]
+command = "node"
+path = "/Users/machina/.nvm/versions/node/v22.8.0/bin/node"
+
+[[repository_bindings.executables]]
+command = "ruff"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/ruff"
+
+[[repository_bindings.executables]]
+command = "git"
+path = "/usr/bin/git"

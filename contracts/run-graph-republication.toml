@@ -1,0 +1,227 @@
+schema_version = 1
+contract_id = "run-graph-republication"
+title = "Run Graph Republication"
+
+[[requirements]]
+id = "RGP-REQ-01"
+claim = "The promoter must read identified protocol documents through its supplied RunFetcher.read_verified(). Local, GCS, and Hugging Face reads must enforce the recorded byte count and SHA-256. Every ordinary retrieval or verification exception must become RunPromotionError(\"source run graph is unavailable\") with the original exception as its cause. RGP-PB-01 retains the public local-root restriction and existing publication behavior."
+depends_on = []
+verifier_ids = ["RGP-VR-01"]
+
+[[requirements]]
+id = "RGP-REQ-02"
+claim = "An explicit optional RunPromotionPolicy must select cloud repositories to relocate, allowed external storage and Git repositories, the original GCS binding for legacy provider-neutral references, and positive resource limits. Existing three-argument calls retain local promotion semantics. Match GCS repositories by bucket and prefix and Hugging Face repositories by repository and repo_type. Source readers must use the captured original binding independently of the configured destination. Missing legacy bindings and unclassified required references must fail before publication."
+depends_on = ["RGP-REQ-01"]
+verifier_ids = ["RGP-VR-02"]
+
+[[requirements]]
+id = "RGP-REQ-03"
+claim = "Discovery must traverse typed documents on every reachable supported backend before deciding which snapshots remain external. Enumerate all members of every selected sealed snapshot and reconcile them against a frozen independent inventory. Each required inventory item must map to a graph role or produce a blocking omission. Report additional snapshot members, shared ancestors, total bytes, largest snapshot, file counts, and permitted external dependencies. A retained cloud document whose child changes must itself be republished so the new root reaches the relocated child."
+depends_on = ["RGP-REQ-02"]
+verifier_ids = ["RGP-VR-03"]
+
+[[requirements]]
+id = "RGP-REQ-04"
+claim = "Publication must keep every scientific payload byte-identical and rewrite only identified protocol references and the metadata identities derived from those changes. Preserve stage identities, code commits, parameters, input roles, measurements, and provenance relationships. Update run-plan stage hashes, reuse keys, source-closure links, and cloud-stage references together. Key graph mappings by complete source identity; shared payload hashes must never collapse distinct producing histories. Preserve sealed snapshot membership and reject inconsistent identities."
+depends_on = ["RGP-REQ-03"]
+verifier_ids = ["RGP-VR-04"]
+
+[[requirements]]
+id = "RGP-REQ-05"
+claim = "Before remote publication, persist an intent bound to the source snapshot, destination, policy digest, expected rewritten manifest, and dependency bindings. Recover the exact verified destination commit after interruption, including a lost response after a successful commit. Publish the completed binding atomically only after verifying that commit. Reuse completed bindings across selected roots and process restarts. Serialize writers for the same publication journal; reject mismatched or corrupt state. Reconcile an uncertain remote outcome before retrying and fail closed when its identity cannot be established. Retain completed children when a parent fails."
+depends_on = ["RGP-REQ-04"]
+verifier_ids = ["RGP-VR-05"]
+
+[[requirements]]
+id = "RGP-REQ-06"
+claim = "Preflight must measure selected snapshots and available staging capacity before payload verification or transfer. Path-backed payload reads, source verification, publication, and destination verification must obey explicit staging, cache, and connection limits. Count VIPER, Hugging Face, and Xet caches and cross-filesystem copies. Persist verified destination bindings before reclaiming task-owned staged files. A snapshot that cannot fit the declared budget must fail before transfer; all unmodified source bytes and shared caches remain intact. Retry and cancellation must leave recoverable evidence and bounded temporary storage."
+depends_on = ["RGP-REQ-05"]
+verifier_ids = ["RGP-VR-06"]
+
+[[requirements]]
+id = "RGP-REQ-07"
+claim = "A verifier independent of the rewriting traversal must compare the source and destination graphs using the saved mapping and the frozen inventory. Require exact scientific payload hashes, exact required inventory membership, preserved non-location fields, and an explicit field-level allowlist of derived metadata changes. Every original dependency edge must reach its intended mapped destination object. Reject missing, extra, altered, or substituted required objects even when the destination graph passes ordinary verification. Record the source roots, destination roots, inventory digest, policy digest, mapping digest, and comparison result."
+depends_on = ["RGP-REQ-04", "RGP-REQ-06"]
+verifier_ids = ["RGP-VR-07"]
+
+[[requirements]]
+id = "RGP-REQ-08"
+claim = "Acceptance must run ordinary VIPER readers and model loading in a new process and fresh workspace with empty VIPER, Hugging Face, and Xet caches, no source store mounts, and retiring Mantra storage blocked. Allow only declared pinned external source repositories and the destination. Restore each selected model and run one frozen inference fixture under its recorded environment; compare against a retained expected result with a predeclared exact or numerical comparison rule. Persist inference output before downstream reporting so reporting repair reuses the measurement. Retain existing training and evaluation evidence without rerunning those experiments."
+depends_on = ["RGP-REQ-07"]
+verifier_ids = ["RGP-VR-08"]
+
+[[requirements]]
+id = "RGP-REQ-09"
+claim = "Before bulk migration, a small mixed local/GCS/Hugging Face graph with two roots, a shared ancestor, distinct histories sharing payload bytes, and a reuse receipt must pass discovery, publication, restart recovery, independent comparison, and cold model recovery. Interrupt after a remotely committed child before its local acknowledgement and verify restart reuses that exact child. Record actual memory, disk, and connection observations. Preserve ordinary promotion tests and reject early public cloud-root enablement until the complete path passes."
+depends_on = ["RGP-REQ-08"]
+verifier_ids = ["RGP-VR-09"]
+
+[[requirements]]
+id = "RGP-REQ-10"
+claim = "Migrate one selected real model first, then every remaining frozen MIL and Hopfield root using shared verified mappings. Acceptance evidence must bind each exact source and destination root, payload inventory, source-code and runtime identities, cold recovery result, and inference fixture. Advance canonical SOTA pointers as one recoverable, compare-and-swap update only after every selected root passes; reject stale pointer generations or any missing acceptance. Retain old pointers and GCS objects for rollback. Configure subsequent publication after the accepted cutover. Record the application-owned pointer paths and execution bindings before freezing this block; library code must not guess them."
+depends_on = ["RGP-REQ-09"]
+verifier_ids = ["RGP-VR-10"]
+
+[[verifiers]]
+id = "RGP-VR-01"
+requirement_ids = ["RGP-REQ-01"]
+acceptance_conditions = ["The injected fetcher reads each supported backend and returns the exact bytes.", "Missing bytes, different size, and different SHA-256 are rejected with the exact public message and preserved cause.", "The reader refactor still rejects cloud roots before retrieval or publication."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_uses_verified_source" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_rejects_invalid_source" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_document_reader_keeps_cloud_roots_rejected" },
+]
+
+[[verifiers]]
+id = "RGP-VR-02"
+requirement_ids = ["RGP-REQ-02"]
+acceptance_conditions = ["The same source graph resolves after the destination is changed to Hugging Face.", "RunPromotionError contains \"legacy source binding is required\" for an unbound provider-neutral source.", "RunPromotionError contains \"unclassified graph dependency\" for required storage outside the explicit policy; no publication occurs."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_policy_preserves_source_binding" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_policy_rejects_unbound_legacy_source" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_policy_rejects_unclassified_dependency" },
+]
+
+[[verifiers]]
+id = "RGP-VR-03"
+requirement_ids = ["RGP-REQ-03"]
+acceptance_conditions = ["A Hugging Face parent pointing to a retiring GCS prior is traversed and rewritten.", "RunPromotionError contains \"inventory item is unreachable\" when a required inventory entry has no graph binding.", "RunPromotionError contains \"storage cycle\" for cyclic snapshot dependencies."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_discovers_mixed_cloud_ancestors" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_rejects_inventory_omission" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_rejects_storage_cycle" },
+]
+
+[[verifiers]]
+id = "RGP-VR-04"
+requirement_ids = ["RGP-REQ-04"]
+acceptance_conditions = ["Two producers with identical payloads retain distinct mapped records and consumer edges.", "RunPromotionError contains \"conflicting source identity\" for two identities asserted for the same source object.", "An independently valid substitute ancestor is rejected with \"graph relationship changed\"."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_preserves_shared_payload_histories" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_rejects_conflicting_source_identity" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_rejects_wrong_valid_ancestor" },
+]
+
+[[verifiers]]
+id = "RGP-VR-05"
+requirement_ids = ["RGP-REQ-05"]
+acceptance_conditions = ["Inject interruption before and after every persistent write and remote commit boundary; recovered references equal the uninterrupted binding.", "A second selected root uses the already-verified shared ancestor binding.", "RunPromotionError contains \"publication journal differs\", \"remote publication outcome is unresolved\", or \"publication journal is locked\" for the corresponding rejection."]
+success_case = { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_republication_recovers_commit_after_lost_response" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_republication_rejects_journal_drift" },
+  { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_republication_rejects_ambiguous_remote_outcome" },
+  { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_republication_rejects_concurrent_writer" },
+]
+
+[[verifiers]]
+id = "RGP-VR-06"
+requirement_ids = ["RGP-REQ-06"]
+acceptance_conditions = ["Measured peak staging bytes, cache bytes, and concurrent connections stay within the supplied policy.", "RunPromotionError contains \"staging budget is insufficient\" before a payload download when the snapshot cannot fit.", "Injected transfer failure releases only task-owned disposable files and retains the journal and verified destination bindings."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_obeys_resource_limits" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_rejects_insufficient_staging" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_bounds_cleanup_after_failure" },
+]
+
+[[verifiers]]
+id = "RGP-VR-07"
+requirement_ids = ["RGP-REQ-07"]
+acceptance_conditions = ["Comparison accepts only location changes and their declared derived identities.", "RunPromotionError contains \"graph relationship changed\" for the wrong valid ancestor.", "RunPromotionError contains \"unexpected metadata change\" for altered parameters, code identity, roles, or measurements."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_compares_source_and_destination" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_comparison_rejects_valid_substitution" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_comparison_rejects_extra_metadata_change" },
+]
+
+[[verifiers]]
+id = "RGP-VR-08"
+requirement_ids = ["RGP-REQ-08"]
+acceptance_conditions = ["A fresh process restores the model and produces the expected bounded inference result using only permitted endpoints.", "A deliberately retained Mantra dependency causes an observed blocked read and failed acceptance.", "A changed output fails the fixture comparison; rerunning a report reuses the immutable inference output."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_cold_recovery_runs_fixture" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_cold_recovery_rejects_source_fallback" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_cold_recovery_rejects_fixture_mismatch" },
+]
+
+[[verifiers]]
+id = "RGP-VR-09"
+requirement_ids = ["RGP-REQ-09"]
+acceptance_conditions = ["One retained rehearsal receipt binds all stages and measured resource peaks.", "A missing prior or donor dependency fails before any canonical pointer is updated."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_rehearsal_recovers_shared_graph" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_rehearsal_rejects_incomplete_graph" },
+]
+
+[[verifiers]]
+id = "RGP-VR-10"
+requirement_ids = ["RGP-REQ-10"]
+acceptance_conditions = ["A retained real-model pilot precedes the full selected-root acceptance set.", "RunPromotionError contains \"canonical pointers changed\" for a stale compare-and-swap input.", "RunPromotionError contains \"migration acceptance is incomplete\" until every selected root passes; interrupted pointer publication recovers all-old or all-new authoritative state."]
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_cutover_requires_all_acceptances" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_cutover_rejects_stale_pointers" },
+  { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_republication_cutover_rejects_partial_acceptance" },
+]
+
+[[pair_blocks]]
+id = "RGP-PB-01"
+requirement_ids = ["RGP-REQ-01"]
+depends_on = []
+repository_id = "viper"
+requirement_contribution = "Delegate document reads to the supplied verified fetcher; retain ordinary promotion and reject cloud roots."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "RGP-PB-02"
+requirement_ids = ["RGP-REQ-02", "RGP-REQ-03"]
+depends_on = ["RGP-PB-01"]
+repository_id = "viper"
+requirement_contribution = "Bind original sources independently of the destination and discover every required dependency before relocation."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "RGP-PB-03"
+requirement_ids = ["RGP-REQ-04"]
+depends_on = ["RGP-PB-02"]
+repository_id = "viper"
+requirement_contribution = "Republish cloud snapshots while preserving payload bytes and every mapped provenance relationship."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "RGP-PB-04"
+requirement_ids = ["RGP-REQ-05"]
+depends_on = ["RGP-PB-03"]
+repository_id = "viper"
+requirement_contribution = "Persist publication intents and verified bindings; recover uncertain commits and share ancestors across restarts."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "RGP-PB-05"
+requirement_ids = ["RGP-REQ-06"]
+depends_on = ["RGP-PB-04"]
+repository_id = "viper"
+requirement_contribution = "Enforce measured transfer budgets and reclaim only task-owned disposable files after verified publication."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "RGP-PB-06"
+requirement_ids = ["RGP-REQ-07"]
+depends_on = ["RGP-PB-05"]
+repository_id = "viper"
+requirement_contribution = "Independently compare original and rewritten graphs against the frozen inventory and exact mapping."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "RGP-PB-07"
+requirement_ids = ["RGP-REQ-08", "RGP-REQ-09"]
+depends_on = ["RGP-PB-06"]
+repository_id = "viper"
+requirement_contribution = "Prove small-graph restart recovery and cold model loading with Mantra unavailable and bounded inference."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "RGP-PB-08"
+requirement_ids = ["RGP-REQ-10"]
+depends_on = ["RGP-PB-07"]
+repository_id = "viper"
+requirement_contribution = "Validate the real-model pilot and all selected roots before a recoverable canonical pointer cutover."
+completion_evidence = ["implementation_review"]
