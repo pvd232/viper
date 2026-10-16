@@ -94,8 +94,8 @@ class SnapshotPublisher(Protocol):
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
         files: Mapping[RepoRelPath, Path],
-    ) -> StageResultSnapshot:
-        """Publish one resolved stage document and its existing member files."""
+    ) -> tuple[StageResultSnapshot, tuple[SnapshotFileRef, ...]]:
+        """Publish stage files and return their snapshot with computed hashes."""
         ...
 
     def publish_reuse(
@@ -113,13 +113,20 @@ class SnapshotPublisher(Protocol):
 
 def content_revision(files: Mapping[RepoRelPath, bytes]) -> str:
     """Derive one revision identity from ordered paths and file identities."""
+    return _content_revision(
+        tuple(snapshot_file(path, raw) for path, raw in sorted(files.items()))
+    )
+
+
+def _content_revision(files: tuple[SnapshotFileRef, ...]) -> str:
+    """Derive the existing revision encoding from previously computed hashes."""
     digest = hashlib.sha256()
-    for path, raw in sorted(files.items()):
-        encoded_path = str(path).encode("utf-8")
+    for file in files:
+        encoded_path = str(file.path).encode("utf-8")
         digest.update(len(encoded_path).to_bytes(8, "big"))
         digest.update(encoded_path)
-        digest.update(len(raw).to_bytes(8, "big"))
-        digest.update(hashlib.sha256(raw).digest())
+        digest.update(file.bytes.to_bytes(8, "big"))
+        digest.update(bytes.fromhex(file.sha256))
     return digest.hexdigest()
 
 
@@ -181,10 +188,20 @@ class LocalArtifactStore:
 
     def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
         """Write one immutable revision and return its content-derived identity."""
+        commit, _ = self._publish(files)
+        return commit
+
+    def _publish(
+        self, files: Mapping[RepoRelPath, bytes]
+    ) -> tuple[str, tuple[SnapshotFileRef, ...]]:
+        """Write one revision and retain the hashes computed from its payloads."""
         if not files:
             raise LocalStoreError("an immutable revision requires at least one file")
         _ = self.store_id
-        commit = content_revision(files)
+        identities = tuple(
+            snapshot_file(path, raw) for path, raw in sorted(files.items())
+        )
+        commit = _content_revision(identities)
         revision_root = self.store_root / commit
         for relative_path, raw in sorted(files.items()):
             target = (revision_root / relative_path).resolve()
@@ -209,7 +226,7 @@ class LocalArtifactStore:
                 temporary_path = Path(temporary_name)
                 if temporary_path.exists():
                     temporary_path.unlink()
-        return commit
+        return commit, identities
 
     def snapshot(
         self,
@@ -228,20 +245,20 @@ class LocalArtifactStore:
         files: Mapping[RepoRelPath, bytes],
     ) -> tuple[ResolvedFileRef, ...]:
         """Publish related files and return exact references to each file."""
-        commit = self.publish(files)
+        commit, identities = self._publish(files)
         return tuple(
             ResolvedFileRef(
-                sha256=hashlib.sha256(raw).hexdigest(),
-                bytes=len(raw),
+                sha256=identity.sha256,
+                bytes=identity.bytes,
                 stored_at=LocalFileRef(
                     workspace=self.repository_root,
                     store=self.store,
                     store_id=self.store_id,
                     commit=commit,
-                    path=path,
+                    path=identity.path,
                 ),
             )
-            for path, raw in sorted(files.items())
+            for identity in identities
         )
 
     def fetch(self, location: StorageModel) -> bytes:
@@ -310,12 +327,19 @@ class LocalSnapshotPublisher:
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
         files: Mapping[RepoRelPath, Path],
-    ) -> LocalStageResultSnapshotRef:
-        """Read validated member paths and publish one local stage snapshot."""
+    ) -> tuple[LocalStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
+        """Publish local files and return the hashes of the stored bytes."""
         payload: dict[RepoRelPath, bytes] = {resolved_stage_path: resolved_stage}
         for path, source in files.items():
             payload[path] = read_publication_source(self.root, source)
-        return self.store.snapshot(payload)
+        commit, members = self.store._publish(payload)
+        snapshot = LocalStageResultSnapshotRef(
+            workspace=self.store.repository_root,
+            store=self.store.store,
+            store_id=self.store.store_id,
+            commit=commit,
+        )
+        return snapshot, members
 
     def publish_reuse(
         self,
@@ -423,13 +447,12 @@ class ViperCloudSnapshotPublisher:
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
         files: Mapping[RepoRelPath, Path],
-    ) -> CloudStageResultSnapshotRef:
-        """Publish one stage and return its sealed provider snapshot."""
-        snapshot, _ = self.cloud.publish(
+    ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
+        """Publish stage files and return the provider's computed hashes."""
+        return self.cloud.publish(
             self.destination,
             {resolved_stage_path: resolved_stage, **files},
         )
-        return snapshot
 
     def publish_reuse(
         self,

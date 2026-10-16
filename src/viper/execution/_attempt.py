@@ -11,7 +11,7 @@ from pathlib import Path
 from threading import current_thread, main_thread
 from typing import Literal
 
-from .._source import ExecutionRunFetcher, RunFetcher, resolve_git_file, run_git
+from .._source import RunFetcher, resolve_git_file, run_git
 from .._verification.storage import read_attempt_reference
 from ..catalog import Catalog, CatalogRunSource
 from ..evidence import VerificationError, VerificationPolicy, VerifiedRunResult
@@ -29,6 +29,7 @@ from ..preflight import preflight_plan
 from ..references import (
     GcsFileRef,
     GitFileRef,
+    LocalFileRef,
     ResolvedFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
@@ -68,6 +69,7 @@ from ..storage import (
     bind_run_destination,
     create_snapshot_publisher,
     load_storage_settings,
+    local_artifact_store,
     publish_resolved_files,
     snapshot_file,
 )
@@ -248,7 +250,7 @@ def execute_attempt(
     run_raw = run_path.read_bytes()
     run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
     store = LocalArtifactStore(root)
-    fetcher = ExecutionRunFetcher(
+    fetcher = RunFetcher(
         root,
         store,
         str(run.source.repository),
@@ -277,7 +279,7 @@ def execute_attempt(
     else:
         if plan.stored_at.path != relative_run_path:
             raise RunError("run path differs from the immutable plan reference")
-        if fetcher.read_verified(plan) != run_raw:
+        if fetcher.read(plan) != run_raw:
             raise RunError("RunSpec bytes differ from the immutable plan")
         plan_location = plan.stored_at
     plan_revision = (
@@ -690,25 +692,19 @@ def execute_attempt(
                 recorded_at=datetime.now(UTC),
                 details={"stage_id": stage_reference.stage_id},
             )
-            snapshot = snapshot_publisher.publish(
+            snapshot, published_files = snapshot_publisher.publish(
                 resolved_stage_path=resolved_path,
                 resolved_stage=resolved_raw,
                 files=snapshot_paths,
             )
+            published = {file.path: file for file in published_files}
             for path, source_path in snapshot_paths.items():
-                with source_path.open("rb") as stream:
-                    source_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
-                fetcher.remember_verified_path(
-                    resolve_snapshot_file_ref(
-                        snapshot,
-                        SnapshotFileRef(
-                            path=path,
-                            sha256=source_sha256,
-                            bytes=source_path.stat().st_size,
-                        ),
-                    ),
-                    source_path,
-                )
+                reference = resolve_snapshot_file_ref(snapshot, published[path])
+                if isinstance(reference.stored_at, LocalFileRef):
+                    source_path = local_artifact_store(reference.stored_at).path(
+                        reference.stored_at
+                    )
+                fetcher.remember_path(reference, source_path)
             resolved_stage_ref = ResolvedStageRef(
                 stage_id=stage_reference.stage_id,
                 snapshot=snapshot,

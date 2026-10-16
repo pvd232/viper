@@ -45,9 +45,7 @@ def run_git(repository_root: Path, *arguments: str) -> bytes:
 
 
 class RunFetcher:
-    """Retrieve frozen Git source and repository-local immutable outputs."""
-
-    _verify_local_content = True
+    """Read run files and reuse their content checks within one execution."""
 
     def __init__(
         self,
@@ -55,10 +53,10 @@ class RunFetcher:
         store: LocalArtifactStore,
         source_repository: str,
     ) -> None:
-        """Bind retrieval to one local Git checkout and output store.
+        """Bind retrieval and its per-file cache to one execution.
 
-        Immutable references determine when a previously verified local path may
-        be reused. Callers cannot weaken that rule with a trust switch.
+        Files must remain unchanged for the lifetime of the fetcher. A new
+        execution creates a new fetcher and checks pre-existing files again.
         """
         self.repository_root = repository_root.resolve()
         self.store = store
@@ -85,7 +83,7 @@ class RunFetcher:
         elif isinstance(
             reference, (HuggingFaceFileRef, HuggingFaceStageResultSnapshotRef)
         ):
-            key = ("hf", str(reference.repository), reference.repo_type)
+            key = ("hf", reference.repository, reference.repo_type)
         else:
             key = ("configured", "", "")
         remembered = self._cloud_services.get(key)
@@ -134,23 +132,29 @@ class RunFetcher:
             return local_artifact_store(location).fetch(location)
         return self.store.fetch(location)
 
-    def read_verified(self, reference: ResolvedFileRef) -> bytes:
-        """Reuse exact bytes across executions without trusting cache contents."""
-        cacheable = not isinstance(reference.stored_at, LocalFileRef) and not (
-            isinstance(reference.stored_at, GitFileRef)
-            and str(reference.stored_at.repository) == self.source_repository
-        )
+    def read(self, reference: ResolvedFileRef) -> bytes:
+        """Read bytes, checking size and SHA-256 on first use in this execution."""
+        remembered = self._verified_paths.get(reference)
+        if remembered is not None:
+            return remembered.read_bytes()
+        cacheable = not isinstance(reference.stored_at, LocalFileRef)
         if cacheable:
             cached = self._verified_objects.read(reference)
             if cached is not None:
+                self._verified_paths[reference] = self._verified_objects.path(reference)
                 return cached
         raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
         if cacheable:
             self._verified_objects.write(reference, raw)
+            path = self._verified_objects.path(reference)
+        else:
+            assert isinstance(reference.stored_at, LocalFileRef)
+            path = local_artifact_store(reference.stored_at).path(reference.stored_at)
+        self._verified_paths[reference] = path
         return raw
 
-    def read_verified_path(self, reference: ResolvedFileRef) -> Path:
-        """Return one path-backed verified object."""
+    def path(self, reference: ResolvedFileRef) -> Path:
+        """Return a local path after its first size and SHA-256 check per execution."""
         remembered = self._verified_paths.get(reference)
         if remembered is not None:
             return remembered
@@ -162,14 +166,12 @@ class RunFetcher:
                     f"byte-count mismatch: expected {reference.bytes}, "
                     f"received {path.stat().st_size}"
                 )
-            if self._verify_local_content:
-                with path.open("rb") as stream:
-                    digest = hashlib.file_digest(stream, "sha256").hexdigest()
-                if digest != reference.sha256:
-                    raise VerificationError(
-                        f"SHA-256 mismatch: expected {reference.sha256}, "
-                        f"received {digest}"
-                    )
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            if digest != reference.sha256:
+                raise VerificationError(
+                    f"SHA-256 mismatch: expected {reference.sha256}, received {digest}"
+                )
             self._verified_paths[reference] = path
             return path
 
@@ -177,11 +179,8 @@ class RunFetcher:
             reference.stored_at,
             (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
         ):
-            raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
-            self._verified_objects.write(reference, raw)
-            path = self._verified_objects.path(reference)
-            self._verified_paths[reference] = path
-            return path
+            self.read(reference)
+            return self._verified_paths[reference]
 
         cached = self._verified_objects.verified_path(reference)
         if cached is not None:
@@ -199,18 +198,16 @@ class RunFetcher:
         self._verified_paths[reference] = cached
         return cached
 
-    def remember_verified_path(self, reference: ResolvedFileRef, path: Path) -> None:
-        """Reuse a local file already matched to its immutable reference."""
+    def remember_path(self, reference: ResolvedFileRef, path: Path) -> None:
+        """Cache a file using the size and hash returned by successful publication.
+
+        The caller must pass the published file or its unchanged upload source.
+        Publication must establish the reference's SHA-256 before registration.
+        """
         if path.stat().st_size != reference.bytes:
             raise VerificationError(
                 f"byte-count mismatch: expected {reference.bytes}, "
                 f"received {path.stat().st_size}"
-            )
-        with path.open("rb") as stream:
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
-        if digest != reference.sha256:
-            raise VerificationError(
-                f"SHA-256 mismatch: expected {reference.sha256}, received {digest}"
             )
         self._verified_paths[reference] = path
 
@@ -247,12 +244,6 @@ class RunFetcher:
             cloud = self._cloud_service(snapshot)
             return tuple(file.path for file in cloud.list_files(snapshot))
         return local_artifact_store(snapshot).list_snapshot_files(snapshot)
-
-
-class ExecutionRunFetcher(RunFetcher):
-    """Trust locally sealed store payloads only inside one active execution."""
-
-    _verify_local_content = False
 
 
 def resolve_git_file(

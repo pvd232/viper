@@ -232,7 +232,7 @@ class _BundleFetcher:
         self.consumed_paths.add(path)
         return (self.root / path).read_bytes()
 
-    def read_verified(self, reference: ResolvedFileRef) -> bytes:
+    def read(self, reference: ResolvedFileRef) -> bytes:
         """Read and verify one resolved reference from the bundle."""
         return verify_resolved_file_bytes(reference, self(reference.stored_at))
 

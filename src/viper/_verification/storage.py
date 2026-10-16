@@ -67,19 +67,19 @@ _ARTIFACT_VALIDATION_CACHE: dict[
 
 
 @runtime_checkable
-class _VerifiedStorageFetcher(Protocol):
+class _FileReader(Protocol):
     """Retrieve a resolved file through a content-validating cache."""
 
-    def read_verified(self, reference: ResolvedFileRef) -> bytes:
+    def read(self, reference: ResolvedFileRef) -> bytes:
         """Return bytes matching the complete resolved reference."""
         ...
 
 
 @runtime_checkable
-class _VerifiedStoragePathFetcher(Protocol):
+class _FilePathReader(Protocol):
     """Materialize a resolved file through a path-backed verified cache."""
 
-    def read_verified_path(self, reference: ResolvedFileRef) -> Path:
+    def path(self, reference: ResolvedFileRef) -> Path:
         """Return a local file matching the complete resolved reference."""
         ...
 
@@ -332,11 +332,10 @@ def read_resolved_file(
     fetcher: StorageFetcher | None = None,
 ) -> bytes:
     """Retrieve a resolved file and verify its byte count and SHA-256."""
-    if isinstance(fetcher, _VerifiedStorageFetcher):
-        raw = fetcher.read_verified(reference)
-    else:
-        retrieve = fetch_storage_bytes if fetcher is None else fetcher
-        raw = retrieve(reference.stored_at)
+    if isinstance(fetcher, _FileReader):
+        return fetcher.read(reference)
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    raw = retrieve(reference.stored_at)
     return verify_resolved_file_bytes(reference, raw)
 
 
@@ -477,11 +476,9 @@ def read_snapshot_file(
         stored_at=location,
     )
     try:
-        raw = (
-            fetcher.read_verified(resolved_reference)
-            if isinstance(fetcher, _VerifiedStorageFetcher)
-            else retrieve(location)
-        )
+        if isinstance(fetcher, _FileReader):
+            return fetcher.read(resolved_reference)
+        raw = retrieve(location)
     except Exception as exc:
         raise VerificationError(
             f"artifact.representation: snapshot file is unavailable: {reference.path}"
@@ -605,7 +602,7 @@ def verify_snapshot_artifact(
     resolved_references = tuple(
         resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references
     )
-    if isinstance(fetcher, _VerifiedStoragePathFetcher):
+    if isinstance(fetcher, _FilePathReader):
         observer = getattr(fetcher, "observe_snapshot", None)
         files = []
         for reference, resolved_reference in zip(
@@ -616,7 +613,7 @@ def verify_snapshot_artifact(
             files.append(
                 VerifiedSnapshotFile(
                     reference=reference,
-                    local_path=fetcher.read_verified_path(resolved_reference),
+                    local_path=fetcher.path(resolved_reference),
                 )
             )
         verified_files = tuple(files)

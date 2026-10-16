@@ -543,7 +543,7 @@ def verify_download_retrieval(
         raise VerificationError(f"HTTP retrieval {input_name!r} body uses another path")
     if body_raw is None:
         resolved_body = resolve_snapshot_file_ref(snapshot, retrieval.body)
-        path_reader = getattr(fetcher, "read_verified_path", None)
+        path_reader = getattr(fetcher, "path", None)
         if path_reader is None:
             body_raw = storage.read_snapshot_file(
                 snapshot,

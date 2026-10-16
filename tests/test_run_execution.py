@@ -32,7 +32,7 @@ from tests.git_repository import REPOSITORY, run_git
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper import config
 from viper._cloud import resolve_publication_source
-from viper._source import ExecutionRunFetcher, RunFetcher
+from viper._source import RunFetcher
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
 from viper.api import compare_runs as compare_runs_application
@@ -1397,7 +1397,7 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         def __call__(self, location: object) -> bytes:
             return pointer_raw
 
-        def read_verified(self, reference: object) -> bytes:
+        def read(self, reference: object) -> bytes:
             return pointer_raw
 
     _, paths, _, _, _ = resolve_inputs(
@@ -2457,7 +2457,7 @@ def test_attempt_preflight_reuses_execution_fetcher(
     with pytest.raises(RunError, match="attempt 1 failed"):
         execute_attempt(root, frozen.files[-1], plan=frozen.reference)
 
-    assert isinstance(captured["fetcher"], ExecutionRunFetcher)
+    assert type(captured["fetcher"]) is RunFetcher
 
 
 def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> None:
@@ -2498,8 +2498,8 @@ def test_retry_reuses_completed_stage_from_failed_attempt(tmp_path: Path) -> Non
     assert (root / "embed_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
 
 
-def test_retry_reexecutes_tampered_completed_stage(tmp_path: Path) -> None:
-    """Reject corrupt reuse bytes and execute that stage again."""
+def test_retry_rejects_tampered_prior_attempt_evidence(tmp_path: Path) -> None:
+    """Fail a retry whose retained history contains altered artifact bytes."""
     root = tmp_path / "project"
     frozen = _freeze_retry_plan(root)
     with pytest.raises(RunError) as caught:
@@ -2512,9 +2512,14 @@ def test_retry_reexecutes_tampered_completed_stage(tmp_path: Path) -> None:
     artifact = next(stored.glob("**/artifacts/prepare/features/features.bin"))
     artifact.write_bytes(b"tampered")
 
-    result = execute_retry(root, frozen.files[-1])
+    with pytest.raises(RunError) as retried:
+        execute_retry(root, frozen.files[-1])
 
-    assert result.status == "succeeded"
+    result = retried.value.result
+    assert result is not None
+    assert result.status == "failed"
+    assert result.latest_attempt.failure is not None
+    assert result.latest_attempt.failure.code == "verification_failed"
     assert (root / "build_calls.txt").read_text(encoding="utf-8") == "1\n1\n"
     with pytest.raises(VerificationError, match="SHA-256 mismatch"):
         verify_run_result(

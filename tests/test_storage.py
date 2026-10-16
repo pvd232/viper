@@ -3,6 +3,7 @@
 import hashlib
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from io import BufferedReader
 from pathlib import Path
 
 import pytest
@@ -443,7 +444,7 @@ def test_run_fetcher_checks_download_once_before_caching(
 
     monkeypatch.setattr(hashlib, "sha256", count_hash)
     monkeypatch.setattr(RunFetcher, "__call__", read_source)
-    read = fetcher.read_verified_path if as_path else fetcher.read_verified
+    read = fetcher.path if as_path else fetcher.read
 
     if payload != original:
         message = (
@@ -460,6 +461,85 @@ def test_run_fetcher_checks_download_once_before_caching(
     assert (result.read_bytes() if isinstance(result, Path) else result) == original
     assert cache_path.read_bytes() == original
     assert hashed == [original]
+
+
+@pytest.mark.parametrize("path_first", [False, True])
+def test_run_fetcher_shares_first_content_check_between_read_and_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path_first: bool,
+) -> None:
+    """Check a pre-existing file once across byte reads and path reads."""
+    payload = b"stored evidence"
+    store = LocalArtifactStore(tmp_path)
+    (reference,) = store.resolved_files({"evidence.bin": payload})
+    location = reference.stored_at
+    assert isinstance(location, LocalFileRef)
+    snapshot = LocalStageResultSnapshotRef(
+        workspace=location.workspace,
+        store=location.store,
+        store_id=location.store_id,
+        commit=location.commit,
+    )
+    member = SnapshotFileRef(
+        path=location.path, sha256=reference.sha256, bytes=reference.bytes
+    )
+    fetcher = RunFetcher(tmp_path, store, CONSUMER_REPOSITORY)
+    sha256 = hashlib.sha256
+    file_digest = hashlib.file_digest
+    checks: list[str] = []
+
+    def count_bytes(raw: bytes = b"", *, usedforsecurity: bool = True):
+        """Count checks of byte content."""
+        checks.append("bytes")
+        return sha256(raw, usedforsecurity=usedforsecurity)
+
+    def count_file(stream: BufferedReader, digest: str):
+        """Count checks that stream a file from disk."""
+        checks.append("path")
+        return file_digest(stream, digest)
+
+    monkeypatch.setattr(hashlib, "sha256", count_bytes)
+    monkeypatch.setattr(hashlib, "file_digest", count_file)
+    if path_first:
+        assert fetcher.path(reference).read_bytes() == payload
+    else:
+        assert fetcher.read(reference) == payload
+    assert read_resolved_file(reference, fetcher=fetcher) == payload
+    assert read_snapshot_file(snapshot, member, fetcher=fetcher) == payload
+    assert fetcher.path(reference).read_bytes() == payload
+    assert fetcher.read(reference) == payload
+    assert checks == ["path" if path_first else "bytes"]
+    conflicting = reference.model_copy(update={"sha256": "0" * 64})
+    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
+        fetcher.path(conflicting)
+
+
+def test_local_publication_reuses_hashes_and_preserves_revision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hash each publication payload once and preserve its existing revision ID."""
+    store = LocalArtifactStore(tmp_path)
+    payloads = {"evidence.bin": b"evidence", "run.yaml": b"status: succeeded\n"}
+    sha256 = hashlib.sha256
+    hashed: list[bytes] = []
+
+    def count_bytes(raw: bytes = b"", *, usedforsecurity: bool = True):
+        """Count hashes of publication payloads separately from the revision hash."""
+        if raw:
+            hashed.append(raw)
+        return sha256(raw, usedforsecurity=usedforsecurity)
+
+    monkeypatch.setattr(hashlib, "sha256", count_bytes)
+    references = store.resolved_files(payloads)
+    assert hashed == list(payloads.values())
+    for reference in references:
+        assert isinstance(reference.stored_at, LocalFileRef)
+        assert reference.stored_at.commit == (
+            "6b3583517f00a98549be453449c91a372b034a870bd1616958e6a0fdc2e0b298"
+        )
+        assert store.fetch(reference.stored_at) == payloads[reference.stored_at.path]
 
 
 def test_run_fetcher_repairs_corrupt_verified_cache_entry(
@@ -484,7 +564,7 @@ def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     _install_remote_bytes(monkeypatch, payload, fetches)
     store = LocalArtifactStore(tmp_path)
     fetcher = RunFetcher(tmp_path, store, CONSUMER_REPOSITORY)
-    fetcher.read_verified(reference)
+    fetcher.read(reference)
     cache_path = (
         tmp_path
         / ".viper/cache/verified-objects"
@@ -493,10 +573,7 @@ def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     )
     cache_path.write_bytes(b"corrupt")
 
-    assert (
-        RunFetcher(tmp_path, store, CONSUMER_REPOSITORY).read_verified(reference)
-        == payload
-    )
+    assert RunFetcher(tmp_path, store, CONSUMER_REPOSITORY).read(reference) == payload
     assert cache_path.read_bytes() == payload
     assert fetches == [location, location]
 
@@ -575,8 +652,7 @@ def test_run_fetcher_does_not_duplicate_local_store_objects(tmp_path: Path) -> N
     resolved = ResolvedFileRef.model_validate(reference.model_dump(mode="python"))
 
     assert (
-        RunFetcher(tmp_path, store, CONSUMER_REPOSITORY).read_verified(resolved)
-        == b"evidence"
+        RunFetcher(tmp_path, store, CONSUMER_REPOSITORY).read(resolved) == b"evidence"
     )
     assert not (tmp_path / ".viper/cache/verified-objects").exists()
 
@@ -898,7 +974,7 @@ def test_cloud_publication_is_atomic_and_retryable(
         destination,
     )
     assert isinstance(publisher, ViperCloudSnapshotPublisher)
-    snapshot = publisher.publish(
+    snapshot, published_files = publisher.publish(
         resolved_stage_path="runs/example/stages/train/resolved.yaml",
         resolved_stage=b"stage_id: train\n",
         files={"artifacts/model.bin": artifact},
@@ -907,6 +983,7 @@ def test_cloud_publication_is_atomic_and_retryable(
     assert isinstance(snapshot, GcsStageResultSnapshotRef)
     assert client.seal_calls == 2
     listed = client.list_files(snapshot)
+    assert published_files == listed
     assert tuple(file.path for file in listed) == (
         "artifacts/model.bin",
         "runs/example/stages/train/resolved.yaml",
@@ -1010,8 +1087,8 @@ def test_cloud_fetcher_streams_one_verified_path_per_execution(
         CONSUMER_REPOSITORY,
     )
 
-    first = fetcher.read_verified_path(reference)
-    second = fetcher.read_verified_path(reference)
+    first = fetcher.path(reference)
+    second = fetcher.path(reference)
 
     assert first == second
     assert first.read_bytes() == raw
@@ -1064,14 +1141,14 @@ def test_cloud_fetcher_rejects_corrupt_verified_cache_path(
         tmp_path,
         LocalArtifactStore(tmp_path),
         CONSUMER_REPOSITORY,
-    ).read_verified_path(reference)
+    ).path(reference)
     first.write_bytes(b"wrong artifact")
 
     repaired = RunFetcher(
         tmp_path,
         LocalArtifactStore(tmp_path),
         CONSUMER_REPOSITORY,
-    ).read_verified_path(reference)
+    ).path(reference)
 
     assert repaired.read_bytes() == raw
     assert client.fetch_to_path_calls == [location, location]
@@ -1102,32 +1179,38 @@ def test_run_fetcher_reuses_remembered_verified_path_for_cloud_reference(
         stored_at=location,
     )
     fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
+    monkeypatch.setattr(
+        hashlib,
+        "file_digest",
+        lambda *args, **kwargs: pytest.fail("publication already checked these bytes"),
+    )
 
-    fetcher.remember_verified_path(reference, source)
+    fetcher.remember_path(reference, source)
 
-    assert fetcher.read_verified_path(reference) == source
+    assert fetcher.path(reference) == source
+    assert fetcher.read(reference) == raw
     assert client.fetch_to_path_calls == []
 
 
-def test_execution_fetcher_trusts_sealed_local_payload_until_strict_verification(
+@pytest.mark.parametrize("method", ["read", "path"])
+def test_new_execution_checks_a_previously_read_local_file(
     tmp_path: Path,
+    method: str,
 ) -> None:
-    """Trust a sealed local payload in execution and retain strict checks."""
+    """Reuse a check within one execution and detect changes in the next."""
     store = LocalArtifactStore(tmp_path)
     raw = b"large artifact"
     reference = store.resolved_files({"runs/example/large.bin": raw})[0]
     trusted = RunFetcher(tmp_path, store, CONSUMER_REPOSITORY)
 
-    path = trusted.read_verified_path(reference)
+    getattr(trusted, method)(reference)
+    path = trusted.path(reference)
     path.write_bytes(b"other artifact")
 
-    assert trusted.read_verified_path(reference) == path
+    assert trusted.path(reference) == path
     with pytest.raises(VerificationError, match="SHA-256 mismatch"):
-        RunFetcher(
-            tmp_path,
-            store,
-            CONSUMER_REPOSITORY,
-        ).read_verified_path(reference)
+        fetcher = RunFetcher(tmp_path, store, CONSUMER_REPOSITORY)
+        getattr(fetcher, method)(reference)
 
 
 def test_cloud_verification_rejects_local_references() -> None:
@@ -1289,7 +1372,7 @@ def test_local_publishers_share_destination_neutral_interface(
 
     publisher = create_snapshot_publisher(tmp_path, destination)
     assert isinstance(publisher, LocalSnapshotPublisher)
-    snapshot = publisher.publish(
+    snapshot, published_files = publisher.publish(
         resolved_stage_path="runs/example/stages/train/resolved.yaml",
         resolved_stage=b"stage_id: train\n",
         files={"artifacts/model.bin": artifact},
@@ -1300,6 +1383,13 @@ def test_local_publishers_share_destination_neutral_interface(
         "artifacts/model.bin",
         "runs/example/stages/train/resolved.yaml",
     }
+    assert {file.path for file in published_files} == set(
+        store.list_snapshot_files(snapshot)
+    )
+    model_file = next(
+        file for file in published_files if file.path == "artifacts/model.bin"
+    )
+    assert model_file.sha256 == hashlib.sha256(b"parameters").hexdigest()
 
     references = publish_resolved_files(
         tmp_path,
@@ -1523,7 +1613,7 @@ def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
     source_artifact.parent.mkdir()
     source_artifact.write_bytes(b"parameters")
     publisher = LocalSnapshotPublisher(tmp_path)
-    source_snapshot = publisher.publish(
+    source_snapshot, _ = publisher.publish(
         resolved_stage_path="runs/source/stages/train/resolved.yaml",
         resolved_stage=b"stage_id: train\n",
         files={"runs/source/artifacts/model.bin": source_artifact},
@@ -1571,7 +1661,7 @@ def test_cloud_snapshot_reuse_copies_existing_payload(
     client = InMemoryViperCloudProvider(tmp_path)
     install_in_memory_cloud(monkeypatch, tmp_path, client)
     publisher = ViperCloudSnapshotPublisher(tmp_path, destination)
-    source_snapshot = publisher.publish(
+    source_snapshot, _ = publisher.publish(
         resolved_stage_path="runs/source/stages/train/resolved.yaml",
         resolved_stage=b"stage_id: train\n",
         files={"runs/source/artifacts/model.bin": artifact},

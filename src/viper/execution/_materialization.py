@@ -233,7 +233,7 @@ def resolve_inputs(
             )
         elif input_ref.kind == "stored":
             if isinstance(input_ref.pointer, ResolvedArtifactPointerRef):
-                pointer_raw = fetcher.read_verified(input_ref.pointer)
+                pointer_raw = fetcher.read(input_ref.pointer)
                 resolved_pointer = input_ref.pointer
             else:
                 pointer_raw = fetcher(input_ref.pointer)
