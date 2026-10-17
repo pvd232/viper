@@ -20,6 +20,7 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
+import yaml
 
 import viper.config as current_config
 import viper.execution as execution_module
@@ -38,6 +39,8 @@ from viper import config
 from viper._cloud import (
     GcsRepository,
     HuggingFaceRepository,
+    RevisionManifest,
+    manifest_revision,
     resolve_publication_source,
 )
 from viper._source import RunFetcher
@@ -87,6 +90,7 @@ from viper.execution._materialization import (
 )
 from viper.execution._metric import MetricWorkerResult
 from viper.execution._promotion import PromotionInventory, _RunGraphPromoter
+from viper.execution._promotion_compare import GraphComparison
 from viper.execution._promotion_journal import PublicationJournal
 from viper.execution._promotion_transfer import (
     TransferLimits,
@@ -137,6 +141,7 @@ from viper.references import (
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
@@ -2969,6 +2974,7 @@ def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace
     (local,) = LocalArtifactStore(root).resolved_files({"selected/run.yaml": raw})
     selected = ResolvedRunRef(**local.model_dump(exclude={"kind"}))
     hf = Mock(spec=ViperCloud)
+    hf.provider = None
     hf.fetch.side_effect = lambda location: (
         attempt_raw if location == hf_location else b"missing"
     )
@@ -3225,3 +3231,180 @@ def test_republication_obeys_resource_limits(
     assert 0 < space.peak_bytes <= limits.staging_bytes
     assert space.peak_cache_bytes <= limits.cache_bytes
     assert case.cloud.provider.uploads == before
+
+
+@pytest.mark.parametrize("change", ("valid", "metadata", "ancestor", "missing"))
+def test_republication_compares_source_and_destination(
+    promotion_graph: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
+    """Compare both graphs and reject altered fields or substituted valid records."""
+    case = promotion_graph
+    api = MemoryHub(tmp_path / "hub")
+    repository = HuggingFaceRepository(
+        repository="owner/additional", repo_type="dataset"
+    )
+    provider = HuggingFaceProvider(
+        tmp_path, repository.repository, "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    target = ViperCloud(tmp_path, repository, provider=provider)
+    client = httpx.Client(transport=httpx.MockTransport(api.response))
+    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+
+    def choose_cloud(root, reference):
+        """Give each reader its own workspace and the selected storage client."""
+        if (
+            reference.kind == "huggingface"
+            and reference.repository == repository.repository
+        ):
+            reader = HuggingFaceProvider(
+                root, repository.repository, "dataset", api=cast(Any, api)
+            )
+            monkeypatch.setattr(reader, "_download", api.download)
+            return ViperCloud(root, repository, provider=reader)
+        return case.hf if reference.kind == "huggingface" else case.cloud
+
+    monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
+    destination = ViperCloudDestination(owner="machina", workspace="models")
+    with (
+        client,
+        PublicationJournal(
+            tmp_path / "progress.json", "a" * 64, target, destination
+        ) as journal,
+    ):
+        promoter = _RunGraphPromoter(
+            tmp_path,
+            target,
+            destination,
+            fetcher=RunFetcher(tmp_path, LocalArtifactStore(tmp_path), REPOSITORY),
+            journal=journal,
+        )
+        inventory = PromotionInventory(roots=(case.selected,), required_files={})
+        promoter.discover_inventory(inventory)
+        published = promoter.promote_reference(case.selected)
+        copies = list(journal.progress.copies.values())
+        documents = []
+        for copy in copies:
+            for member in copy.source_files:
+                if member.path in promoter.documents.get(copy.source, {}):
+                    documents.append(
+                        promoter.file_in_snapshot(copy.source, member).stored_at
+                    )
+
+        if change in {"metadata", "ancestor"}:
+            selected = None
+            if change == "metadata":
+                for index, copy in enumerate(copies):
+                    for path, document in promoter.documents.get(
+                        copy.source, {}
+                    ).items():
+                        if isinstance(document, RunSpec):
+                            selected = (index, path)
+                            break
+                    if selected is not None:
+                        break
+            else:
+                snapshot = promoter.snapshot_for(case.selected.stored_at)
+                selected = (
+                    next(i for i, copy in enumerate(copies) if copy.source == snapshot),
+                    case.selected.stored_at.path,
+                )
+            assert selected is not None
+            index, path = selected
+            copy = copies[index]
+            copied_snapshot = copy.published
+            assert isinstance(copied_snapshot, HuggingFaceStageResultSnapshotRef)
+            files = {
+                member.path: api.commits[copied_snapshot.commit][member.path]
+                for member in copy.expected.files
+            }
+            document = parse_yaml_bytes(files[path])
+            if change == "metadata":
+                document["seed"] += 1
+            else:
+                plan_location = HuggingFaceFileRef.model_validate(
+                    document["spec"]["stored_at"]
+                )
+                plan_manifest = provider.read_manifest(
+                    HuggingFaceStageResultSnapshotRef(
+                        repository=plan_location.repository,
+                        repo_type=plan_location.repo_type,
+                        commit=plan_location.commit,
+                    )
+                )
+                plan_files = {
+                    member.path: api.commits[plan_location.commit][member.path]
+                    for member in plan_manifest.files
+                }
+                clone, _ = target.publish(destination, plan_files)
+                document["spec"]["stored_at"] = target.file_ref(
+                    clone, plan_location.path
+                ).model_dump(mode="json")
+            files[path] = yaml.safe_dump(document, sort_keys=False).encode()
+            revised, members = target.publish(destination, files)
+            expected = RevisionManifest(
+                owner=destination.owner,
+                workspace=destination.workspace,
+                revision=manifest_revision(members),
+                files=members,
+            )
+            copies[index] = copy.model_copy(
+                update={"published": revised, "expected": expected}
+            )
+            if change == "ancestor":
+                record = ResolvedRun.model_validate(document)
+                verify_run_result(
+                    record,
+                    policy=VerificationPolicy(
+                        trusted_source_repositories=frozenset({REPOSITORY})
+                    ),
+                    fetcher=RunFetcher(
+                        case.root, LocalArtifactStore(case.root), REPOSITORY
+                    ),
+                )
+
+        source = RunFetcher(
+            tmp_path,
+            LocalArtifactStore(tmp_path),
+            REPOSITORY,
+            cache_root=tmp_path / "source-check",
+        )
+        destination_reader = RunFetcher(
+            tmp_path,
+            LocalArtifactStore(tmp_path),
+            REPOSITORY,
+            cache_root=tmp_path / "destination-check",
+        )
+        comparison = GraphComparison(
+            copies,
+            documents,
+            source,
+            destination_reader,
+            destination_repository=repository,
+        )
+        required = {}
+        if change == "missing":
+            required["missing"] = ResolvedFileRef(
+                stored_at=case.selected.stored_at.model_copy(
+                    update={"path": "missing.bin"}
+                ),
+                sha256="0" * 64,
+                bytes=1,
+            )
+        if change == "valid":
+            result = comparison.verify(inventory.roots, required)
+            assert result["passed"]
+            assert result["files_checked"] == len(comparison.files)
+            assert result["destination_roots"][0]["sha256"] == published.sha256
+        else:
+            message = {
+                "metadata": "unexpected metadata change",
+                "ancestor": "graph relationship changed",
+                "missing": "inventory item is unreachable",
+            }[change]
+            with pytest.raises(RunPromotionError, match=message):
+                comparison.verify(inventory.roots, required)
