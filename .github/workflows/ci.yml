@@ -35,19 +35,13 @@ jobs:
           pyrefly check --python-interpreter-path "$(command -v python)" 2>&1 | tee "$RUNNER_TEMP/pyrefly.log"
       - name: Run unit and contract tests
         run: python -m pytest tests -q -m "unit or contract"
-      - name: Collect type-check tools for this revision
-        if: failure()
-        run: |
-          python -m pip download --no-deps -d "$RUNNER_TEMP/check-tools" "pyrefly==0.64.1" "ruff==0.17.1" google-cloud-storage google-cloud-core google-api-core google-auth google-resumable-media googleapis-common-protos proto-plus "torchdata==0.11.0"
       - name: Retain failed type-check report
         if: failure()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: pyrefly-diagnostics
           retention-days: 3
-          path: |
-            ${{ runner.temp }}/pyrefly.log
-            ${{ runner.temp }}/check-tools/
+          path: ${{ runner.temp }}/pyrefly.log
 
   integration:
     needs: fast
