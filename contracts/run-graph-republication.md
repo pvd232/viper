@@ -1,5 +1,15 @@
 # Run Graph Republication
 
+## Additional publication scope
+
+The current implementation stack adds destination hosts through
+`RunPromotionPolicy.hosts`. Source files, canonical SOTA pointers, and default
+storage settings remain unchanged. The source workspace resolves older
+`viper_cloud` references. The pull requests carry each new block's checks and
+code-growth report. Existing lifecycle receipts remain historical evidence.
+The generated region below reflects the last accepted declaration; review of
+the additional-publication declaration is pending.
+
 ## 1. Status
 
 **RGP-PB-01 is implemented.** VIPER uses one `RunFetcher` with `read()` and

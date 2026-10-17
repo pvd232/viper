@@ -1,0 +1,768 @@
+diff --git a/contracts/run-graph-republication.md b/contracts/run-graph-republication.md
+index 404994c..39fb72a 100644
+--- a/contracts/run-graph-republication.md
++++ b/contracts/run-graph-republication.md
+@@ -1,5 +1,15 @@
+ # Run Graph Republication
+ 
++## Additional publication scope
++
++The current implementation stack adds destination hosts through
++`RunPromotionPolicy.hosts`. Source files, canonical SOTA pointers, and default
++storage settings remain unchanged. The source workspace resolves older
++`viper_cloud` references. The pull requests carry each new block's checks and
++code-growth report. Existing lifecycle receipts remain historical evidence.
++The generated region below reflects the last accepted declaration; review of
++the additional-publication declaration is pending.
++
+ ## 1. Status
+ 
+ **RGP-PB-01 is implemented.** VIPER uses one `RunFetcher` with `read()` and
+diff --git a/contracts/run-graph-republication.toml b/contracts/run-graph-republication.toml
+index 68b6644..96c0aba 100644
+--- a/contracts/run-graph-republication.toml
++++ b/contracts/run-graph-republication.toml
+@@ -10,13 +10,13 @@ verifier_ids = ["RGP-VR-01"]
+ 
+ [[requirements]]
+ id = "RGP-REQ-02"
+-claim = "An explicit optional RunPromotionPolicy must select cloud repositories to relocate, allowed external storage and Git repositories, the original GCS binding for legacy provider-neutral references, and positive resource limits. Existing three-argument calls retain local promotion semantics. Match GCS repositories by bucket and prefix and Hugging Face repositories by repository and repo_type. Source readers must use the captured original binding independently of the configured destination. Missing legacy bindings and unclassified required references must fail before publication."
++claim = "RunPromotionPolicy.hosts names the destination cloud repositories for additional graph publications. Original files, references, workspace settings, and canonical SOTA pointers remain unchanged. Source readers resolve provider-specific addresses directly and obtain older viper_cloud addresses from the original workspace configuration. Missing source settings fail before publication. Transfer budgets belong to the transfer operation."
+ depends_on = ["RGP-REQ-01"]
+ verifier_ids = ["RGP-VR-02"]
+ 
+ [[requirements]]
+ id = "RGP-REQ-03"
+-claim = "Discovery must traverse typed documents on every reachable supported backend before deciding which snapshots remain external. Enumerate all members of every selected sealed snapshot and reconcile them against a frozen independent inventory. Each required inventory item must map to a graph role or produce a blocking omission. Report additional snapshot members, shared ancestors, total bytes, largest snapshot, file counts, and permitted external dependencies. A retained cloud document whose child changes must itself be republished so the new root reaches the relocated child."
++claim = "Discovery follows typed documents across local, GCS, Hugging Face, and pinned Git storage. It lists every member of the required snapshots before transferring artifacts, checks a separately frozen required-file inventory, rejects conflicting identities and dependency cycles, and records pending hashes for additional local files. Shared ancestors keep every source relationship. HF documents that refer to GCS files remain part of the discovered graph."
+ depends_on = ["RGP-REQ-02"]
+ verifier_ids = ["RGP-VR-03"]
+ 
+@@ -46,7 +46,7 @@ verifier_ids = ["RGP-VR-07"]
+ 
+ [[requirements]]
+ id = "RGP-REQ-08"
+-claim = "Acceptance must run ordinary VIPER readers and model loading in a new process and fresh workspace with empty VIPER, Hugging Face, and Xet caches, no source store mounts, and retiring Mantra storage blocked. Allow only declared pinned external source repositories and the destination. Restore each selected model and run one frozen inference fixture under its recorded environment; compare against a retained expected result with a predeclared exact or numerical comparison rule. Persist inference output before downstream reporting so reporting repair reuses the measurement. Retain existing training and evaluation evidence without rerunning those experiments."
++claim = "Acceptance must run ordinary VIPER readers and model loading in a new process and fresh workspace with empty VIPER, Hugging Face, and Xet caches, no source store mounts, and original Mantra storage blocked. Allow only declared pinned external source repositories and the destination. Restore each selected model and run one frozen inference fixture under its recorded environment; compare against a retained expected result with a predeclared exact or numerical comparison rule. Persist inference output before downstream reporting so reporting repair reuses the measurement. Retain existing training and evaluation evidence without rerunning those experiments."
+ depends_on = ["RGP-REQ-07"]
+ verifier_ids = ["RGP-VR-08"]
+ 
+@@ -58,7 +58,7 @@ verifier_ids = ["RGP-VR-09"]
+ 
+ [[requirements]]
+ id = "RGP-REQ-10"
+-claim = "Migrate one selected real model first, then every remaining frozen MIL and Hopfield root using shared verified mappings. Acceptance evidence must bind each exact source and destination root, payload inventory, source-code and runtime identities, cold recovery result, and inference fixture. Advance canonical SOTA pointers as one recoverable, compare-and-swap update only after every selected root passes; reject stale pointer generations or any missing acceptance. Retain old pointers and GCS objects for rollback. Configure subsequent publication after the accepted cutover. Record the application-owned pointer paths and execution bindings before freezing this block; library code must not guess them."
++claim = "Publish one selected real model first, then every remaining frozen MIL and Hopfield root using shared verified mappings. Save each additional destination root with its source root, inventory, environment, comparison, and cold-recovery evidence. Register the complete accepted publication set atomically after every selected root passes. Existing source publications, canonical pointers, and default storage configuration stay unchanged."
+ depends_on = ["RGP-REQ-09"]
+ verifier_ids = ["RGP-VR-10"]
+ 
+@@ -86,7 +86,7 @@ rejection_cases = [
+ [[verifiers]]
+ id = "RGP-VR-03"
+ requirement_ids = ["RGP-REQ-03"]
+-acceptance_conditions = ["A Hugging Face parent pointing to a retiring GCS prior is traversed and rewritten.", "RunPromotionError contains \"inventory item is unreachable\" when a required inventory entry has no graph binding.", "RunPromotionError contains \"storage cycle\" for cyclic snapshot dependencies."]
++acceptance_conditions = ["A Hugging Face parent pointing to a GCS prior is traversed and rewritten.", "RunPromotionError contains \"inventory item is unreachable\" when a required inventory entry has no graph binding.", "RunPromotionError contains \"storage cycle\" for cyclic snapshot dependencies."]
+ success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_discovers_mixed_cloud_ancestors" }
+ rejection_cases = [
+   { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_promotion_rejects_inventory_omission" },
+@@ -176,7 +176,7 @@ id = "RGP-PB-02"
+ requirement_ids = ["RGP-REQ-02", "RGP-REQ-03"]
+ depends_on = ["RGP-PB-01"]
+ repository_id = "viper"
+-requirement_contribution = "Bind original sources independently of the destination and discover every required dependency before relocation."
++requirement_contribution = "Bind original sources independently of the destination and discover every required dependency before publication."
+ completion_evidence = ["implementation_review"]
+ 
+ [[pair_blocks]]
+diff --git a/docs/how-to/cloud-storage.md b/docs/how-to/cloud-storage.md
+index 70854af..59c5e86 100644
+--- a/docs/how-to/cloud-storage.md
++++ b/docs/how-to/cloud-storage.md
+@@ -119,3 +119,17 @@ does not replace the local terminal record required by retention.
+ See [the protocol's retention boundary](../reference/protocol.md#disk-retention-boundary)
+ for the remaining rejection conditions. Provider tests use controlled stores;
+ their success does not establish that your credentials or live bucket work.
++
++
++## Plan an additional cloud publication
++
++`RunPromotionPolicy` in `viper.storage` names the target repositories in its
++`hosts` tuple. Each entry uses the existing GCS or Hugging Face repository type.
++The source workspace and existing saved references stay unchanged.
++
++Graph discovery reads saved plans, run records, stage records, and cloud
++manifests. A Hugging Face record can lead to a GCS input. Discovery follows
++that link, lists the input, and keeps the dependency order for publication.
++A separate required-file inventory detects missing application inputs.
++Additional local files are listed with their sizes; their hashes are checked
++when publication prepares the snapshot.
+diff --git a/src/viper/_source.py b/src/viper/_source.py
+index 49a43a3..d30214c 100644
+--- a/src/viper/_source.py
++++ b/src/viper/_source.py
+@@ -13,6 +13,7 @@ from ._verified_cache import VerifiedObjectCache
+ from .cloud import CloudReference, ViperCloud
+ from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
+ from .references import (
++    CloudStageResultSnapshotRef,
+     GcsFileRef,
+     GcsStageResultSnapshotRef,
+     GitFileRef,
+@@ -22,6 +23,7 @@ from .references import (
+     ResolvedFileRef,
+     ResolvedGitFileRef,
+     ResolvedRunRef,
++    SnapshotFileRef,
+     StageResultSnapshot,
+     StorageModel,
+     ViperCloudFileRef,
+@@ -228,6 +230,12 @@ class RunFetcher:
+         """Reuse one immutable producer proof without retaining artifact bytes."""
+         self._verified_producers[(reference, policy)] = producer
+ 
++    def snapshot_files(
++        self, snapshot: CloudStageResultSnapshotRef
++    ) -> tuple[SnapshotFileRef, ...]:
++        """Return each file's path, size, and SHA-256 hash from a cloud snapshot."""
++        return self._cloud_service(snapshot).list_files(snapshot)
++
+     def list_snapshot_files(
+         self,
+         snapshot: StageResultSnapshot,
+@@ -241,8 +249,7 @@ class RunFetcher:
+                 ViperCloudStageResultSnapshotRef,
+             ),
+         ):
+-            cloud = self._cloud_service(snapshot)
+-            return tuple(file.path for file in cloud.list_files(snapshot))
++            return tuple(file.path for file in self.snapshot_files(snapshot))
+         return local_artifact_store(snapshot).list_snapshot_files(snapshot)
+ 
+ 
+diff --git a/src/viper/execution/_promotion.py b/src/viper/execution/_promotion.py
+index cb87a07..d9177fc 100644
+--- a/src/viper/execution/_promotion.py
++++ b/src/viper/execution/_promotion.py
+@@ -8,22 +8,26 @@ import shutil
+ import tempfile
+ from collections.abc import Callable
+ from pathlib import Path
+-from typing import Any
++from typing import Any, Literal
+ 
+-from pydantic import BaseModel, TypeAdapter
++from pydantic import BaseModel, Field, TypeAdapter
+ 
+-from .._cloud import PublicationSource, manifest_revision
++from .._cloud import GcsRepository, PublicationSource, manifest_revision
++from .._schema import ProtocolModel
+ from .._source import RunFetcher
+ from ..artifacts import ArtifactPointer
+ from ..benchmark import BenchmarkResult, BenchmarkSpec
+ from ..cloud import ViperCloud
+ from ..evidence import VerificationPolicy
++from ..experiments import ExperimentSpec, VariantSpec
+ from ..inputs import DownloadSourceClosureReceipt
+ from ..metrics import MetricVerificationReceipt
+ from ..references import (
++    ArtifactPointerRef,
+     CloudStageResultSnapshotRef,
+     GcsFileRef,
+     GitFileRef,
++    GitSource,
+     HuggingFaceFileRef,
+     LocalFileRef,
+     LocalStageResultSnapshotRef,
+@@ -35,6 +39,10 @@ from ..references import (
+     ResolvedRunSpecRef,
+     ResolvedStageRef,
+     SnapshotFileRef,
++    StageResultSnapshot,
++    StorageModel,
++    ViperCloudFileRef,
++    resolve_snapshot_file_ref,
+ )
+ from ..reuse import ResolvedStageReuseRef, StageReuseReceipt, stage_spec_sha256
+ from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
+@@ -53,6 +61,22 @@ from .errors import RunPromotionError
+ _SPEC_ADAPTER = TypeAdapter(Spec)
+ _RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
+ _DocumentDecoder = Callable[[object], BaseModel]
++_SourceSnapshot = StageResultSnapshot | GitSource
++_SNAPSHOT_ADAPTER = TypeAdapter(_SourceSnapshot)
++
++
++class PromotionInventory(ProtocolModel):
++    """Name the runs and files that an additional publication must contain."""
++
++    schema_version: Literal[1] = Field(
++        default=1, description="Inventory format version."
++    )
++    roots: tuple[ResolvedRunRef, ...] = Field(
++        min_length=1, description="Runs to publish."
++    )
++    required_files: dict[str, ResolvedFileRef] = Field(
++        description="Expected files, keyed by their role in the application."
++    )
+ 
+ 
+ class _RunGraphPromoter:
+@@ -81,21 +105,102 @@ class _RunGraphPromoter:
+             tuple[SnapshotFileRef, ...],
+         ] = {}
+         self.documents: dict[
+-            LocalStageResultSnapshotRef,
++            _SourceSnapshot,
+             dict[str, BaseModel],
+         ] = {}
+         self.promoting: set[LocalStageResultSnapshotRef] = set()
+         self.receipt_hashes: dict[str, str] = {}
++        self.inventory: PromotionInventory | None = None
++        self.source_files: dict[StorageModel, tuple[int, str | None]] = {}
++        self.source_members: dict[_SourceSnapshot, tuple[StorageModel, ...]] = {}
++        self.dependencies: dict[_SourceSnapshot, set[_SourceSnapshot]] = {}
++        self._reading: list[StorageModel] = []
+ 
+     @staticmethod
+-    def snapshot_for(location: LocalFileRef) -> LocalStageResultSnapshotRef:
+-        """Return the local snapshot containing one local file."""
+-        return LocalStageResultSnapshotRef(
+-            workspace=location.workspace,
+-            store=location.store,
+-            store_id=location.store_id,
+-            commit=location.commit,
+-        )
++    def snapshot_for(location: StorageModel) -> _SourceSnapshot:
++        """Return the snapshot containing a file."""
++        return _SNAPSHOT_ADAPTER.validate_python(location.model_dump(exclude={"path"}))
++
++    @staticmethod
++    def file_in_snapshot(
++        snapshot: _SourceSnapshot, file: SnapshotFileRef
++    ) -> ResolvedFileRef:
++        """Combine a file's size and hash with its snapshot address."""
++        if isinstance(snapshot, GitSource):
++            location = GitFileRef(**snapshot.model_dump(), path=file.path)
++            return ResolvedFileRef(
++                stored_at=location, sha256=file.sha256, bytes=file.bytes
++            )
++        return resolve_snapshot_file_ref(snapshot, file)
++
++    def _record_file(
++        self, location: StorageModel, size: int, digest: str | None
++    ) -> None:
++        """Record a file once and reject conflicting sizes or hashes."""
++        previous = self.source_files.get(location)
++        if previous is not None:
++            if previous[0] != size or (
++                previous[1] and digest and previous[1] != digest
++            ):
++                raise RunPromotionError("conflicting source identity")
++            digest = digest or previous[1]
++        self.source_files[location] = (size, digest)
++
++    def discover_snapshot(self, snapshot: _SourceSnapshot) -> None:
++        """List a snapshot's files before reading any artifact bodies."""
++        if snapshot in self.source_members or isinstance(snapshot, GitSource):
++            return
++        if isinstance(snapshot, LocalStageResultSnapshotRef):
++            store = local_artifact_store(snapshot)
++            locations = []
++            for path in store.list_snapshot_files(snapshot):
++                location = LocalFileRef(
++                    **snapshot.model_dump(exclude={"kind"}), path=path
++                )
++                self._record_file(location, store.path(location).stat().st_size, None)
++                locations.append(location)
++        else:
++            locations = []
++            for member in self.fetcher.snapshot_files(snapshot):
++                reference = resolve_snapshot_file_ref(snapshot, member)
++                self._record_file(reference.stored_at, member.bytes, member.sha256)
++                locations.append(reference.stored_at)
++        self.source_members[snapshot] = tuple(locations)
++
++    def discover_inventory(
++        self, inventory: PromotionInventory
++    ) -> tuple[_SourceSnapshot, ...]:
++        """List the required files and return snapshots in dependency order."""
++        self.inventory = inventory
++        for reference in inventory.roots:
++            self.discover_reference(reference, ResolvedRun.model_validate)
++        for role, reference in inventory.required_files.items():
++            actual = self.source_files.get(reference.stored_at)
++            if actual is None:
++                raise RunPromotionError(f"inventory item is unreachable: {role}")
++            self._record_file(reference.stored_at, reference.bytes, reference.sha256)
++        ordered: list[_SourceSnapshot] = []
++        active: set[_SourceSnapshot] = set()
++        complete: set[_SourceSnapshot] = set()
++
++        def visit(snapshot: _SourceSnapshot) -> None:
++            """Place each dependency before the snapshot that uses it."""
++            if snapshot in active:
++                raise RunPromotionError("storage cycle")
++            if snapshot in complete:
++                return
++            active.add(snapshot)
++            for child in sorted(
++                self.dependencies.get(snapshot, ()), key=lambda x: x.model_dump_json()
++            ):
++                visit(child)
++            active.remove(snapshot)
++            complete.add(snapshot)
++            ordered.append(snapshot)
++
++        for snapshot in self.source_members:
++            visit(snapshot)
++        return tuple(ordered)
+ 
+     def read_document(self, reference: ResolvedFileRef) -> bytes:
+         """Read a run document through the supplied fetcher."""
+@@ -145,100 +250,120 @@ class _RunGraphPromoter:
+         reference: ResolvedFileRef,
+         decoder: _DocumentDecoder | None = None,
+     ) -> None:
+-        """Register the typed document selected by one immutable reference."""
++        """Record a file and follow the links in its saved document."""
+         location = reference.stored_at
+-        if not isinstance(location, LocalFileRef):
++        if self.inventory is None and not isinstance(location, LocalFileRef):
+             return
++        if isinstance(location, ViperCloudFileRef):
++            if not isinstance(
++                load_storage_settings(self.root).repository, GcsRepository
++            ):
++                raise RunPromotionError("legacy source binding is required")
++        self._record_file(location, reference.bytes, reference.sha256)
++        snapshot = self.snapshot_for(location)
++        if self.inventory is not None:
++            self.discover_snapshot(snapshot)
++            if self._reading:
++                parent = self.snapshot_for(self._reading[-1])
++                if parent != snapshot:
++                    self.dependencies.setdefault(parent, set()).add(snapshot)
+         selected_decoder = decoder or self.document_decoder(reference)
+         if selected_decoder is None:
+             return
+-        snapshot = self.snapshot_for(location)
++        if location in self._reading:
++            raise RunPromotionError("storage cycle")
+         documents = self.documents.setdefault(snapshot, {})
+         if location.path in documents:
+             return
+-        raw = self.read_document(reference)
++        self._reading.append(location)
+         try:
+-            document = selected_decoder(parse_yaml_bytes(raw))
+-        except (UnicodeDecodeError, ValueError) as error:
+-            raise RunPromotionError("source run graph is unavailable") from error
+-        documents[location.path] = document
+-        if isinstance(document, RunSpec):
+-            self.discover_plan_members(snapshot, document)
+-        if isinstance(document, RunAttempt):
+-            for metric in document.metric_verification_files:
+-                self.discover_reference(
+-                    metric, MetricVerificationReceipt.model_validate
+-                )
+-        if isinstance(document, BenchmarkResult):
+-            for metric in document.metrics:
+-                self.discover_reference(
+-                    metric.candidate_verification,
+-                    MetricVerificationReceipt.model_validate,
+-                )
+-                self.discover_reference(
+-                    metric.confirmation_verification,
+-                    MetricVerificationReceipt.model_validate,
+-                )
+-        if isinstance(document, StageReuseReceipt):
+-            for metric in document.metrics:
+-                if metric.verification is not None:
++            document = selected_decoder(parse_yaml_bytes(self.read_document(reference)))
++            documents[location.path] = document
++            if isinstance(document, RunSpec):
++                self.discover_plan_members(snapshot, document)
++            if isinstance(document, RunAttempt):
++                for metric in document.metric_verification_files:
++                    self.discover_reference(
++                        metric, MetricVerificationReceipt.model_validate
++                    )
++            if isinstance(document, BenchmarkResult):
++                for metric in document.metrics:
++                    self.discover_reference(
++                        metric.candidate_verification,
++                        MetricVerificationReceipt.model_validate,
++                    )
+                     self.discover_reference(
+-                        metric.verification,
++                        metric.confirmation_verification,
+                         MetricVerificationReceipt.model_validate,
+                     )
+-        self.discover_typed(document)
++            if isinstance(document, StageReuseReceipt):
++                for metric in document.metrics:
++                    if metric.verification is not None:
++                        self.discover_reference(
++                            metric.verification,
++                            MetricVerificationReceipt.model_validate,
++                        )
++            self.discover_typed(document)
++        except RunPromotionError:
++            raise
++        except Exception as error:
++            raise RunPromotionError("source run graph is unavailable") from error
++        finally:
++            self._reading.pop()
+ 
+     def discover_snapshot_document(
+         self,
+-        snapshot: LocalStageResultSnapshotRef,
++        snapshot: _SourceSnapshot,
+         identity: SnapshotFileRef,
+         decoder: _DocumentDecoder,
+     ) -> None:
+-        """Register a typed member selected inside one immutable snapshot."""
+-        reference = ResolvedFileRef(
+-            sha256=identity.sha256,
+-            bytes=identity.bytes,
+-            stored_at=LocalFileRef(
+-                workspace=snapshot.workspace,
+-                store=snapshot.store,
+-                store_id=snapshot.store_id,
+-                commit=snapshot.commit,
+-                path=identity.path,
+-            ),
+-        )
+-        self.discover_reference(reference, decoder)
++        """Follow a document using its snapshot, path, size, and hash."""
++        self.discover_reference(self.file_in_snapshot(snapshot, identity), decoder)
+ 
+     def discover_plan_document(
+         self,
+-        snapshot: LocalStageResultSnapshotRef,
++        snapshot: _SourceSnapshot,
+         path: str,
+         decoder: _DocumentDecoder,
+     ) -> None:
+-        """Register a canonical plan member sealed by the plan snapshot."""
+-        location = LocalFileRef(
+-            workspace=snapshot.workspace,
+-            store=snapshot.store,
+-            store_id=snapshot.store_id,
+-            commit=snapshot.commit,
+-            path=path,
+-        )
+-        try:
+-            raw = local_artifact_store(location).fetch(location)
+-        except (OSError, RuntimeError) as error:
+-            raise RunPromotionError("source run graph is unavailable") from error
+-        reference = ResolvedFileRef(
+-            sha256=hashlib.sha256(raw).hexdigest(),
+-            bytes=len(raw),
+-            stored_at=location,
+-        )
+-        self.discover_reference(reference, decoder)
++        """Read a saved plan file and follow its references."""
++        if isinstance(snapshot, (LocalStageResultSnapshotRef, GitSource)):
++            placeholder = SnapshotFileRef(path=path, bytes=0, sha256="0" * 64)
++            location = self.file_in_snapshot(snapshot, placeholder).stored_at
++            raw = self.fetcher(location)
++            identity = SnapshotFileRef(
++                path=path, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest()
++            )
++        else:
++            identity = next(
++                (
++                    file
++                    for file in self.fetcher.snapshot_files(snapshot)
++                    if file.path == path
++                ),
++                None,
++            )
++            if identity is None:
++                raise RunPromotionError("plan document is missing from snapshot")
++        self.discover_snapshot_document(snapshot, identity, decoder)
+ 
+     def discover_plan_members(
+         self,
+-        snapshot: LocalStageResultSnapshotRef,
++        snapshot: _SourceSnapshot,
+         run: RunSpec,
+     ) -> None:
+         """Register every typed document selected by one frozen run plan."""
++        if self.inventory is not None:
++            self.discover_plan_document(
++                snapshot,
++                f"experiments/{run.experiment_id}/spec.yaml",
++                ExperimentSpec.model_validate,
++            )
++            self.discover_plan_document(
++                snapshot,
++                f"experiments/{run.experiment_id}/variants/{run.variant_id}.spec.yaml",
++                VariantSpec.model_validate,
++            )
+         for stage in run.stages:
+             self.discover_snapshot_document(
+                 snapshot,
+@@ -258,7 +383,9 @@ class _RunGraphPromoter:
+ 
+     def discover_stage_reference(self, reference: ResolvedStageRef) -> None:
+         """Register the resolved stage document selected by a stage reference."""
+-        if isinstance(reference.snapshot, LocalStageResultSnapshotRef):
++        if self.inventory is not None or isinstance(
++            reference.snapshot, LocalStageResultSnapshotRef
++        ):
+             self.discover_snapshot_document(
+                 reference.snapshot,
+                 reference.resolved_spec,
+@@ -267,6 +394,19 @@ class _RunGraphPromoter:
+ 
+     def discover_typed(self, value: Any) -> None:
+         """Walk typed objects and register every referenced protocol document."""
++        if isinstance(value, ArtifactPointerRef) and self.inventory is not None:
++            raw = self.fetcher(value)
++            reference = ResolvedArtifactPointerRef(
++                stored_at=value, sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw)
++            )
++            self.discover_reference(reference)
++            return
++        if isinstance(value, SnapshotFileRef) and self._reading:
++            snapshot = self.snapshot_for(self._reading[-1])
++            reference = self.file_in_snapshot(snapshot, value)
++            if reference.stored_at in self.source_files:
++                self._record_file(reference.stored_at, value.bytes, value.sha256)
++            return
+         if isinstance(value, ResolvedStageRef):
+             self.discover_stage_reference(value)
+             return
+@@ -298,6 +438,8 @@ class _RunGraphPromoter:
+         if remembered is not None:
+             return remembered
+         snapshot = self.snapshot_for(location)
++        if not isinstance(snapshot, LocalStageResultSnapshotRef):
++            raise RunPromotionError("local promotion requires a local snapshot")
+         promoted_snapshot = self.promote_snapshot(snapshot)
+         matches = tuple(
+             file for file in self.snapshot_files[snapshot] if file.path == location.path
+diff --git a/src/viper/storage.py b/src/viper/storage.py
+index 7171cf6..8382ace 100644
+--- a/src/viper/storage.py
++++ b/src/viper/storage.py
+@@ -12,7 +12,12 @@ from collections.abc import Mapping
+ from pathlib import Path
+ from typing import Annotated, Literal, Protocol
+ 
+-from pydantic import Field, TypeAdapter, ValidationError, model_validator
++from pydantic import (
++    Field,
++    TypeAdapter,
++    ValidationError,
++    model_validator,
++)
+ 
+ from ._cloud import (
+     PublicationSource,
+@@ -85,6 +90,15 @@ class StorageSettings(ProtocolModel):
+         return self
+ 
+ 
++class RunPromotionPolicy(ProtocolModel):
++    """Select cloud hosts receiving the complete run graph."""
++
++    hosts: tuple[ViperCloudRepository, ...] = Field(
++        min_length=1,
++        description="Destination cloud repositories for graph publication.",
++    )
++
++
+ class SnapshotPublisher(Protocol):
+     """Publish one completed stage snapshot to a selected destination."""
+ 
+@@ -122,7 +136,7 @@ def _content_revision(files: tuple[SnapshotFileRef, ...]) -> str:
+     """Derive the existing revision encoding from previously computed hashes."""
+     digest = hashlib.sha256()
+     for file in files:
+-        encoded_path = str(file.path).encode("utf-8")
++        encoded_path = file.path.encode("utf-8")
+         digest.update(len(encoded_path).to_bytes(8, "big"))
+         digest.update(encoded_path)
+         digest.update(file.bytes.to_bytes(8, "big"))
+diff --git a/tests/test_run_execution.py b/tests/test_run_execution.py
+index a66fb72..b5f7d53 100644
+--- a/tests/test_run_execution.py
++++ b/tests/test_run_execution.py
+@@ -32,7 +32,7 @@ from tests.fixtures import (
+ from tests.git_repository import REPOSITORY, run_git
+ from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
+ from viper import config
+-from viper._cloud import resolve_publication_source
++from viper._cloud import GcsRepository, resolve_publication_source
+ from viper._source import RunFetcher
+ from viper._verification.storage import read_attempt_reference, snapshot_identity
+ from viper.api import CompareRunsRequest, RunSuccess
+@@ -79,7 +79,7 @@ from viper.execution._materialization import (
+     verify_captured_inputs,
+ )
+ from viper.execution._metric import MetricWorkerResult
+-from viper.execution._promotion import _RunGraphPromoter
++from viper.execution._promotion import PromotionInventory, _RunGraphPromoter
+ from viper.execution._publication import write_attempt_document
+ from viper.execution._run import execute_benchmark_confirmation
+ from viper.execution._stage import (
+@@ -126,10 +126,12 @@ from viper.references import (
+     LocalFileRef,
+     LocalStageResultSnapshotRef,
+     ResolvedArtifactPointerRef,
++    ResolvedFileRef,
+     ResolvedRunRef,
+     ResolvedRunSpecRef,
+     ResolvedStageRef,
+     SnapshotFileRef,
++    ViperCloudFileRef,
+ )
+ from viper.reuse import (
+     ReusedStageCompletion,
+@@ -2914,3 +2916,143 @@ def test_verified_reuse_skips_stage_process(
+         assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
+         assert len(Catalog(root).runs().items) == 3
+         assert len(verifier_calls) == 3
++
++
++@pytest.fixture(scope="module")
++def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
++    """Build one saved run whose HF attempt refers to GCS stage files."""
++    root = tmp_path_factory.mktemp("promotion-source")
++    frozen = _freeze_retry_plan(root)
++    with pytest.raises(RunError):
++        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
++    completed = execute_retry(root, frozen.files[-1])
++    provider = InMemoryViperCloudProvider(root)
++    cloud = ViperCloud(root, GcsRepository(bucket=provider.bucket), provider=provider)
++    promoter = _RunGraphPromoter(
++        root,
++        cloud,
++        ViperCloudDestination(owner="machina", workspace="models"),
++        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
++    )
++    promoter.discover_reference(completed.reference, ResolvedRun.model_validate)
++    published = promoter.promote_reference(completed.reference)
++    assert isinstance(published.stored_at, GcsFileRef)
++    record = ResolvedRun.model_validate(
++        parse_yaml_bytes(cloud.fetch(published.stored_at))
++    )
++    attempt = record.attempts[-1]
++    assert isinstance(attempt.stored_at, GcsFileRef)
++    attempt_raw = cloud.fetch(attempt.stored_at)
++    hf_location = HuggingFaceFileRef(
++        repository="owner/attempts",
++        repo_type="dataset",
++        commit="e" * 40,
++        path=attempt.stored_at.path,
++    )
++    changed = attempt.model_copy(update={"stored_at": hf_location})
++    record = record.model_copy(update={"attempts": (*record.attempts[:-1], changed)})
++    raw = serialize_document(record)
++    (local,) = LocalArtifactStore(root).resolved_files({"selected/run.yaml": raw})
++    selected = ResolvedRunRef(**local.model_dump(exclude={"kind"}))
++    hf = Mock(spec=ViperCloud)
++    hf.fetch.side_effect = lambda location: (
++        attempt_raw if location == hf_location else b"missing"
++    )
++    hf.list_files.return_value = (
++        SnapshotFileRef(
++            path=hf_location.path,
++            bytes=len(attempt_raw),
++            sha256=hashlib.sha256(attempt_raw).hexdigest(),
++        ),
++    )
++    return SimpleNamespace(
++        root=root, selected=selected, cloud=cloud, hf=hf, hf_location=hf_location
++    )
++
++
++def test_promotion_discovers_mixed_cloud_ancestors(
++    promotion_graph: SimpleNamespace,
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """List a local run's HF and GCS files using document reads only."""
++    case = promotion_graph
++
++    def source_client(root, reference):
++        """Choose the source client from each saved address."""
++        return case.hf if reference.kind == "huggingface" else case.cloud
++
++    monkeypatch.setattr(ViperCloud, "for_reference", source_client)
++    monkeypatch.setattr(ViperCloud, "for_snapshot", source_client)
++    destination = Mock(spec=ViperCloud)
++    fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), REPOSITORY)
++    original = case.cloud.fetch
++    reads = []
++
++    def metadata_only(location):
++        """Reject artifact downloads during file discovery."""
++        assert "/artifacts/" not in location.path
++        reads.append(location)
++        return original(location)
++
++    monkeypatch.setattr(case.cloud, "fetch", metadata_only)
++    promoter = _RunGraphPromoter(
++        tmp_path,
++        destination,
++        ViperCloudDestination(owner="machina", workspace="models"),
++        fetcher=fetcher,
++    )
++    inventory = PromotionInventory(roots=(case.selected,), required_files={})
++    order = promoter.discover_inventory(inventory)
++    assert {snapshot.kind for snapshot in order} >= {"local", "gcs", "huggingface"}
++    assert any("/artifacts/" in file.path for file in promoter.source_files)
++    assert case.hf_location in promoter.source_files
++    for parent, children in promoter.dependencies.items():
++        for child in children:
++            assert order.index(child) < order.index(parent)
++    destination.publish.assert_not_called()
++    assert len(reads) == len(set(reads))
++    missing = ResolvedFileRef(
++        stored_at=case.hf_location.model_copy(update={"path": "absent.bin"}),
++        bytes=1,
++        sha256="0" * 64,
++    )
++    with pytest.raises(RunPromotionError, match="inventory item is unreachable"):
++        promoter.discover_inventory(
++            inventory.model_copy(update={"required_files": {"missing": missing}})
++        )
++    wrong = case.selected.model_copy(update={"sha256": "0" * 64})
++    with pytest.raises(RunPromotionError, match="conflicting source identity"):
++        promoter.discover_reference(wrong)
++    parent = order[-1]
++    child = next(iter(promoter.dependencies[parent]))
++    promoter.dependencies.setdefault(child, set()).add(parent)
++    with pytest.raises(RunPromotionError, match="storage cycle"):
++        promoter.discover_inventory(inventory)
++    destination.publish.assert_not_called()
++
++
++def test_promotion_rejects_missing_legacy_settings(tmp_path: Path) -> None:
++    """Require the source bucket before reading an older cloud address."""
++    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
++    reference = ResolvedRunRef(
++        stored_at=ViperCloudFileRef(
++            owner="machina", workspace="models", revision="a" * 64, path="run.yaml"
++        ),
++        bytes=1,
++        sha256="b" * 64,
++    )
++    cloud = Mock(spec=ViperCloud)
++    fetcher = Mock(spec=RunFetcher)
++    promoter = _RunGraphPromoter(
++        tmp_path,
++        cloud,
++        ViperCloudDestination(owner="machina", workspace="models"),
++        fetcher=fetcher,
++    )
++    with pytest.raises(RunPromotionError, match="legacy source binding is required"):
++        promoter.discover_inventory(
++            PromotionInventory(roots=(reference,), required_files={})
++        )
++    fetcher.read.assert_not_called()
++    cloud.publish.assert_not_called()

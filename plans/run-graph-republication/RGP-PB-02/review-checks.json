@@ -1,0 +1,118 @@
+{
+  "pair_block": "RGP-PB-02",
+  "status": "review",
+  "baseline": "8ae163150f15613743d2a016c84bc42bfa0baa32",
+  "commands": [
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "--select",
+        "I",
+        "--fix",
+        "src/viper/_source.py",
+        "src/viper/storage.py",
+        "src/viper/execution/_promotion.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "format",
+        "src/viper/_source.py",
+        "src/viper/storage.py",
+        "src/viper/execution/_promotion.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "4 files left unchanged\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "pyright",
+        "--pythonpath",
+        "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python",
+        "src/viper/_source.py",
+        "src/viper/storage.py",
+        "src/viper/execution/_promotion.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "0 errors, 0 warnings, 0 informations\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_run_execution.py::test_promotion_discovers_mixed_cloud_ancestors",
+        "tests/test_run_execution.py::test_promotion_rejects_missing_legacy_settings",
+        "tests/test_run_execution.py::test_promotion_document_reader_uses_fetcher",
+        "tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store",
+        "tests/test_run_execution.py::test_explicit_cloud_promotion_preserves_local_run_mode[False]"
+      ],
+      "exit_code": 0,
+      "stdout": "......                                                                   [100%]\n6 passed in 48.74s\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "--select",
+        "D",
+        "src/viper/_source.py",
+        "src/viper/storage.py",
+        "src/viper/execution/_promotion.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "format",
+        "--check",
+        "src/viper/_source.py",
+        "src/viper/storage.py",
+        "src/viper/execution/_promotion.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "4 files already formatted\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "src/viper/_source.py",
+        "src/viper/storage.py",
+        "src/viper/execution/_promotion.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    }
+  ],
+  "source_sha256": {
+    "src/viper/_source.py": "bbe4bb2219d2a18e0df28d7d7d0fb0704d1c16d0455703fb403e0a332bbb16a9",
+    "src/viper/storage.py": "57daedb5903442c67d912a4e5eb37d13eb4212e965369c1ef7553072a2dc263f",
+    "src/viper/execution/_promotion.py": "fa49323fc1e24c569f44c9e65239031e3b5842db21bae7ec560e46b94bbd3cc8",
+    "tests/test_run_execution.py": "5f94c7ae3c523d23afa6e8639b07c7462540aec053e4367214c9f0a242788774"
+  },
+  "code_growth": "9\t2\tsrc/viper/_source.py\n219\t77\tsrc/viper/execution/_promotion.py\n16\t2\tsrc/viper/storage.py\n144\t2\ttests/test_run_execution.py\n",
+  "independent_review": "pending"
+}

@@ -119,3 +119,17 @@ does not replace the local terminal record required by retention.
 See [the protocol's retention boundary](../reference/protocol.md#disk-retention-boundary)
 for the remaining rejection conditions. Provider tests use controlled stores;
 their success does not establish that your credentials or live bucket work.
+
+
+## Plan an additional cloud publication
+
+`RunPromotionPolicy` in `viper.storage` names the target repositories in its
+`hosts` tuple. Each entry uses the existing GCS or Hugging Face repository type.
+The source workspace and existing saved references stay unchanged.
+
+Graph discovery reads saved plans, run records, stage records, and cloud
+manifests. A Hugging Face record can lead to a GCS input. Discovery follows
+that link, lists the input, and keeps the dependency order for publication.
+A separate required-file inventory detects missing application inputs.
+Additional local files are listed with their sizes; their hashes are checked
+when publication prepares the snapshot.

@@ -1,0 +1,47 @@
+schema_version = 1
+contract_id = "run-graph-republication"
+package_sha256 = "332413d182184fa30a647addfba334fcaf4841a156f68ac74fb0cc7f07ea0bb3"
+pair_block_id = "RGP-PB-02"
+baseline_commit = "8ae163150f15613743d2a016c84bc42bfa0baa32"
+change_summary = ["Discover every source file before publication"]
+deviation_summary = "Stacked pull requests retain independent review as pending. The original publication and default settings remain intact. Review checks retain the tested source hashes and exact command output."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/implementation.patch"
+target_paths = ["contracts/run-graph-republication.md", "contracts/run-graph-republication.toml", "docs/how-to/cloud-storage.md", "src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/storage.py", "tests/test_run_execution.py"]
+
+[[handoff_targets]]
+label = "Implementation changes"
+source = "plan"
+path = "patches/implementation.patch"
+line = 1
+
+[gate]
+source_roots = ["src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = ["pyright", "--pythonpath", "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_run_execution.py::test_promotion_discovers_mixed_cloud_ancestors", "tests/test_run_execution.py::test_promotion_rejects_missing_legacy_settings", "tests/test_run_execution.py::test_promotion_document_reader_uses_fetcher", "tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store", "tests/test_run_execution.py::test_explicit_cloud_promotion_preserves_local_run_mode[False]"]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = ["ruff", "check", "--select", "D", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "format", "--check", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "check", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
