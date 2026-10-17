@@ -3067,6 +3067,19 @@ def test_promotion_discovers_mixed_cloud_ancestors(
             assert order.index(child) < order.index(parent)
     destination.publish.assert_not_called()
     assert len(reads) == len(set(reads))
+    (supporting,) = LocalArtifactStore(tmp_path).resolved_files(
+        {"source-records/prior.json": b'{"source": "saved prior"}'}
+    )
+    required = inventory.model_copy(update={"required_files": {"prior": supporting}})
+    with pytest.raises(RunPromotionError, match="inventory item is unreachable"):
+        promoter.discover_inventory(required)
+    promoter.discover_inventory(
+        required.model_copy(update={"supporting_roots": (supporting,)})
+    )
+    assert promoter.source_files[supporting.stored_at] == (
+        supporting.bytes,
+        supporting.sha256,
+    )
     missing = ResolvedFileRef(
         stored_at=case.hf_location.model_copy(update={"path": "absent.bin"}),
         bytes=1,
@@ -3477,15 +3490,23 @@ def test_copy_worker_resumes_and_restores_a_model(
         {"selected/another.yaml": original_raw}
     )
     roots = (case.selected, ResolvedRunRef(**another.model_dump()))
+    (supporting,) = LocalArtifactStore(case.root).resolved_files(
+        {"source-records/prior.json": b'{"source": "saved prior"}'}
+    )
     request = CopyRequest(
         repository_root=case.root,
-        inventory=PromotionInventory(roots=roots, required_files={}),
+        inventory=PromotionInventory(
+            roots=roots,
+            supporting_roots=(supporting,),
+            required_files={"prior": supporting},
+        ),
         policy=RunPromotionPolicy(hosts=(repository,)),
         destination=ViperCloudDestination(owner="machina", workspace="models"),
         limits=TransferLimits(
             staging_bytes=64_000_000, cache_bytes=32_000_000, connections=2
         ),
     )
+    request = CopyRequest.model_validate_json(request.model_dump_json())
     with client:
         with pytest.raises(RunPromotionError, match="outcome is unresolved"):
             copy_graphs(request)
@@ -3495,6 +3516,10 @@ def test_copy_worker_resumes_and_restores_a_model(
     publication = result["publications"][0]
     assert publication["passed"]
     assert len(publication["destination_roots"]) == 2
+    assert publication["required_files_checked"] == 1
+    assert publication["supporting_roots"][0]["source"] == supporting.model_dump(
+        mode="json"
+    )
     assert publication["peak_staging_bytes"] <= request.limits.staging_bytes
     assert LocalArtifactStore(case.root).fetch(case.selected.stored_at) == original_raw
     progress = case.root / ".viper/promotion" / result["operation_sha256"]

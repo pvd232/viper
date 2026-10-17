@@ -13,7 +13,7 @@ import viper._subprocess as subprocess
 
 from .._schema import SHA256
 from ..authoring import RunPlanDraft, freeze_run_plan
-from ..references import ResolvedFileRef, ResolvedRunRef
+from ..references import ResolvedFileRef, ResolvedRunRef, ResolvedStageRef
 from ..repository import resolve_root
 from ..storage import RunPromotionPolicy, TransferLimits, ViperCloudDestination
 from ._batch import run_many as _run_many
@@ -50,6 +50,9 @@ def promote_run_to_cloud(
     policy: RunPromotionPolicy,
     limits: TransferLimits,
     required_files: Mapping[str, ResolvedFileRef] | None = None,
+    supporting_roots: tuple[
+        ResolvedRunRef | ResolvedStageRef | ResolvedFileRef, ...
+    ] = (),
     trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> tuple[ResolvedRunRef, ...]: ...
 
@@ -62,6 +65,9 @@ def promote_run_to_cloud(
     policy: RunPromotionPolicy | None = None,
     limits: TransferLimits | None = None,
     required_files: Mapping[str, ResolvedFileRef] | None = None,
+    supporting_roots: tuple[
+        ResolvedRunRef | ResolvedStageRef | ResolvedFileRef, ...
+    ] = (),
     trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> ResolvedRunRef | tuple[ResolvedRunRef, ...]:
     """Publish saved runs and return their additional cloud references.
@@ -70,7 +76,8 @@ def promote_run_to_cloud(
     policy selects additional hosts; limits bounds the separate copy process.
     That form accepts several roots, checks required_files, and returns references
     in host order and then source-root order. Original publications and workspace
-    settings remain unchanged. Progress and checks are saved under .viper/promotion.
+    settings remain unchanged. supporting_roots includes separately recorded source
+    builds and files. Progress and checks are saved under .viper/promotion.
     """
     root = repository_root.resolve(strict=True)
     if policy is None:
@@ -78,6 +85,7 @@ def promote_run_to_cloud(
             isinstance(source, tuple)
             or limits is not None
             or required_files is not None
+            or supporting_roots
         ):
             raise ValueError(
                 "multiple roots and copy limits require a promotion policy"
@@ -92,6 +100,9 @@ def promote_run_to_cloud(
         "repository_root": str(root),
         "inventory": {
             "roots": [reference.model_dump(mode="json") for reference in roots],
+            "supporting_roots": [
+                reference.model_dump(mode="json") for reference in supporting_roots
+            ],
             "required_files": {
                 role: reference.model_dump(mode="json")
                 for role, reference in (required_files or {}).items()

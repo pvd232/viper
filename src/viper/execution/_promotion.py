@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, SerializeAsAny, TypeAdapter
 
 from .._cloud import GcsRepository, PublicationSource, manifest_revision
 from .._schema import ProtocolModel
@@ -79,6 +79,12 @@ class PromotionInventory(ProtocolModel):
     )
     roots: tuple[ResolvedRunRef, ...] = Field(
         min_length=1, description="Runs to publish."
+    )
+    supporting_roots: tuple[
+        SerializeAsAny[ResolvedStageRef | ResolvedFileRef | ResolvedRunRef], ...
+    ] = Field(
+        default=(),
+        description="Saved runs, stages, and files named by the application source records.",
     )
     required_files: dict[str, ResolvedFileRef] = Field(
         description="Expected files, keyed by their role in the application."
@@ -189,6 +195,8 @@ class RunGraphPromoter:
         self.inventory = inventory
         for reference in inventory.roots:
             self.discover_reference(reference, ResolvedRun.model_validate)
+        for reference in inventory.supporting_roots:
+            self.discover_typed(reference)
         for role, reference in inventory.required_files.items():
             actual = self.source_files.get(reference.stored_at)
             if actual is None:

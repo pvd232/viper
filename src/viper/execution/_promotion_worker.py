@@ -172,6 +172,15 @@ def copy_graphs(request: CopyRequest) -> dict:
                     "policy_sha256": document_digest(request.policy),
                     "mapping_sha256": document_digest(journal.progress),
                     "host": host.model_dump(mode="json"),
+                    "supporting_roots": [
+                        {
+                            "source": item.model_dump(mode="json"),
+                            "destination": promoter.rewrite_typed(item).model_dump(
+                                mode="json"
+                            ),
+                        }
+                        for item in request.inventory.supporting_roots
+                    ],
                     "peak_staging_bytes": space.peak_bytes,
                     "peak_cache_bytes": space.peak_cache_bytes,
                     "connection_limit": request.limits.connections,
