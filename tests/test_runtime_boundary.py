@@ -34,7 +34,7 @@ def test_runtime_context_rejects_field_reassignment() -> None:
     """Preserve the logical immutability supplied by frozen dataclasses."""
     context = stages.StageContext.__new__(stages.StageContext)
     with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
-        context.stage_id = "other"  # pyright: ignore[reportAttributeAccessIssue]
+        setattr(context, "stage_id", "other")
 
 
 def _stateful_metric_type(metrics_module: Any) -> type[Any]:

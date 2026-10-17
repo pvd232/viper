@@ -44,7 +44,7 @@ from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution import run as execute_run
 from viper.journal import DurableJournal
 from viper.metrics import measure, min
-from viper.outputs import OutputDraft, output
+from viper.outputs import OutputDraft, StageOutputs, output
 from viper.preflight import preflight_plan
 from viper.references import (
     GitFileRef,
@@ -69,6 +69,7 @@ from viper.serialization import (
     serialize_document,
 )
 from viper.stages import (
+    ResolvedParameterizedSpec,
     ResolvedTrainSpec,
     StageInvocationReceipt,
     TrainSpec,
@@ -231,25 +232,27 @@ def _freeze_signal_plan(
             hosts=frozenset({host}),
             ports=frozenset({port}),
         ),
-        outputs={"prior": prior_artifact},  # pyright: ignore[reportArgumentType]
+        outputs=StageOutputs[OutputDraft].model_validate({"prior": prior_artifact}),  # pyright: ignore[reportArgumentType]
     )
     objective = measure(fixture.signal_objective, config=config.MetricConfig())
     training = stage(
         fixture.train,
         config=config.TrainConfig(),
         inputs={"prior": acquisition.outputs["prior"]},
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=fixture.load_bytes,
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=fixture.load_resume_state,
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft].model_validate(
+            {
+                "model": output(
+                    path="model.bin",
+                    loader=fixture.load_bytes,
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=fixture.load_resume_state,
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(objective,),
         objective=min(objective),
     )
@@ -595,6 +598,8 @@ def test_python_adapter_and_cli_share_verification_boundary(
     attempt = verified.attempts[-1]
     stage = verified.plan.stages["train"]
     assert isinstance(stage, TrainSpec)
+    resolved_train = verified.resolved_stages["train"]
+    assert isinstance(resolved_train, ResolvedParameterizedSpec)
     original_reference = attempt.invocations[-1]
     original_receipt = StageInvocationReceipt.model_validate(
         parse_yaml_bytes(
@@ -637,7 +642,7 @@ def test_python_adapter_and_cli_share_verification_boundary(
             stage_id="train",
             stage=stage,
             stage_specs=verified.plan.stages,
-            resolved_stage=verified.resolved_stages["train"],
+            resolved_stage=resolved_train,
             fetcher=fetcher,
         )
 
@@ -658,7 +663,7 @@ def test_python_adapter_and_cli_share_verification_boundary(
             stage_id="train",
             stage=stage,
             stage_specs=verified.plan.stages,
-            resolved_stage=verified.resolved_stages["train"],
+            resolved_stage=resolved_train,
             fetcher=fetcher,
         )
 
@@ -679,7 +684,7 @@ def test_python_adapter_and_cli_share_verification_boundary(
             stage_id="train",
             stage=stage,
             stage_specs=verified.plan.stages,
-            resolved_stage=verified.resolved_stages["train"],
+            resolved_stage=resolved_train,
             fetcher=fetcher,
         )
 

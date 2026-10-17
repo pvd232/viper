@@ -532,7 +532,7 @@ class MCPAdapter:
             raise MCPError(types.INVALID_PARAMS, str(exc)) from exc
 
 
-def build_server(root: Path, access: AccessMode = "read") -> Server[None]:
+def build_server(root: Path, access: AccessMode = "read") -> Server[dict[str, Any]]:
     """Build the official MCP server around one stateless VIPER adapter."""
     adapter = MCPAdapter(root, access)
     return Server(

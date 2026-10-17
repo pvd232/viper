@@ -246,7 +246,9 @@ def _stage_metric_handles(
                 stage_id=binding.stage_id,
                 metric_id=metric_id,
             ),
-            MetricContext(inputs=inputs, artifacts=outputs, config=values),
+            MetricContext(
+                inputs=inputs, artifacts=outputs, config=cast(MetricConfig, values)
+            ),
         )
     return handles
 

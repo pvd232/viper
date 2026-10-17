@@ -265,7 +265,7 @@ def loader_ref(loader_id: str, *, bundle: bool = False) -> ArtifactLoaderRef:
     )
 
 
-def yaml_bytes(value: object) -> bytes:
+def yaml_bytes(value: Any) -> bytes:
     """Serialize one protocol record as deterministic YAML bytes."""
     data = YAML_ADAPTER.dump_python(value, mode="json")
     data_s = yaml.safe_dump(data, sort_keys=True)

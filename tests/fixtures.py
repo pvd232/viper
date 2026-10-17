@@ -301,7 +301,7 @@ class MemoryHub:
         """Start an empty repository and a separate download cache."""
         self.cache = cache
         self.token = None
-        self.head = "0" * 40
+        self.head: str = "0" * 40
         self.commits: dict[str, dict[str, bytes]] = {self.head: {}}
         self.messages: dict[str, str] = {}
         self.fail_after_commit = False
