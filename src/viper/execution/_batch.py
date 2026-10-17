@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..authoring import RunPlanDraft, freeze_run_plan
 from ..evidence import VerificationError
+from ..references import ResolvedRunSpecRef
 from ..runs import RunSpec
 from ..serialization import parse_yaml_bytes
 from ._run import run as execute_run
@@ -69,7 +70,7 @@ def run_many(
 
     # Preserve the immutable store reference when freezing a draft. A path-only
     # request instead identifies a plan committed to Git.
-    inputs = []
+    inputs: list[tuple[Path, RunSpec, ResolvedRunSpecRef | None]] = []
     for item in run_spec_paths:
         if isinstance(item, RunPlanDraft):
             frozen = freeze_run_plan(root, item)
