@@ -327,11 +327,11 @@ class MemoryHub:
             raise ConnectionError("commit response lost")
         return SimpleNamespace(oid=self.head)
 
-    def repo_info(self, **kwargs: Any) -> SimpleNamespace:
+    def repo_info(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
         """Return the current commit and repository privacy."""
         return SimpleNamespace(sha=self.head, private=True)
 
-    def list_repo_commits(self, **kwargs: Any) -> list[SimpleNamespace]:
+    def list_repo_commits(self, *args: Any, **kwargs: Any) -> list[SimpleNamespace]:
         """Return newest commits first for interrupted-write recovery."""
         return [
             SimpleNamespace(commit_id=commit, title=self.messages.get(commit, ""))

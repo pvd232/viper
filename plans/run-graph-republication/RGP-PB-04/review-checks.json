@@ -1,0 +1,130 @@
+{
+  "pair_block": "RGP-PB-04",
+  "status": "review",
+  "baseline": "2151d6665880ab37e4bb5ad4793525cf599e6975",
+  "commands": [
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "--select",
+        "I",
+        "--fix",
+        "src/viper/cloud.py",
+        "src/viper/huggingface.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "format",
+        "src/viper/cloud.py",
+        "src/viper/huggingface.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py"
+      ],
+      "exit_code": 0,
+      "stdout": "6 files left unchanged\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "pyright",
+        "--pythonpath",
+        "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python",
+        "src/viper/cloud.py",
+        "src/viper/huggingface.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py"
+      ],
+      "exit_code": 0,
+      "stdout": "0 errors, 0 warnings, 0 informations\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references",
+        "tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store"
+      ],
+      "exit_code": 0,
+      "stdout": "...........                                                              [100%]\n11 passed in 22.02s\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "--select",
+        "D",
+        "src/viper/cloud.py",
+        "src/viper/huggingface.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "format",
+        "--check",
+        "src/viper/cloud.py",
+        "src/viper/huggingface.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py"
+      ],
+      "exit_code": 0,
+      "stdout": "6 files already formatted\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "src/viper/cloud.py",
+        "src/viper/huggingface.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    }
+  ],
+  "source_sha256": {
+    "src/viper/cloud.py": "ee025d5b250c4e61f6698995a2c5d7ecbe0af8210a009a5a5415bc7397b1c8b7",
+    "src/viper/huggingface.py": "774771609ee55995840d79a7a016264bdf2310d614fbc98705e19abbce5445c3",
+    "src/viper/execution/_promotion_journal.py": "499ef34d4bd54cab16df991a98df0782aa23210eaa0fe7bc9122e991e51798a5",
+    "src/viper/execution/_promotion.py": "238764458ae84fccfc2c083984a0015a7be01e0148aeb4f369af16903dc323d1",
+    "tests/fixtures.py": "0ef3a53e56d7dd62f7384e48ce53c401d45bdf426e5bc337c2a0f4744f35107e",
+    "tests/test_cloud_service.py": "a4af2f62c47bc855a25a4d3f07afb0d449205da07cbbd7b92170f1906bf3424c"
+  },
+  "code_growth": "4\t2\tsrc/viper/cloud.py\n26\t1\tsrc/viper/execution/_promotion.py\n254\t0\tsrc/viper/execution/_promotion_journal.py\n44\t7\tsrc/viper/huggingface.py\n2\t2\ttests/fixtures.py\n94\t0\ttests/test_cloud_service.py\n",
+  "independent_review": "pending"
+}

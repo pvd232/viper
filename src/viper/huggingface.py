@@ -111,6 +111,41 @@ class HuggingFaceProvider(ViperCloudProvider):
             repo_type=self.repo_type,
         )
 
+    def publication_head(self) -> str:
+        """Read the current commit before saving a publication intent."""
+        head = self.api.repo_info(self.repository, repo_type=self._api_repo_type).sha
+        if head is None:
+            raise ViperCloudError("destination commit is unavailable")
+        return head
+
+    def find_publication(
+        self, expected: RevisionManifest, previous_head: str
+    ) -> HuggingFaceStageResultSnapshotRef | None:
+        """Find the exact committed files after a lost upload response."""
+        found = []
+        reached_previous = False
+        for commit in self.api.list_repo_commits(
+            self.repository, repo_type=self._api_repo_type
+        ):
+            if commit.commit_id == previous_head:
+                reached_previous = True
+                break
+            if commit.title != f"Publish VIPER revision {expected.revision}":
+                continue
+            snapshot = HuggingFaceStageResultSnapshotRef(
+                repository=self.repository,
+                repo_type=self.repo_type,
+                commit=commit.commit_id,
+            )
+            manifest = RevisionManifest.model_validate_json(
+                self.fetch(self.file_ref(snapshot, _MANIFEST_PATH))
+            )
+            if manifest == expected:
+                found.append(snapshot)
+        if not reached_previous or len(found) > 1:
+            raise ViperCloudError("remote publication outcome is unresolved")
+        return found[0] if found else None
+
     def file_ref(
         self,
         snapshot: CloudStageResultSnapshotRef,
@@ -190,18 +225,20 @@ class HuggingFaceProvider(ViperCloudProvider):
             temporary.unlink(missing_ok=True)
         return target
 
-    def list_files(
-        self,
-        snapshot: CloudStageResultSnapshotRef,
-    ) -> tuple[SnapshotFileRef, ...]:
-        """Read the exact file identities from a sealed VIPER revision."""
+    def read_manifest(self, snapshot: CloudStageResultSnapshotRef) -> RevisionManifest:
+        """Read the file list and owner saved in a snapshot."""
         if not isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
             raise TypeError(
                 "HuggingFaceProvider requires a HuggingFaceStageResultSnapshotRef"
             )
         manifest_ref = self.file_ref(snapshot, _MANIFEST_PATH)
-        manifest = RevisionManifest.model_validate_json(self.fetch(manifest_ref))
-        return manifest.files
+        return RevisionManifest.model_validate_json(self.fetch(manifest_ref))
+
+    def list_files(
+        self, snapshot: CloudStageResultSnapshotRef
+    ) -> tuple[SnapshotFileRef, ...]:
+        """Return each saved file's path, size, and hash."""
+        return self.read_manifest(snapshot).files
 
 
 __all__ = ["HuggingFaceProvider"]

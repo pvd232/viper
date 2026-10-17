@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import pytest
 
+from tests.fixtures import MemoryHub
 from tests.test_storage import InMemoryViperCloudProvider
 from viper import execution
 from viper._cloud import (
@@ -20,13 +21,17 @@ from viper._cloud import (
 )
 from viper.authoring import freeze_run_plan
 from viper.cloud import ViperCloud
+from viper.execution._promotion_journal import PublicationJournal
+from viper.execution.errors import RunPromotionError
 from viper.huggingface import HuggingFaceProvider
 from viper.references import (
     GcsFileRef,
     HuggingFaceFileRef,
     HuggingFaceStageResultSnapshotRef,
     ResolvedFileRef,
+    SnapshotFileRef,
 )
+from viper.storage import LocalArtifactStore
 
 
 class _HuggingFaceApi:
@@ -223,3 +228,92 @@ def test_fresh_workspace_materializes_each_provider_reference(
     assert gcs_path.read_bytes() == raw
     assert hf_path.read_bytes() == raw
     assert not (fresh / ".viper/store").exists()
+
+
+@pytest.mark.parametrize("lost_response", (False, True))
+def test_republication_recovers_commit_after_lost_response(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lost_response: bool
+) -> None:
+    """Reuse the same verified destination commit when publication resumes."""
+    api = MemoryHub(tmp_path / "hub")
+    provider = HuggingFaceProvider(
+        tmp_path, "owner/copies", "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    cloud = ViperCloud(
+        tmp_path,
+        HuggingFaceRepository(repository="owner/copies", repo_type="dataset"),
+        provider=provider,
+    )
+    destination = ViperCloudDestination(owner="owner", workspace="models")
+    source = LocalArtifactStore(tmp_path).snapshot({"weights.bin": b"weights"})
+    files = (
+        SnapshotFileRef(
+            path="weights.bin",
+            bytes=7,
+            sha256=hashlib.sha256(b"weights").hexdigest(),
+        ),
+    )
+    path = tmp_path / "progress.json"
+    api.fail_after_commit = lost_response
+    with PublicationJournal(path, "a" * 64, cloud, destination) as journal:
+        if lost_response:
+            with pytest.raises(RunPromotionError, match="outcome is unresolved"):
+                journal.publish(source, files, {"weights.bin": b"weights"}, "b" * 64)
+        else:
+            journal.publish(source, files, {"weights.bin": b"weights"}, "b" * 64)
+    committed, count = api.head, len(api.commits)
+    with PublicationJournal(path, "a" * 64, cloud, destination) as journal:
+        published, observed = journal.publish(
+            source, files, {"weights.bin": b"weights"}, "b" * 64
+        )
+        assert isinstance(published, HuggingFaceStageResultSnapshotRef)
+        assert published.commit == committed
+        assert observed == files
+        with pytest.raises(RunPromotionError, match="publication journal differs"):
+            journal.publish(source, files, {"weights.bin": b"weights"}, "c" * 64)
+        with pytest.raises(RunPromotionError, match="publication journal is locked"):
+            with PublicationJournal(path, "a" * 64, cloud, destination):
+                pytest.fail("a second writer acquired the lock")
+    assert len(api.commits) == count
+    with pytest.raises(RunPromotionError, match="publication journal differs"):
+        with PublicationJournal(path, "d" * 64, cloud, destination):
+            pytest.fail("a different request opened the saved progress")
+
+
+def test_republication_keeps_an_uncertain_write_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check saved progress before making another upload attempt."""
+    api = MemoryHub(tmp_path / "hub")
+    provider = HuggingFaceProvider(
+        tmp_path, "owner/copies", "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    cloud = ViperCloud(
+        tmp_path,
+        HuggingFaceRepository(repository="owner/copies", repo_type="dataset"),
+        provider=provider,
+    )
+    destination = ViperCloudDestination(owner="owner", workspace="models")
+    source = LocalArtifactStore(tmp_path).snapshot({"file.bin": b"x"})
+    files = (
+        SnapshotFileRef(
+            path="file.bin", bytes=1, sha256=hashlib.sha256(b"x").hexdigest()
+        ),
+    )
+    attempts = []
+
+    def interrupted(**kwargs: Any) -> None:
+        """Simulate a connection failure with an unknown remote outcome."""
+        attempts.append(kwargs)
+        raise ConnectionError("upload response unavailable")
+
+    monkeypatch.setattr(api, "create_commit", interrupted)
+    for _ in range(2):
+        with PublicationJournal(
+            tmp_path / "progress.json", "a" * 64, cloud, destination
+        ) as journal:
+            with pytest.raises(RunPromotionError, match="outcome is unresolved"):
+                journal.publish(source, files, {"file.bin": b"x"}, "b" * 64)
+    assert len(attempts) == 1
