@@ -7,7 +7,7 @@ check: check-fast
 check-fast:
 	ruff check setup.py src/viper tests
 	ruff format --check setup.py src/viper tests
-	pyright --pythonpath "$$($(PYTHON) -c 'import shutil; print(shutil.which("python"))')"
+	pyrefly check --python-interpreter-path "$$($(PYTHON) -c 'import sys; print(sys.executable)')"
 	$(PYTHON) -m pytest tests -q -m "unit or contract"
 
 check-integration:
