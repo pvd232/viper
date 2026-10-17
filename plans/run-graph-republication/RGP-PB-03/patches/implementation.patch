@@ -1,0 +1,433 @@
+diff --git a/src/viper/execution/_promotion.py b/src/viper/execution/_promotion.py
+index d9177fc..71d22bd 100644
+--- a/src/viper/execution/_promotion.py
++++ b/src/viper/execution/_promotion.py
+@@ -26,9 +26,11 @@ from ..references import (
+     ArtifactPointerRef,
+     CloudStageResultSnapshotRef,
+     GcsFileRef,
++    GcsStageResultSnapshotRef,
+     GitFileRef,
+     GitSource,
+     HuggingFaceFileRef,
++    HuggingFaceStageResultSnapshotRef,
+     LocalFileRef,
+     LocalStageResultSnapshotRef,
+     ResolvedArtifactPointerRef,
+@@ -42,6 +44,7 @@ from ..references import (
+     StageResultSnapshot,
+     StorageModel,
+     ViperCloudFileRef,
++    ViperCloudStageResultSnapshotRef,
+     resolve_snapshot_file_ref,
+ )
+ from ..reuse import ResolvedStageReuseRef, StageReuseReceipt, stage_spec_sha256
+@@ -95,20 +98,20 @@ class _RunGraphPromoter:
+         self.cloud = cloud
+         self.destination = destination
+         self.fetcher = fetcher
+-        self.files: dict[LocalFileRef, ResolvedFileRef] = {}
++        self.files: dict[StorageModel, ResolvedFileRef] = {}
+         self.snapshots: dict[
+-            LocalStageResultSnapshotRef,
++            _SourceSnapshot,
+             CloudStageResultSnapshotRef,
+         ] = {}
+         self.snapshot_files: dict[
+-            LocalStageResultSnapshotRef,
++            _SourceSnapshot,
+             tuple[SnapshotFileRef, ...],
+         ] = {}
+         self.documents: dict[
+             _SourceSnapshot,
+             dict[str, BaseModel],
+         ] = {}
+-        self.promoting: set[LocalStageResultSnapshotRef] = set()
++        self.promoting: set[_SourceSnapshot] = set()
+         self.receipt_hashes: dict[str, str] = {}
+         self.inventory: PromotionInventory | None = None
+         self.source_files: dict[StorageModel, tuple[int, str | None]] = {}
+@@ -428,25 +431,29 @@ class _RunGraphPromoter:
+                 self.discover_typed(item)
+ 
+     def promote_reference(self, reference: ResolvedFileRef) -> ResolvedFileRef:
+-        """Promote one local file after rewriting its referenced descendants."""
++        """Publish a file after updating the documents it depends on."""
+         location = reference.stored_at
+-        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
++        snapshot = self.snapshot_for(location)
++        if self.inventory is None and not isinstance(location, LocalFileRef):
+             return reference
+-        if not isinstance(location, LocalFileRef):
++        if isinstance(location, GitFileRef) and location.path not in self.documents.get(
++            snapshot, {}
++        ):
+             return reference
+         remembered = self.files.get(location)
+         if remembered is not None:
+             return remembered
+-        snapshot = self.snapshot_for(location)
+-        if not isinstance(snapshot, LocalStageResultSnapshotRef):
+-            raise RunPromotionError("local promotion requires a local snapshot")
+         promoted_snapshot = self.promote_snapshot(snapshot)
+-        matches = tuple(
+-            file for file in self.snapshot_files[snapshot] if file.path == location.path
++        identity = next(
++            (
++                file
++                for file in self.snapshot_files[snapshot]
++                if file.path == location.path
++            ),
++            None,
+         )
+-        if len(matches) != 1:
++        if identity is None:
+             raise RunPromotionError("source run graph is unavailable")
+-        identity = matches[0]
+         promoted = ResolvedFileRef(
+             sha256=identity.sha256,
+             bytes=identity.bytes,
+@@ -456,43 +463,62 @@ class _RunGraphPromoter:
+         return promoted
+ 
+     def promote_snapshot(
+-        self,
+-        snapshot: LocalStageResultSnapshotRef,
++        self, snapshot: _SourceSnapshot
+     ) -> CloudStageResultSnapshotRef:
+-        """Promote every member of one local snapshot as a sealed unit."""
++        """Publish a complete snapshot after updating its saved references."""
+         remembered = self.snapshots.get(snapshot)
+         if remembered is not None:
+             return remembered
+         if snapshot in self.promoting:
+-            raise RunPromotionError("source run graph contains a storage cycle")
++            raise RunPromotionError("storage cycle")
+         self.promoting.add(snapshot)
+-        store = local_artifact_store(snapshot)
+         try:
+-            paths = store.list_snapshot_files(snapshot)
++            self.discover_snapshot(snapshot)
++            if isinstance(snapshot, GitSource):
++                locations = tuple(
++                    file
++                    for file in self.source_files
++                    if self.snapshot_for(file) == snapshot
++                    and file.path in self.documents[snapshot]
++                )
++            else:
++                locations = self.source_members[snapshot]
+             original: dict[str, PublicationSource] = {}
+             identities = []
+-            for path in paths:
+-                location = LocalFileRef(
+-                    workspace=snapshot.workspace,
+-                    store=snapshot.store,
+-                    store_id=snapshot.store_id,
+-                    commit=snapshot.commit,
+-                    path=path,
+-                )
+-                source = store.path(location)
+-                original[path] = source
+-                identities.append(self.source_identity(path, source))
+-            if manifest_revision(tuple(identities)) != snapshot.commit:
+-                raise RunPromotionError("source run graph is unavailable")
++            for location in locations:
++                size, digest = self.source_files[location]
++                if isinstance(location, LocalFileRef):
++                    source = local_artifact_store(location).path(location)
++                    identity = self.source_identity(location.path, source)
++                    self._record_file(location, identity.bytes, identity.sha256)
++                else:
++                    if digest is None:
++                        raise RunPromotionError("source file hash is missing")
++                    identity = SnapshotFileRef(
++                        path=location.path, bytes=size, sha256=digest
++                    )
++                    reference = ResolvedFileRef(
++                        stored_at=location, bytes=size, sha256=digest
++                    )
++                    source = self.fetcher.path(reference)
++                original[location.path] = source
++                identities.append(identity)
++            if (
++                isinstance(snapshot, LocalStageResultSnapshotRef)
++                and manifest_revision(tuple(identities)) != snapshot.commit
++            ):
++                raise RunPromotionError("source snapshot files changed")
+             sources = self.rewrite_snapshot_documents(snapshot, original)
+-        except (OSError, RuntimeError) as error:
++            promoted, files = self._publish_sources(sources)
++            self.snapshots[snapshot] = promoted
++            self.snapshot_files[snapshot] = files
++            return promoted
++        except RunPromotionError:
++            raise
++        except Exception as error:
+             raise RunPromotionError("source run graph is unavailable") from error
+         finally:
+             self.promoting.remove(snapshot)
+-        promoted, files = self._publish_sources(sources)
+-        self.snapshots[snapshot] = promoted
+-        self.snapshot_files[snapshot] = files
+-        return promoted
+ 
+     def _publish_sources(
+         self,
+@@ -517,7 +543,7 @@ class _RunGraphPromoter:
+ 
+     def rewrite_snapshot_documents(
+         self,
+-        snapshot: LocalStageResultSnapshotRef,
++        snapshot: _SourceSnapshot,
+         original: dict[str, PublicationSource],
+     ) -> dict[str, PublicationSource]:
+         """Rewrite referenced documents and propagate changed stage identities."""
+@@ -552,7 +578,9 @@ class _RunGraphPromoter:
+ 
+     def promote_stage_reference(self, value: ResolvedStageRef) -> ResolvedStageRef:
+         """Promote one stage snapshot and bind its rewritten resolved record."""
+-        if not isinstance(value.snapshot, LocalStageResultSnapshotRef):
++        if self.inventory is None and not isinstance(
++            value.snapshot, LocalStageResultSnapshotRef
++        ):
+             return value
+         promoted_snapshot = self.promote_snapshot(value.snapshot)
+         matches = tuple(
+@@ -627,6 +655,16 @@ class _RunGraphPromoter:
+ 
+     def rewrite_typed(self, value: Any) -> Any:
+         """Promote storage references while preserving protocol model types."""
++        if isinstance(value, ArtifactPointerRef) and self.inventory is not None:
++            size, digest = self.source_files[value]
++            if digest is None:
++                raise RunPromotionError("source file hash is missing")
++            original = ResolvedArtifactPointerRef(
++                stored_at=value, bytes=size, sha256=digest
++            )
++            rewritten = self.promote_reference(original)
++            self.receipt_hashes[digest] = rewritten.sha256
++            return ResolvedArtifactPointerRef(**rewritten.model_dump())
+         if isinstance(value, StageReuseReceipt):
+             return self._rewrite_reuse_receipt(value)
+         if isinstance(value, ResolvedStageRef):
+@@ -640,6 +678,15 @@ class _RunGraphPromoter:
+             return type(value).model_validate(payload)
+         if isinstance(value, LocalStageResultSnapshotRef):
+             return self.promote_snapshot(value)
++        if self.inventory is not None and isinstance(
++            value,
++            (
++                GcsStageResultSnapshotRef,
++                HuggingFaceStageResultSnapshotRef,
++                ViperCloudStageResultSnapshotRef,
++            ),
++        ):
++            return self.promote_snapshot(value)
+         if isinstance(value, DownloadSourceClosureReceipt):
+             return self._rewrite_source_closure(value)
+         if isinstance(value, BaseModel):
+@@ -665,7 +712,9 @@ class _RunGraphPromoter:
+     def _rewrite_reuse_receipt(self, value: StageReuseReceipt) -> StageReuseReceipt:
+         """Bind the reuse key to its promoted source stage's pointer identities."""
+         source = value.source_stage
+-        if not isinstance(source.snapshot, LocalStageResultSnapshotRef):
++        if self.inventory is None and not isinstance(
++            source.snapshot, LocalStageResultSnapshotRef
++        ):
+             return value
+         original = self.documents[source.snapshot][source.resolved_spec.path]
+         rewritten_source = self.rewrite_typed(original)
+diff --git a/tests/fixtures.py b/tests/fixtures.py
+index 13d0caa..ab3deb9 100644
+--- a/tests/fixtures.py
++++ b/tests/fixtures.py
+@@ -1,6 +1,10 @@
+ """Shared protocol objects used by independent test modules."""
+ 
+ import hashlib
++from io import BytesIO
++from pathlib import Path
++from types import SimpleNamespace
++from typing import Any
+ 
+ from viper import config
+ from viper._schema import DataRole
+@@ -284,3 +288,60 @@ def resume_state(
+             state_dict={"num_yielded": 10},
+         ),
+     )
++
++
++class MemoryHub:
++    """Keep complete Hugging Face commits for storage tests."""
++
++    def __init__(self, cache: Path) -> None:
++        """Start an empty repository and a separate download cache."""
++        self.cache = cache
++        self.head = "0" * 40
++        self.commits: dict[str, dict[str, bytes]] = {self.head: {}}
++        self.messages: dict[str, str] = {}
++        self.fail_after_commit = False
++
++    def create_repo(self, **kwargs: Any) -> None:
++        """Keep the already-created test repository."""
++
++    def create_commit(self, *, operations: list[Any], **kwargs: Any) -> SimpleNamespace:
++        """Apply all files together and optionally lose the response."""
++        files = dict(self.commits[self.head])
++        for operation in operations:
++            source = operation.path_or_fileobj
++            files[operation.path_in_repo] = (
++                source.getvalue()
++                if isinstance(source, BytesIO)
++                else Path(source).read_bytes()
++            )
++        digest = hashlib.sha1()
++        digest.update(self.head.encode())
++        for name, raw in sorted(files.items()):
++            digest.update(name.encode())
++            digest.update(hashlib.sha256(raw).digest())
++        self.head = digest.hexdigest()
++        self.commits[self.head] = files
++        self.messages[self.head] = kwargs.get("commit_message", "")
++        if self.fail_after_commit:
++            self.fail_after_commit = False
++            raise ConnectionError("commit response lost")
++        return SimpleNamespace(oid=self.head)
++
++    def repo_info(self, **kwargs: Any) -> SimpleNamespace:
++        """Return the current commit and repository privacy."""
++        return SimpleNamespace(sha=self.head, private=True)
++
++    def list_repo_commits(self, **kwargs: Any) -> list[SimpleNamespace]:
++        """Return newest commits first for interrupted-write recovery."""
++        return [
++            SimpleNamespace(commit_id=commit, title=self.messages.get(commit, ""))
++            for commit in reversed(self.commits)
++        ]
++
++    def download(self, location: Any) -> Path:
++        """Write the exact committed file into the test download cache."""
++        raw = self.commits[location.commit][location.path]
++        path = self.cache / location.commit / location.path
++        path.parent.mkdir(parents=True, exist_ok=True)
++        path.write_bytes(raw)
++        return path
+diff --git a/tests/test_run_execution.py b/tests/test_run_execution.py
+index b5f7d53..5e95dc3 100644
+--- a/tests/test_run_execution.py
++++ b/tests/test_run_execution.py
+@@ -15,6 +15,7 @@ from datetime import UTC, datetime
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from pathlib import Path
+ from types import SimpleNamespace
++from typing import Any, cast
+ from unittest.mock import Mock
+ 
+ import pytest
+@@ -22,6 +23,7 @@ import pytest
+ import viper.config as current_config
+ import viper.execution as execution_module
+ from tests.fixtures import (
++    MemoryHub,
+     builtin_http,
+     http_policy,
+     http_request,
+@@ -32,7 +34,11 @@ from tests.fixtures import (
+ from tests.git_repository import REPOSITORY, run_git
+ from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
+ from viper import config
+-from viper._cloud import GcsRepository, resolve_publication_source
++from viper._cloud import (
++    GcsRepository,
++    HuggingFaceRepository,
++    resolve_publication_source,
++)
+ from viper._source import RunFetcher
+ from viper._verification.storage import read_attempt_reference, snapshot_identity
+ from viper.api import CompareRunsRequest, RunSuccess
+@@ -95,6 +101,7 @@ from viper.experiments import (
+     TrainVariantStageConfig,
+     VariantSpec,
+ )
++from viper.huggingface import HuggingFaceProvider
+ from viper.inputs import (
+     ExternalInputRef,
+     FutureInputRef,
+@@ -3056,3 +3063,75 @@ def test_promotion_rejects_missing_legacy_settings(tmp_path: Path) -> None:
+         )
+     fetcher.read.assert_not_called()
+     cloud.publish.assert_not_called()
++
++
++def test_republication_preserves_files_and_follows_new_references(
++    promotion_graph: SimpleNamespace,
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify an HF publication after blocking the original cloud clients."""
++    case = promotion_graph
++    api = MemoryHub(tmp_path / "hub-cache")
++    provider = HuggingFaceProvider(
++        tmp_path, "owner/additional", "dataset", api=cast(Any, api)
++    )
++    monkeypatch.setattr(provider, "_download", api.download)
++    target = ViperCloud(
++        tmp_path,
++        HuggingFaceRepository(repository="owner/additional", repo_type="dataset"),
++        provider=provider,
++    )
++
++    def choose_cloud(root, reference):
++        """Read from the repository named by each reference."""
++        if reference.kind == "huggingface":
++            return target if reference.repository == "owner/additional" else case.hf
++        return case.cloud
++
++    monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
++    monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
++    promoter = _RunGraphPromoter(
++        tmp_path,
++        target,
++        ViperCloudDestination(owner="machina", workspace="models"),
++        fetcher=RunFetcher(tmp_path, LocalArtifactStore(tmp_path), REPOSITORY),
++    )
++    inventory = PromotionInventory(roots=(case.selected,), required_files={})
++    promoter.discover_inventory(inventory)
++    before = case.cloud.provider.uploads.copy()
++    published = promoter.promote_reference(case.selected)
++    assert isinstance(published.stored_at, HuggingFaceFileRef)
++    for snapshot, locations in promoter.source_members.items():
++        copied = promoter.snapshots[snapshot]
++        for location in locations:
++            if location.path in promoter.documents.get(snapshot, {}):
++                continue
++            raw = target.fetch(target.file_ref(copied, location.path))
++            size, digest = promoter.source_files[location]
++            assert len(raw) == size
++            assert hashlib.sha256(raw).hexdigest() == digest
++
++    def destination_only(root, reference):
++        """Fail any attempted read from an original cloud repository."""
++        assert reference.kind == "huggingface"
++        assert reference.repository == "owner/additional"
++        reader_provider = HuggingFaceProvider(
++            root, "owner/additional", "dataset", api=cast(Any, api)
++        )
++        monkeypatch.setattr(reader_provider, "_download", api.download)
++        return ViperCloud(root, target.repository, provider=reader_provider)
++
++    monkeypatch.setattr(ViperCloud, "for_reference", destination_only)
++    monkeypatch.setattr(ViperCloud, "for_snapshot", destination_only)
++    record = ResolvedRun.model_validate(
++        parse_yaml_bytes(target.fetch(published.stored_at))
++    )
++    verified = verify_run_result(
++        record,
++        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
++        fetcher=RunFetcher(case.root, LocalArtifactStore(case.root), REPOSITORY),
++    )
++    assert verified is not None
++    assert before == case.cloud.provider.uploads
++    assert promoter.promote_reference(case.selected) == published

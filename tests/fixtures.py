@@ -1,6 +1,10 @@
 """Shared protocol objects used by independent test modules."""
 
 import hashlib
+from io import BytesIO
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 from viper import config
 from viper._schema import DataRole
@@ -284,3 +288,60 @@ def resume_state(
             state_dict={"num_yielded": 10},
         ),
     )
+
+
+class MemoryHub:
+    """Keep complete Hugging Face commits for storage tests."""
+
+    def __init__(self, cache: Path) -> None:
+        """Start an empty repository and a separate download cache."""
+        self.cache = cache
+        self.head = "0" * 40
+        self.commits: dict[str, dict[str, bytes]] = {self.head: {}}
+        self.messages: dict[str, str] = {}
+        self.fail_after_commit = False
+
+    def create_repo(self, **kwargs: Any) -> None:
+        """Keep the already-created test repository."""
+
+    def create_commit(self, *, operations: list[Any], **kwargs: Any) -> SimpleNamespace:
+        """Apply all files together and optionally lose the response."""
+        files = dict(self.commits[self.head])
+        for operation in operations:
+            source = operation.path_or_fileobj
+            files[operation.path_in_repo] = (
+                source.getvalue()
+                if isinstance(source, BytesIO)
+                else Path(source).read_bytes()
+            )
+        digest = hashlib.sha1()
+        digest.update(self.head.encode())
+        for name, raw in sorted(files.items()):
+            digest.update(name.encode())
+            digest.update(hashlib.sha256(raw).digest())
+        self.head = digest.hexdigest()
+        self.commits[self.head] = files
+        self.messages[self.head] = kwargs.get("commit_message", "")
+        if self.fail_after_commit:
+            self.fail_after_commit = False
+            raise ConnectionError("commit response lost")
+        return SimpleNamespace(oid=self.head)
+
+    def repo_info(self, **kwargs: Any) -> SimpleNamespace:
+        """Return the current commit and repository privacy."""
+        return SimpleNamespace(sha=self.head, private=True)
+
+    def list_repo_commits(self, **kwargs: Any) -> list[SimpleNamespace]:
+        """Return newest commits first for interrupted-write recovery."""
+        return [
+            SimpleNamespace(commit_id=commit, title=self.messages.get(commit, ""))
+            for commit in reversed(self.commits)
+        ]
+
+    def download(self, location: Any) -> Path:
+        """Write the exact committed file into the test download cache."""
+        raw = self.commits[location.commit][location.path]
+        path = self.cache / location.commit / location.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+        return path
