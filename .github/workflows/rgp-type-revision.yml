@@ -1,0 +1,67 @@
+name: PB-02 type revision preparation
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.repository == 'pvd232/viper' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'rgp/pb02-discovery-20261017'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Install check dependencies
+        run: python -m pip install -e '.[test,release,mcp,gcs]'
+      - name: Apply and check the reviewed type changes
+        run: |
+          python tools/prepare_rgptypes.py
+          rm tools/prepare_rgptypes.py
+          python - <<'PY'
+          import json, pathlib, subprocess
+          paths = json.loads(pathlib.Path('/tmp/rgp-type-paths.json').read_text())
+          subprocess.run(['ruff', 'check', '--select', 'I', '--fix', *paths], check=True)
+          subprocess.run(['ruff', 'format', *paths], check=True)
+          subprocess.run(['pyrefly', 'check', '--python-interpreter-path', __import__('sys').executable], check=True)
+          subprocess.run(['ruff', 'check', 'setup.py', 'src/viper', 'tests'], check=True)
+          subprocess.run(['ruff', 'format', '--check', 'setup.py', 'src/viper', 'tests'], check=True)
+          PY
+      - name: Check unit and contract behavior
+        run: python -m pytest tests -q -m 'unit or contract'
+      - name: Save checked Git objects for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.request
+          repo = 'pvd232/viper'
+          def call(endpoint, payload=None):
+              request = urllib.request.Request('https://api.github.com/repos/' + repo + '/' + endpoint, data=None if payload is None else json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'})
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  return json.load(response)
+          paths = json.loads(pathlib.Path('/tmp/rgp-type-paths.json').read_text())
+          entries = [{'path': p, 'mode': '100644', 'type': 'blob', 'content': pathlib.Path(p).read_text()} for p in paths]
+          for path in ['tools/prepare_rgptypes.py', '.github/workflows/rgp-type-revision.yml']:
+              entries.append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': None})
+          base = call('git/commits/' + os.environ['SOURCE_SHA'])['tree']['sha']
+          tree = call('git/trees', {'base_tree': base, 'tree': entries})['sha']
+          commit = call('git/commits', {'message': 'RGP-PB-02 revision: align checked types and preserve runtime rejection tests', 'tree': tree, 'parents': [os.environ['SOURCE_SHA']]})['sha']
+          receipt = {'source_sha': os.environ['SOURCE_SHA'], 'tree_sha': tree, 'commit_sha': commit, 'files': {p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in paths}, 'pyrefly': subprocess.check_output(['pyrefly', '--version'], text=True).strip()}
+          print(json.dumps(receipt, indent=2))
+          pathlib.Path('/tmp/type-revision.json').write_text(json.dumps(receipt, indent=2))
+          PY
+      - name: Retain checked source revision
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: checked-type-revision
+          retention-days: 3
+          path: /tmp/type-revision.json
