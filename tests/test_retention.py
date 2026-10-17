@@ -64,7 +64,7 @@ def _successful_result(
         "experiments/example/runs/selected/01ARZ3NDEKTSV4RRFFQ69G5FAV/"
         "stages/embed/resolved.yaml"
     )
-    snapshot = ViperCloudSnapshotPublisher(
+    snapshot, _ = ViperCloudSnapshotPublisher(
         root,
         ViperCloudDestination(owner="machina", workspace="retention"),
     ).publish(
