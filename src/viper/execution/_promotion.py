@@ -84,7 +84,7 @@ class PromotionInventory(ProtocolModel):
         SerializeAsAny[ResolvedStageRef | ResolvedFileRef | ResolvedRunRef], ...
     ] = Field(
         default=(),
-        description="Saved runs, stages, and files named by the application source records.",
+        description="Additional saved runs, stages, and source files.",
     )
     required_files: dict[str, ResolvedFileRef] = Field(
         description="Expected files, keyed by their role in the application."
