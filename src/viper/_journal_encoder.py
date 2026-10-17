@@ -64,6 +64,8 @@ def encode(texts: tuple[str, ...]) -> JournalEncodingResult:
     tokenizer = AutoTokenizer.from_pretrained(
         snapshot, padding_side="left", local_files_only=True, trust_remote_code=False
     )
+    if tokenizer is None:
+        raise ValueError("journal tokenizer is unavailable")
     model = AutoModel.from_pretrained(
         snapshot,
         dtype=torch.float32,

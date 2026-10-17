@@ -57,6 +57,7 @@ from .experiments import (
     ReplicateSpec,
     TrainVariantStageConfig,
     VariantSpec,
+    VariantStageConfig,
 )
 from .http import (
     BuiltinHttpImplementationSpec,
@@ -348,7 +349,10 @@ class StageDraft(BaseModel):
         output_type = (
             StageOutputs[StageDraftOutputRef]
             if origin is None
-            else origin[StageDraftOutputRef]
+            else cast(
+                "type[StageOutputs[StageDraftOutputRef]]",
+                origin.__class_getitem__(StageDraftOutputRef),
+            )
         )
         references = {
             name: StageDraftOutputRef(producer=self, output_name=name)
@@ -1079,7 +1083,13 @@ def _freeze_declared_outputs(
     """Freeze output values while retaining their declared output class."""
     declared_type = type(declared)
     origin = declared_type.__pydantic_generic_metadata__.get("origin")
-    output_type = StageOutputs[OutputSpec] if origin is None else origin[OutputSpec]
+    output_type = (
+        StageOutputs[OutputSpec]
+        if origin is None
+        else cast(
+            "type[StageOutputs[OutputSpec]]", origin.__class_getitem__(OutputSpec)
+        )
+    )
     values = {
         name: _freeze_output(root, run_root, stage_id, name, output)
         for name, output in declared.items()
@@ -1237,7 +1247,7 @@ def _stage_inputs(
     """Resolve input names while preserving each selected artifact's producer."""
     selected: dict[InputName, StageInputDraft] = {}
     if isinstance(inputs, Mapping):
-        entries = tuple(inputs.items())
+        entries: list[tuple[InputName, StageInputDraft]] = list(inputs.items())
     else:
         entries = []
         for value in inputs:
@@ -1460,7 +1470,7 @@ def _compile_variant(
     draft: VariantDraft,
 ) -> VariantSpec:
     """Compile the typed config selection for one variant."""
-    stage_configs = []
+    stage_configs: list[VariantStageConfig] = []
     for stage_id, stage_draft in draft.stages.items():
         spec = stage_draft.spec
         if isinstance(spec, BuildSpecDraft):
