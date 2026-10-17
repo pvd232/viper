@@ -9,6 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -31,6 +32,7 @@ from viper.execution._promotion_transfer import (
     directory_bytes,
 )
 from viper.execution.errors import RunPromotionError
+from viper.gcs import GcsProvider
 from viper.huggingface import HuggingFaceProvider
 from viper.references import (
     GcsFileRef,
@@ -487,3 +489,17 @@ def test_additional_publication_uses_a_separate_process(
                 limits=limits,
             )
     assert len(calls) == 1
+
+
+def test_transfer_keeps_the_same_connection_pool(tmp_path: Path) -> None:
+    """Keep the GCS pool when comparison revisits an already configured client."""
+    limits = TransferLimits(staging_bytes=64, cache_bytes=32, connections=2)
+    space = TransferSpace(tmp_path / "copy", limits)
+    client = Mock()
+    provider = GcsProvider(tmp_path, "source", client=client)
+    cloud = ViperCloud(tmp_path, GcsRepository(bucket="source"), provider=provider)
+    space.configure_cloud(cloud)
+    adapter = client._http.mount.call_args.args[1]
+    space.configure_cloud(cloud)
+    client._http.mount.assert_called_once_with("https://", adapter)
+    assert provider.max_workers == 1

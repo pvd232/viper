@@ -46,6 +46,7 @@ class TransferSpace:
         self.limits = limits
         self.peak_bytes = 0
         self.peak_cache_bytes = 0
+        self._configured: set[ViperCloud] = set()
 
     def check(self, snapshot_bytes: int = 0, largest_file: int = 0) -> None:
         """Check current use and reserve space for files awaiting verification."""
@@ -63,6 +64,8 @@ class TransferSpace:
 
     def configure_cloud(self, cloud: ViperCloud) -> None:
         """Use one upload worker and stream files into the copy directory."""
+        if cloud in self._configured:
+            return
         provider = cloud.provider
         if isinstance(provider, HuggingFaceProvider):
             provider.stream_files = True
@@ -79,6 +82,8 @@ class TransferSpace:
                     pool_block=True,
                 ),
             )
+
+        self._configured.add(cloud)
 
     def prepare_reader(self, fetcher: RunFetcher) -> None:
         """Configure the source clients used by the selected graph."""
