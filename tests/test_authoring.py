@@ -76,7 +76,7 @@ from viper.metrics import (
     metric,
     min,
 )
-from viper.outputs import EvalOutputs, StageOutputs, output
+from viper.outputs import EvalOutputs, OutputDraft, StageOutputs, output
 from viper.preflight import preflight_plan
 from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 from viper.resume import DataLoaderConfiguration
@@ -499,14 +499,16 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         fit,
         config=config.TrainConfig(),
         inputs={"dataset": dataset},
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": model,
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=lambda path: path.read_bytes(),
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft].model_validate(
+            {
+                "model": model,
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=lambda path: path.read_bytes(),
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(loss,),
         objective=min(loss),
         file_access="declared",
@@ -540,18 +542,20 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
                 data_role="training",
             )
         },
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=lambda path: path.read_bytes(),
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=lambda path: path.read_bytes(),
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft].model_validate(
+            {
+                "model": output(
+                    path="model.bin",
+                    loader=lambda path: path.read_bytes(),
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=lambda path: path.read_bytes(),
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(loss,),
         objective=min(loss),
     )
@@ -595,7 +599,7 @@ def test_plan_generates_read_only_run_id() -> None:
 
     assert len(draft.run_id) == 26
     with pytest.raises(ValidationError):
-        draft.run_id = RUN_ID
+        setattr(draft, "run_id", RUN_ID)
 
 
 def test_workspace_stage_may_derive_outputs_without_input_artifacts() -> None:
@@ -681,18 +685,20 @@ def _compiled_plan(
                 data_role="training",
             )
         },
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=module.load,
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=module.load,
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft].model_validate(
+            {
+                "model": output(
+                    path="model.bin",
+                    loader=module.load,
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=module.load,
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(loss,),
         objective=min(loss),
         file_access=file_access,
@@ -1060,7 +1066,7 @@ def test_execution_policy_plan_defaults_to_reproducible() -> None:
     assert selected.execution_policy.version == 1
     assert selected.reproducibility.determinism.deterministic_algorithms is True
     with pytest.raises(ValidationError):
-        selected.reproducibility.parallelism.torch_intraop_threads = 8
+        setattr(selected.reproducibility.parallelism, "torch_intraop_threads", 8)
 
 
 def test_execution_policy_plan_relaxed_with_parallelism() -> None:

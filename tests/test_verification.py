@@ -217,7 +217,7 @@ def loader_ref(
     return artifact_loader_ref(loader_path(name), raw)
 
 
-def yaml_bytes(value: object) -> bytes:
+def yaml_bytes(value: Any) -> bytes:
     """Serialize one value as YAML bytes."""
     data = YAML_ADAPTER.dump_python(value, mode="json")
     data_s = yaml.safe_dump(data, sort_keys=True)

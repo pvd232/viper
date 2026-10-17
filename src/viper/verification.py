@@ -330,6 +330,8 @@ def _verify_download_source_closure(
         selected_refs: dict[StageId, ResolvedStageRef] = {}
         selected_results: dict[StageId, ResolvedBaseSpec] = {}
 
+        source_stages = source_attempt.resolved_stages
+
         def load_stage(branch_stage_id: StageId) -> None:
             if branch_stage_id in selected_results:
                 return
@@ -342,11 +344,7 @@ def _verify_download_source_closure(
                 None,
             )
             resolved = next(
-                (
-                    item
-                    for item in source_attempt.resolved_stages
-                    if item.stage_id == branch_stage_id
-                ),
+                (item for item in source_stages if item.stage_id == branch_stage_id),
                 None,
             )
             if planned is None or resolved is None:

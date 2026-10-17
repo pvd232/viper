@@ -30,7 +30,7 @@ jobs:
         run: |
           ruff check setup.py src/viper tests
           ruff format --check setup.py src/viper tests
-          pyright --pythonpath "$(command -v python)"
+          pyrefly check --python-interpreter-path "$(command -v python)"
       - name: Run unit and contract tests
         run: python -m pytest tests -q -m "unit or contract"
 

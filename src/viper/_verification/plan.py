@@ -366,7 +366,8 @@ def verify_experiment_and_variant(
             else (ast.FunctionDef, ast.AsyncFunctionDef)
         )
         if not any(
-            isinstance(node, permitted_nodes) and node.name == implementation.symbol
+            isinstance(node, permitted_nodes)
+            and getattr(node, "name", None) == implementation.symbol
             for node in metric_tree.body
         ):
             raise VerificationError(

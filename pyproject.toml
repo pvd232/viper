@@ -41,7 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-    "pyright>=1.1.400,<2",
+    "pyrefly==1.4.0",
     "pytest>=9,<10",
     "ruff>=0.12,<1",
 ]
@@ -107,3 +107,10 @@ include = ["viper*"]
 
 [tool.setuptools.package-data]
 viper = ["py.typed"]
+
+[tool.pyrefly]
+project-includes = ["setup.py", "src/viper", "tests", "tools"]
+project-excludes = ["archive"]
+search-path = ["src", "."]
+python-version = "3.11"
+preset = "default"

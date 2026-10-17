@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -31,6 +30,7 @@ from viper.metrics import (
     MetricVerificationReceipt,
     invoke_metric,
 )
+from viper.stages import InternalSpec, ResolvedInternalSpec
 from viper.verification import verify_run_result
 
 
@@ -151,8 +151,8 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
         data_role="eval",
     )
     resolved = metric_execution._resolve_metric_dependencies(
-        SimpleNamespace(inputs={}),  # pyright: ignore[reportArgumentType]
-        SimpleNamespace(  # pyright: ignore[reportArgumentType]
+        InternalSpec.model_construct(inputs={}),
+        ResolvedInternalSpec.model_construct(
             inputs={},
             artifacts={
                 "predictions": artifacts.ResolvedSingleFileArtifact(
@@ -163,9 +163,7 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
         ),
         stage_ref,
         {},
-        SimpleNamespace(  # pyright: ignore[reportArgumentType]
-            dependencies=(dependency,)
-        ),
+        metrics.MetricSpec.model_construct(dependencies=(dependency,)),
         {},
     )
 
