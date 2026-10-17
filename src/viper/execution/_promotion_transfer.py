@@ -8,33 +8,14 @@ from pathlib import Path
 
 import httpx
 from huggingface_hub import constants, set_client_factory
-from pydantic import Field
 from requests.adapters import HTTPAdapter
 
-from .._schema import ProtocolModel
 from .._source import RunFetcher
 from ..cloud import ViperCloud
 from ..gcs import GcsProvider
 from ..huggingface import HuggingFaceProvider
+from ..storage import TransferLimits
 from .errors import RunPromotionError
-
-
-class TransferLimits(ProtocolModel):
-    """Limit disk use and connections for one graph copy."""
-
-    staging_bytes: int = Field(
-        gt=0, strict=True, description="Maximum bytes in the copy's working directory."
-    )
-    cache_bytes: int = Field(
-        gt=0,
-        strict=True,
-        description="Maximum bytes kept in the copy's download cache.",
-    )
-    connections: int = Field(
-        gt=0,
-        strict=True,
-        description="Maximum active connections used by a transfer client.",
-    )
 
 
 def directory_bytes(root: Path) -> int:
@@ -86,6 +67,7 @@ class TransferSpace:
         if isinstance(provider, HuggingFaceProvider):
             provider.stream_files = True
             provider.upload_threads = 1
+            provider.cache_dir = self.cache / "destination-hub"
         elif isinstance(provider, GcsProvider):
             provider.max_workers = 1
             provider.sliced_fetch_min_bytes = sys.maxsize

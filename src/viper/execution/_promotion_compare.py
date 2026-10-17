@@ -25,7 +25,7 @@ from ..references import (
 from ..reuse import stage_spec_sha256
 from ..serialization import parse_yaml_bytes
 from ..stages import Spec
-from ._promotion_journal import _Copy
+from ._promotion_journal import SnapshotCopy
 from ._promotion_transfer import TransferSpace
 from .errors import RunPromotionError
 
@@ -39,7 +39,7 @@ def _key(value: BaseModel | dict[str, Any]) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-def _file(copy: _Copy, member: SnapshotFileRef) -> ResolvedFileRef:
+def _file(copy: SnapshotCopy, member: SnapshotFileRef) -> ResolvedFileRef:
     """Locate an original file using the saved snapshot and file identity."""
     if isinstance(copy.source, GitSource):
         location = GitFileRef(**copy.source.model_dump(), path=member.path)
@@ -79,7 +79,7 @@ class GraphComparison:
 
     def __init__(
         self,
-        copies: Sequence[_Copy],
+        copies: Sequence[SnapshotCopy],
         documents: Sequence[StorageModel],
         source: RunFetcher,
         destination: RunFetcher,
@@ -99,7 +99,7 @@ class GraphComparison:
         self.space = space
         self.files: dict[str, ResolvedFileRef] = {}
         self.originals: dict[str, ResolvedFileRef] = {}
-        self.containers: dict[str, _Copy] = {}
+        self.containers: dict[str, SnapshotCopy] = {}
         self.snapshots: dict[str, dict[str, Any]] = {}
         self.hashes: dict[str, str] = {}
         for copy in self.copies:
@@ -132,7 +132,7 @@ class GraphComparison:
         if not self.documents <= self.originals.keys():
             raise RunPromotionError("document list names an uncopied file")
 
-    def _expected(self, value: Any, copy: _Copy) -> Any:
+    def _expected(self, value: Any, copy: SnapshotCopy) -> Any:
         """Calculate the allowed reference and derived-hash changes from the source."""
         if isinstance(value, list):
             return [self._expected(item, copy) for item in value]

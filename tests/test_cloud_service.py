@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import json
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,7 +27,6 @@ from viper.authoring import freeze_run_plan
 from viper.cloud import ViperCloud
 from viper.execution._promotion_journal import PublicationJournal
 from viper.execution._promotion_transfer import (
-    TransferLimits,
     TransferSpace,
     directory_bytes,
 )
@@ -37,9 +37,10 @@ from viper.references import (
     HuggingFaceFileRef,
     HuggingFaceStageResultSnapshotRef,
     ResolvedFileRef,
+    ResolvedRunRef,
     SnapshotFileRef,
 )
-from viper.storage import LocalArtifactStore
+from viper.storage import LocalArtifactStore, RunPromotionPolicy, TransferLimits
 
 
 class _HuggingFaceApi:
@@ -407,3 +408,82 @@ def test_transfer_space_checks_capacity_and_preserves_source_files(
     shared = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), "")
     with pytest.raises(RunPromotionError, match="cleanup requires the copy's cache"):
         space.release(shared)
+
+
+@pytest.mark.parametrize("reply", ("valid", "failed", "wrong_host", "wrong_roots"))
+def test_additional_publication_uses_a_separate_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reply: str
+) -> None:
+    """Pass the exact copy request to a child and validate the returned hosts."""
+    original = ResolvedRunRef(
+        stored_at=GcsFileRef(
+            bucket="original",
+            owner="owner",
+            workspace="runs",
+            revision="a" * 64,
+            path="run.yaml",
+        ),
+        sha256="b" * 64,
+        bytes=8,
+    )
+    copied = ResolvedRunRef(
+        stored_at=HuggingFaceFileRef(
+            repository="owner/additional",
+            repo_type="dataset",
+            commit="c" * 40,
+            path="run.yaml",
+        ),
+        sha256="d" * 64,
+        bytes=9,
+    )
+    host = HuggingFaceRepository(repository="owner/additional", repo_type="dataset")
+    limits = TransferLimits(staging_bytes=2048, cache_bytes=1024, connections=2)
+    calls = []
+
+    def run(command, **kwargs):
+        """Check process settings and return a controlled publication response."""
+        request = json.loads(kwargs["input"])
+        calls.append(request)
+        assert command[-1] == "viper.execution._promotion_worker"
+        assert kwargs["env"]["HF_HUB_DISABLE_XET"] == "1"
+        assert request["limits"] == limits.model_dump()
+        assert request["inventory"]["roots"] == [original.model_dump(mode="json")]
+        assert request["policy"]["hosts"] == [host.model_dump(mode="json")]
+        response = {
+            "passed": True,
+            "host": host.model_dump(mode="json"),
+            "source_roots": [original.model_dump(mode="json")],
+            "destination_roots": [copied.model_dump(mode="json")],
+        }
+        if reply == "wrong_host":
+            response["host"] = {**response["host"], "repository": "owner/other"}
+        if reply == "wrong_roots":
+            response["source_roots"] = []
+        return SimpleNamespace(
+            returncode=1 if reply == "failed" else 0,
+            stdout=json.dumps({"publications": [response]}),
+            stderr=json.dumps({"error": "copy interrupted"}),
+        )
+
+    monkeypatch.setattr(execution.subprocess, "run", run)
+    if reply == "valid":
+        assert execution.promote_run_to_cloud(
+            tmp_path,
+            original,
+            ViperCloudDestination(owner="owner", workspace="runs"),
+            policy=RunPromotionPolicy(hosts=(host,)),
+            limits=limits,
+        ) == (copied,)
+    else:
+        message = (
+            "copy interrupted" if reply == "failed" else "publication result is invalid"
+        )
+        with pytest.raises(RunPromotionError, match=message):
+            execution.promote_run_to_cloud(
+                tmp_path,
+                original,
+                ViperCloudDestination(owner="owner", workspace="runs"),
+                policy=RunPromotionPolicy(hosts=(host,)),
+                limits=limits,
+            )
+    assert len(calls) == 1

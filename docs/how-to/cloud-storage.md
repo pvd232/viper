@@ -133,3 +133,33 @@ that link, lists the input, and keeps the dependency order for publication.
 A separate required-file inventory detects missing application inputs.
 Additional local files are listed with their sizes; their hashes are checked
 when publication prepares the snapshot.
+
+### Publish to additional hosts
+
+Pass `policy=RunPromotionPolicy(hosts=(host, ...))` and `limits=TransferLimits(...)`
+to `execution.promote_run_to_cloud(root, source, destination, ...)`. A host is an
+existing `GcsRepository` or `HuggingFaceRepository`. `destination` supplies its
+logical owner and workspace. Each target repository must already be accessible.
+
+The policy form accepts one run reference or a tuple of run references. It
+returns a tuple ordered by host, then by the supplied runs. `required_files`
+can name exact input or output references that must appear in the discovered
+graph. `trusted_source_repositories` permits additional pinned code repositories
+during ordinary verification. The original publications, run pointers, and
+workspace configuration remain unchanged.
+
+`TransferLimits`, defined in `viper.storage`, has `staging_bytes`, `cache_bytes`,
+and `connections`. Choose disk limits from the discovered graph and the available
+working disk. The copy process checks space before loading source artifacts.
+It uses a task-owned cache, serial file transfers, and a shared HTTP pool.
+The dedicated process sets `HF_HUB_DISABLE_XET=1` to keep transfer connections
+under that pool's control. Source file paths and shared caches remain intact.
+
+Progress is saved under `.viper/promotion/<request-digest>/`. Repeating the exact
+request checks saved publication intents and reuses completed destination
+commits. An uncertain upload stays recorded until its outcome can be verified.
+The source-to-destination comparison is saved before the final loader checks.
+`result.json` records the completed additional publications.
+
+The three-argument call retains its single-reference result and workspace-selected
+destination. The additional-host path is opt-in.
