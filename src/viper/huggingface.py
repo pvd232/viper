@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import tempfile
 from collections.abc import Mapping
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
 
-from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
+from huggingface_hub import (
+    CommitOperationAdd,
+    HfApi,
+    get_session,
+    hf_hub_download,
+    hf_hub_url,
+    hf_raise_for_status,
+)
+from huggingface_hub.utils._headers import build_hf_headers
 
 from ._cloud import (
     PublicationSource,
@@ -52,6 +59,9 @@ class HuggingFaceProvider(ViperCloudProvider):
         self.repository = repository
         self.repo_type: Literal["model", "dataset", "space"] = repo_type
         self.api = api or HfApi()
+        self.stream_files = False
+        self.cache_dir: Path | None = None
+        self.upload_threads = 5
 
     @property
     def _api_repo_type(self) -> Literal["dataset", "space"] | None:
@@ -104,6 +114,7 @@ class HuggingFaceProvider(ViperCloudProvider):
             repo_type=self._api_repo_type,
             operations=operations,
             commit_message=f"Publish VIPER revision {revision}",
+            num_threads=self.upload_threads,
         )
         return HuggingFaceStageResultSnapshotRef(
             repository=self.repository,
@@ -171,6 +182,7 @@ class HuggingFaceProvider(ViperCloudProvider):
                 filename=location.path,
                 repo_type=None if location.repo_type == "model" else location.repo_type,
                 revision=location.commit,
+                cache_dir=self.cache_dir,
             )
             return Path(downloaded)
         except (OSError, ValueError) as error:
@@ -208,16 +220,45 @@ class HuggingFaceProvider(ViperCloudProvider):
         )
         temporary = Path(temporary_name)
         try:
-            source = self._download(location)
-            with (
-                source.open("rb") as source_stream,
-                os.fdopen(descriptor, "wb") as target_stream,
-            ):
-                shutil.copyfileobj(source_stream, target_stream, length=1024 * 1024)
+            digest_state = hashlib.sha256()
+            size = 0
+            with os.fdopen(descriptor, "wb") as target_stream:
+                if self.stream_files:
+                    url = hf_hub_url(
+                        self.repository,
+                        location.path,
+                        repo_type=self._api_repo_type,
+                        revision=location.commit,
+                    )
+                    with get_session().stream(
+                        "GET",
+                        url,
+                        headers=build_hf_headers(token=self.api.token),
+                        follow_redirects=True,
+                        timeout=120,
+                    ) as response:
+                        hf_raise_for_status(response)
+                        for chunk in response.iter_bytes(1024 * 1024):
+                            size += len(chunk)
+                            if size > identity.bytes:
+                                raise ViperCloudError(
+                                    "Hugging Face file exceeds its recorded size"
+                                )
+                            digest_state.update(chunk)
+                            target_stream.write(chunk)
+                else:
+                    with self._download(location).open("rb") as source_stream:
+                        while chunk := source_stream.read(1024 * 1024):
+                            size += len(chunk)
+                            if size > identity.bytes:
+                                raise ViperCloudError(
+                                    "Hugging Face file exceeds its recorded size"
+                                )
+                            digest_state.update(chunk)
+                            target_stream.write(chunk)
                 target_stream.flush()
                 os.fsync(target_stream.fileno())
-            with temporary.open("rb") as stream:
-                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            digest = digest_state.hexdigest()
             if temporary.stat().st_size != identity.bytes or digest != identity.sha256:
                 raise ViperCloudError("Hugging Face file identity changed")
             os.replace(temporary, target)

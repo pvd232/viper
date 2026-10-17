@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
 import pytest
 
 from tests.fixtures import MemoryHub
@@ -18,10 +19,17 @@ from viper._cloud import (
     GcsRepository,
     HuggingFaceRepository,
     ViperCloudDestination,
+    ViperCloudError,
 )
+from viper._source import RunFetcher
 from viper.authoring import freeze_run_plan
 from viper.cloud import ViperCloud
 from viper.execution._promotion_journal import PublicationJournal
+from viper.execution._promotion_transfer import (
+    TransferLimits,
+    TransferSpace,
+    directory_bytes,
+)
 from viper.execution.errors import RunPromotionError
 from viper.huggingface import HuggingFaceProvider
 from viper.references import (
@@ -317,3 +325,85 @@ def test_republication_keeps_an_uncertain_write_pending(
             with pytest.raises(RunPromotionError, match="outcome is unresolved"):
                 journal.publish(source, files, {"file.bin": b"x"}, "b" * 64)
     assert len(attempts) == 1
+
+
+@pytest.mark.parametrize("body", (b"weights", b"short", b"WEIGHTS", b"weights-extra"))
+def test_streamed_hub_file_checks_size_and_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: bytes
+) -> None:
+    """Check streamed files and discard temporary bytes after a failed check."""
+    requests = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        """Serve the chosen body through the normal HTTP streaming interface."""
+        requests.append(request.url.path)
+        return httpx.Response(200, content=body)
+
+    client = httpx.Client(transport=httpx.MockTransport(respond))
+    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+    provider = HuggingFaceProvider(tmp_path, "owner/copies", "dataset")
+    provider.stream_files = True
+    location = HuggingFaceFileRef(
+        repository="owner/copies",
+        repo_type="dataset",
+        commit="a" * 40,
+        path="weights.bin",
+    )
+    identity = SnapshotFileRef(
+        path="weights.bin", bytes=7, sha256=hashlib.sha256(b"weights").hexdigest()
+    )
+    target = tmp_path / "restored.bin"
+    with client:
+        if body == b"weights":
+            assert (
+                provider.fetch_to_path(location, identity, target).read_bytes() == body
+            )
+        else:
+            with pytest.raises(ViperCloudError):
+                provider.fetch_to_path(location, identity, target)
+            assert not target.exists()
+            assert not list(tmp_path.glob(".restored.bin.*"))
+    assert len(requests) == 1
+
+
+def test_transfer_space_checks_capacity_and_preserves_source_files(
+    tmp_path: Path,
+) -> None:
+    """Reject oversized work and remove only the copy's verified downloads."""
+    limits = TransferLimits(staging_bytes=64, cache_bytes=32, connections=2)
+    space = TransferSpace(tmp_path / "copy", limits)
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        "https://example.test/code",
+        cache_root=space.cache,
+    )
+    with pytest.raises(RunPromotionError, match="staging budget is insufficient"):
+        space.check(40, 40)
+    with pytest.raises(RunPromotionError, match="cache budget is insufficient"):
+        space.check(33)
+    (local,) = LocalArtifactStore(tmp_path).resolved_files({"original.bin": b"weights"})
+    original = fetcher.path(local)
+    remote = ResolvedFileRef(
+        stored_at=HuggingFaceFileRef(
+            repository="owner/copies",
+            repo_type="dataset",
+            commit="a" * 40,
+            path="weights.bin",
+        ),
+        bytes=7,
+        sha256=local.sha256,
+    )
+    fetcher._verified_objects.write(remote, b"weights")
+    cached = fetcher._verified_objects.path(remote)
+    fetcher.remember_path(remote, cached)
+    space.check()
+    assert space.peak_bytes == space.peak_cache_bytes == 7
+    space.release(fetcher)
+    assert not cached.exists()
+    assert original.read_bytes() == b"weights"
+    assert fetcher.path(local) == original
+    assert directory_bytes(space.root) == 0
+    shared = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), "")
+    with pytest.raises(RunPromotionError, match="cleanup requires the copy's cache"):
+        space.release(shared)

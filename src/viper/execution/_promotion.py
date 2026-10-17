@@ -60,6 +60,7 @@ from ..storage import (
 )
 from ..verification import verify_run_result
 from ._promotion_journal import PublicationJournal
+from ._promotion_transfer import TransferSpace
 from ._restore import resolve_run_reference
 from .errors import RunPromotionError
 
@@ -95,6 +96,7 @@ class _RunGraphPromoter:
         *,
         fetcher: RunFetcher,
         journal: PublicationJournal | None = None,
+        space: TransferSpace | None = None,
     ) -> None:
         """Use the supplied fetcher for source documents."""
         self.root = root
@@ -102,6 +104,12 @@ class _RunGraphPromoter:
         self.destination = destination
         self.fetcher = fetcher
         self.journal = journal
+        self.space = space
+        if space is not None:
+            if journal is None:
+                raise RunPromotionError("bounded copies require a publication journal")
+            journal.space = space
+            space.configure_cloud(cloud)
         self.files: dict[StorageModel, ResolvedFileRef] = {}
         self.snapshots: dict[
             _SourceSnapshot,
@@ -207,11 +215,18 @@ class _RunGraphPromoter:
 
         for snapshot in self.source_members:
             visit(snapshot)
+        if self.space is not None:
+            self.space.prepare_reader(self.fetcher)
+            for locations in self.source_members.values():
+                sizes = [self.source_files[file][0] for file in locations]
+                self.space.check(sum(sizes), max(sizes, default=0))
         return tuple(ordered)
 
     def read_document(self, reference: ResolvedFileRef) -> bytes:
         """Read a run document through the supplied fetcher."""
         try:
+            if self.space is not None:
+                self.space.check(reference.bytes, reference.bytes)
             return self.fetcher.read(reference)
         except Exception as err:
             raise RunPromotionError("source run graph is unavailable") from err
@@ -478,6 +493,12 @@ class _RunGraphPromoter:
         self.promoting.add(snapshot)
         try:
             self.discover_snapshot(snapshot)
+            for child in sorted(
+                self.dependencies.get(snapshot, ()),
+                key=lambda item: item.model_dump_json(),
+            ):
+                if not isinstance(child, GitSource) or child in self.documents:
+                    self.promote_snapshot(child)
             if isinstance(snapshot, GitSource):
                 locations = tuple(
                     file
@@ -487,6 +508,9 @@ class _RunGraphPromoter:
                 )
             else:
                 locations = self.source_members[snapshot]
+            if self.space is not None:
+                sizes = [self.source_files[file][0] for file in locations]
+                self.space.check(sum(sizes), max(sizes, default=0))
             original: dict[str, PublicationSource] = {}
             identities = []
             for location in locations:
@@ -518,6 +542,9 @@ class _RunGraphPromoter:
             )
             self.snapshots[snapshot] = promoted
             self.snapshot_files[snapshot] = files
+            if self.space is not None:
+                self.space.check()
+                self.space.release(self.fetcher)
             return promoted
         except RunPromotionError:
             raise
@@ -534,7 +561,11 @@ class _RunGraphPromoter:
         source_files: tuple[SnapshotFileRef, ...],
     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
         """Stage verified neighboring-store files within the publication root."""
-        staging_root = self.root / ".viper" / "promotion"
+        staging_root = (
+            self.space.root / "staging"
+            if self.space is not None
+            else self.root / ".viper" / "promotion"
+        )
         staging_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=staging_root) as temporary:
             confined: dict[str, PublicationSource] = {}
@@ -548,6 +579,8 @@ class _RunGraphPromoter:
                 except OSError:
                     shutil.copyfile(source, staged)
                 confined[path] = staged
+            if self.space is not None:
+                self.space.check()
             if self.journal is not None:
                 children = [
                     (
