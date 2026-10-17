@@ -1,0 +1,3 @@
+project-includes = ["setup.py", "src/viper", "tests", "tools"]
+search-path = ["src", "."]
+python-version = "3.11"

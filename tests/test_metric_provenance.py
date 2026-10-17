@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -151,20 +152,26 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
         data_role="eval",
     )
     resolved = metric_execution._resolve_metric_dependencies(
-        SimpleNamespace(inputs={}),  # pyright: ignore[reportArgumentType]
-        SimpleNamespace(  # pyright: ignore[reportArgumentType]
-            inputs={},
-            artifacts={
-                "predictions": artifacts.ResolvedSingleFileArtifact(
-                    relative_path="predictions.json",
-                    file=file,
-                )
-            },
+        cast(Any, SimpleNamespace(inputs={})),  # pyright: ignore[reportArgumentType]
+        cast(
+            Any,
+            SimpleNamespace(  # pyright: ignore[reportArgumentType]
+                inputs={},
+                artifacts={
+                    "predictions": artifacts.ResolvedSingleFileArtifact(
+                        relative_path="predictions.json",
+                        file=file,
+                    )
+                },
+            ),
         ),
         stage_ref,
         {},
-        SimpleNamespace(  # pyright: ignore[reportArgumentType]
-            dependencies=(dependency,)
+        cast(
+            Any,
+            SimpleNamespace(  # pyright: ignore[reportArgumentType]
+                dependencies=(dependency,)
+            ),
         ),
         {},
     )

@@ -131,7 +131,7 @@ from viper.metrics import (
 from viper.metrics import (
     min as minimize,
 )
-from viper.outputs import OutputSpec, StageOutputs, output
+from viper.outputs import OutputDraft, OutputSpec, StageOutputs, output
 from viper.references import (
     GcsFileRef,
     GitFileRef,
@@ -1831,24 +1831,28 @@ def _freeze_retry_plan(
             else {"prior": downloaded.outputs["prior"]}
         ),
         input_roots="any" if downloaded is None else "download",
-        outputs={  # pyright: ignore[reportArgumentType]
-            "features": output(
-                path="features.bin",
-                loader=module.load,
-                data_role="training",
-            )
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{  # pyright: ignore[reportArgumentType]
+                "features": output(
+                    path="features.bin",
+                    loader=module.load,
+                    data_role="training",
+                )
+            }
+        ),
     )
     embedded = stage(
         module.encode,
         inputs={"features": prepared.outputs["features"]},
-        outputs={  # pyright: ignore[reportArgumentType]
-            "embedding": output(
-                path="embedding.bin",
-                loader=module.load,
-                data_role="training",
-            )
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{  # pyright: ignore[reportArgumentType]
+                "embedding": output(
+                    path="embedding.bin",
+                    loader=module.load,
+                    data_role="training",
+                )
+            }
+        ),
         input_roots="download" if download_rooted or downloaded is not None else "any",
     )
     authored = experiment(
@@ -2112,18 +2116,20 @@ def test_cloud_recomputed_metric_reads_declared_artifact_path(
                 data_role="training",
             )
         },
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=module.load,
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=module.load_state,
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{  # pyright: ignore[reportArgumentType]
+                "model": output(
+                    path="model.bin",
+                    loader=module.load,
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=module.load_state,
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(model_bytes,),
         objective=minimize(model_bytes),
     )
@@ -2747,18 +2753,20 @@ def test_verified_reuse_skips_stage_process(
                 data_role="training",
             )
         },
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=module.load,
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=module.load_state,
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{  # pyright: ignore[reportArgumentType]
+                "model": output(
+                    path="model.bin",
+                    loader=module.load,
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=module.load_state,
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(loss,),
         objective=minimize(loss),
     )

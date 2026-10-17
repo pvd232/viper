@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, get_args
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -153,7 +153,7 @@ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
 
 def test_diagnostic_accepts_descriptive_metrics() -> None:
     """Permit measurements that describe a diagnostic result."""
-    assert "diagnostic" in metrics.MetricKind.__args__
+    assert "diagnostic" in get_args(metrics.MetricKind)
 
 
 def test_diagnostic_dispatch_is_not_an_eval_fallback() -> None:
