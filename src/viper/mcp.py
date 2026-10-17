@@ -282,7 +282,7 @@ def call_tool(
     allowed = _operations(access)
     if name not in allowed:
         raise ValueError(f"MCP tool is unavailable in {access} mode: {name}")
-    operation = name
+    operation = cast(OperationName, name)
     try:
         payload = _request_payload(root.resolve(), operation, arguments or {})
     except (ValueError, TypeError) as exc:

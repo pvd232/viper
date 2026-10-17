@@ -47,7 +47,7 @@ def _policy(*, host: str, port: int) -> HttpRetrievalPolicy:
 
 def _request(**updates: object) -> HttpRequestSpec:
     """Build one immutable request with fixed response-body identity."""
-    values = {
+    values: dict[str, object] = {
         "url": "https://data.example.test/archive.bin",
         "version": "2026-08-23",
         "expected_body_sha256": "a" * 64,

@@ -360,7 +360,9 @@ def verify_experiment_and_variant(
             raise VerificationError(
                 f"metric {metric.metric_id!r} implementation is not valid Python"
             ) from exc
-        permitted_nodes: tuple[type[ast.AST], ...] = (
+        permitted_nodes: tuple[
+            type[ast.ClassDef] | type[ast.FunctionDef] | type[ast.AsyncFunctionDef], ...
+        ] = (
             (ast.ClassDef,)
             if metric.mode == "stateful"
             else (ast.FunctionDef, ast.AsyncFunctionDef)

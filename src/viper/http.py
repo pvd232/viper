@@ -378,7 +378,7 @@ class HttpCallable(Protocol[HttpConfigT]):
 def http(
     *,
     id: HumanId,
-    config: type[HttpConfigT] = HttpConfig,
+    config: type[HttpConfig] = HttpConfig,
     executables: tuple[ExternalExecutableSpec, ...] = (),
 ) -> Callable[[DecoratedHttp], DecoratedHttp]:
     """Declare one workspace-owned HTTP callable with its config type."""

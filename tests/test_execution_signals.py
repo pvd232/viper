@@ -44,7 +44,7 @@ from viper.evidence import VerificationError, VerificationPolicy
 from viper.execution import run as execute_run
 from viper.journal import DurableJournal
 from viper.metrics import measure, min
-from viper.outputs import OutputDraft, output
+from viper.outputs import OutputDraft, StageOutputs, output
 from viper.preflight import preflight_plan
 from viper.references import (
     GitFileRef,
@@ -231,25 +231,27 @@ def _freeze_signal_plan(
             hosts=frozenset({host}),
             ports=frozenset({port}),
         ),
-        outputs={"prior": prior_artifact},  # pyright: ignore[reportArgumentType]
+        outputs=StageOutputs[OutputDraft](**{"prior": prior_artifact}),
     )
     objective = measure(fixture.signal_objective, config=config.MetricConfig())
     training = stage(
         fixture.train,
         config=config.TrainConfig(),
         inputs={"prior": acquisition.outputs["prior"]},
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=fixture.load_bytes,
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=fixture.load_resume_state,
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{
+                "model": output(
+                    path="model.bin",
+                    loader=fixture.load_bytes,
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=fixture.load_resume_state,
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(objective,),
         objective=min(objective),
     )
