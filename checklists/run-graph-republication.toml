@@ -97,3 +97,8 @@ path = "/usr/bin/git"
 number = 9
 title = "Remove repeated publication work"
 requirement_ids = ["RGP-REQ-11", "RGP-REQ-12", "RGP-REQ-13"]
+
+[[phases]]
+number = 10
+title = "Reuse bounded verification work"
+requirement_ids = ["RGP-REQ-14", "RGP-REQ-15", "RGP-REQ-16"]

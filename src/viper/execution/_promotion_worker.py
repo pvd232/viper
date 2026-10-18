@@ -175,6 +175,16 @@ def copy_graphs(request: CopyRequest, *, verify_only: bool = False) -> dict:
                     target_directory / "comparison.json",
                     (json.dumps(comparison, sort_keys=True, indent=2) + "\n").encode(),
                 )
+                cached_hashes = {
+                    reference.sha256 for reference in destination_check._verified_paths
+                }
+                missing_sizes = {
+                    member.sha256: member.bytes
+                    for copy in journal.progress.copies.values()
+                    for member in copy.expected.files
+                    if member.sha256 not in cached_hashes
+                }
+                space.check(sum(missing_sizes.values()))
                 for reference in published:
                     record = ResolvedRun.model_validate(
                         parse_yaml_bytes(destination_check.read(reference))

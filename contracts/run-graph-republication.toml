@@ -258,3 +258,66 @@ depends_on = ["RGP-PB-08"]
 repository_id = "rico"
 requirement_contribution = "Reuse request bytes and pointer digests within each recovery-tool invocation."
 completion_evidence = ["implementation_review"]
+
+[[requirements]]
+id = "RGP-REQ-14"
+claim = "Retain verified destination payloads between graph comparison and ordinary verification within one copy invocation. Reclaim only owned cache files when the next reservation exceeds a budget. Preserve independent source checks, full metadata comparison, resource failures, final cleanup, and fresh-reader byte verification."
+depends_on = ["RGP-REQ-07", "RGP-REQ-12"]
+verifier_ids = ["RGP-VR-14"]
+
+[[verifiers]]
+id = "RGP-VR-14"
+requirement_ids = ["RGP-REQ-14"]
+acceptance_conditions = ["Retain verified destination payloads between graph comparison and ordinary verification within one copy invocation. Reclaim only owned cache files when the next reservation exceeds a budget. Preserve independent source checks, full metadata comparison, resource failures, final cleanup, and fresh-reader byte verification."]
+success_case = { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_republication_retains_bounded_destination_cache" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_transfer_space_checks_capacity_and_preserves_source_files" }]
+
+[[pair_blocks]]
+id = "RGP-PB-12"
+requirement_ids = ["RGP-REQ-14"]
+depends_on = ["RGP-PB-10"]
+repository_id = "viper"
+requirement_contribution = "Retain bounded destination downloads."
+completion_evidence = ["implementation_review"]
+
+[[requirements]]
+id = "RGP-REQ-15"
+claim = "Hash metric dependency files with bounded memory in the worker. Preserve ordered SHA-256 and byte counts, changed-byte rejection before invoking the metric, and missing, empty, or symbolic-link rejection. Each worker independently checks its actual input bytes."
+depends_on = ["RGP-REQ-14"]
+verifier_ids = ["RGP-VR-15"]
+
+[[verifiers]]
+id = "RGP-VR-15"
+requirement_ids = ["RGP-REQ-15"]
+acceptance_conditions = ["Hash metric dependency files with bounded memory in the worker. Preserve ordered SHA-256 and byte counts, changed-byte rejection before invoking the metric, and missing, empty, or symbolic-link rejection. Each worker independently checks its actual input bytes."]
+success_case = { repository_id = "viper", path = "tests/test_metric_provenance.py", symbol = "test_metric_dependency_hashing_streams_files" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_metric_provenance.py", symbol = "test_metric_dependency_hashing_rejects_invalid_paths" }]
+
+[[pair_blocks]]
+id = "RGP-PB-13"
+requirement_ids = ["RGP-REQ-15"]
+depends_on = ["RGP-PB-12"]
+repository_id = "viper"
+requirement_contribution = "Stream metric dependency hashing."
+completion_evidence = ["implementation_review"]
+
+[[requirements]]
+id = "RGP-REQ-16"
+claim = "Reuse the candidate and confirmation-stage verification completed within the same benchmark invocation and verification policy. Keep independent confirmation execution and all cross-execution lineage, parity, metric, and status checks. Independently supplied benchmark results still receive full public verification. Share metric criteria and status calculation without changing serialized records or adding durable caches."
+depends_on = ["RGP-REQ-15"]
+verifier_ids = ["RGP-VR-16"]
+
+[[verifiers]]
+id = "RGP-VR-16"
+requirement_ids = ["RGP-REQ-16"]
+acceptance_conditions = ["Reuse the candidate and confirmation-stage verification completed within the same benchmark invocation and verification policy. Keep independent confirmation execution and all cross-execution lineage, parity, metric, and status checks. Independently supplied benchmark results still receive full public verification. Share metric criteria and status calculation without changing serialized records or adding durable caches."]
+success_case = { repository_id = "viper", path = "tests/test_benchmark_execution.py", symbol = "test_benchmark_reuses_verified_execution" }
+rejection_cases = [{ repository_id = "viper", path = "tests/test_benchmark_execution.py", symbol = "test_benchmark_public_verifier_remains_independent" }]
+
+[[pair_blocks]]
+id = "RGP-PB-14"
+requirement_ids = ["RGP-REQ-16"]
+depends_on = ["RGP-PB-13"]
+repository_id = "viper"
+requirement_contribution = "Reuse verification within benchmark execution."
+completion_evidence = ["implementation_review"]

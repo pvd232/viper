@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-**Contract status:** PB-01–PB-11 validation complete; PR review and integration pending.
+**Contract status:** PB-01–PB-11 validation complete; PB-12–14 authorized and in progress. PR review and integration remain separate.
 PB-09–11 now have separate implementation PRs and retained checks. Their current
 states are recorded below. The legacy compiler view is retained for historical
 receipts; it does not update the new PR-backed blocks.
@@ -70,6 +70,17 @@ preserves prior validation. The checklist links this table as its sole PR view.
 GitHub documents [merge requirements and methods](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/merging-a-pull-request),
 [retargeting](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/changing-the-base-branch-of-a-pull-request),
 and [closure without merge](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/closing-a-pull-request).
+
+### Approved follow-ups
+
+PB-12 retains bounded destination downloads; PB-13 streams metric hashes;
+PB-14 reuses verification within benchmark execution and shares metric criteria.
+Their typed requirements are RGP-REQ-14–16. See the scoped
+[PB-12](../plans/run-graph-republication/RGP-PB-12/README.md),
+[PB-13](../plans/run-graph-republication/RGP-PB-13/README.md), and
+[PB-14](../plans/run-graph-republication/RGP-PB-14/README.md) plans.
+These append declarations without changing historical requirements or receipts.
+No new cache format, persisted verification state, or publication is required.
 
 <details>
 <summary>Historical compiler view; use the PR table above for PB-09–11 status</summary>

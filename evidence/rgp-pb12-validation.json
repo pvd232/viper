@@ -1,0 +1,21 @@
+{
+  "pair_block": "RGP-PB-12",
+  "base_commit": "d68a0411ecd3389672633b33ea4d16fed531de1e",
+  "checks": {
+    "pyrefly check src/viper tests": "PASS: 0 errors",
+    "python -m pytest -q tests/test_cloud_service.py tests/test_run_execution.py -k \"republication or copy_worker or transfer_space or directory_bytes\"": "PASS: 43 passed, 68 deselected in 52.51s",
+    "ruff check --select D src/viper tests": "PASS",
+    "ruff format --check src/viper tests": "PASS: 153 files",
+    "ruff check src/viper tests": "PASS",
+    "contract_protocol.load_current_execution_state(checklists/run-graph-republication.toml, evidence/run-graph-republication-state.json)": "PASS: 14 blocks; historical evidence unchanged"
+  },
+  "observations": {
+    "two_payload_transfers_before": 4,
+    "after_with_room": 2,
+    "after_eviction": 3,
+    "fresh_reader_after_corruption": "refetches and verifies correct bytes",
+    "source_lines_added": 32,
+    "source_lines_removed": 9
+  },
+  "limitations": "Operation counts use MemoryHub; no production network timing or live publication repeated. Independent review and merge pending."
+}

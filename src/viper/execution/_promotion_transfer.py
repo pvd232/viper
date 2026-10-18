@@ -73,18 +73,30 @@ class TransferSpace:
         self.peak_cache_bytes = 0
         self._configured: set[ViperCloud] = set()
 
-    def check(self, snapshot_bytes: int = 0, largest_file: int = 0) -> None:
-        """Check current use and reserve space for files awaiting verification."""
+    def check(
+        self,
+        snapshot_bytes: int = 0,
+        largest_file: int = 0,
+        *,
+        reclaim: RunFetcher | None = None,
+    ) -> None:
+        """Reserve space, releasing owned downloads only when a budget requires it."""
         current, cached = _directory_totals(self.root, self.cache)
         self.peak_bytes = max(self.peak_bytes, current)
         self.peak_cache_bytes = max(self.peak_cache_bytes, cached)
         required = snapshot_bytes + largest_file
         if current + required > self.limits.staging_bytes:
-            raise RunPromotionError("staging budget is insufficient")
-        if cached + snapshot_bytes > self.limits.cache_bytes:
-            raise RunPromotionError("cache budget is insufficient")
-        if required > shutil.disk_usage(self.root).free:
-            raise RunPromotionError("available disk space is insufficient")
+            failure = "staging budget is insufficient"
+        elif cached + snapshot_bytes > self.limits.cache_bytes:
+            failure = "cache budget is insufficient"
+        elif required > shutil.disk_usage(self.root).free:
+            failure = "available disk space is insufficient"
+        else:
+            return
+        if reclaim is None:
+            raise RunPromotionError(failure)
+        self.release(reclaim)
+        self.check(snapshot_bytes, largest_file)
 
     def configure_cloud(self, cloud: ViperCloud) -> None:
         """Use one upload worker and stream files into the copy directory."""

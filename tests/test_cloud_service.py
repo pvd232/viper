@@ -29,6 +29,7 @@ from viper._cloud import (
 from viper._source import RunFetcher
 from viper.authoring import freeze_run_plan
 from viper.cloud import ViperCloud
+from viper.execution._promotion_compare import GraphComparison
 from viper.execution._promotion_journal import PublicationJournal
 from viper.execution._promotion_transfer import (
     TransferSpace,
@@ -44,8 +45,14 @@ from viper.references import (
     ResolvedFileRef,
     ResolvedRunRef,
     SnapshotFileRef,
+    resolve_snapshot_file_ref,
 )
-from viper.storage import LocalArtifactStore, RunPromotionPolicy, TransferLimits
+from viper.storage import (
+    LocalArtifactStore,
+    RunPromotionPolicy,
+    TransferLimits,
+    snapshot_file,
+)
 
 
 class _HuggingFaceApi:
@@ -640,7 +647,12 @@ def test_transfer_space_checks_capacity_and_preserves_source_files(
     fetcher.remember_path(remote, cached)
     space.check()
     assert space.peak_bytes == space.peak_cache_bytes == 7
-    space.release(fetcher)
+    space.check(25, reclaim=fetcher)
+    assert cached.exists()
+    space.check(26, reclaim=fetcher)
+    assert remote not in fetcher._verified_paths
+    with pytest.raises(RunPromotionError, match="cache budget is insufficient"):
+        space.check(33, reclaim=fetcher)
     assert not cached.exists()
     assert original.read_bytes() == b"weights"
     assert fetcher.path(local) == original
@@ -742,3 +754,71 @@ def test_transfer_keeps_the_same_connection_pool(tmp_path: Path) -> None:
     space.configure_cloud(cloud)
     client._http.mount.assert_called_once_with("https://", adapter)
     assert provider.max_workers == 1
+
+
+@pytest.mark.parametrize("budget, downloads", ((64, 2), (15, 3)))
+def test_republication_retains_bounded_destination_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, budget: int, downloads: int
+) -> None:
+    """Reuse compared files, evict under pressure, and recheck in a fresh reader."""
+    space = TransferSpace(
+        tmp_path / "copy",
+        TransferLimits(staging_bytes=128, cache_bytes=budget, connections=2),
+    )
+    store = LocalArtifactStore(tmp_path)
+    payloads = {"a.bin": b"weights", "b.bin": b"another"}
+    source = store.snapshot(payloads)
+    api = MemoryHub(tmp_path / "hub")
+    host = HuggingFaceRepository(repository="owner/additional", repo_type="dataset")
+    provider = HuggingFaceProvider(
+        tmp_path, host.repository, "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    cloud = ViperCloud(tmp_path, host, provider=provider)
+    monkeypatch.setattr(ViperCloud, "for_reference", lambda *_: cloud)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", lambda *_: cloud)
+    calls = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        """Count payload transfers separately from manifest reads."""
+        calls.append(request.url.path)
+        return api.response(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(respond))
+    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+    destination = ViperCloudDestination(owner="owner", workspace="models")
+    source_reader = RunFetcher(tmp_path, store, "", cache_root=space.cache / "source")
+    reader = RunFetcher(tmp_path, store, "", cache_root=space.cache / "destination")
+    with (
+        client,
+        PublicationJournal(
+            tmp_path / "progress.json", "a" * 64, cloud, destination
+        ) as journal,
+    ):
+        members = tuple(snapshot_file(path, raw) for path, raw in payloads.items())
+        copied, _ = journal.publish(source, members, dict(payloads), "b" * 64)
+        GraphComparison(
+            tuple(journal.progress.copies.values()),
+            {},
+            source_reader,
+            reader,
+            destination_repository=host,
+            space=space,
+        ).verify((), {})
+        refs = [resolve_snapshot_file_ref(copied, member) for member in members]
+        for reference in refs:
+            assert (
+                reader.path(reference).read_bytes()
+                == payloads[str(reference.stored_at.path)]
+            )
+        assert sum(path.endswith(".bin") for path in calls) == downloads
+        assert space.peak_cache_bytes <= budget
+        cached = reader.path(refs[0])
+        cached.write_bytes(b"changed")
+        fresh = RunFetcher(tmp_path, store, "", cache_root=reader.cache_root)
+        assert fresh.path(refs[0]).read_bytes() == b"weights"
+        assert sum(path.endswith(".bin") for path in calls) == downloads + 1
+        space.release(reader)
+        assert all(
+            source_reader.path(ref).is_file() for ref in store.resolved_files(payloads)
+        )

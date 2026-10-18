@@ -293,7 +293,9 @@ class GraphComparison:
         for key, original in self.originals.items():
             copied = self.files[key]
             if self.space is not None:
-                self.space.check(original.bytes + copied.bytes)
+                self.space.check(
+                    original.bytes + copied.bytes, reclaim=self.destination
+                )
             if key in self.documents:
                 source_document = self._source_document(key)
                 copied_document = parse_yaml_bytes(self.destination.read(copied))
@@ -309,7 +311,6 @@ class GraphComparison:
             if self.space is not None:
                 self.space.check()
                 self.space.release(self.source)
-                self.space.release(self.destination)
         published_roots = []
         for root in roots:
             copied = self.files.get(_key(root.stored_at))

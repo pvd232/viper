@@ -18,8 +18,9 @@ remain pending. The contract links their checks and measurements.
 
 Reduce repeated publication hashing, manifest reads, directory traversal, and
 RICO request reads while preserving the completed migration's guarantees.
-All three optimization blocks are implemented. Next: independent PR review,
-then integration in the order above. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
+PB-09–11 are implemented. PB-12–14 extend the same contract with bounded cache
+retention, streaming metric hashing, and benchmark verification reuse. Implement
+and validate each in a separate PR before independent review and integration. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
 records projected savings, exact owners, and conditional cache retention.
 
 <details>
