@@ -4,7 +4,7 @@ Context: RICO rereads requests and repeats the same model-pointer hash across se
 
 Requirement: RGP-REQ-13. Dependency: RGP-PB-08. Repository: RICO.
 Planning baseline inspected: `cd81561d331f9d0a5fed7d16cc1892abffd0611a`.
-Recheck HEAD before freezing the implementation candidate.
+Recheck HEAD before implementation and retain the tested commit.
 
 ## Targets and handoff
 
@@ -13,8 +13,10 @@ Recheck HEAD before freezing the implementation candidate.
 
 Use the [impact decision](../../../contracts/run-graph-republication-optimization-impact.md)
 and typed verifier RGP-VR-13. Complete the bounded edit and observing tests,
-then persist one `plan.toml` with its full patch and exact baseline. This note
-is planning metadata. The complete patch is frozen at the implementation handoff.
+then commit the real target files and create a linked implementation PR. This
+note defines scope and checks; Git owns the source and the PR diff owns review.
+**PR:** Not created. Update the [contract tracking table](../../../contracts/run-graph-republication.md#pr-review-and-integration)
+when the PR exists. Keep validation, review, and integration separate.
 
 ## Focused gate
 

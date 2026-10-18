@@ -6,6 +6,13 @@ complete: 1,305 required payloads and four recovered models, with original GCS
 objects and model pointers preserved. The [completion record](../evidence/run-graph-republication-completion-20261018.json)
 binds acceptance and passing GitHub checks.
 
+Review and integration remain pending. The contract's
+[PR tracking table](../contracts/run-graph-republication.md#pr-review-and-integration)
+records each observed head, checks, review decision, and merge state separately
+from completed migration validation. Review and merge VIPER #5 through #13 in
+order, retargeting each successor to `main`, then RICO #26. Planned PB-09–11
+have no implementation PRs yet.
+
 ## Current outcome
 
 Reduce repeated publication hashing, manifest reads, directory traversal, and
@@ -78,7 +85,8 @@ records projected savings, exact owners, and conditional cache retention.
 
 ## Completion rules
 
-Every new block freezes one candidate and observing gate. Target-path formatting
+Every new block names its scope, observing gate, and linked implementation PR.
+Git retains the candidate; the PR diff presents it for review. Target-path formatting
 precedes Pyrefly, affected tests, directory-discovered documentation checks, and
 final non-mutating Ruff checks. Escalate only when the impact trace reaches a
 wider consumer. Record actual operation counts and timings separately from the

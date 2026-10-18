@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-**Contract status:** Migration complete; publication-work optimizations planned.
+**Contract status:** Migration validation complete; PR review and integration pending; publication-work optimizations planned.
 RGP-PB-01 through RGP-PB-08 retain the completed migration. RGP-PB-09 is the next
 implementation step. The [checklist](../checklists/run-graph-republication.md)
 and the generated region below derive their statuses from typed records.
@@ -11,6 +11,57 @@ The [completion evidence](../evidence/run-graph-republication-completion-2026101
 records 783 completed mappings, zero pending mappings, all 1,305 required
 payloads, four recovered models, and passing checks at VIPER `462b202` and RICO
 `cd81561d`. Original GCS publications and canonical model pointers remain intact.
+
+### PR review and integration
+
+The migration's completed validation remains valid while its PRs await review
+and merge. The generated `complete` and `bootstrap-complete` labels below
+describe retained acceptance evidence. They do not establish GitHub approval or
+integration into `main`. The current compiler does not ingest PR state.
+
+Observed on **2026-10-18 (UTC; before this documentation revision)**: all listed PRs are open, each has passing
+GitHub checks at the head shown, and their GitHub review lists are empty. Thus
+review is **pending / no recorded GitHub decision**, and integration is **open /
+not merged** for every PR below. These are dated observations, not assertions
+about a later head. The latest push requires its own checks and review.
+
+| Order | PairBlock contribution | PR | Observed head | Observed base branch | Validation | Review | Integration |
+|---|---|---|---|---|---|---|---|
+| 1 | PB-02 discovery | [VIPER #5](https://github.com/pvd232/viper/pull/5) | `c3ecfe262b6e88a2fccdb563e9b1f22ce552c4fc` | `main` | [7 checks passed](https://github.com/pvd232/viper/pull/5/checks) | Pending | Open; no merge commit |
+| 2 | PB-03 publication | [VIPER #6](https://github.com/pvd232/viper/pull/6) | `62fb4764fbb1eab54b7f3fadec624e4daf3c2b7e` | `rgp/pb02-discovery-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/6/checks) | Pending | Open; no merge commit |
+| 3 | PB-04 restart | [VIPER #7](https://github.com/pvd232/viper/pull/7) | `995785d9ff3b434362f238a08f7d1ca76dbf5508` | `rgp/pb03-publication-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/7/checks) | Pending | Open; no merge commit |
+| 4 | PB-05 resources | [VIPER #8](https://github.com/pvd232/viper/pull/8) | `8a8788fd5a19130c7501829c4387db43c0359aa5` | `rgp/pb04-recovery-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/8/checks) | Pending | Open; no merge commit |
+| 5 | PB-06 comparison | [VIPER #9](https://github.com/pvd232/viper/pull/9) | `f3c10aaead0ee3dfbaee17fb4e5155f98338788f` | `rgp/pb05-resources-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/9/checks) | Pending | Open; no merge commit |
+| 6 | PB-07 rehearsal | [VIPER #10](https://github.com/pvd232/viper/pull/10) | `f98b694fc938a13ea746a0c7a63fdc9f8883c6f7` | `rgp/pb06-comparison-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/10/checks) | Pending | Open; no merge commit |
+| 7 | PB-07 Pyrefly follow-up | [VIPER #11](https://github.com/pvd232/viper/pull/11) | `06fae367d03b5eca64b3a1910760a0e6c838493e` | `rgp/pb07-rehearsal-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/11/checks) | Pending | Open; no merge commit |
+| 8 | PB-02 supporting inputs | [VIPER #12](https://github.com/pvd232/viper/pull/12) | `4fbe070d2c27eb3c9fd9521486ddc12d74739770` | `rgp/pb07-pyrefly-r2` | [7 checks passed](https://github.com/pvd232/viper/pull/12/checks) | Pending | Open; no merge commit |
+| 9 | PB-04/05/06 recovery and verification follow-ups; PB-09–11 planning | [VIPER #13](https://github.com/pvd232/viper/pull/13) | `352236ad81080fea6c1a4d9237962732e424d270` | `rgp/pb02-supporting-r2` | [7 checks passed](https://github.com/pvd232/viper/pull/13/checks) | Pending | Open; no merge commit |
+| 10 | PB-08 publication and recovery | [RICO #26](https://github.com/pvd232/rico-rebuild/pull/26) | `cd81561d331f9d0a5fed7d16cc1892abffd0611a` | `main` | [active-code passed](https://github.com/pvd232/rico-rebuild/actions/runs/39147868154/job/117735289886) | Pending | Open; no merge commit |
+
+PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
+[historical review](../evidence/reviews/rgp-pb-01-implementation.json) and
+[completion](../evidence/lifecycle/rgp-pb-01-complete.json) remain retained.
+No separate PR is recorded for that block. PB-09, PB-10, and PB-11 remain
+**planned / PR not created**; #13 contains their scope, not their implementation.
+
+Review and merge VIPER **#5 → #6 → #7 → #8 → #9 → #10 → #11 → #12 → #13**,
+then RICO **#26**. Prefer **Create a merge commit**, which this repository allows,
+to preserve the existing evidence and descendant commit identities. After each
+VIPER merge, retarget the next PR to `main`, inspect the resulting diff, and
+refresh required CI and review before merging. RICO #26 targets its own `main`;
+integrate it after its VIPER dependency. Retain branches until any dependent PRs
+have been retargeted and branch cleanup is separately authorized.
+
+Refresh this table from GitHub after each push, review, retarget, merge, or
+closure. Record the reviewer and reviewed SHA with the actual review URL or
+user message reference. After merging, record the observed merge SHA, time, and
+destination. Close without merge only for abandoned or superseded work, with
+the reason and replacement PR. Such closure leaves integration incomplete and
+preserves prior validation. The checklist links this table as its sole PR view.
+
+GitHub documents [merge requirements and methods](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/merging-a-pull-request),
+[retargeting](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/changing-the-base-branch-of-a-pull-request),
+and [closure without merge](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/closing-a-pull-request).
 
 <!-- contract-protocol:generated:start -->
 **In progress.** [Jump to current PairBlock](#rgp-pb-09)
@@ -688,9 +739,10 @@ binding. A substituted valid ancestor still raises `RunPromotionError` containin
 
 ## 9. Implementation order
 
-Migration blocks 01–08 are complete. Author and freeze PB-09 first, then PB-10;
-PB-11 can follow independently once its RICO baseline is checked. Each block
-ends at its focused gate and independent review before the next accepted change.
+Migration validation for blocks 01–08 is complete; their pending PR integration
+is tracked above. Implement PB-09 first, then PB-10; PB-11 can proceed once its
+RICO baseline is checked. Give each new block its own commit and PR. An authorized
+stack may be implemented before independent review; integrate dependencies first.
 
 ## 10. Contract-owned PairBlocks
 
@@ -700,12 +752,13 @@ ends at its focused gate and independent review before the next accepted change.
 
 ## 11. ContractTarget
 
-The current extension is planning metadata. Freeze a complete `PairBlockPlan`
-with exact `add`, `replace`, `remove`, or `patch` actions at the start of each
-implementation handoff. Materialize at real target paths, run the declared gate
-through `prepare_pairblock_review`, and retain the resulting review commit.
-A missing candidate or failed gate keeps that block open; historical migration
-completion remains supported by its independent evidence.
+The current extension declares scope and observing checks. Edit the named real
+repository paths, run the focused gate, commit and push, and create the linked
+PR. Preserve the tested SHA and results, actual review decision, and observed
+merge separately. Git and the PR diff retain implementation bytes; new blocks
+need no saved patch payload. Existing plans remain historical evidence. A
+missing implementation or failed gate leaves new validation pending while
+completed migration evidence remains valid.
 
 ## Future work
 
