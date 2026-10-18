@@ -42,12 +42,12 @@ requirement_ids = ["RGP-REQ-08", "RGP-REQ-09"]
 
 [[phases]]
 number = 8
-title = "Migrate selected models and switch pointers"
+title = "Publish and recover the selected models"
 requirement_ids = ["RGP-REQ-10"]
 
 [[repository_bindings]]
 repository_id = "viper"
-checkout = "/Users/machina/Developer/ChatGPT/viper"
+checkout = "/Users/machina/Developer/ChatGPT/viper-publication-final-20261017"
 
 [[repository_bindings.executables]]
 command = "python3"
@@ -68,3 +68,32 @@ path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/ruff"
 [[repository_bindings.executables]]
 command = "git"
 path = "/usr/bin/git"
+
+[[repository_bindings.executables]]
+command = "pyrefly"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/pyrefly"
+
+[[repository_bindings]]
+repository_id = "rico"
+checkout = "/Users/machina/Developer/ChatGPT/rico-publication-20261017"
+
+[[repository_bindings.executables]]
+command = "python3"
+path = "/Users/machina/Developer/ChatGPT/rico-publication-20261017/.venv/bin/python3"
+
+[[repository_bindings.executables]]
+command = "pyrefly"
+path = "/Users/machina/Developer/ChatGPT/rico-publication-20261017/.venv/bin/pyrefly"
+
+[[repository_bindings.executables]]
+command = "ruff"
+path = "/Users/machina/Developer/ChatGPT/rico-publication-20261017/.venv/bin/ruff"
+
+[[repository_bindings.executables]]
+command = "git"
+path = "/usr/bin/git"
+
+[[phases]]
+number = 9
+title = "Remove repeated publication work"
+requirement_ids = ["RGP-REQ-11", "RGP-REQ-12", "RGP-REQ-13"]

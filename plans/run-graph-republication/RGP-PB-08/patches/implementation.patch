@@ -1,0 +1,1208 @@
+diff --git a/tests/test_graph_publication.py b/tests/test_graph_publication.py
+new file mode 100644
+index 00000000..60f3c532
+--- /dev/null
++++ b/tests/test_graph_publication.py
+@@ -0,0 +1,425 @@
++"""Check file selection and prediction evidence for additional model publications."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from pathlib import Path
++from typing import Any
++
++import numpy as np
++import pytest
++from viper._cloud import HuggingFaceRepository, RevisionManifest, manifest_revision
++from viper.execution._promotion import PromotionInventory
++from viper.execution._promotion_journal import SnapshotCopy
++from viper.execution._promotion_worker import CopyRequest
++from viper.references import (
++    GcsFileRef,
++    GcsStageResultSnapshotRef,
++    HuggingFaceFileRef,
++    HuggingFaceStageResultSnapshotRef,
++    ResolvedFileRef,
++    ResolvedRunRef,
++    SnapshotFileRef,
++)
++from viper.serialization import document_digest
++from viper.storage import RunPromotionPolicy, TransferLimits, ViperCloudDestination
++
++from tools.graph_publication import recover as recovery
++from tools.graph_publication.checks import (
++    SELECTED_MODELS,
++    model_checks,
++    register,
++    saved_environment,
++)
++from tools.graph_publication.prepare import capture_sources, original_bytes
++
++
++@pytest.mark.parametrize(
++    "model", ("mil_string112_certification_20261006", "hopfield_certification_20261007")
++)
++def test_frozen_runtime_formats_require_the_recorded_l4_versions(model: str) -> None:
++    """Read the committed MIL and Hopfield records into the same exact requirements."""
++    root = Path(__file__).resolve().parents[1]
++    runtime = json.loads((root / "experiments" / model / "runtime.json").read_bytes())
++    assert saved_environment(runtime) == {
++        "python": "3.13.15",
++        "torch": "2.14.0+cu130",
++        "numpy": "2.5.3",
++        "cuda": "13.0",
++        "device": "NVIDIA L4",
++    }
++
++
++@pytest.mark.parametrize(
++    "change",
++    (
++        "aliases",
++        "bytes",
++        "sha256",
++        "commit",
++        "repository",
++        "missing_address",
++        "settings",
++        "roles",
++    ),
++)
++def test_model_checks_preserve_valid_saved_addresses(
++    tmp_path: Path, change: str
++) -> None:
++    """Keep request and prediction bytes after journal growth; reject changed inputs."""
++    root = Path(__file__).resolve().parents[1]
++    record = json.loads((root / "models/direct_mil.json").read_bytes())
++    inputs = json.loads((root / record["model_inputs"]).read_bytes())["files"]
++    payloads = [record["selected_checkpoint"], record["tune_predictions"]]
++    payloads.extend(inputs[key] for key in ("response_data", "manifest"))
++    members = tuple(
++        sorted(
++            (
++                SnapshotFileRef(
++                    path=item["sha256"], sha256=item["sha256"], bytes=item["bytes"]
++                )
++                for item in payloads
++            ),
++            key=lambda item: item.path,
++        )
++    )
++    copy = SnapshotCopy(
++        source=GcsStageResultSnapshotRef(
++            bucket="original", owner="owner", workspace="models", revision="a" * 64
++        ),
++        source_files=members,
++        expected=RevisionManifest(
++            owner="owner",
++            workspace="models",
++            revision=manifest_revision(members),
++            files=members,
++        ),
++        dependencies_sha256="b" * 64,
++        previous_head=None,
++        published=HuggingFaceStageResultSnapshotRef(
++            repository="owner/models", repo_type="dataset", commit="b" * 40
++        ),
++    )
++    progress = tmp_path / "progress.json"
++    result = tmp_path / "result.json"
++    saved = {"copies": {"later": copy.model_dump(mode="json")}}
++    publication: dict[str, Any] = {
++        "passed": True,
++        "host": HuggingFaceRepository(
++            repository="owner/models", repo_type="dataset"
++        ).model_dump(mode="json"),
++        "source_roots": [record["native_benchmark"]["cloud_run"]],
++    }
++
++    def save_progress() -> None:
++        """Bind the comparison receipt to this complete set of copied snapshots."""
++        progress.write_text(json.dumps(saved))
++        publication["mapping_sha256"] = hashlib.sha256(
++            json.dumps(
++                saved, ensure_ascii=False, separators=(",", ":"), sort_keys=True
++            ).encode()
++        ).hexdigest()
++        result.write_text(json.dumps({"publications": [publication]}))
++
++    save_progress()
++    output = tmp_path / "checks"
++    (request,) = model_checks(root, progress, result, output)
++    settings = json.loads(request.read_bytes())
++    settings["files"] = dict(reversed(settings["files"].items()))
++    if change in ("bytes", "sha256"):
++        settings["checkpoint"][change] = settings["expected"][change]
++    elif change == "commit":
++        settings["expected"]["stored_at"]["commit"] = "c" * 40
++    elif change == "repository":
++        settings["files"]["manifest"]["stored_at"]["repository"] = "owner/other"
++    elif change == "settings":
++        settings["environment"]["torch"] = "changed"
++    elif change == "roles":
++        settings["files"]["extra"] = settings["checkpoint"]
++    request.write_text(json.dumps(settings, indent=1) + "\n")
++    prediction = output / "mil-123464" / "prediction.npz"
++    prediction.parent.mkdir()
++    saved_array(prediction, 2.0)
++    before = {
++        path: (path.read_bytes(), path.stat().st_mtime_ns)
++        for path in (request, prediction)
++    }
++
++    earlier = copy.model_dump(mode="json")
++    earlier["published"]["commit"] = "a" * 40
++    saved["copies"] = {"earlier": earlier, **saved["copies"]}
++    if change == "missing_address":
++        del saved["copies"]["later"]
++    save_progress()
++    if change == "aliases":
++        assert model_checks(root, progress, result, output) == [request]
++        (fresh,) = model_checks(root, progress, result, tmp_path / "fresh")
++        assert (
++            json.loads(fresh.read_bytes())["checkpoint"]["stored_at"]["commit"]
++            == "a" * 40
++        )
++    else:
++        with pytest.raises(ValueError, match="Recovery"):
++            model_checks(root, progress, result, output)
++    assert before == {
++        path: (path.read_bytes(), path.stat().st_mtime_ns) for path in before
++    }
++
++
++def saved_array(path: Path, value: float) -> ResolvedFileRef:
++    """Write one numerical prediction with named rows and columns."""
++    np.savez(
++        path,
++        prediction=np.asarray([[value]]),
++        perts=np.asarray(["p"]),
++        genes=np.asarray(["g"]),
++    )
++    raw = path.read_bytes()
++    return ResolvedFileRef(
++        bytes=len(raw),
++        sha256=hashlib.sha256(raw).hexdigest(),
++        stored_at=HuggingFaceFileRef(
++            repository="owner/models",
++            repo_type="dataset",
++            commit="a" * 40,
++            path=path.name,
++        ),
++    )
++
++
++@pytest.mark.parametrize("kind", ("gcs", "another_repository"))
++def test_recovery_rejects_original_storage(tmp_path: Path, kind: str) -> None:
++    """Reject an original address before any cached or remote read."""
++    reader = recovery.DestinationReader(
++        tmp_path, HuggingFaceRepository(repository="owner/models", repo_type="dataset")
++    )
++    location = (
++        GcsFileRef(
++            bucket="original",
++            owner="owner",
++            workspace="models",
++            revision="a" * 64,
++            path="weights.pt",
++        )
++        if kind == "gcs"
++        else HuggingFaceFileRef(
++            repository="owner/other",
++            repo_type="dataset",
++            commit="a" * 40,
++            path="weights.pt",
++        )
++    )
++    reference = ResolvedFileRef(stored_at=location, bytes=1, sha256="b" * 64)
++    for read in (reader.read, reader.path):
++        with pytest.raises(ValueError, match="original storage is blocked"):
++            read(reference)
++    assert not tuple(tmp_path.rglob("weights.pt"))
++
++
++def test_recovery_keeps_prediction_during_report_repair(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Reuse a saved prediction when its expected-result report is corrected."""
++    expected = saved_array(tmp_path / "expected.npz", 3.0)
++    weights = tmp_path / "weights.pt"
++    weights.write_bytes(b"weights")
++    checkpoint = ResolvedFileRef(
++        stored_at=expected.stored_at.model_copy(update={"path": "weights.pt"}),
++        sha256=hashlib.sha256(weights.read_bytes()).hexdigest(),
++        bytes=7,
++    )
++    files = {"expected.npz": tmp_path / "expected.npz", "weights.pt": weights}
++    current = {
++        "python": "test",
++        "torch": "test",
++        "numpy": "test",
++        "cuda": "test",
++        "device": "test",
++    }
++    settings: dict[str, Any] = {
++        "model": "mil",
++        "seed": 123464,
++        "host": {
++            "provider": "huggingface",
++            "repository": "owner/models",
++            "repo_type": "dataset",
++        },
++        "checkpoint": checkpoint.model_dump(mode="json"),
++        "files": {},
++        "expected": expected.model_dump(mode="json"),
++        "environment": current,
++        "split": "tune",
++        "atol": 0.0,
++        "rtol": 0.0,
++    }
++    request = tmp_path / "request.json"
++    request.write_text(json.dumps(settings))
++    calls = []
++
++    def path(reader: recovery.DestinationReader, reference: ResolvedFileRef) -> Path:
++        """Serve the controlled file after checking its destination address."""
++        reader.require_destination(reference.stored_at)
++        return files[reference.stored_at.path]
++
++    def predict(index: Path, output: Path, split: str) -> Path:
++        """Record one forward pass using the selected checkpoint."""
++        assert json.loads(index.read_bytes())["checkpoint_sha256"] == checkpoint.sha256
++        assert split == "tune"
++        calls.append(output)
++        saved_array(output, 2.0)
++        return output
++
++    monkeypatch.setattr(recovery.DestinationReader, "path", path)
++    monkeypatch.setattr(recovery, "environment", lambda: current)
++    monkeypatch.setattr(recovery, "predict", predict)
++    workspace = tmp_path / "fresh"
++    with pytest.raises(AssertionError):
++        recovery.recover(request, workspace)
++    before = (workspace / "prediction.npz").read_bytes()
++    fixed = saved_array(tmp_path / "expected.npz", 2.0)
++    settings["expected"] = fixed.model_dump(mode="json")
++    request.write_text(json.dumps(settings))
++    result = recovery.recover(request, workspace)
++    assert result["passed"] and result["maximum_absolute_error"] == 0
++    assert len(calls) == 1
++    assert (workspace / "prediction.npz").read_bytes() == before
++    settings["checkpoint"]["sha256"] = "d" * 64
++    request.write_text(json.dumps(settings))
++    with pytest.raises(ValueError, match="recovery request changed"):
++        recovery.recover(request, workspace)
++    settings["environment"]["torch"] = "another-version"
++    monkeypatch.setattr(recovery, "environment", lambda: {**current, "torch": "test"})
++    request.write_text(json.dumps(settings))
++    with pytest.raises(ValueError, match="environment differs"):
++        recovery.recover(request, tmp_path / "another-fresh")
++
++
++def test_capture_preserves_bytes_and_original_locations(tmp_path: Path) -> None:
++    """Check local source bytes and retain their original location record."""
++    path = tmp_path / "prior.bin"
++    path.write_bytes(b"prior")
++    payload = {
++        "bytes": 5,
++        "sha256": hashlib.sha256(b"prior").hexdigest(),
++        "sources": [{"kind": "vm_file", "path": str(path)}],
++    }
++    captured, size = capture_sources(tmp_path, tmp_path, b"inventory", [payload])
++    assert size == 14
++    assert any(item.sha256 == payload["sha256"] for item in captured)
++    assert any(
++        item.stored_at.path == "source-records/original-locations.json"
++        for item in captured
++    )
++    path.write_bytes(b"other")
++    with pytest.raises(ValueError, match="Original file is unavailable"):
++        original_bytes(payload, tmp_path)
++    assert path.read_bytes() == b"other"
++
++
++@pytest.mark.parametrize(
++    "failure", ("none", "missing_report", "wrong_model", "changed_pointer")
++)
++@pytest.mark.parametrize("separate_model_root", (False, True))
++def test_registration_requires_all_selected_models(
++    tmp_path: Path, failure: str, separate_model_root: bool
++) -> None:
++    """Write the final reference set only after all four recovery records match."""
++    host = HuggingFaceRepository(repository="owner/models", repo_type="dataset")
++    roots = tuple(
++        ResolvedRunRef(
++            stored_at=GcsFileRef(
++                bucket="original",
++                owner="owner",
++                workspace="models",
++                revision=str(index) * 64,
++                path=f"run-{index}.yaml",
++            ),
++            sha256=str(index) * 64,
++            bytes=1,
++        )
++        for index in range(1, 5)
++    )
++    request = CopyRequest(
++        repository_root=tmp_path,
++        inventory=PromotionInventory(roots=roots, required_files={}),
++        policy=RunPromotionPolicy(hosts=(host,)),
++        destination=ViperCloudDestination(owner="owner", workspace="models"),
++        limits=TransferLimits(staging_bytes=1024, cache_bytes=512, connections=1),
++    )
++    request_path = tmp_path / "copy.json"
++    request_path.write_text(request.model_dump_json())
++    result_path = tmp_path / "result.json"
++    result_path.write_text(
++        json.dumps(
++            {
++                "operation_sha256": document_digest(request),
++                "publications": [
++                    {
++                        "passed": True,
++                        "host": host.model_dump(mode="json"),
++                        "required_files_checked": 0,
++                        "source_roots": [ref.model_dump(mode="json") for ref in roots],
++                    }
++                ],
++            }
++        )
++    )
++    model_root = tmp_path / "frozen" if separate_model_root else tmp_path
++    models = model_root / "models"
++    models.mkdir(parents=True)
++    for name in ("direct_mil", "asymmetric_hopfield"):
++        (models / f"{name}.json").write_text("{}")
++    checks = tmp_path / "checks"
++    checks.mkdir()
++    for name, root in zip(SELECTED_MODELS, roots, strict=True):
++        model, seed = name.split("-")
++        directory = checks / name
++        directory.mkdir()
++        checkpoint = saved_array(directory / "prediction.npz", 2.0)
++        settings = {
++            "model": model,
++            "seed": int(seed),
++            "checkpoint": checkpoint.model_dump(mode="json"),
++            "source_run": root.model_dump(mode="json"),
++            "source_pointer_sha256": hashlib.sha256(b"{}").hexdigest(),
++            "expected": checkpoint.model_dump(mode="json"),
++            "environment": {},
++            "atol": 0.0,
++            "rtol": 0.0,
++        }
++        settings_path = checks / f"{name}.json"
++        settings_path.write_text(json.dumps(settings))
++        report = {
++            "passed": True,
++            "request_sha256": hashlib.sha256(settings_path.read_bytes()).hexdigest(),
++            "prediction_sha256": checkpoint.sha256,
++            "checkpoint_sha256": checkpoint.sha256,
++            "model": model,
++            "seed": int(seed),
++            "expected_sha256": checkpoint.sha256,
++            "environment": {},
++            "atol": 0.0,
++            "rtol": 0.0,
++        }
++        (directory / "verified.json").write_text(json.dumps(report))
++    last = checks / SELECTED_MODELS[-1] / "verified.json"
++    if failure == "missing_report":
++        last.unlink()
++    elif failure == "wrong_model":
++        report = json.loads(last.read_bytes())
++        report["seed"] = 123464
++        last.write_text(json.dumps(report))
++    elif failure == "changed_pointer":
++        (models / "direct_mil.json").write_text('{"changed": true}')
++    output = tmp_path / "accepted.json"
++    if failure == "none":
++        accepted = register(request_path, result_path, checks, output, model_root)
++        assert len(accepted["recovery"]) == 4
++        assert json.loads(output.read_bytes()) == accepted
++    else:
++        with pytest.raises((FileNotFoundError, ValueError)):
++            register(request_path, result_path, checks, output, model_root)
++        assert not output.exists()
++    if failure != "changed_pointer":
++        assert all(path.read_bytes() == b"{}" for path in models.iterdir())
+diff --git a/tools/graph_publication/README.md b/tools/graph_publication/README.md
+new file mode 100644
+index 00000000..54e42d9a
+--- /dev/null
++++ b/tools/graph_publication/README.md
+@@ -0,0 +1,61 @@
++# RGP-PB-08: Publish and recover the selected models
++
++These tools publish the frozen MIL and Hopfield model graphs through VIPER and recover the saved models in a fresh workspace. They include the prepared model inputs and separately recorded earlier builds and raw priors.
++
++## Commands
++
++[prepare.py](prepare.py) reads the frozen inventory and upstream-run report. It checks local source bytes, saves their original locations, and produces a fixed `CopyRequest`. The captured local files are limited to one GiB. Existing GCS files retain their full source addresses. The source workspace needs its original GCS configuration.
++
++[publish.py](publish.py) calls `execution.promote_run_to_cloud()`. It requires write access to the destination named in the request, which may be public or private. `--pilot 1` selects the first Hopfield root for the pilot. The complete request includes all four model roots and supporting source records. The worker keeps its verified progress across restarts. The pilot and full request have separate progress files because their selected scope differs.
++
++[checks.py](checks.py) selects the destination checkpoint, inputs and saved TUNE predictions from the verified snapshot mappings. Existing recovery requests retain their exact bytes when their settings match and every saved file address remains in the completed mappings; a mismatch stops preparation. The comparison rule is exact equality. The saved Python, PyTorch, NumPy, CUDA and GPU versions are required before prediction. The reader accepts MIL's structured execution context and Hopfield's flat runtime record; both become the same five version requirements. Its `register` command writes the additional publication set after all four recovery reports pass.
++
++[recover.py](recover.py) downloads through VIPER's normal reader. Its reader checks the destination repository before every file read. It invokes the existing RICO prediction command, saves the prediction, then compares it with the frozen expected arrays. Repairing an expected-result report reuses the saved prediction. Changed model inputs require a fresh recovery workspace.
++
++The original model records and default storage settings remain unchanged.
++
++## Execution environment
++
++Use the original L4 model environment and VIPER source at commit `462b2029c5ec6797585840fdf8bfd7c9be886b31` through `PYTHONPATH`. The original scientific package environment stays installed. Hugging Face authentication must be available to the machine running the copy. Keep credentials in the normal Hugging Face login store.
++
++The public copy stopped on October 17 after Hugging Face rejected its next commit with HTTP 429 and reported a limit of 128 commits per hour. VIPER now waits after an explicit quota rejection and retries up to three times. It honors a numeric `Retry-After` header, using 3,601 seconds when that header is absent or unrecognized. Other failures return to the existing journal recovery. The saved public request and journal remain the continuation point.
++
++The prepared request on the source VM is:
++
++```text
++/mnt/rico-source-data/viper-publication-20261017/public-request.json
++```
++
++From the RICO checkout root, the copy commands are:
++
++```bash
++publication_root=/mnt/rico-source-data/viper-publication-20261017
++python tools/graph_publication/publish.py "$publication_root/public-request.json" "$publication_root/pilot-result.json" --pilot 1
++python tools/graph_publication/publish.py "$publication_root/public-request.json" "$publication_root/full-result.json"
++```
++
++Run the pilot recovery before starting the full copy. Prepare each recovery request from its copy's `progress.json` and result:
++
++```bash
++python tools/graph_publication/checks.py prepare WORKSPACE PROGRESS_JSON RESULT_JSON CHECK_DIRECTORY
++python tools/graph_publication/recover.py CHECK_JSON FRESH_RECOVERY_DIRECTORY
++python tools/graph_publication/checks.py register "$publication_root/public-request.json" "$publication_root/full-result.json" CHECK_DIRECTORY "$publication_root/additional-publication.json"
++```
++
++When the transfer workspace contains historical model pointers, pass the frozen model metadata directory to `checks.py prepare` as `WORKSPACE`, and pass the same directory to `checks.py register` with `--model-root`. Registration checks the pointer hashes saved in the recovery requests. Keep the transfer request unchanged so its existing journal remains valid.
++
++Run recovery in a new process with fresh VIPER and Hugging Face caches. Mount the reviewed code, numerical environment, credentials for the additional host, and recovery directory. Keep the original model stores outside the recovery process's filesystem. The destination reader rejects original storage addresses. Retain the process command and environment alongside the reports.
++
++## Current evidence
++
++Preparation on the source VM accounted for all 1,305 required payloads, totaling 41,504,155,543 bytes. It found 811 snapshots and 2,674 file references using four model roots and 289 supporting records. The original inventory file's SHA-256 is `0e641ded7af12ac4219e158bd5402bff54785bf1df2e07cd0249c4681c12097e`.
++
++The [public dataset](https://huggingface.co/datasets/pvd232/viper-sota-publication) contains all 1,305 required payloads across 783 completed snapshot mappings; 28 pinned Git source snapshots remain declared external code references. On October 18, independent comparison passed for 2,605 file references and 889 protocol documents, followed by ordinary destination verification for all four model roots. The [registered publication](https://huggingface.co/datasets/pvd232/viper-sota-publication/blob/main/publication/additional-publication.json) records the complete result and four exact TUNE recoveries: MIL seed 123464 and Hopfield seeds 123457, 123458, and 123459. Every maximum absolute error is zero, with absolute and relative tolerances both zero.
++
++Recovery used Python 3.13.15, PyTorch 2.14.0+cu130, NumPy 2.5.3, CUDA 13.0, and an NVIDIA L4. Original model stores and cloud credentials were absent from the recovery environment, and the destination reader rejected other storage addresses. Final registration reused the saved predictions after checking their public addresses against the complete graph. Prediction hashes, sizes, and modification times remained unchanged, as did the original model pointers and source storage settings. The [dataset instructions and checksums](https://huggingface.co/datasets/pvd232/viper-sota-publication) link the fixed requests, journal, comparison, recovery reports, and saved predictions.
++
++Twenty-two controlled tool tests pass. They check stable requests as the journal grows, rejection of changed settings or file references, destination-only reads, prediction reuse during report repair, both committed runtime formats, environment changes, captured source identities, complete four-model registration, and separate frozen metadata with pointer-change rejection. These tests exercise the recovery commands with a small numerical result. The live L4 checks establish the real-model result.
++
++Repository-wide active Ruff and Pyrefly scans both passed across 294 files. Separate archive scans reported 629 Ruff findings and 530 Pyrefly findings across 49 unchanged files. The full lists and outputs are retained with the local migration evidence. The [publication workflow](../../.github/workflows/graph-publication.yml) checks every active Python file and runs the [publication-tool tests](../../tests/test_graph_publication.py).
++
++Independent human review remains pending.
+diff --git a/tools/graph_publication/checks.py b/tools/graph_publication/checks.py
+new file mode 100644
+index 00000000..a2370925
+--- /dev/null
++++ b/tools/graph_publication/checks.py
+@@ -0,0 +1,261 @@
++"""Prepare fixed recovery checks and register their completed results."""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++from pathlib import Path
++from typing import Any
++
++from viper.execution._promotion_journal import SnapshotCopy
++from viper.execution._promotion_worker import CopyRequest
++from viper.execution._publication import write_synchronized
++from viper.references import ResolvedFileRef, resolve_snapshot_file_ref
++from viper.serialization import document_digest
++
++from rico.domain.mil.serialization import file_sha256
++
++SELECTED_MODELS = (
++    "mil-123464",
++    "hopfield-123457",
++    "hopfield-123458",
++    "hopfield-123459",
++)
++
++
++def saved_environment(runtime: dict[str, Any]) -> dict[str, Any]:
++    """Read numerical versions from the two frozen runtime record formats."""
++    if "candidate_execution_context" in runtime:
++        context = runtime["candidate_execution_context"]
++        numerical = context["numerical_runtime"]
++        backend = context["backend"]
++        return {
++            "python": numerical["python_version"],
++            "torch": numerical["pytorch_version"],
++            "numpy": numerical["numpy_version"],
++            "cuda": backend["pytorch_cuda_version"],
++            "device": backend["gpu_devices"][0]["model"],
++        }
++    return {
++        "python": runtime["python"].split()[0],
++        "torch": runtime["torch"],
++        "cuda": runtime["cuda"],
++        "device": runtime["gpu"],
++        "numpy": next(
++            value.split("==", 1)[1]
++            for value in runtime["packages"]
++            if value.startswith("numpy==")
++        ),
++    }
++
++
++def _save_model_check(
++    path: Path,
++    settings: dict[str, Any],
++    locations: dict[str, list[dict[str, Any]]],
++) -> None:
++    """Keep an existing request's exact bytes when its addresses remain valid."""
++    if not path.exists():
++        write_synchronized(
++            path, (json.dumps(settings, indent=2, sort_keys=True) + "\n").encode()
++        )
++        return
++    saved = json.loads(path.read_bytes())
++    for section in ("checkpoint", "expected", "files"):
++        expected = (
++            settings[section] if section == "files" else {section: settings[section]}
++        )
++        previous = saved[section] if section == "files" else {section: saved[section]}
++        if expected.keys() != previous.keys():
++            raise ValueError(f"Recovery file roles changed: {path}")
++        for key, reference in expected.items():
++            if (
++                previous[key] not in locations[reference["sha256"]]
++                or previous[key]["bytes"] != reference["bytes"]
++            ):
++                raise ValueError(
++                    f"Recovery file changed or its address is missing: {path}"
++                )
++        settings[section] = saved[section]
++    if settings != saved:
++        raise ValueError(f"Recovery settings changed: {path}")
++
++
++def model_checks(root: Path, progress: Path, result: Path, output: Path) -> list[Path]:
++    """Prepare model checks from completed copies, preserving valid saved requests."""
++    publication: dict[str, Any] = json.loads(result.read_bytes())["publications"][0]
++    saved: dict[str, Any] = json.loads(progress.read_bytes())
++    if (
++        not publication["passed"]
++        or publication["mapping_sha256"]
++        != hashlib.sha256(
++            json.dumps(
++                saved, ensure_ascii=False, separators=(",", ":"), sort_keys=True
++            ).encode()
++        ).hexdigest()
++    ):
++        raise ValueError("The copy result and progress file differ")
++    locations: dict[str, list[dict[str, Any]]] = {}
++    for value in saved["copies"].values():
++        copy = SnapshotCopy.model_validate(value)
++        if copy.published is None:
++            raise ValueError("A copied snapshot is still pending")
++        for member in copy.expected.files:
++            locations.setdefault(member.sha256, []).append(
++                resolve_snapshot_file_ref(copy.published, member).model_dump(
++                    mode="json"
++                ),
++            )
++    selected_roots = {item["sha256"] for item in publication["source_roots"]}
++    paths = []
++    for model, name in (("mil", "direct_mil"), ("hopfield", "asymmetric_hopfield")):
++        pointer = root / "models" / f"{name}.json"
++        record = json.loads(pointer.read_bytes())
++        entries = record.get("seeds", [record])
++        inputs = json.loads((root / record["model_inputs"]).read_bytes())["files"]
++        runtime = json.loads((root / record["runtime"]).read_bytes())
++        required = (
++            ("response_data", "manifest")
++            if model == "mil"
++            else ("fit_data", "queries", "keys")
++        )
++        for item in entries:
++            if item["native_benchmark"]["cloud_run"]["sha256"] not in selected_roots:
++                continue
++            settings = {
++                "model": model,
++                "seed": item["canonical_seed"],
++                "host": publication["host"],
++                "source_pointer_sha256": file_sha256(pointer),
++                "source_commit": record["source_commit"],
++                "source_run": item["native_benchmark"]["cloud_run"],
++                "environment": saved_environment(runtime),
++                "checkpoint": locations[item["selected_checkpoint"]["sha256"]][0],
++                "files": {key: locations[inputs[key]["sha256"]][0] for key in required},
++                "expected": locations[item["tune_predictions"]["sha256"]][0],
++                "split": "tune",
++                "atol": 0.0,
++                "rtol": 0.0,
++            }
++            path = output / f"{model}-{item['canonical_seed']}.json"
++            _save_model_check(path, settings, locations)
++            paths.append(path)
++    return paths
++
++
++def recovery_reports(checks: Path) -> list[dict[str, Any]]:
++    """Check each model's saved recovery output against its fixed request."""
++    evidence = []
++    for name in SELECTED_MODELS:
++        settings_path = checks / f"{name}.json"
++        settings = json.loads(settings_path.read_bytes())
++        directory = checks / name
++        report = json.loads((directory / "verified.json").read_bytes())
++        if not report["passed"] or report["request_sha256"] != file_sha256(
++            settings_path
++        ):
++            raise ValueError(f"Recovery evidence differs for {name}")
++        if report["prediction_sha256"] != file_sha256(directory / "prediction.npz"):
++            raise ValueError(f"The saved prediction changed for {name}")
++        checkpoint = ResolvedFileRef.model_validate(settings["checkpoint"])
++        if report["checkpoint_sha256"] != checkpoint.sha256:
++            raise ValueError(f"The recovered weights differ for {name}")
++        expected = {
++            "model": settings["model"],
++            "seed": settings["seed"],
++            "expected_sha256": settings["expected"]["sha256"],
++            "atol": settings["atol"],
++            "rtol": settings["rtol"],
++            "environment": settings["environment"],
++        }
++        if name != f"{settings['model']}-{settings['seed']}" or any(
++            report[key] != value for key, value in expected.items()
++        ):
++            raise ValueError(
++                f"The recovery result belongs to another model check: {name}"
++            )
++        evidence.append(report)
++    return evidence
++
++
++def register(
++    request_path: Path,
++    result_path: Path,
++    checks: Path,
++    output: Path,
++    model_root: Path | None = None,
++) -> dict[str, Any]:
++    """Register all four recovered models after checking their saved evidence."""
++    request = CopyRequest.model_validate_json(request_path.read_bytes())
++    pointer_root = request.repository_root if model_root is None else model_root
++    result: dict[str, Any] = json.loads(result_path.read_bytes())
++    if result["operation_sha256"] != document_digest(request):
++        raise ValueError("The result belongs to another publication request")
++    if (
++        len(request.inventory.roots) != len(SELECTED_MODELS)
++        or len(request.policy.hosts) != 1
++        or len(result["publications"]) != 1
++    ):
++        raise ValueError("Registration requires four selected models and one host")
++    host = request.policy.hosts[0]
++    publication = result["publications"][0]
++    if not publication["passed"] or publication["host"] != host.model_dump(mode="json"):
++        raise ValueError("A publication failed its graph comparison")
++    if publication["required_files_checked"] != len(request.inventory.required_files):
++        raise ValueError("A required file is missing")
++    if publication["source_roots"] != [
++        ref.model_dump(mode="json") for ref in request.inventory.roots
++    ]:
++        raise ValueError("The selected model roots changed")
++    selected_roots = set()
++    for name in SELECTED_MODELS:
++        settings_path = checks / f"{name}.json"
++        settings = json.loads(settings_path.read_bytes())
++        selected_roots.add(settings["source_run"]["sha256"])
++        pointer_name = (
++            "direct_mil" if settings["model"] == "mil" else "asymmetric_hopfield"
++        )
++        pointer = pointer_root / "models" / f"{pointer_name}.json"
++        if file_sha256(pointer) != settings["source_pointer_sha256"]:
++            raise ValueError("The original model pointer changed during recovery")
++    if selected_roots != {root.sha256 for root in request.inventory.roots}:
++        raise ValueError("Recovery checks must cover every selected model root")
++    evidence = recovery_reports(checks)
++    accepted = {"schema_version": 1, "publication": result, "recovery": evidence}
++    write_synchronized(
++        output, (json.dumps(accepted, indent=2, sort_keys=True) + "\n").encode()
++    )
++    return accepted
++
++
++def main() -> None:
++    """Prepare model checks or register the completed publication."""
++    parser = argparse.ArgumentParser(description=__doc__)
++    tasks = parser.add_subparsers(dest="action", required=True)
++    prepare = tasks.add_parser("prepare")
++    for name in ("root", "progress", "result", "output"):
++        prepare.add_argument(name, type=Path)
++    finish = tasks.add_parser("register")
++    for name in ("request", "result", "checks", "output"):
++        finish.add_argument(name, type=Path)
++    finish.add_argument("--model-root", type=Path)
++    args = parser.parse_args()
++    if args.action == "prepare":
++        print(
++            json.dumps(
++                [
++                    str(path)
++                    for path in model_checks(
++                        args.root, args.progress, args.result, args.output
++                    )
++                ]
++            )
++        )
++    else:
++        register(args.request, args.result, args.checks, args.output, args.model_root)
++        print(args.output)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tools/graph_publication/prepare.py b/tools/graph_publication/prepare.py
+new file mode 100644
+index 00000000..d49f3674
+--- /dev/null
++++ b/tools/graph_publication/prepare.py
+@@ -0,0 +1,177 @@
++"""List the saved files needed for the model copies."""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import shutil
++from pathlib import Path
++from typing import Any
++
++from viper._cloud import HuggingFaceRepository
++from viper._source import RunFetcher
++from viper.cloud import ViperCloud
++from viper.execution._promotion import PromotionInventory, RunGraphPromoter
++from viper.execution._promotion_worker import CopyRequest
++from viper.references import ResolvedFileRef, ResolvedRunRef
++from viper.storage import (
++    LocalArtifactStore,
++    RunPromotionPolicy,
++    TransferLimits,
++    ViperCloudDestination,
++)
++
++
++def original_bytes(payload: dict[str, Any], metadata: Path) -> bytes:
++    """Read an original local file and check its frozen size and hash."""
++    paths = [
++        Path(item["path"]) for item in payload["sources"] if item["kind"] == "vm_file"
++    ]
++    paths += [
++        metadata / "sota-metadata" / payload["sha256"],
++        metadata / "recovered-metadata" / payload["sha256"],
++    ]
++    for path in paths:
++        if path.is_file() and path.stat().st_size == payload["bytes"]:
++            raw = path.read_bytes()
++            if hashlib.sha256(raw).hexdigest() == payload["sha256"]:
++                return raw
++    raise ValueError(f"Original file is unavailable: {payload['sha256']}")
++
++
++def capture_sources(
++    workspace: Path, metadata: Path, frozen_raw: bytes, local: list[dict[str, Any]]
++) -> tuple[tuple[ResolvedFileRef, ...], int]:
++    """Save the original local source files and their location records together."""
++    local_bytes = sum(item["bytes"] for item in local) + len(frozen_raw)
++    if local_bytes > 1024**3 or local_bytes * 2 > shutil.disk_usage(workspace).free:
++        raise ValueError(
++            "Local source collection exceeds its one-GiB preparation budget"
++        )
++    files = {"source-records/original-inventory.json": frozen_raw}
++    origins = {}
++    for payload in local:
++        digest = payload["sha256"]
++        path = f"source-records/files/{digest}"
++        files[path] = original_bytes(payload, metadata)
++        origins[path] = payload["sources"]
++    files["source-records/original-locations.json"] = (
++        json.dumps(origins, sort_keys=True, indent=2) + "\n"
++    ).encode()
++    captured = LocalArtifactStore(workspace).resolved_files(files)
++    return tuple(captured), local_bytes
++
++
++def prepare(workspace: Path, metadata: Path, upstream_path: Path, output: Path) -> None:
++    """Check the full file list and save the copy request."""
++    frozen_raw = (metadata / "sota-complete.json").read_bytes()
++    frozen = json.loads(frozen_raw)
++    upstream = json.loads(upstream_path.read_bytes())
++    if upstream["errors"]:
++        raise ValueError("Upstream run discovery has unresolved records")
++    roots = tuple(
++        ResolvedRunRef.model_validate(item["run"]) for item in frozen["roots"]
++    )
++    root_keys = {item.model_dump_json() for item in roots}
++    supporting: list[ResolvedFileRef] = [
++        ResolvedRunRef.model_validate(item["root"]) for item in upstream["roots"]
++    ]
++    supporting = [
++        item for item in supporting if item.model_dump_json() not in root_keys
++    ]
++    found: dict[str, ResolvedFileRef] = {}
++    for item in upstream["files"]:
++        if item["sha256"] is not None and item["reference"]["kind"] != "git":
++            found.setdefault(
++                item["sha256"],
++                ResolvedFileRef(
++                    stored_at=item["reference"],
++                    sha256=item["sha256"],
++                    bytes=item["bytes"],
++                ),
++            )
++    aliases: dict[str, ResolvedFileRef] = {}
++    for item in frozen["aliases"]:
++        if item["reference"]["kind"] == "gcs":
++            aliases.setdefault(
++                item["sha256"],
++                ResolvedFileRef(
++                    stored_at=item["reference"],
++                    sha256=item["sha256"],
++                    bytes=item["bytes"],
++                ),
++            )
++    missing = [item for item in frozen["payloads"] if item["sha256"] not in found]
++    local = [item for item in missing if item["sha256"] not in aliases]
++    captured, local_bytes = capture_sources(workspace, metadata, frozen_raw, local)
++    supporting.extend(captured)
++    for reference in captured:
++        found.setdefault(reference.sha256, reference)
++    for payload in missing:
++        digest = payload["sha256"]
++        if digest in aliases:
++            reference = aliases[digest]
++            found[digest] = reference
++            supporting.append(reference)
++    required = {item["sha256"]: found[item["sha256"]] for item in frozen["payloads"]}
++    if any(
++        required[item["sha256"]].bytes != item["bytes"] for item in frozen["payloads"]
++    ):
++        raise ValueError("Required file size differs from the original inventory")
++    inventory = PromotionInventory(
++        roots=roots, supporting_roots=tuple(supporting), required_files=required
++    )
++    host = HuggingFaceRepository(
++        repository="pvd232/viper-plan-evidence", repo_type="dataset"
++    )
++    destination = ViperCloudDestination(owner="pvd232", workspace="rico_rebuild")
++    fetcher = RunFetcher(
++        workspace,
++        LocalArtifactStore(workspace),
++        "https://github.com/pvd232/rico-rebuild.git",
++    )
++    promoter = RunGraphPromoter(
++        workspace, ViperCloud(workspace, host), destination, fetcher=fetcher
++    )
++    order = promoter.discover_inventory(inventory)
++    request = CopyRequest(
++        repository_root=workspace,
++        inventory=inventory,
++        policy=RunPromotionPolicy(hosts=(host,)),
++        destination=destination,
++        limits=TransferLimits(
++            staging_bytes=128 * 1024**3, cache_bytes=96 * 1024**3, connections=4
++        ),
++    )
++    output.write_text(request.model_dump_json(indent=2) + "\n")
++    coverage = dict(
++        original_inventory_sha256=hashlib.sha256(frozen_raw).hexdigest(),
++        required_files=len(required),
++        required_bytes=sum(item["bytes"] for item in frozen["payloads"]),
++        model_roots=len(roots),
++        supporting_roots=len(supporting),
++        snapshots=len(order),
++        discovered_files=len(promoter.source_files),
++        local_source_bytes=local_bytes,
++        source_settings_changed=False,
++    )
++    output.with_suffix(".coverage.json").write_text(
++        json.dumps(coverage, sort_keys=True, indent=2) + "\n"
++    )
++    print(json.dumps(coverage, sort_keys=True), flush=True)
++
++
++if __name__ == "__main__":
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("workspace", type=Path)
++    parser.add_argument("metadata", type=Path)
++    parser.add_argument("upstream", type=Path)
++    parser.add_argument("output", type=Path)
++    arguments = parser.parse_args()
++    prepare(
++        arguments.workspace.resolve(),
++        arguments.metadata.resolve(),
++        arguments.upstream,
++        arguments.output,
++    )
+diff --git a/tools/graph_publication/publish.py b/tools/graph_publication/publish.py
+new file mode 100644
+index 00000000..c9ad03b7
+--- /dev/null
++++ b/tools/graph_publication/publish.py
+@@ -0,0 +1,84 @@
++"""Publish the selected models using VIPER's checked copy operation."""
++
++from __future__ import annotations
++
++import argparse
++import json
++from pathlib import Path
++from typing import Any
++
++from huggingface_hub import HfApi
++from viper._cloud import HuggingFaceRepository
++from viper.execution import promote_run_to_cloud
++from viper.execution._promotion_worker import CopyRequest
++from viper.execution._publication import write_synchronized
++from viper.serialization import document_digest
++
++from rico.domain.mil.serialization import file_sha256
++
++
++def publish(
++    request_path: Path, output: Path, pilot: int | None = None
++) -> dict[str, Any]:
++    """Copy the graph and retain the worker's verified result."""
++    request = CopyRequest.model_validate_json(request_path.read_bytes())
++    if pilot is not None:
++        selected = request.inventory.roots[pilot]
++        inventory = request.inventory.model_copy(
++            update={"roots": (selected,), "supporting_roots": (), "required_files": {}}
++        )
++        request = request.model_copy(update={"inventory": inventory})
++    api = HfApi()
++    for host in request.policy.hosts:
++        if isinstance(host, HuggingFaceRepository):
++            api.auth_check(host.repository, repo_type=host.repo_type, write=True)
++    settings = request.repository_root / "viper.toml"
++    settings_hash = file_sha256(settings)
++    runs = promote_run_to_cloud(
++        request.repository_root,
++        request.inventory.roots,
++        request.destination,
++        policy=request.policy,
++        limits=request.limits,
++        required_files=request.inventory.required_files,
++        supporting_roots=request.inventory.supporting_roots,
++        trusted_source_repositories=request.trusted_source_repositories,
++    )
++    result_path = (
++        request.repository_root
++        / ".viper/promotion"
++        / document_digest(request)
++        / "result.json"
++    )
++    result: dict[str, Any] = json.loads(result_path.read_bytes())
++    actual = [run.model_dump(mode="json") for run in runs]
++    recorded = [
++        run for host in result["publications"] for run in host["destination_roots"]
++    ]
++    if actual != recorded or any(not host["passed"] for host in result["publications"]):
++        raise ValueError("The copy result differs from the returned model references")
++    if file_sha256(settings) != settings_hash:
++        raise ValueError("The source storage settings changed")
++    write_synchronized(
++        output, (json.dumps(result, indent=2, sort_keys=True) + "\n").encode()
++    )
++    return result
++
++
++def main() -> None:
++    """Read the frozen request and optionally select one model for the pilot."""
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("request", type=Path)
++    parser.add_argument("output", type=Path)
++    parser.add_argument("--pilot", type=int)
++    args = parser.parse_args()
++    result = publish(args.request, args.output, args.pilot)
++    print(
++        json.dumps(
++            {"operation_sha256": result["operation_sha256"], "output": str(args.output)}
++        )
++    )
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tools/graph_publication/recover.py b/tools/graph_publication/recover.py
+new file mode 100644
+index 00000000..bbfa8715
+--- /dev/null
++++ b/tools/graph_publication/recover.py
+@@ -0,0 +1,164 @@
++"""Load copied model files from Hugging Face and check their predictions."""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import sys
++from pathlib import Path
++from typing import Any
++
++import numpy as np
++import torch
++from viper._cloud import HuggingFaceRepository
++from viper._source import RunFetcher
++from viper.references import HuggingFaceFileRef, ResolvedFileRef, StorageModel
++from viper.storage import LocalArtifactStore
++
++from rico.commands.model_prediction import predict
++from rico.domain.mil.serialization import file_sha256
++
++
++class DestinationReader(RunFetcher):
++    """Read only files from the selected additional repository."""
++
++    def __init__(self, root: Path, host: HuggingFaceRepository) -> None:
++        """Start a reader in the recovery workspace."""
++        super().__init__(root, LocalArtifactStore(root), "")
++        self.host = host
++
++    def require_destination(self, location: StorageModel) -> None:
++        """Reject every original storage address before reading a file."""
++        if not isinstance(location, HuggingFaceFileRef) or (
++            location.repository != self.host.repository
++            or location.repo_type != self.host.repo_type
++        ):
++            raise ValueError("original storage is blocked")
++
++    def __call__(self, location: StorageModel) -> bytes:
++        """Check the host and use VIPER's ordinary file reader."""
++        self.require_destination(location)
++        return super().__call__(location)
++
++    def read(self, reference: ResolvedFileRef) -> bytes:
++        """Check the host before reading a document or a cached file."""
++        self.require_destination(reference.stored_at)
++        return super().read(reference)
++
++    def path(self, reference: ResolvedFileRef) -> Path:
++        """Check the host and download the exact recorded bytes."""
++        self.require_destination(reference.stored_at)
++        return super().path(reference)
++
++
++def compare(prediction: Path, expected: Path, atol: float, rtol: float) -> float:
++    """Check named axes and the predeclared numerical tolerance."""
++    with (
++        np.load(prediction, allow_pickle=False) as actual,
++        np.load(expected, allow_pickle=False) as saved,
++    ):
++        for axis in ("perts", "genes"):
++            expected_axis = axis if axis in saved.files else "response_gene_ids"
++            np.testing.assert_array_equal(
++                actual[axis].astype(str), saved[expected_axis].astype(str)
++            )
++        observed = actual["prediction"]
++        required = saved["prediction"]
++        if not np.isfinite(observed).all() or not np.isfinite(required).all():
++            raise ValueError("Predictions must contain finite numbers")
++        np.testing.assert_allclose(observed, required, atol=atol, rtol=rtol)
++        return float(np.max(np.abs(observed - required)))
++
++
++def environment() -> dict[str, Any]:
++    """Describe the Python and numerical libraries used for this prediction."""
++    return {
++        "python": sys.version.split()[0],
++        "torch": str(torch.__version__),
++        "numpy": np.__version__,
++        "cuda": torch.version.cuda,
++        "device": torch.cuda.get_device_name(),
++    }
++
++
++def recover(settings_path: Path, workspace: Path) -> dict[str, Any]:
++    """Save the predictions, then compare them with the expected values."""
++    settings: dict[str, Any] = json.loads(settings_path.read_bytes())
++    current_environment = environment()
++    if current_environment != settings["environment"]:
++        raise ValueError(
++            "The prediction environment differs from the saved model environment"
++        )
++    plan_hash = file_sha256(settings_path)
++    inputs = {
++        key: settings[key]
++        for key in ("model", "seed", "checkpoint", "files", "split", "environment")
++    }
++    input_hash = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
++    workspace.mkdir(parents=True, exist_ok=True)
++    binding = workspace / "request.sha256"
++    if binding.exists() and binding.read_text().strip() != input_hash:
++        raise ValueError("The recovery request changed")
++    output = workspace / "prediction.npz"
++    if not binding.exists():
++        if any(workspace.iterdir()):
++            raise ValueError("Recovery requires a fresh workspace")
++        binding.write_text(input_hash + "\n")
++        (workspace / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
++    reader = DestinationReader(
++        workspace, HuggingFaceRepository.model_validate(settings["host"])
++    )
++    expected_ref = ResolvedFileRef.model_validate(settings["expected"])
++    expected = reader.path(expected_ref)
++    if not output.exists():
++        checkpoint = ResolvedFileRef.model_validate(settings["checkpoint"])
++        files = {
++            name: str(reader.path(ResolvedFileRef.model_validate(reference)))
++            for name, reference in settings["files"].items()
++        }
++        index = {
++            "model": settings["model"],
++            "checkpoint": str(reader.path(checkpoint)),
++            "checkpoint_sha256": checkpoint.sha256,
++            "files": files,
++        }
++        index_path = workspace / "inputs.json"
++        index_path.write_text(json.dumps(index, indent=2) + "\n")
++        predict(index_path, output, settings["split"])
++    difference = compare(output, expected, settings["atol"], settings["rtol"])
++    result = {
++        "passed": True,
++        "model": settings["model"],
++        "seed": settings["seed"],
++        "request_sha256": plan_hash,
++        "inputs_sha256": input_hash,
++        "checkpoint_sha256": settings["checkpoint"]["sha256"],
++        "prediction_sha256": file_sha256(output),
++        "expected_sha256": expected_ref.sha256,
++        "maximum_absolute_error": difference,
++        "atol": settings["atol"],
++        "rtol": settings["rtol"],
++        "environment": current_environment,
++    }
++    (workspace / "verified.json").write_text(
++        json.dumps(result, indent=2, sort_keys=True) + "\n"
++    )
++    return result
++
++
++def main() -> None:
++    """Read the fixed model check and its fresh workspace path."""
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("settings", type=Path)
++    parser.add_argument("workspace", type=Path)
++    args = parser.parse_args()
++    print(
++        json.dumps(
++            recover(args.settings.resolve(), args.workspace.resolve()), sort_keys=True
++        )
++    )
++
++
++if __name__ == "__main__":
++    main()

@@ -1,0 +1,47 @@
+schema_version = 1
+contract_id = "run-graph-republication"
+package_sha256 = "78bf5f71a9f96c3c9370380a2a27fa6a36553691ff90921876ac8071db1a3541"
+pair_block_id = "RGP-PB-04"
+baseline_commit = "2151d6665880ab37e4bb5ad4793525cf599e6975"
+change_summary = ["Retain the completed RGP-PB-04 implementation at f9817194faa83c495aef9355db93c103b77876a2."]
+deviation_summary = "Historical plan reconstructed on 2026-10-18 from the retained implementation commit. Existing review-checks and migration acceptance record the executed checks; reconstruction does not claim a new gate run."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/implementation.patch"
+target_paths = ["src/viper/cloud.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_journal.py", "src/viper/huggingface.py", "tests/fixtures.py", "tests/test_cloud_service.py"]
+
+[[handoff_targets]]
+label = "Retained implementation diff"
+source = "plan"
+path = "patches/implementation.patch"
+line = 1
+
+[gate]
+source_roots = ["src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = ["pyrefly", "check", "src/viper", "tests"]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_cloud_service.py", "tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references", "tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store"]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = ["ruff", "check", "--select", "D", "src/viper", "tests"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "format", "--check", "src/viper/cloud.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_journal.py", "src/viper/huggingface.py", "tests/fixtures.py", "tests/test_cloud_service.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "check", "src/viper/cloud.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_journal.py", "src/viper/huggingface.py", "tests/fixtures.py", "tests/test_cloud_service.py"]

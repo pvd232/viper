@@ -1,0 +1,572 @@
+diff --git a/src/viper/cloud.py b/src/viper/cloud.py
+index f770de6..93c3af5 100644
+--- a/src/viper/cloud.py
++++ b/src/viper/cloud.py
+@@ -164,9 +164,11 @@ class ViperCloud:
+         self,
+         destination: ViperCloudDestination,
+         sources: Mapping[RepoRelPath, PublicationSource],
++        *,
++        attempts: int = 3,
+     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
+-        """Publish one sealed revision through the selected provider."""
+-        return self.provider.publish(destination, sources)
++        """Publish a snapshot with the requested number of attempts."""
++        return self.provider.publish(destination, sources, attempts=attempts)
+ 
+     def resolved_files(
+         self,
+diff --git a/src/viper/execution/_promotion.py b/src/viper/execution/_promotion.py
+index 71d22bd..727087b 100644
+--- a/src/viper/execution/_promotion.py
++++ b/src/viper/execution/_promotion.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import hashlib
++import json
+ import os
+ import shutil
+ import tempfile
+@@ -58,6 +59,7 @@ from ..storage import (
+     local_artifact_store,
+ )
+ from ..verification import verify_run_result
++from ._promotion_journal import PublicationJournal
+ from ._restore import resolve_run_reference
+ from .errors import RunPromotionError
+ 
+@@ -92,12 +94,14 @@ class _RunGraphPromoter:
+         destination: ViperCloudDestination,
+         *,
+         fetcher: RunFetcher,
++        journal: PublicationJournal | None = None,
+     ) -> None:
+         """Use the supplied fetcher for source documents."""
+         self.root = root
+         self.cloud = cloud
+         self.destination = destination
+         self.fetcher = fetcher
++        self.journal = journal
+         self.files: dict[StorageModel, ResolvedFileRef] = {}
+         self.snapshots: dict[
+             _SourceSnapshot,
+@@ -509,7 +513,9 @@ class _RunGraphPromoter:
+             ):
+                 raise RunPromotionError("source snapshot files changed")
+             sources = self.rewrite_snapshot_documents(snapshot, original)
+-            promoted, files = self._publish_sources(sources)
++            promoted, files = self._publish_sources(
++                sources, snapshot=snapshot, source_files=tuple(identities)
++            )
+             self.snapshots[snapshot] = promoted
+             self.snapshot_files[snapshot] = files
+             return promoted
+@@ -523,6 +529,9 @@ class _RunGraphPromoter:
+     def _publish_sources(
+         self,
+         sources: dict[str, PublicationSource],
++        *,
++        snapshot: _SourceSnapshot,
++        source_files: tuple[SnapshotFileRef, ...],
+     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
+         """Stage verified neighboring-store files within the publication root."""
+         staging_root = self.root / ".viper" / "promotion"
+@@ -539,6 +548,22 @@ class _RunGraphPromoter:
+                 except OSError:
+                     shutil.copyfile(source, staged)
+                 confined[path] = staged
++            if self.journal is not None:
++                children = [
++                    (
++                        child.model_dump(mode="json"),
++                        self.snapshots[child].model_dump(mode="json"),
++                    )
++                    for child in sorted(
++                        self.dependencies.get(snapshot, ()),
++                        key=lambda item: item.model_dump_json(),
++                    )
++                    if child in self.snapshots
++                ]
++                digest = hashlib.sha256(
++                    json.dumps(children, sort_keys=True).encode()
++                ).hexdigest()
++                return self.journal.publish(snapshot, source_files, confined, digest)
+             return self.cloud.publish(self.destination, confined)
+ 
+     def rewrite_snapshot_documents(
+diff --git a/src/viper/execution/_promotion_journal.py b/src/viper/execution/_promotion_journal.py
+new file mode 100644
+index 0000000..d8437c4
+--- /dev/null
++++ b/src/viper/execution/_promotion_journal.py
+@@ -0,0 +1,254 @@
++"""Save publication progress so an interrupted copy can resume."""
++
++from __future__ import annotations
++
++import fcntl
++import os
++import tempfile
++from pathlib import Path
++from types import TracebackType
++from typing import Literal, Self
++
++from pydantic import Field
++
++from .._cloud import (
++    GcsRepository,
++    PublicationSource,
++    RevisionManifest,
++    canonical_json_bytes,
++    manifest_revision,
++    source_file,
++)
++from .._schema import SHA256, ProtocolModel
++from ..cloud import ViperCloud
++from ..huggingface import HuggingFaceProvider
++from ..references import (
++    CloudStageResultSnapshotRef,
++    GcsStageResultSnapshotRef,
++    GitSource,
++    SnapshotFileRef,
++    StageResultSnapshot,
++    resolve_snapshot_file_ref,
++)
++from ..serialization import document_digest, parse_yaml_bytes
++from ..storage import ViperCloudDestination
++from ._publication import replace_synchronized
++from .errors import RunPromotionError
++
++
++class _Copy(ProtocolModel):
++    """Describe an original snapshot and its expected destination copy."""
++
++    source: StageResultSnapshot | GitSource = Field(
++        description="Original snapshot address."
++    )
++    source_files: tuple[SnapshotFileRef, ...] = Field(
++        description="Original file paths, sizes, and hashes."
++    )
++    expected: RevisionManifest = Field(
++        description="Required destination files and their identities."
++    )
++    dependencies_sha256: SHA256 = Field(
++        description="Hash of the completed child mappings."
++    )
++    previous_head: str | None = Field(
++        description="Destination commit observed before copying."
++    )
++    published: CloudStageResultSnapshotRef | None = Field(
++        default=None, description="Verified destination snapshot, once available."
++    )
++
++
++class _Progress(ProtocolModel):
++    """Bind saved copies to one publication request."""
++
++    schema_version: Literal[1] = Field(default=1, description="Progress file format.")
++    operation_sha256: SHA256 = Field(
++        description="Hash of the inventory, policy, and destination."
++    )
++    copies: dict[str, _Copy] = Field(
++        default_factory=dict,
++        description="Expected and completed copies, keyed by source snapshot.",
++    )
++
++
++class PublicationJournal:
++    """Keep one writer and reuse verified copies after a restart."""
++
++    def __init__(
++        self,
++        path: Path,
++        operation_sha256: SHA256,
++        cloud: ViperCloud,
++        destination: ViperCloudDestination,
++    ) -> None:
++        """Select the progress file and publication destination."""
++        self.path = path
++        self.cloud = cloud
++        self.destination = destination
++        self.progress = _Progress(operation_sha256=operation_sha256)
++        self._lock: int | None = None
++
++    def __enter__(self) -> Self:
++        """Lock the progress file and check the request it describes."""
++        self.path.parent.mkdir(parents=True, exist_ok=True)
++        self._lock = os.open(
++            self.path.with_suffix(".lock"),
++            os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
++            0o600,
++        )
++        try:
++            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
++        except OSError as error:
++            os.close(self._lock)
++            self._lock = None
++            raise RunPromotionError("publication journal is locked") from error
++        try:
++            if self.path.is_symlink():
++                raise ValueError("progress file is a symlink")
++            if self.path.exists():
++                saved = _Progress.model_validate(
++                    parse_yaml_bytes(self.path.read_bytes())
++                )
++                if saved.operation_sha256 != self.progress.operation_sha256:
++                    raise ValueError("publication request changed")
++                if any(
++                    key != document_digest(copy.source)
++                    for key, copy in saved.copies.items()
++                ):
++                    raise ValueError("source key changed")
++                self.progress = saved
++            return self
++        except Exception as error:
++            self.__exit__(None, None, None)
++            raise RunPromotionError("publication journal differs") from error
++
++    def __exit__(
++        self,
++        kind: type[BaseException] | None,
++        error: BaseException | None,
++        trace: TracebackType | None,
++    ) -> None:
++        """Release the writer lock and keep the saved progress."""
++        if self._lock is not None:
++            os.close(self._lock)
++            self._lock = None
++
++    def _save(self) -> None:
++        """Replace the progress file while holding its writer lock."""
++        if self._lock is None:
++            raise RunPromotionError("publication journal is not locked")
++        replace_synchronized(self.path, canonical_json_bytes(self.progress))
++        descriptor = os.open(self.path.parent, os.O_RDONLY)
++        try:
++            os.fsync(descriptor)
++        finally:
++            os.close(descriptor)
++
++    def publish(
++        self,
++        source: StageResultSnapshot | GitSource,
++        source_files: tuple[SnapshotFileRef, ...],
++        sources: dict[str, PublicationSource],
++        dependencies_sha256: SHA256,
++    ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
++        """Save intent, publish once, and verify the destination files."""
++        if self._lock is None:
++            raise RunPromotionError("publication journal is not locked")
++        original_files = tuple(sorted(source_files, key=lambda file: file.path))
++        files = tuple(
++            source_file(self.cloud.root, name, data)
++            for name, data in sorted(sources.items())
++        )
++        expected = RevisionManifest(
++            owner=self.destination.owner,
++            workspace=self.destination.workspace,
++            revision=manifest_revision(files),
++            files=files,
++        )
++        key = document_digest(source)
++        saved = self.progress.copies.get(key)
++        if saved is not None:
++            if (
++                saved.source != source
++                or saved.source_files != original_files
++                or saved.expected != expected
++                or saved.dependencies_sha256 != dependencies_sha256
++            ):
++                raise RunPromotionError("publication journal differs")
++            published = saved.published or self._recover(saved)
++        else:
++            previous = None
++            if isinstance(self.cloud.provider, HuggingFaceProvider):
++                previous = self.cloud.provider.publication_head()
++            saved = _Copy(
++                source=source,
++                source_files=original_files,
++                expected=expected,
++                dependencies_sha256=dependencies_sha256,
++                previous_head=previous,
++            )
++            self.progress.copies[key] = saved
++            self._save()
++            try:
++                published, observed = self.cloud.publish(
++                    self.destination, sources, attempts=1
++                )
++                if observed != files:
++                    raise RunPromotionError("publication file identities changed")
++            except Exception as error:
++                raise RunPromotionError(
++                    "remote publication outcome is unresolved"
++                ) from error
++        self._verify(published, expected)
++        self.progress.copies[key] = saved.model_copy(update={"published": published})
++        self._save()
++        return published, files
++
++    def _recover(self, saved: _Copy) -> CloudStageResultSnapshotRef:
++        """Find an earlier successful copy using its exact manifest."""
++        provider = self.cloud.provider
++        if isinstance(provider, HuggingFaceProvider):
++            if saved.previous_head is None:
++                raise RunPromotionError("publication journal differs")
++            published = provider.find_publication(saved.expected, saved.previous_head)
++            if published is not None:
++                return published
++        else:
++            repository = self.cloud.repository
++            if isinstance(repository, GcsRepository):
++                return GcsStageResultSnapshotRef(
++                    bucket=repository.bucket,
++                    prefix=repository.prefix,
++                    owner=saved.expected.owner,
++                    workspace=saved.expected.workspace,
++                    revision=saved.expected.revision,
++                )
++        raise RunPromotionError("remote publication outcome is unresolved")
++
++    def _verify(
++        self, snapshot: CloudStageResultSnapshotRef, expected: RevisionManifest
++    ) -> None:
++        """Read every destination file and check its saved size and hash."""
++        if ViperCloud._repository_for(snapshot) != self.cloud.repository:
++            raise RunPromotionError("destination repository differs")
++        if isinstance(snapshot, GcsStageResultSnapshotRef) and (
++            snapshot.owner != expected.owner
++            or snapshot.workspace != expected.workspace
++            or snapshot.revision != expected.revision
++        ):
++            raise RunPromotionError("destination snapshot differs")
++        if isinstance(self.cloud.provider, HuggingFaceProvider):
++            if self.cloud.provider.read_manifest(snapshot) != expected:
++                raise RunPromotionError("destination snapshot differs")
++        if self.cloud.list_files(snapshot) != expected.files:
++            raise RunPromotionError("destination snapshot differs")
++        directory = self.cloud.root / ".viper/promotion/verification"
++        directory.mkdir(parents=True, exist_ok=True)
++        with tempfile.TemporaryDirectory(dir=directory) as scratch:
++            for member in expected.files:
++                target = Path(scratch) / "file"
++                self.cloud.fetch_to_path(
++                    resolve_snapshot_file_ref(snapshot, member), target
++                )
++                target.unlink()
+diff --git a/src/viper/huggingface.py b/src/viper/huggingface.py
+index cec9a0a..960b821 100644
+--- a/src/viper/huggingface.py
++++ b/src/viper/huggingface.py
+@@ -111,6 +111,41 @@ class HuggingFaceProvider(ViperCloudProvider):
+             repo_type=self.repo_type,
+         )
+ 
++    def publication_head(self) -> str:
++        """Read the current commit before saving a publication intent."""
++        head = self.api.repo_info(self.repository, repo_type=self._api_repo_type).sha
++        if head is None:
++            raise ViperCloudError("destination commit is unavailable")
++        return head
++
++    def find_publication(
++        self, expected: RevisionManifest, previous_head: str
++    ) -> HuggingFaceStageResultSnapshotRef | None:
++        """Find the exact committed files after a lost upload response."""
++        found = []
++        reached_previous = False
++        for commit in self.api.list_repo_commits(
++            self.repository, repo_type=self._api_repo_type
++        ):
++            if commit.commit_id == previous_head:
++                reached_previous = True
++                break
++            if commit.title != f"Publish VIPER revision {expected.revision}":
++                continue
++            snapshot = HuggingFaceStageResultSnapshotRef(
++                repository=self.repository,
++                repo_type=self.repo_type,
++                commit=commit.commit_id,
++            )
++            manifest = RevisionManifest.model_validate_json(
++                self.fetch(self.file_ref(snapshot, _MANIFEST_PATH))
++            )
++            if manifest == expected:
++                found.append(snapshot)
++        if not reached_previous or len(found) > 1:
++            raise ViperCloudError("remote publication outcome is unresolved")
++        return found[0] if found else None
++
+     def file_ref(
+         self,
+         snapshot: CloudStageResultSnapshotRef,
+@@ -190,18 +225,20 @@ class HuggingFaceProvider(ViperCloudProvider):
+             temporary.unlink(missing_ok=True)
+         return target
+ 
+-    def list_files(
+-        self,
+-        snapshot: CloudStageResultSnapshotRef,
+-    ) -> tuple[SnapshotFileRef, ...]:
+-        """Read the exact file identities from a sealed VIPER revision."""
++    def read_manifest(self, snapshot: CloudStageResultSnapshotRef) -> RevisionManifest:
++        """Read the file list and owner saved in a snapshot."""
+         if not isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+             raise TypeError(
+                 "HuggingFaceProvider requires a HuggingFaceStageResultSnapshotRef"
+             )
+         manifest_ref = self.file_ref(snapshot, _MANIFEST_PATH)
+-        manifest = RevisionManifest.model_validate_json(self.fetch(manifest_ref))
+-        return manifest.files
++        return RevisionManifest.model_validate_json(self.fetch(manifest_ref))
++
++    def list_files(
++        self, snapshot: CloudStageResultSnapshotRef
++    ) -> tuple[SnapshotFileRef, ...]:
++        """Return each saved file's path, size, and hash."""
++        return self.read_manifest(snapshot).files
+ 
+ 
+ __all__ = ["HuggingFaceProvider"]
+diff --git a/tests/fixtures.py b/tests/fixtures.py
+index ab3deb9..5c90599 100644
+--- a/tests/fixtures.py
++++ b/tests/fixtures.py
+@@ -327,11 +327,11 @@ class MemoryHub:
+             raise ConnectionError("commit response lost")
+         return SimpleNamespace(oid=self.head)
+ 
+-    def repo_info(self, **kwargs: Any) -> SimpleNamespace:
++    def repo_info(self, *args: Any, **kwargs: Any) -> SimpleNamespace:
+         """Return the current commit and repository privacy."""
+         return SimpleNamespace(sha=self.head, private=True)
+ 
+-    def list_repo_commits(self, **kwargs: Any) -> list[SimpleNamespace]:
++    def list_repo_commits(self, *args: Any, **kwargs: Any) -> list[SimpleNamespace]:
+         """Return newest commits first for interrupted-write recovery."""
+         return [
+             SimpleNamespace(commit_id=commit, title=self.messages.get(commit, ""))
+diff --git a/tests/test_cloud_service.py b/tests/test_cloud_service.py
+index 3c3fd0b..e26e405 100644
+--- a/tests/test_cloud_service.py
++++ b/tests/test_cloud_service.py
+@@ -11,6 +11,7 @@ from typing import Any, cast
+ 
+ import pytest
+ 
++from tests.fixtures import MemoryHub
+ from tests.test_storage import InMemoryViperCloudProvider
+ from viper import execution
+ from viper._cloud import (
+@@ -20,13 +21,17 @@ from viper._cloud import (
+ )
+ from viper.authoring import freeze_run_plan
+ from viper.cloud import ViperCloud
++from viper.execution._promotion_journal import PublicationJournal
++from viper.execution.errors import RunPromotionError
+ from viper.huggingface import HuggingFaceProvider
+ from viper.references import (
+     GcsFileRef,
+     HuggingFaceFileRef,
+     HuggingFaceStageResultSnapshotRef,
+     ResolvedFileRef,
++    SnapshotFileRef,
+ )
++from viper.storage import LocalArtifactStore
+ 
+ 
+ class _HuggingFaceApi:
+@@ -223,3 +228,92 @@ def test_fresh_workspace_materializes_each_provider_reference(
+     assert gcs_path.read_bytes() == raw
+     assert hf_path.read_bytes() == raw
+     assert not (fresh / ".viper/store").exists()
++
++
++@pytest.mark.parametrize("lost_response", (False, True))
++def test_republication_recovers_commit_after_lost_response(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lost_response: bool
++) -> None:
++    """Reuse the same verified destination commit when publication resumes."""
++    api = MemoryHub(tmp_path / "hub")
++    provider = HuggingFaceProvider(
++        tmp_path, "owner/copies", "dataset", api=cast(Any, api)
++    )
++    monkeypatch.setattr(provider, "_download", api.download)
++    cloud = ViperCloud(
++        tmp_path,
++        HuggingFaceRepository(repository="owner/copies", repo_type="dataset"),
++        provider=provider,
++    )
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    source = LocalArtifactStore(tmp_path).snapshot({"weights.bin": b"weights"})
++    files = (
++        SnapshotFileRef(
++            path="weights.bin",
++            bytes=7,
++            sha256=hashlib.sha256(b"weights").hexdigest(),
++        ),
++    )
++    path = tmp_path / "progress.json"
++    api.fail_after_commit = lost_response
++    with PublicationJournal(path, "a" * 64, cloud, destination) as journal:
++        if lost_response:
++            with pytest.raises(RunPromotionError, match="outcome is unresolved"):
++                journal.publish(source, files, {"weights.bin": b"weights"}, "b" * 64)
++        else:
++            journal.publish(source, files, {"weights.bin": b"weights"}, "b" * 64)
++    committed, count = api.head, len(api.commits)
++    with PublicationJournal(path, "a" * 64, cloud, destination) as journal:
++        published, observed = journal.publish(
++            source, files, {"weights.bin": b"weights"}, "b" * 64
++        )
++        assert isinstance(published, HuggingFaceStageResultSnapshotRef)
++        assert published.commit == committed
++        assert observed == files
++        with pytest.raises(RunPromotionError, match="publication journal differs"):
++            journal.publish(source, files, {"weights.bin": b"weights"}, "c" * 64)
++        with pytest.raises(RunPromotionError, match="publication journal is locked"):
++            with PublicationJournal(path, "a" * 64, cloud, destination):
++                pytest.fail("a second writer acquired the lock")
++    assert len(api.commits) == count
++    with pytest.raises(RunPromotionError, match="publication journal differs"):
++        with PublicationJournal(path, "d" * 64, cloud, destination):
++            pytest.fail("a different request opened the saved progress")
++
++
++def test_republication_keeps_an_uncertain_write_pending(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Check saved progress before making another upload attempt."""
++    api = MemoryHub(tmp_path / "hub")
++    provider = HuggingFaceProvider(
++        tmp_path, "owner/copies", "dataset", api=cast(Any, api)
++    )
++    monkeypatch.setattr(provider, "_download", api.download)
++    cloud = ViperCloud(
++        tmp_path,
++        HuggingFaceRepository(repository="owner/copies", repo_type="dataset"),
++        provider=provider,
++    )
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    source = LocalArtifactStore(tmp_path).snapshot({"file.bin": b"x"})
++    files = (
++        SnapshotFileRef(
++            path="file.bin", bytes=1, sha256=hashlib.sha256(b"x").hexdigest()
++        ),
++    )
++    attempts = []
++
++    def interrupted(**kwargs: Any) -> None:
++        """Simulate a connection failure with an unknown remote outcome."""
++        attempts.append(kwargs)
++        raise ConnectionError("upload response unavailable")
++
++    monkeypatch.setattr(api, "create_commit", interrupted)
++    for _ in range(2):
++        with PublicationJournal(
++            tmp_path / "progress.json", "a" * 64, cloud, destination
++        ) as journal:
++            with pytest.raises(RunPromotionError, match="outcome is unresolved"):
++                journal.publish(source, files, {"file.bin": b"x"}, "b" * 64)
++    assert len(attempts) == 1

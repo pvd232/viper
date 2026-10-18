@@ -1,0 +1,143 @@
+{
+  "validated_at": "2026-10-18T18:03:42.696500+00:00",
+  "scope": "Contract, checklist, historical completion reconciliation, and optimization planning metadata; active Python source and tests unchanged.",
+  "checks": [
+    {
+      "command": "load_current_execution_state(workspace, 'evidence/run-graph-republication-state.json'); render_views(workspace, state, check=True)",
+      "result": "pass; 10 migration requirements complete; RGP-PB-09 selected"
+    },
+    {
+      "command": "AST lookup of every existing TestRef; classify absent observers against the impact PlannedAddition list",
+      "result": "pass; four explicitly planned test symbols"
+    },
+    {
+      "command": "Resolve relative Markdown paths in contract, checklist, impact, and PB-09 through PB-11 notes",
+      "result": "pass; 133 existing paths"
+    },
+    {
+      "command": "Compare all three Mermaid blocks in contract and impact analysis byte-for-byte",
+      "result": "pass"
+    },
+    {
+      "command": "mmdc -i INPUT.mmd -o OUTPUT.png -t default|dark -w 1200",
+      "result": "six renders passed; all three light diagrams and integrated dark diagram visually inspected"
+    },
+    {
+      "command": "./skills/direct-prose/scripts/check_prose.py /tmp/viper-optimization-prose/*.md",
+      "result": "pass; authored prose clean. Full generated documents retain existing protocol wording flagged by the advisory prose checker."
+    }
+  ],
+  "historical_patch_materialization": [
+    {
+      "pair_block": "RGP-PB-02",
+      "baseline": "8ae163150f15613743d2a016c84bc42bfa0baa32",
+      "implementation_commit": "2bb68454e92ba04d16fbbb5d015224552ac6fc60",
+      "targets": [
+        "src/viper/_source.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/storage.py",
+        "tests/test_run_execution.py"
+      ],
+      "git_apply_cached_check": 0,
+      "candidate_matches_recorded_commit": true
+    },
+    {
+      "pair_block": "RGP-PB-03",
+      "baseline": "2bb68454e92ba04d16fbbb5d015224552ac6fc60",
+      "implementation_commit": "2151d6665880ab37e4bb5ad4793525cf599e6975",
+      "targets": [
+        "src/viper/execution/_promotion.py",
+        "tests/fixtures.py",
+        "tests/test_run_execution.py"
+      ],
+      "git_apply_cached_check": 0,
+      "candidate_matches_recorded_commit": true
+    },
+    {
+      "pair_block": "RGP-PB-04",
+      "baseline": "2151d6665880ab37e4bb5ad4793525cf599e6975",
+      "implementation_commit": "f9817194faa83c495aef9355db93c103b77876a2",
+      "targets": [
+        "src/viper/cloud.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/huggingface.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py"
+      ],
+      "git_apply_cached_check": 0,
+      "candidate_matches_recorded_commit": true
+    },
+    {
+      "pair_block": "RGP-PB-05",
+      "baseline": "f9817194faa83c495aef9355db93c103b77876a2",
+      "implementation_commit": "97cadc32fd7c640a48942933ef24b5e6f052bd54",
+      "targets": [
+        "src/viper/_source.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/huggingface.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_retention.py",
+        "tests/test_run_execution.py"
+      ],
+      "git_apply_cached_check": 0,
+      "candidate_matches_recorded_commit": true
+    },
+    {
+      "pair_block": "RGP-PB-06",
+      "baseline": "97cadc32fd7c640a48942933ef24b5e6f052bd54",
+      "implementation_commit": "293628b25f5fc313d85c8faf00772753d509c7a0",
+      "targets": [
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "tests/test_run_execution.py"
+      ],
+      "git_apply_cached_check": 0,
+      "candidate_matches_recorded_commit": true
+    },
+    {
+      "pair_block": "RGP-PB-07",
+      "baseline": "293628b25f5fc313d85c8faf00772753d509c7a0",
+      "implementation_commit": "f98b694fc938a13ea746a0c7a63fdc9f8883c6f7",
+      "targets": [
+        "src/viper/execution/__init__.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/execution/_promotion_worker.py",
+        "src/viper/storage.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py"
+      ],
+      "git_apply_cached_check": 0,
+      "candidate_matches_recorded_commit": true
+    },
+    {
+      "pair_block": "RGP-PB-08",
+      "baseline": "671a72b8a082c382bf8f8311bd277b89aef8c167",
+      "implementation_commit": "cd81561d331f9d0a5fed7d16cc1892abffd0611a",
+      "targets": [
+        "tests/test_graph_publication.py",
+        "tools/graph_publication/README.md",
+        "tools/graph_publication/checks.py",
+        "tools/graph_publication/prepare.py",
+        "tools/graph_publication/publish.py",
+        "tools/graph_publication/recover.py"
+      ],
+      "git_apply_cached_check": 0,
+      "candidate_matches_recorded_commit": true
+    }
+  ],
+  "unexecuted_gates": {
+    "RGP-PB-09": "Implementation candidate and new tests are planned, not yet authored.",
+    "RGP-PB-10": "Depends on the first optimization block; candidate is not frozen.",
+    "RGP-PB-11": "RICO candidate and observing test are planned, not yet authored.",
+    "full_repository_tests_and_model_recovery": "No active runtime source change; live baseline CI and retained model acceptance are in the completion record."
+  },
+  "production_source_net_lines": 0
+}

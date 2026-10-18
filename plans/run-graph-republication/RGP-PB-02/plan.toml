@@ -1,18 +1,18 @@
 schema_version = 1
 contract_id = "run-graph-republication"
-package_sha256 = "332413d182184fa30a647addfba334fcaf4841a156f68ac74fb0cc7f07ea0bb3"
+package_sha256 = "78bf5f71a9f96c3c9370380a2a27fa6a36553691ff90921876ac8071db1a3541"
 pair_block_id = "RGP-PB-02"
 baseline_commit = "8ae163150f15613743d2a016c84bc42bfa0baa32"
-change_summary = ["Discover every source file before publication"]
-deviation_summary = "Stacked pull requests retain independent review as pending. The original publication and default settings remain intact. Review checks retain the tested source hashes and exact command output."
+change_summary = ["Retain the completed RGP-PB-02 implementation at 2bb68454e92ba04d16fbbb5d015224552ac6fc60."]
+deviation_summary = "Historical plan reconstructed on 2026-10-18 from the retained implementation commit. Existing review-checks and migration acceptance record the executed checks; reconstruction does not claim a new gate run."
 
 [[actions]]
 operation = "patch"
 patch_path = "patches/implementation.patch"
-target_paths = ["contracts/run-graph-republication.md", "contracts/run-graph-republication.toml", "docs/how-to/cloud-storage.md", "src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/storage.py", "tests/test_run_execution.py"]
+target_paths = ["src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/storage.py", "tests/test_run_execution.py"]
 
 [[handoff_targets]]
-label = "Implementation changes"
+label = "Retained implementation diff"
 source = "plan"
 path = "patches/implementation.patch"
 line = 1
@@ -24,7 +24,7 @@ test_roots = ["tests"]
 [[gate.steps]]
 role = "typecheck"
 working_directory = "."
-argv = ["pyright", "--pythonpath", "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+argv = ["pyrefly", "check", "src/viper", "tests"]
 
 [[gate.steps]]
 role = "test"
@@ -34,14 +34,14 @@ argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_r
 [[gate.steps]]
 role = "documentation"
 working_directory = "."
-argv = ["ruff", "check", "--select", "D", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+argv = ["ruff", "check", "--select", "D", "src/viper", "tests"]
 
 [[gate.steps]]
 role = "lint"
 working_directory = "."
-argv = ["ruff", "format", "--check", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+argv = ["ruff", "format", "--check", "src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/storage.py", "tests/test_run_execution.py"]
 
 [[gate.steps]]
 role = "lint"
 working_directory = "."
-argv = ["ruff", "check", "src/viper/_source.py", "src/viper/storage.py", "src/viper/execution/_promotion.py", "tests/test_run_execution.py"]
+argv = ["ruff", "check", "src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/storage.py", "tests/test_run_execution.py"]

@@ -1,0 +1,742 @@
+diff --git a/src/viper/_source.py b/src/viper/_source.py
+index d30214c..ef9d4e9 100644
+--- a/src/viper/_source.py
++++ b/src/viper/_source.py
+@@ -12,6 +12,7 @@ from ._verification.storage import fetch_git_file_bytes, verify_resolved_file_by
+ from ._verified_cache import VerifiedObjectCache
+ from .cloud import CloudReference, ViperCloud
+ from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
++from .huggingface import HuggingFaceProvider
+ from .references import (
+     CloudStageResultSnapshotRef,
+     GcsFileRef,
+@@ -54,22 +55,28 @@ class RunFetcher:
+         repository_root: Path,
+         store: LocalArtifactStore,
+         source_repository: str,
++        *,
++        cache_root: Path | None = None,
+     ) -> None:
+         """Bind retrieval and its per-file cache to one execution.
+ 
++        cache_root selects a task-owned cache beneath the workspace.
+         Files must remain unchanged for the lifetime of the fetcher. A new
+         execution creates a new fetcher and checks pre-existing files again.
+         """
+         self.repository_root = repository_root.resolve()
+         self.store = store
+         self.source_repository = source_repository
++        self.cache_root = (
++            cache_root or self.repository_root / ".viper/cache"
++        ).resolve()
++        if not self.cache_root.is_relative_to(self.repository_root):
++            raise ValueError("file cache must be inside the workspace")
+         self._external_git_files: dict[GitFileRef, bytes] = {}
+         self._external_git_cache_bytes = 0
+-        self._external_git_checkout_root = (
+-            self.repository_root / ".viper/cache/git-checkouts"
+-        )
++        self._external_git_checkout_root = self.cache_root / "git-checkouts"
+         self._verified_objects = VerifiedObjectCache(
+-            self.repository_root / ".viper/cache/verified-objects"
++            self.cache_root / "verified-objects"
+         )
+         self._verified_paths: dict[ResolvedFileRef, Path] = {}
+         self._verified_producers: dict[
+@@ -97,6 +104,11 @@ class RunFetcher:
+             cloud = ViperCloud.for_reference(self.repository_root, reference)
+         else:
+             cloud = ViperCloud.for_snapshot(self.repository_root, reference)
++        if self.cache_root != self.repository_root / ".viper/cache" and isinstance(
++            cloud.provider, HuggingFaceProvider
++        ):
++            cloud.provider.cache_dir = self.cache_root / "hub"
++            cloud.provider.stream_files = True
+         self._cloud_services[key] = cloud
+         return cloud
+ 
+diff --git a/src/viper/execution/_promotion.py b/src/viper/execution/_promotion.py
+index 727087b..72e206a 100644
+--- a/src/viper/execution/_promotion.py
++++ b/src/viper/execution/_promotion.py
+@@ -60,6 +60,7 @@ from ..storage import (
+ )
+ from ..verification import verify_run_result
+ from ._promotion_journal import PublicationJournal
++from ._promotion_transfer import TransferSpace
+ from ._restore import resolve_run_reference
+ from .errors import RunPromotionError
+ 
+@@ -95,6 +96,7 @@ class _RunGraphPromoter:
+         *,
+         fetcher: RunFetcher,
+         journal: PublicationJournal | None = None,
++        space: TransferSpace | None = None,
+     ) -> None:
+         """Use the supplied fetcher for source documents."""
+         self.root = root
+@@ -102,6 +104,12 @@ class _RunGraphPromoter:
+         self.destination = destination
+         self.fetcher = fetcher
+         self.journal = journal
++        self.space = space
++        if space is not None:
++            if journal is None:
++                raise RunPromotionError("bounded copies require a publication journal")
++            journal.space = space
++            space.configure_cloud(cloud)
+         self.files: dict[StorageModel, ResolvedFileRef] = {}
+         self.snapshots: dict[
+             _SourceSnapshot,
+@@ -207,11 +215,18 @@ class _RunGraphPromoter:
+ 
+         for snapshot in self.source_members:
+             visit(snapshot)
++        if self.space is not None:
++            self.space.prepare_reader(self.fetcher)
++            for locations in self.source_members.values():
++                sizes = [self.source_files[file][0] for file in locations]
++                self.space.check(sum(sizes), max(sizes, default=0))
+         return tuple(ordered)
+ 
+     def read_document(self, reference: ResolvedFileRef) -> bytes:
+         """Read a run document through the supplied fetcher."""
+         try:
++            if self.space is not None:
++                self.space.check(reference.bytes, reference.bytes)
+             return self.fetcher.read(reference)
+         except Exception as err:
+             raise RunPromotionError("source run graph is unavailable") from err
+@@ -478,6 +493,12 @@ class _RunGraphPromoter:
+         self.promoting.add(snapshot)
+         try:
+             self.discover_snapshot(snapshot)
++            for child in sorted(
++                self.dependencies.get(snapshot, ()),
++                key=lambda item: item.model_dump_json(),
++            ):
++                if not isinstance(child, GitSource) or child in self.documents:
++                    self.promote_snapshot(child)
+             if isinstance(snapshot, GitSource):
+                 locations = tuple(
+                     file
+@@ -487,6 +508,9 @@ class _RunGraphPromoter:
+                 )
+             else:
+                 locations = self.source_members[snapshot]
++            if self.space is not None:
++                sizes = [self.source_files[file][0] for file in locations]
++                self.space.check(sum(sizes), max(sizes, default=0))
+             original: dict[str, PublicationSource] = {}
+             identities = []
+             for location in locations:
+@@ -518,6 +542,9 @@ class _RunGraphPromoter:
+             )
+             self.snapshots[snapshot] = promoted
+             self.snapshot_files[snapshot] = files
++            if self.space is not None:
++                self.space.check()
++                self.space.release(self.fetcher)
+             return promoted
+         except RunPromotionError:
+             raise
+@@ -534,7 +561,11 @@ class _RunGraphPromoter:
+         source_files: tuple[SnapshotFileRef, ...],
+     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
+         """Stage verified neighboring-store files within the publication root."""
+-        staging_root = self.root / ".viper" / "promotion"
++        staging_root = (
++            self.space.root / "staging"
++            if self.space is not None
++            else self.root / ".viper" / "promotion"
++        )
+         staging_root.mkdir(parents=True, exist_ok=True)
+         with tempfile.TemporaryDirectory(dir=staging_root) as temporary:
+             confined: dict[str, PublicationSource] = {}
+@@ -548,6 +579,8 @@ class _RunGraphPromoter:
+                 except OSError:
+                     shutil.copyfile(source, staged)
+                 confined[path] = staged
++            if self.space is not None:
++                self.space.check()
+             if self.journal is not None:
+                 children = [
+                     (
+diff --git a/src/viper/execution/_promotion_journal.py b/src/viper/execution/_promotion_journal.py
+index d8437c4..08659ec 100644
+--- a/src/viper/execution/_promotion_journal.py
++++ b/src/viper/execution/_promotion_journal.py
+@@ -32,6 +32,7 @@ from ..references import (
+ )
+ from ..serialization import document_digest, parse_yaml_bytes
+ from ..storage import ViperCloudDestination
++from ._promotion_transfer import TransferSpace
+ from ._publication import replace_synchronized
+ from .errors import RunPromotionError
+ 
+@@ -88,6 +89,7 @@ class PublicationJournal:
+         self.destination = destination
+         self.progress = _Progress(operation_sha256=operation_sha256)
+         self._lock: int | None = None
++        self.space: TransferSpace | None = None
+ 
+     def __enter__(self) -> Self:
+         """Lock the progress file and check the request it describes."""
+@@ -243,7 +245,13 @@ class PublicationJournal:
+                 raise RunPromotionError("destination snapshot differs")
+         if self.cloud.list_files(snapshot) != expected.files:
+             raise RunPromotionError("destination snapshot differs")
+-        directory = self.cloud.root / ".viper/promotion/verification"
++        if self.space is not None:
++            self.space.check(
++                largest_file=max((file.bytes for file in expected.files), default=0)
++            )
++            directory = self.space.root / "verification"
++        else:
++            directory = self.cloud.root / ".viper/promotion/verification"
+         directory.mkdir(parents=True, exist_ok=True)
+         with tempfile.TemporaryDirectory(dir=directory) as scratch:
+             for member in expected.files:
+@@ -251,4 +259,6 @@ class PublicationJournal:
+                 self.cloud.fetch_to_path(
+                     resolve_snapshot_file_ref(snapshot, member), target
+                 )
++                if self.space is not None:
++                    self.space.check()
+                 target.unlink()
+diff --git a/src/viper/execution/_promotion_transfer.py b/src/viper/execution/_promotion_transfer.py
+new file mode 100644
+index 0000000..5cb009c
+--- /dev/null
++++ b/src/viper/execution/_promotion_transfer.py
+@@ -0,0 +1,143 @@
++"""Check disk space before copying saved experiment files."""
++
++from __future__ import annotations
++
++import shutil
++import sys
++from pathlib import Path
++
++import httpx
++from huggingface_hub import constants, set_client_factory
++from pydantic import Field
++from requests.adapters import HTTPAdapter
++
++from .._schema import ProtocolModel
++from .._source import RunFetcher
++from ..cloud import ViperCloud
++from ..gcs import GcsProvider
++from ..huggingface import HuggingFaceProvider
++from .errors import RunPromotionError
++
++
++class TransferLimits(ProtocolModel):
++    """Limit disk use and connections for one graph copy."""
++
++    staging_bytes: int = Field(
++        gt=0, strict=True, description="Maximum bytes in the copy's working directory."
++    )
++    cache_bytes: int = Field(
++        gt=0,
++        strict=True,
++        description="Maximum bytes kept in the copy's download cache.",
++    )
++    connections: int = Field(
++        gt=0,
++        strict=True,
++        description="Maximum active connections used by a transfer client.",
++    )
++
++
++def directory_bytes(root: Path) -> int:
++    """Count file bytes once per inode, including temporary downloads."""
++    seen = set()
++    size = 0
++    if root.exists():
++        for path in root.rglob("*"):
++            if path.is_symlink() and not path.resolve().is_relative_to(root):
++                raise RunPromotionError("cached file escapes the copy directory")
++            if path.is_file():
++                stat = path.stat()
++                identity = (stat.st_dev, stat.st_ino)
++                if identity not in seen:
++                    seen.add(identity)
++                    size += stat.st_size
++    return size
++
++
++class TransferSpace:
++    """Reserve space for a snapshot and its destination verification."""
++
++    def __init__(self, root: Path, limits: TransferLimits) -> None:
++        """Use a new directory for this copy's temporary files."""
++        self.root = root.resolve()
++        self.root.mkdir(parents=True, exist_ok=False)
++        self.cache = self.root / "cache"
++        self.limits = limits
++        self.peak_bytes = 0
++        self.peak_cache_bytes = 0
++
++    def check(self, snapshot_bytes: int = 0, largest_file: int = 0) -> None:
++        """Check current use and reserve space for files awaiting verification."""
++        current = directory_bytes(self.root)
++        cached = directory_bytes(self.cache)
++        self.peak_bytes = max(self.peak_bytes, current)
++        self.peak_cache_bytes = max(self.peak_cache_bytes, cached)
++        required = snapshot_bytes + largest_file
++        if current + required > self.limits.staging_bytes:
++            raise RunPromotionError("staging budget is insufficient")
++        if cached + snapshot_bytes > self.limits.cache_bytes:
++            raise RunPromotionError("cache budget is insufficient")
++        if required > shutil.disk_usage(self.root).free:
++            raise RunPromotionError("available disk space is insufficient")
++
++    def configure_cloud(self, cloud: ViperCloud) -> None:
++        """Use one upload worker and stream files into the copy directory."""
++        provider = cloud.provider
++        if isinstance(provider, HuggingFaceProvider):
++            provider.stream_files = True
++            provider.upload_threads = 1
++        elif isinstance(provider, GcsProvider):
++            provider.max_workers = 1
++            provider.sliced_fetch_min_bytes = sys.maxsize
++            provider.client._http.mount(
++                "https://",
++                HTTPAdapter(
++                    pool_connections=2,
++                    pool_maxsize=self.limits.connections,
++                    pool_block=True,
++                ),
++            )
++
++    def prepare_reader(self, fetcher: RunFetcher) -> None:
++        """Configure the source clients used by the selected graph."""
++        if fetcher.cache_root != self.cache:
++            raise RunPromotionError("source reader must use the copy's cache")
++        for cloud in fetcher._cloud_services.values():
++            self.configure_cloud(cloud)
++
++    def release(self, fetcher: RunFetcher) -> None:
++        """Remove verified downloads owned by this copy after publication succeeds."""
++        if fetcher.cache_root != self.cache:
++            raise RunPromotionError("cleanup requires the copy's cache")
++        cache = fetcher._verified_objects
++        completed = {}
++        for reference, path in fetcher._verified_paths.items():
++            if path.is_relative_to(cache.root):
++                if path != cache.path(reference) or path.is_symlink():
++                    raise RunPromotionError("cached file path changed")
++                completed[reference] = path
++        for path in set(completed.values()):
++            path.unlink(missing_ok=True)
++        for reference in completed:
++            del fetcher._verified_paths[reference]
++        self.check()
++
++    def configure_network(self) -> None:
++        """Use a small shared HTTP pool in the dedicated copy process."""
++        if not constants.HF_HUB_DISABLE_XET:
++            raise RunPromotionError("copy process requires HF_HUB_DISABLE_XET=1")
++        connections = self.limits.connections
++
++        def client() -> httpx.Client:
++            """Create the HTTP client used for Hub calls and file reads."""
++            return httpx.Client(
++                limits=httpx.Limits(
++                    max_connections=connections,
++                    max_keepalive_connections=connections,
++                    keepalive_expiry=120,
++                ),
++                timeout=httpx.Timeout(120, connect=20),
++                follow_redirects=True,
++            )
++
++        set_client_factory(client)
+diff --git a/src/viper/huggingface.py b/src/viper/huggingface.py
+index 960b821..5926629 100644
+--- a/src/viper/huggingface.py
++++ b/src/viper/huggingface.py
+@@ -4,14 +4,21 @@ from __future__ import annotations
+ 
+ import hashlib
+ import os
+-import shutil
+ import tempfile
+ from collections.abc import Mapping
+ from io import BytesIO
+ from pathlib import Path
+ from typing import Literal
+ 
+-from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
++from huggingface_hub import (
++    CommitOperationAdd,
++    HfApi,
++    get_session,
++    hf_hub_download,
++    hf_hub_url,
++    hf_raise_for_status,
++)
++from huggingface_hub.utils._headers import build_hf_headers
+ 
+ from ._cloud import (
+     PublicationSource,
+@@ -52,6 +59,9 @@ class HuggingFaceProvider(ViperCloudProvider):
+         self.repository = repository
+         self.repo_type: Literal["model", "dataset", "space"] = repo_type
+         self.api = api or HfApi()
++        self.stream_files = False
++        self.cache_dir: Path | None = None
++        self.upload_threads = 5
+ 
+     @property
+     def _api_repo_type(self) -> Literal["dataset", "space"] | None:
+@@ -104,6 +114,7 @@ class HuggingFaceProvider(ViperCloudProvider):
+             repo_type=self._api_repo_type,
+             operations=operations,
+             commit_message=f"Publish VIPER revision {revision}",
++            num_threads=self.upload_threads,
+         )
+         return HuggingFaceStageResultSnapshotRef(
+             repository=self.repository,
+@@ -171,6 +182,7 @@ class HuggingFaceProvider(ViperCloudProvider):
+                 filename=location.path,
+                 repo_type=None if location.repo_type == "model" else location.repo_type,
+                 revision=location.commit,
++                cache_dir=self.cache_dir,
+             )
+             return Path(downloaded)
+         except (OSError, ValueError) as error:
+@@ -208,16 +220,45 @@ class HuggingFaceProvider(ViperCloudProvider):
+         )
+         temporary = Path(temporary_name)
+         try:
+-            source = self._download(location)
+-            with (
+-                source.open("rb") as source_stream,
+-                os.fdopen(descriptor, "wb") as target_stream,
+-            ):
+-                shutil.copyfileobj(source_stream, target_stream, length=1024 * 1024)
++            digest_state = hashlib.sha256()
++            size = 0
++            with os.fdopen(descriptor, "wb") as target_stream:
++                if self.stream_files:
++                    url = hf_hub_url(
++                        self.repository,
++                        location.path,
++                        repo_type=self._api_repo_type,
++                        revision=location.commit,
++                    )
++                    with get_session().stream(
++                        "GET",
++                        url,
++                        headers=build_hf_headers(token=self.api.token),
++                        follow_redirects=True,
++                        timeout=120,
++                    ) as response:
++                        hf_raise_for_status(response)
++                        for chunk in response.iter_bytes(1024 * 1024):
++                            size += len(chunk)
++                            if size > identity.bytes:
++                                raise ViperCloudError(
++                                    "Hugging Face file exceeds its recorded size"
++                                )
++                            digest_state.update(chunk)
++                            target_stream.write(chunk)
++                else:
++                    with self._download(location).open("rb") as source_stream:
++                        while chunk := source_stream.read(1024 * 1024):
++                            size += len(chunk)
++                            if size > identity.bytes:
++                                raise ViperCloudError(
++                                    "Hugging Face file exceeds its recorded size"
++                                )
++                            digest_state.update(chunk)
++                            target_stream.write(chunk)
+                 target_stream.flush()
+                 os.fsync(target_stream.fileno())
+-            with temporary.open("rb") as stream:
+-                digest = hashlib.file_digest(stream, "sha256").hexdigest()
++            digest = digest_state.hexdigest()
+             if temporary.stat().st_size != identity.bytes or digest != identity.sha256:
+                 raise ViperCloudError("Hugging Face file identity changed")
+             os.replace(temporary, target)
+diff --git a/tests/fixtures.py b/tests/fixtures.py
+index 5c90599..3156781 100644
+--- a/tests/fixtures.py
++++ b/tests/fixtures.py
+@@ -6,6 +6,8 @@ from pathlib import Path
+ from types import SimpleNamespace
+ from typing import Any
+ 
++import httpx
++
+ from viper import config
+ from viper._schema import DataRole
+ from viper.artifacts import ArtifactLoaderRef
+@@ -296,6 +298,7 @@ class MemoryHub:
+     def __init__(self, cache: Path) -> None:
+         """Start an empty repository and a separate download cache."""
+         self.cache = cache
++        self.token = None
+         self.head = "0" * 40
+         self.commits: dict[str, dict[str, bytes]] = {self.head: {}}
+         self.messages: dict[str, str] = {}
+@@ -345,3 +348,9 @@ class MemoryHub:
+         path.parent.mkdir(parents=True, exist_ok=True)
+         path.write_bytes(raw)
+         return path
++
++    def response(self, request: httpx.Request) -> httpx.Response:
++        """Serve an exact commit through an in-memory HTTP connection."""
++        _, selected = request.url.path.split("/resolve/", 1)
++        commit, path = selected.split("/", 1)
++        return httpx.Response(200, content=self.commits[commit][path])
+diff --git a/tests/test_cloud_service.py b/tests/test_cloud_service.py
+index e26e405..c0ed824 100644
+--- a/tests/test_cloud_service.py
++++ b/tests/test_cloud_service.py
+@@ -9,6 +9,7 @@ from pathlib import Path
+ from types import SimpleNamespace
+ from typing import Any, cast
+ 
++import httpx
+ import pytest
+ 
+ from tests.fixtures import MemoryHub
+@@ -18,10 +19,17 @@ from viper._cloud import (
+     GcsRepository,
+     HuggingFaceRepository,
+     ViperCloudDestination,
++    ViperCloudError,
+ )
++from viper._source import RunFetcher
+ from viper.authoring import freeze_run_plan
+ from viper.cloud import ViperCloud
+ from viper.execution._promotion_journal import PublicationJournal
++from viper.execution._promotion_transfer import (
++    TransferLimits,
++    TransferSpace,
++    directory_bytes,
++)
+ from viper.execution.errors import RunPromotionError
+ from viper.huggingface import HuggingFaceProvider
+ from viper.references import (
+@@ -317,3 +325,85 @@ def test_republication_keeps_an_uncertain_write_pending(
+             with pytest.raises(RunPromotionError, match="outcome is unresolved"):
+                 journal.publish(source, files, {"file.bin": b"x"}, "b" * 64)
+     assert len(attempts) == 1
++
++
++@pytest.mark.parametrize("body", (b"weights", b"short", b"WEIGHTS", b"weights-extra"))
++def test_streamed_hub_file_checks_size_and_hash(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: bytes
++) -> None:
++    """Check streamed files and discard temporary bytes after a failed check."""
++    requests = []
++
++    def respond(request: httpx.Request) -> httpx.Response:
++        """Serve the chosen body through the normal HTTP streaming interface."""
++        requests.append(request.url.path)
++        return httpx.Response(200, content=body)
++
++    client = httpx.Client(transport=httpx.MockTransport(respond))
++    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
++    provider = HuggingFaceProvider(tmp_path, "owner/copies", "dataset")
++    provider.stream_files = True
++    location = HuggingFaceFileRef(
++        repository="owner/copies",
++        repo_type="dataset",
++        commit="a" * 40,
++        path="weights.bin",
++    )
++    identity = SnapshotFileRef(
++        path="weights.bin", bytes=7, sha256=hashlib.sha256(b"weights").hexdigest()
++    )
++    target = tmp_path / "restored.bin"
++    with client:
++        if body == b"weights":
++            assert (
++                provider.fetch_to_path(location, identity, target).read_bytes() == body
++            )
++        else:
++            with pytest.raises(ViperCloudError):
++                provider.fetch_to_path(location, identity, target)
++            assert not target.exists()
++            assert not list(tmp_path.glob(".restored.bin.*"))
++    assert len(requests) == 1
++
++
++def test_transfer_space_checks_capacity_and_preserves_source_files(
++    tmp_path: Path,
++) -> None:
++    """Reject oversized work and remove only the copy's verified downloads."""
++    limits = TransferLimits(staging_bytes=64, cache_bytes=32, connections=2)
++    space = TransferSpace(tmp_path / "copy", limits)
++    fetcher = RunFetcher(
++        tmp_path,
++        LocalArtifactStore(tmp_path),
++        "https://example.test/code",
++        cache_root=space.cache,
++    )
++    with pytest.raises(RunPromotionError, match="staging budget is insufficient"):
++        space.check(40, 40)
++    with pytest.raises(RunPromotionError, match="cache budget is insufficient"):
++        space.check(33)
++    (local,) = LocalArtifactStore(tmp_path).resolved_files({"original.bin": b"weights"})
++    original = fetcher.path(local)
++    remote = ResolvedFileRef(
++        stored_at=HuggingFaceFileRef(
++            repository="owner/copies",
++            repo_type="dataset",
++            commit="a" * 40,
++            path="weights.bin",
++        ),
++        bytes=7,
++        sha256=local.sha256,
++    )
++    fetcher._verified_objects.write(remote, b"weights")
++    cached = fetcher._verified_objects.path(remote)
++    fetcher.remember_path(remote, cached)
++    space.check()
++    assert space.peak_bytes == space.peak_cache_bytes == 7
++    space.release(fetcher)
++    assert not cached.exists()
++    assert original.read_bytes() == b"weights"
++    assert fetcher.path(local) == original
++    assert directory_bytes(space.root) == 0
++    shared = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), "")
++    with pytest.raises(RunPromotionError, match="cleanup requires the copy's cache"):
++        space.release(shared)
+diff --git a/tests/test_retention.py b/tests/test_retention.py
+index b720f8e..d401eba 100644
+--- a/tests/test_retention.py
++++ b/tests/test_retention.py
+@@ -64,7 +64,7 @@ def _successful_result(
+         "experiments/example/runs/selected/01ARZ3NDEKTSV4RRFFQ69G5FAV/"
+         "stages/embed/resolved.yaml"
+     )
+-    snapshot = ViperCloudSnapshotPublisher(
++    snapshot, _ = ViperCloudSnapshotPublisher(
+         root,
+         ViperCloudDestination(owner="machina", workspace="retention"),
+     ).publish(
+diff --git a/tests/test_run_execution.py b/tests/test_run_execution.py
+index 5e95dc3..6879b4d 100644
+--- a/tests/test_run_execution.py
++++ b/tests/test_run_execution.py
+@@ -18,6 +18,7 @@ from types import SimpleNamespace
+ from typing import Any, cast
+ from unittest.mock import Mock
+ 
++import httpx
+ import pytest
+ 
+ import viper.config as current_config
+@@ -86,6 +87,12 @@ from viper.execution._materialization import (
+ )
+ from viper.execution._metric import MetricWorkerResult
+ from viper.execution._promotion import PromotionInventory, _RunGraphPromoter
++from viper.execution._promotion_journal import PublicationJournal
++from viper.execution._promotion_transfer import (
++    TransferLimits,
++    TransferSpace,
++    directory_bytes,
++)
+ from viper.execution._publication import write_attempt_document
+ from viper.execution._run import execute_benchmark_confirmation
+ from viper.execution._stage import (
+@@ -2965,6 +2972,17 @@ def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace
+     hf.fetch.side_effect = lambda location: (
+         attempt_raw if location == hf_location else b"missing"
+     )
++
++    def hf_file(reference: ResolvedFileRef, destination: Path) -> Path:
++        """Restore the saved test document after a task clears its cache."""
++        raw = hf.fetch(reference.stored_at)
++        assert len(raw) == reference.bytes
++        assert hashlib.sha256(raw).hexdigest() == reference.sha256
++        destination.parent.mkdir(parents=True, exist_ok=True)
++        destination.write_bytes(raw)
++        return destination
++
++    hf.fetch_to_path.side_effect = hf_file
+     hf.list_files.return_value = (
+         SnapshotFileRef(
+             path=hf_location.path,
+@@ -3135,3 +3153,75 @@ def test_republication_preserves_files_and_follows_new_references(
+     assert verified is not None
+     assert before == case.cloud.provider.uploads
+     assert promoter.promote_reference(case.selected) == published
++
++
++@pytest.mark.parametrize("interrupted", (False, True))
++def test_republication_obeys_resource_limits(
++    promotion_graph: SimpleNamespace,
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    interrupted: bool,
++) -> None:
++    """Copy a connected graph within its budget and retain interrupted progress."""
++    case = promotion_graph
++    limits = TransferLimits(
++        staging_bytes=8_000_000, cache_bytes=4_000_000, connections=2
++    )
++    space = TransferSpace(tmp_path / "work", limits)
++    api = MemoryHub(space.cache / "hub")
++    api.fail_after_commit = interrupted
++    provider = HuggingFaceProvider(
++        tmp_path, "owner/additional", "dataset", api=cast(Any, api)
++    )
++    monkeypatch.setattr(provider, "_download", api.download)
++    target = ViperCloud(
++        tmp_path,
++        HuggingFaceRepository(repository="owner/additional", repo_type="dataset"),
++        provider=provider,
++    )
++    client = httpx.Client(transport=httpx.MockTransport(api.response))
++    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
++    case.hf.provider = Mock()
++
++    def choose_cloud(root, reference):
++        """Keep the original graph's clients separate from the additional host."""
++        return case.hf if reference.kind == "huggingface" else case.cloud
++
++    monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
++    monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
++    fetcher = RunFetcher(
++        tmp_path, LocalArtifactStore(tmp_path), REPOSITORY, cache_root=space.cache
++    )
++    destination = ViperCloudDestination(owner="machina", workspace="models")
++    before = case.cloud.provider.uploads.copy()
++    progress = tmp_path / "progress.json"
++    with client, PublicationJournal(progress, "a" * 64, target, destination) as journal:
++        promoter = _RunGraphPromoter(
++            tmp_path,
++            target,
++            destination,
++            fetcher=fetcher,
++            journal=journal,
++            space=space,
++        )
++        promoter.discover_inventory(
++            PromotionInventory(roots=(case.selected,), required_files={})
++        )
++        if interrupted:
++            with pytest.raises(RunPromotionError, match="outcome is unresolved"):
++                promoter.promote_reference(case.selected)
++            assert progress.is_file()
++            assert any(
++                copy.published is None for copy in journal.progress.copies.values()
++            )
++        else:
++            published = promoter.promote_reference(case.selected)
++            assert isinstance(published.stored_at, HuggingFaceFileRef)
++            assert all(
++                copy.published is not None for copy in journal.progress.copies.values()
++            )
++            assert directory_bytes(fetcher._verified_objects.root) == 0
++        space.check()
++    assert 0 < space.peak_bytes <= limits.staging_bytes
++    assert space.peak_cache_bytes <= limits.cache_bytes
++    assert case.cloud.provider.uploads == before

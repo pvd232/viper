@@ -1,0 +1,273 @@
+{
+  "recorded_at": "2026-10-18T17:57:17.600074+00:00",
+  "source": "Retained publication artifacts plus live GitHub checks; no transfer or inference rerun.",
+  "github": {
+    "viper": {
+      "headRefOid": "462b2029c5ec6797585840fdf8bfd7c9be886b31",
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:06:38Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/viper/actions/runs/39147830483/job/117735179335",
+          "name": "fast",
+          "startedAt": "2026-10-18T17:03:41Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:39:01Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/viper/actions/runs/39147830483/job/117735860655",
+          "name": "integration",
+          "startedAt": "2026-10-18T17:06:41Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:08:30Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/viper/actions/runs/39147830483/job/117735860723",
+          "name": "minimum-pydantic",
+          "startedAt": "2026-10-18T17:06:41Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:11:31Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/viper/actions/runs/39147830483/job/117735860714",
+          "name": "release-candidate",
+          "startedAt": "2026-10-18T17:06:41Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:09:39Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/viper/actions/runs/39147830483/job/117735860753",
+          "name": "compatibility (3.11)",
+          "startedAt": "2026-10-18T17:06:41Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:09:30Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/viper/actions/runs/39147830483/job/117735860694",
+          "name": "compatibility (3.12)",
+          "startedAt": "2026-10-18T17:06:41Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:09:34Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/viper/actions/runs/39147830483/job/117735860661",
+          "name": "compatibility (3.13)",
+          "startedAt": "2026-10-18T17:06:41Z",
+          "status": "COMPLETED",
+          "workflowName": "ci"
+        }
+      ]
+    },
+    "rico": {
+      "headRefOid": "cd81561d331f9d0a5fed7d16cc1892abffd0611a",
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-18T17:05:56Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/pvd232/rico-rebuild/actions/runs/39147868154/job/117735289886",
+          "name": "active-code",
+          "startedAt": "2026-10-18T17:04:12Z",
+          "status": "COMPLETED",
+          "workflowName": "graph-publication"
+        }
+      ]
+    }
+  },
+  "publication": {
+    "commit": "5d254396500029c1c80102f248b54e508d312919",
+    "acceptance_url": "https://huggingface.co/datasets/pvd232/viper-sota-publication/blob/5d254396500029c1c80102f248b54e508d312919/publication/additional-publication.json",
+    "acceptance_sha256": "f6ed699f380fa0cbc0181c51487eeba6011e9033335ccd6af40be878a233d795",
+    "required_payloads": 1305,
+    "completed_snapshots": 783,
+    "pending_snapshots": 0,
+    "recovery": [
+      {
+        "atol": 0.0,
+        "checkpoint_sha256": "ecab7488f695bd74ae92784d69c1a0f612711d748cf1912e92d28a0a21c886ba",
+        "environment": {
+          "cuda": "13.0",
+          "device": "NVIDIA L4",
+          "numpy": "2.5.3",
+          "python": "3.13.15",
+          "torch": "2.14.0+cu130"
+        },
+        "expected_sha256": "0001d3f51aed1532c10838ac618faafbf05482ab06197ec9c995703203b581fe",
+        "inputs_sha256": "c5c6dd68b119a63fc78ba5ff657e218d501f26ce2c692730a0424c0d789103bb",
+        "maximum_absolute_error": 0.0,
+        "model": "mil",
+        "passed": true,
+        "prediction_sha256": "f62fe7a56f7092cbfb6e397764752696a7fb351ed492bc6cb61b454c0a507ad2",
+        "request_sha256": "9a915845b646f1096883595d0393b746559b86bb0cf497e2e0e43d853e625898",
+        "rtol": 0.0,
+        "seed": 123464
+      },
+      {
+        "atol": 0.0,
+        "checkpoint_sha256": "7540614904addb4cc0b9f1e1582e455c551601e9a957b4714476ac2e2ba3ac78",
+        "environment": {
+          "cuda": "13.0",
+          "device": "NVIDIA L4",
+          "numpy": "2.5.3",
+          "python": "3.13.15",
+          "torch": "2.14.0+cu130"
+        },
+        "expected_sha256": "2ffb4a74335b835c6272dd60f9b2e4a007fd3cc60a721c8e542ed5278deecb21",
+        "inputs_sha256": "9c25e8d594dcfa2f75c584cd70eb80091b61e57814bb938152e50d2041758e71",
+        "maximum_absolute_error": 0.0,
+        "model": "hopfield",
+        "passed": true,
+        "prediction_sha256": "6f303126b33a569719658a615754c0ead49ca114008698a34653b9c5b8484fa1",
+        "request_sha256": "48c80caf026963bc105059958d4c2434170033d785ba007190684609bb073d2e",
+        "rtol": 0.0,
+        "seed": 123457
+      },
+      {
+        "atol": 0.0,
+        "checkpoint_sha256": "dcddc125326f63cb536f953813e1efdeb502b989e1daf455dd62e41295017898",
+        "environment": {
+          "cuda": "13.0",
+          "device": "NVIDIA L4",
+          "numpy": "2.5.3",
+          "python": "3.13.15",
+          "torch": "2.14.0+cu130"
+        },
+        "expected_sha256": "8a326767e4ddb76725a525ab89e0e493a16d3907ee5fd9f2d2e81c9d8ed394e6",
+        "inputs_sha256": "87946fbb8cb4bf3ed9169aecedaccba6ea93776497402bf96dde5c9efb82542d",
+        "maximum_absolute_error": 0.0,
+        "model": "hopfield",
+        "passed": true,
+        "prediction_sha256": "2a520bdc0b873d2c1789fb304d0904da9ee6633c8c8b0863dbacbb471e0cebd1",
+        "request_sha256": "a9bd509e48d46cda36aa30d25bfc9ff078e024e3163e2e92ef1232e501cde62f",
+        "rtol": 0.0,
+        "seed": 123458
+      },
+      {
+        "atol": 0.0,
+        "checkpoint_sha256": "cf3b2353dccd710d8c2bf63c59d25fe2e85c2f2ba3a8a8d0c6fdc2c4d899a448",
+        "environment": {
+          "cuda": "13.0",
+          "device": "NVIDIA L4",
+          "numpy": "2.5.3",
+          "python": "3.13.15",
+          "torch": "2.14.0+cu130"
+        },
+        "expected_sha256": "e747b9d387b08fec9de2286899c7458a9fed87f741c26e729e165091f7eac8f7",
+        "inputs_sha256": "79ad97db211dd21ee6007ac51641d67b0f50586a160dea52b79d05fe2eb2f420",
+        "maximum_absolute_error": 0.0,
+        "model": "hopfield",
+        "passed": true,
+        "prediction_sha256": "73578daa932794f604c4933d1067cbcc8a4f9cf2e8006df00805949da1840ff0",
+        "request_sha256": "ebb55a58b1703afa83056648187a27fd9747772c1a15e1c90270880e07e78d62",
+        "rtol": 0.0,
+        "seed": 123459
+      }
+    ]
+  },
+  "scan_observations": {
+    "scope": "Alternating directory_bytes observations on the active verification cache; concurrent file changes mean this is a timing observation, not a fixed-input equivalence test.",
+    "baseline_commit": "2c240f887b79decea9300b4f36aa1bd8e952ac81",
+    "candidate_commit_prefix": "caef1a3",
+    "root": "/mnt/rico-source-data/viper-publication-20261017/workspace/.viper/promotion/a69600c726e7db30edac66bb5cac0e01cd56dfc0b3bc5560edf6e1ed8bd79e4b/work-ruiridy1/files",
+    "observations": [
+      {
+        "variant": "defaults",
+        "measurements": [
+          {
+            "scope": "files",
+            "bytes": 14227891,
+            "seconds": 0.26072736899368465
+          },
+          {
+            "scope": "cache",
+            "bytes": 14228881,
+            "seconds": 0.25605831400025636
+          }
+        ]
+      },
+      {
+        "variant": "scan",
+        "measurements": [
+          {
+            "scope": "files",
+            "bytes": 14231422,
+            "seconds": 0.2132746660063276
+          },
+          {
+            "scope": "cache",
+            "bytes": 14227832,
+            "seconds": 0.20835109399922658
+          }
+        ]
+      },
+      {
+        "variant": "defaults",
+        "measurements": [
+          {
+            "scope": "files",
+            "bytes": 14227832,
+            "seconds": 0.26433036000526045
+          },
+          {
+            "scope": "cache",
+            "bytes": 14227832,
+            "seconds": 0.25845214400033
+          }
+        ]
+      },
+      {
+        "variant": "scan",
+        "measurements": [
+          {
+            "scope": "files",
+            "bytes": 14753360,
+            "seconds": 0.21508822700707242
+          },
+          {
+            "scope": "cache",
+            "bytes": 14753360,
+            "seconds": 0.21072383799764793
+          }
+        ]
+      }
+    ],
+    "comparison_budget_checks_per_file_before": 4,
+    "comparison_budget_checks_per_file_after": 2,
+    "checks_retained": [
+      "reservation before downloads",
+      "usage and peak measurement before cleanup"
+    ],
+    "complete_transfer_speedup_measured": false
+  },
+  "status_update_authorization": {
+    "reference": {
+      "kind": "user_approval",
+      "task_id": "01a14c84-adb3-7b33-8139-7647a1e8d342",
+      "message_id": "content-sha256:ec4fe40df4c44a0c1353793d99daceb7d7cafe1a1799fe6de9f34e53d98f6392"
+    },
+    "excerpt": "Don't preserve the incomplete status of a contract that needs to updated",
+    "identifier_note": "The runtime exposes the chat ID but no native message ID. The message citation is the SHA-256 of this exact user excerpt, not an invented native message ID.",
+    "scope": "Reconcile the completed migration and persist the optimization extension. Future optimization implementation and measurements remain open."
+  }
+}

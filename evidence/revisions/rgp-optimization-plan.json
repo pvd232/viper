@@ -1,0 +1,1291 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-18T17:57:15.864746Z",
+  "accepted_package_sha256": "0260d2c8c72bd2a65f5138b1bb73efb43c191dcbbc210aefe70bce9e5961465e",
+  "candidate_package_sha256": "78bf5f71a9f96c3c9370380a2a27fa6a36553691ff90921876ac8071db1a3541",
+  "record_changes": [
+    {
+      "record_key": "pair_block:RGP-PB-02",
+      "accepted_sha256": "b694459ac5c88d7afca08ec01704ce480ed89e2a867a3738d58d10afecac09bc",
+      "candidate_sha256": "4f8bb4655d2f76fc7be7a6e453c80a44af601c4b7b39877a4a8b5571e18738b1"
+    },
+    {
+      "record_key": "pair_block:RGP-PB-08",
+      "accepted_sha256": "304bb08a0947db76136d203cb6f897b9c0b35c8567b2d515a59b7338f8df71ec",
+      "candidate_sha256": "69faaecc8aaa8d786e9c9e8b11c4f27e8b1f53bf3ab3d76189f338f792620707"
+    },
+    {
+      "record_key": "pair_block:RGP-PB-09",
+      "accepted_sha256": null,
+      "candidate_sha256": "32c9f9aa0d9c9c74630bbac58cfba5d5afd400774fe54f205ce716ace4c9af74"
+    },
+    {
+      "record_key": "pair_block:RGP-PB-10",
+      "accepted_sha256": null,
+      "candidate_sha256": "55711d522b494de24e926d0e513c55ae698e1e697cafa12a2c88b5cd31709fe4"
+    },
+    {
+      "record_key": "pair_block:RGP-PB-11",
+      "accepted_sha256": null,
+      "candidate_sha256": "401068da01f28bc9aef4c47561018346b198536aaf927278b28c779ac6ab7272"
+    },
+    {
+      "record_key": "requirement:RGP-REQ-02",
+      "accepted_sha256": "578c1c87abc382e6287fd89407bcb7236dc3e8d9a71263475a3f4ed264da9f13",
+      "candidate_sha256": "edb89e060bfd16c0def247c22c86fbb3aa839a78d6bb52d0961cf287128fccfa"
+    },
+    {
+      "record_key": "requirement:RGP-REQ-03",
+      "accepted_sha256": "7d41073d3137d5a811667fb1cc4726dc22003c3fad2549332af1a0380698471d",
+      "candidate_sha256": "86d6f836e27b8cbfdd568f89c0665b16d6369db39109741ee6ea6086b9f79a93"
+    },
+    {
+      "record_key": "requirement:RGP-REQ-08",
+      "accepted_sha256": "613e3b637fc10924dd0c8d9c72499fedf3f5d21d25c03bc1fec16a62cebdc0b9",
+      "candidate_sha256": "d71eed7018987661180eae517410223c3d149f60006644eb51e239afab072520"
+    },
+    {
+      "record_key": "requirement:RGP-REQ-10",
+      "accepted_sha256": "21da49734c7cc082b09622330c4770c63005b3684cf46fdc32904cf4c01a244f",
+      "candidate_sha256": "3302ea3aaa15d98914e4f1e54690bc0b6448c827eb8a38e264075d11374d3a2f"
+    },
+    {
+      "record_key": "requirement:RGP-REQ-11",
+      "accepted_sha256": null,
+      "candidate_sha256": "dee21c76021efb15c6de97d55f745f0e8520f2f59b9d028bcd066673f2216816"
+    },
+    {
+      "record_key": "requirement:RGP-REQ-12",
+      "accepted_sha256": null,
+      "candidate_sha256": "2198f953980cefc49f262375893f49af9e5db6db3addd64bc5182460084c92e8"
+    },
+    {
+      "record_key": "requirement:RGP-REQ-13",
+      "accepted_sha256": null,
+      "candidate_sha256": "10411f1dd8ce8e97fdc38e978f9a65b47cb1f3f216033c8e1765b9b5ae07036c"
+    },
+    {
+      "record_key": "verifier:RGP-VR-02",
+      "accepted_sha256": "ed642c4e45c0c7f1c3ff680ff267762f33b66b6e5469fc55d90d7a2393fed884",
+      "candidate_sha256": "475fdbe5d3d0a8968f9a1fe3e2caeed5c6c24c9381d86d69be938c21e9fd08df"
+    },
+    {
+      "record_key": "verifier:RGP-VR-03",
+      "accepted_sha256": "6127edd8d247b9aea48fa9f1078dc770867d6f7a5ec4bec6347cc1ae71c40913",
+      "candidate_sha256": "84300cb8e740da86c7a070dcae8c3736b20823764b5d5013bf3866c5b439558c"
+    },
+    {
+      "record_key": "verifier:RGP-VR-04",
+      "accepted_sha256": "390f8fccc3497029b95c934a32a9ee138e9ea6218b8ba93b0895a793ed49606b",
+      "candidate_sha256": "5b8ce0915133c8592d27474275da0e3fb26b5fa12047a03e995580e4af3a1322"
+    },
+    {
+      "record_key": "verifier:RGP-VR-05",
+      "accepted_sha256": "0cfbe94f245bf6a576d233f53f5d9b2a866a1eacc7438ff8a2446cebdc92d399",
+      "candidate_sha256": "28781ddc04b90692e5de4ba2c8a6614a15cc850289a888ece30cb71b8e216738"
+    },
+    {
+      "record_key": "verifier:RGP-VR-06",
+      "accepted_sha256": "918f9a0b2526e0cd67423affb193db05d77f6c85ed255e7eed1866695ba5be91",
+      "candidate_sha256": "6635f60d10372b5ee316d2fe77732d577738d257b7c3d7b81c6f4f8496f31327"
+    },
+    {
+      "record_key": "verifier:RGP-VR-07",
+      "accepted_sha256": "c846542b7264a9a9043ed4117d0b5a2dc3b540926023fad76a50ee261e0b44fb",
+      "candidate_sha256": "8e2a72b475d2889735ca2dc9d08c8f77c81e543ae86bc08c947f5a18931d17ed"
+    },
+    {
+      "record_key": "verifier:RGP-VR-08",
+      "accepted_sha256": "4a5eea9e1bad783d9e7608f9a5484a54820c751669e82ed4a54392a3d9dc27dc",
+      "candidate_sha256": "9690ecb2dfa99d0d12ed913e6a3581e8b822dd344e5d2e9910eb0c4f7df4b183"
+    },
+    {
+      "record_key": "verifier:RGP-VR-09",
+      "accepted_sha256": "de839f308409da79c28e8c095a86be660f39364a75050a5e14d80a325776160d",
+      "candidate_sha256": "c7e2a32c37d5354d41c212a143b2e078b55613ec548f6d4eeac3dd9e04a7a730"
+    },
+    {
+      "record_key": "verifier:RGP-VR-10",
+      "accepted_sha256": "aabee8216fa1362c05c57ec718f5f4462a686a924a9e10ef46b39cdb33761a68",
+      "candidate_sha256": "79d57bf2f2b04660e7bd992ebe8b4750ac867a86f09ada2ade6b8ef2702f71a3"
+    },
+    {
+      "record_key": "verifier:RGP-VR-11",
+      "accepted_sha256": null,
+      "candidate_sha256": "6cfbbc5fd9323d40bf2d0daea72d7e44c711947831be25b17100a7f7beb77232"
+    },
+    {
+      "record_key": "verifier:RGP-VR-12",
+      "accepted_sha256": null,
+      "candidate_sha256": "5b2fb8844f146fb414b47cffbc75400950db547b8177320d5f2fd0444cd60763"
+    },
+    {
+      "record_key": "verifier:RGP-VR-13",
+      "accepted_sha256": null,
+      "candidate_sha256": "67cd636db679bcbace62f183a91ebd22999279fec9bf5bd51c73b880abdf7f6f"
+    }
+  ],
+  "affected_pair_block_ids": [
+    "RGP-PB-02",
+    "RGP-PB-03",
+    "RGP-PB-04",
+    "RGP-PB-05",
+    "RGP-PB-06",
+    "RGP-PB-07",
+    "RGP-PB-08",
+    "RGP-PB-09",
+    "RGP-PB-10",
+    "RGP-PB-11"
+  ],
+  "previous_receipt_ref": {
+    "path": "evidence/revisions/rgp-reader-api.json",
+    "sha256": "cd61be6ab93c801d1959055909cf28d1b27e3bfb1da9a3323bd126251903658a"
+  },
+  "accepted_package": {
+    "schema_version": 1,
+    "contract_id": "run-graph-republication",
+    "title": "Run Graph Republication",
+    "requirements": [
+      {
+        "id": "RGP-REQ-01",
+        "claim": "The promoter must read identified protocol documents through its supplied RunFetcher.read(). RunFetcher.path() supplies file paths for payloads. One RunFetcher must check pre-existing artifacts once per execution and reuse hashes for files published during that execution. Local, GCS, and Hugging Face reads must enforce the recorded byte count and SHA-256. Every ordinary retrieval or verification exception must become RunPromotionError(\"source run graph is unavailable\") with the original exception as its cause. RGP-PB-01 retains the public local-root restriction and existing publication behavior.",
+        "depends_on": [],
+        "verifier_ids": [
+          "RGP-VR-01"
+        ]
+      },
+      {
+        "id": "RGP-REQ-02",
+        "claim": "An explicit optional RunPromotionPolicy must select cloud repositories to relocate, allowed external storage and Git repositories, the original GCS binding for legacy provider-neutral references, and positive resource limits. Existing three-argument calls retain local promotion semantics. Match GCS repositories by bucket and prefix and Hugging Face repositories by repository and repo_type. Source readers must use the captured original binding independently of the configured destination. Missing legacy bindings and unclassified required references must fail before publication.",
+        "depends_on": [
+          "RGP-REQ-01"
+        ],
+        "verifier_ids": [
+          "RGP-VR-02"
+        ]
+      },
+      {
+        "id": "RGP-REQ-03",
+        "claim": "Discovery must traverse typed documents on every reachable supported backend before deciding which snapshots remain external. Enumerate all members of every selected sealed snapshot and reconcile them against a frozen independent inventory. Each required inventory item must map to a graph role or produce a blocking omission. Report additional snapshot members, shared ancestors, total bytes, largest snapshot, file counts, and permitted external dependencies. A retained cloud document whose child changes must itself be republished so the new root reaches the relocated child.",
+        "depends_on": [
+          "RGP-REQ-02"
+        ],
+        "verifier_ids": [
+          "RGP-VR-03"
+        ]
+      },
+      {
+        "id": "RGP-REQ-04",
+        "claim": "Publication must keep every scientific payload byte-identical and rewrite only identified protocol references and the metadata identities derived from those changes. Preserve stage identities, code commits, parameters, input roles, measurements, and provenance relationships. Update run-plan stage hashes, reuse keys, source-closure links, and cloud-stage references together. Key graph mappings by complete source identity; shared payload hashes must never collapse distinct producing histories. Preserve sealed snapshot membership and reject inconsistent identities.",
+        "depends_on": [
+          "RGP-REQ-03"
+        ],
+        "verifier_ids": [
+          "RGP-VR-04"
+        ]
+      },
+      {
+        "id": "RGP-REQ-05",
+        "claim": "Before remote publication, persist an intent bound to the source snapshot, destination, policy digest, expected rewritten manifest, and dependency bindings. Recover the exact verified destination commit after interruption, including a lost response after a successful commit. Publish the completed binding atomically only after verifying that commit. Reuse completed bindings across selected roots and process restarts. Serialize writers for the same publication journal; reject mismatched or corrupt state. Reconcile an uncertain remote outcome before retrying and fail closed when its identity cannot be established. Retain completed children when a parent fails.",
+        "depends_on": [
+          "RGP-REQ-04"
+        ],
+        "verifier_ids": [
+          "RGP-VR-05"
+        ]
+      },
+      {
+        "id": "RGP-REQ-06",
+        "claim": "Preflight must measure selected snapshots and available staging capacity before payload verification or transfer. Path-backed payload reads, source verification, publication, and destination verification must obey explicit staging, cache, and connection limits. Count VIPER, Hugging Face, and Xet caches and cross-filesystem copies. Persist verified destination bindings before reclaiming task-owned staged files. A snapshot that cannot fit the declared budget must fail before transfer; all unmodified source bytes and shared caches remain intact. Retry and cancellation must leave recoverable evidence and bounded temporary storage.",
+        "depends_on": [
+          "RGP-REQ-05"
+        ],
+        "verifier_ids": [
+          "RGP-VR-06"
+        ]
+      },
+      {
+        "id": "RGP-REQ-07",
+        "claim": "A verifier independent of the rewriting traversal must compare the source and destination graphs using the saved mapping and the frozen inventory. Require exact scientific payload hashes, exact required inventory membership, preserved non-location fields, and an explicit field-level allowlist of derived metadata changes. Every original dependency edge must reach its intended mapped destination object. Reject missing, extra, altered, or substituted required objects even when the destination graph passes ordinary verification. Record the source roots, destination roots, inventory digest, policy digest, mapping digest, and comparison result.",
+        "depends_on": [
+          "RGP-REQ-04",
+          "RGP-REQ-06"
+        ],
+        "verifier_ids": [
+          "RGP-VR-07"
+        ]
+      },
+      {
+        "id": "RGP-REQ-08",
+        "claim": "Acceptance must run ordinary VIPER readers and model loading in a new process and fresh workspace with empty VIPER, Hugging Face, and Xet caches, no source store mounts, and retiring Mantra storage blocked. Allow only declared pinned external source repositories and the destination. Restore each selected model and run one frozen inference fixture under its recorded environment; compare against a retained expected result with a predeclared exact or numerical comparison rule. Persist inference output before downstream reporting so reporting repair reuses the measurement. Retain existing training and evaluation evidence without rerunning those experiments.",
+        "depends_on": [
+          "RGP-REQ-07"
+        ],
+        "verifier_ids": [
+          "RGP-VR-08"
+        ]
+      },
+      {
+        "id": "RGP-REQ-09",
+        "claim": "Before bulk migration, a small mixed local/GCS/Hugging Face graph with two roots, a shared ancestor, distinct histories sharing payload bytes, and a reuse receipt must pass discovery, publication, restart recovery, independent comparison, and cold model recovery. Interrupt after a remotely committed child before its local acknowledgement and verify restart reuses that exact child. Record actual memory, disk, and connection observations. Preserve ordinary promotion tests and reject early public cloud-root enablement until the complete path passes.",
+        "depends_on": [
+          "RGP-REQ-08"
+        ],
+        "verifier_ids": [
+          "RGP-VR-09"
+        ]
+      },
+      {
+        "id": "RGP-REQ-10",
+        "claim": "Migrate one selected real model first, then every remaining frozen MIL and Hopfield root using shared verified mappings. Acceptance evidence must bind each exact source and destination root, payload inventory, source-code and runtime identities, cold recovery result, and inference fixture. Advance canonical SOTA pointers as one recoverable, compare-and-swap update only after every selected root passes; reject stale pointer generations or any missing acceptance. Retain old pointers and GCS objects for rollback. Configure subsequent publication after the accepted cutover. Record the application-owned pointer paths and execution bindings before freezing this block; library code must not guess them.",
+        "depends_on": [
+          "RGP-REQ-09"
+        ],
+        "verifier_ids": [
+          "RGP-VR-10"
+        ]
+      }
+    ],
+    "verifiers": [
+      {
+        "id": "RGP-VR-01",
+        "requirement_ids": [
+          "RGP-REQ-01"
+        ],
+        "acceptance_conditions": [
+          "The promoter calls the supplied fetcher's read() method and returns its bytes.",
+          "A failed document read raises the exact public message and preserves the original cause.",
+          "The fetcher rejects altered content and checks pre-existing artifacts again in a new execution.",
+          "Ordinary local promotion and staging from neighboring stores retain their existing behavior."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_promotion_document_reader_uses_fetcher"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_promotion_document_reader_uses_fetcher"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_storage.py",
+            "symbol": "test_new_execution_checks_a_previously_read_local_file"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_storage.py",
+            "symbol": "test_run_fetcher_checks_download_once_before_caching"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-02",
+        "requirement_ids": [
+          "RGP-REQ-02"
+        ],
+        "acceptance_conditions": [
+          "The same source graph resolves after the destination is changed to Hugging Face.",
+          "RunPromotionError contains \"legacy source binding is required\" for an unbound provider-neutral source.",
+          "RunPromotionError contains \"unclassified graph dependency\" for required storage outside the explicit policy; no publication occurs."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_promotion_policy_preserves_source_binding"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_promotion_policy_rejects_unbound_legacy_source"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_promotion_policy_rejects_unclassified_dependency"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-03",
+        "requirement_ids": [
+          "RGP-REQ-03"
+        ],
+        "acceptance_conditions": [
+          "A Hugging Face parent pointing to a retiring GCS prior is traversed and rewritten.",
+          "RunPromotionError contains \"inventory item is unreachable\" when a required inventory entry has no graph binding.",
+          "RunPromotionError contains \"storage cycle\" for cyclic snapshot dependencies."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_promotion_discovers_mixed_cloud_ancestors"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_promotion_rejects_inventory_omission"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_promotion_rejects_storage_cycle"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-04",
+        "requirement_ids": [
+          "RGP-REQ-04"
+        ],
+        "acceptance_conditions": [
+          "Two producers with identical payloads retain distinct mapped records and consumer edges.",
+          "RunPromotionError contains \"conflicting source identity\" for two identities asserted for the same source object.",
+          "An independently valid substitute ancestor is rejected with \"graph relationship changed\"."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_preserves_shared_payload_histories"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_rejects_conflicting_source_identity"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_rejects_wrong_valid_ancestor"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-05",
+        "requirement_ids": [
+          "RGP-REQ-05"
+        ],
+        "acceptance_conditions": [
+          "Inject interruption before and after every persistent write and remote commit boundary; recovered references equal the uninterrupted binding.",
+          "A second selected root uses the already-verified shared ancestor binding.",
+          "RunPromotionError contains \"publication journal differs\", \"remote publication outcome is unresolved\", or \"publication journal is locked\" for the corresponding rejection."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_cloud_service.py",
+          "symbol": "test_republication_recovers_commit_after_lost_response"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_republication_rejects_journal_drift"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_republication_rejects_ambiguous_remote_outcome"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_republication_rejects_concurrent_writer"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-06",
+        "requirement_ids": [
+          "RGP-REQ-06"
+        ],
+        "acceptance_conditions": [
+          "Measured peak staging bytes, cache bytes, and concurrent connections stay within the supplied policy.",
+          "RunPromotionError contains \"staging budget is insufficient\" before a payload download when the snapshot cannot fit.",
+          "Injected transfer failure releases only task-owned disposable files and retains the journal and verified destination bindings."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_obeys_resource_limits"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_rejects_insufficient_staging"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_bounds_cleanup_after_failure"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-07",
+        "requirement_ids": [
+          "RGP-REQ-07"
+        ],
+        "acceptance_conditions": [
+          "Comparison accepts only location changes and their declared derived identities.",
+          "RunPromotionError contains \"graph relationship changed\" for the wrong valid ancestor.",
+          "RunPromotionError contains \"unexpected metadata change\" for altered parameters, code identity, roles, or measurements."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_compares_source_and_destination"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_comparison_rejects_valid_substitution"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_comparison_rejects_extra_metadata_change"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-08",
+        "requirement_ids": [
+          "RGP-REQ-08"
+        ],
+        "acceptance_conditions": [
+          "A fresh process restores the model and produces the expected bounded inference result using only permitted endpoints.",
+          "A deliberately retained Mantra dependency causes an observed blocked read and failed acceptance.",
+          "A changed output fails the fixture comparison; rerunning a report reuses the immutable inference output."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_cold_recovery_runs_fixture"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_cold_recovery_rejects_source_fallback"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_cold_recovery_rejects_fixture_mismatch"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-09",
+        "requirement_ids": [
+          "RGP-REQ-09"
+        ],
+        "acceptance_conditions": [
+          "One retained rehearsal receipt binds all stages and measured resource peaks.",
+          "A missing prior or donor dependency fails before any canonical pointer is updated."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_rehearsal_recovers_shared_graph"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_rehearsal_rejects_incomplete_graph"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-10",
+        "requirement_ids": [
+          "RGP-REQ-10"
+        ],
+        "acceptance_conditions": [
+          "A retained real-model pilot precedes the full selected-root acceptance set.",
+          "RunPromotionError contains \"canonical pointers changed\" for a stale compare-and-swap input.",
+          "RunPromotionError contains \"migration acceptance is incomplete\" until every selected root passes; interrupted pointer publication recovers all-old or all-new authoritative state."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_cutover_requires_all_acceptances"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_cutover_rejects_stale_pointers"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_cutover_rejects_partial_acceptance"
+          }
+        ]
+      }
+    ],
+    "pair_blocks": [
+      {
+        "id": "RGP-PB-01",
+        "requirement_ids": [
+          "RGP-REQ-01"
+        ],
+        "depends_on": [],
+        "repository_id": "viper",
+        "requirement_contribution": "Use one RunFetcher with read() and path(). Reuse content checks within each execution and pass the same fetcher into promotion.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-02",
+        "requirement_ids": [
+          "RGP-REQ-02",
+          "RGP-REQ-03"
+        ],
+        "depends_on": [
+          "RGP-PB-01"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Bind original sources independently of the destination and discover every required dependency before relocation.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-03",
+        "requirement_ids": [
+          "RGP-REQ-04"
+        ],
+        "depends_on": [
+          "RGP-PB-02"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Republish cloud snapshots while preserving payload bytes and every mapped provenance relationship.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-04",
+        "requirement_ids": [
+          "RGP-REQ-05"
+        ],
+        "depends_on": [
+          "RGP-PB-03"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Persist publication intents and verified bindings; recover uncertain commits and share ancestors across restarts.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-05",
+        "requirement_ids": [
+          "RGP-REQ-06"
+        ],
+        "depends_on": [
+          "RGP-PB-04"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Enforce measured transfer budgets and reclaim only task-owned disposable files after verified publication.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-06",
+        "requirement_ids": [
+          "RGP-REQ-07"
+        ],
+        "depends_on": [
+          "RGP-PB-05"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Independently compare original and rewritten graphs against the frozen inventory and exact mapping.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-07",
+        "requirement_ids": [
+          "RGP-REQ-08",
+          "RGP-REQ-09"
+        ],
+        "depends_on": [
+          "RGP-PB-06"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Prove small-graph restart recovery and cold model loading with Mantra unavailable and bounded inference.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-08",
+        "requirement_ids": [
+          "RGP-REQ-10"
+        ],
+        "depends_on": [
+          "RGP-PB-07"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Validate the real-model pilot and all selected roots before a recoverable canonical pointer cutover.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      }
+    ]
+  },
+  "candidate_package": {
+    "schema_version": 1,
+    "contract_id": "run-graph-republication",
+    "title": "Run Graph Republication",
+    "requirements": [
+      {
+        "id": "RGP-REQ-01",
+        "claim": "The promoter must read identified protocol documents through its supplied RunFetcher.read(). RunFetcher.path() supplies file paths for payloads. One RunFetcher must check pre-existing artifacts once per execution and reuse hashes for files published during that execution. Local, GCS, and Hugging Face reads must enforce the recorded byte count and SHA-256. Every ordinary retrieval or verification exception must become RunPromotionError(\"source run graph is unavailable\") with the original exception as its cause. RGP-PB-01 retains the public local-root restriction and existing publication behavior.",
+        "depends_on": [],
+        "verifier_ids": [
+          "RGP-VR-01"
+        ]
+      },
+      {
+        "id": "RGP-REQ-02",
+        "claim": "RunPromotionPolicy.hosts names the destination cloud repositories for additional graph publications. Original files, references, workspace settings, and canonical SOTA pointers remain unchanged. Source readers resolve provider-specific addresses directly and obtain older viper_cloud addresses from the original workspace configuration. Missing source settings fail before publication. Transfer budgets belong to the transfer operation.",
+        "depends_on": [
+          "RGP-REQ-01"
+        ],
+        "verifier_ids": [
+          "RGP-VR-02"
+        ]
+      },
+      {
+        "id": "RGP-REQ-03",
+        "claim": "Discovery follows typed documents across local, GCS, Hugging Face, and pinned Git storage. It lists every member of the required snapshots before transferring artifacts, checks a separately frozen required-file inventory, rejects conflicting identities and dependency cycles, and records pending hashes for additional local files. Shared ancestors keep every source relationship. HF documents that refer to GCS files remain part of the discovered graph.",
+        "depends_on": [
+          "RGP-REQ-02"
+        ],
+        "verifier_ids": [
+          "RGP-VR-03"
+        ]
+      },
+      {
+        "id": "RGP-REQ-04",
+        "claim": "Publication must keep every scientific payload byte-identical and rewrite only identified protocol references and the metadata identities derived from those changes. Preserve stage identities, code commits, parameters, input roles, measurements, and provenance relationships. Update run-plan stage hashes, reuse keys, source-closure links, and cloud-stage references together. Key graph mappings by complete source identity; shared payload hashes must never collapse distinct producing histories. Preserve sealed snapshot membership and reject inconsistent identities.",
+        "depends_on": [
+          "RGP-REQ-03"
+        ],
+        "verifier_ids": [
+          "RGP-VR-04"
+        ]
+      },
+      {
+        "id": "RGP-REQ-05",
+        "claim": "Before remote publication, persist an intent bound to the source snapshot, destination, policy digest, expected rewritten manifest, and dependency bindings. Recover the exact verified destination commit after interruption, including a lost response after a successful commit. Publish the completed binding atomically only after verifying that commit. Reuse completed bindings across selected roots and process restarts. Serialize writers for the same publication journal; reject mismatched or corrupt state. Reconcile an uncertain remote outcome before retrying and fail closed when its identity cannot be established. Retain completed children when a parent fails.",
+        "depends_on": [
+          "RGP-REQ-04"
+        ],
+        "verifier_ids": [
+          "RGP-VR-05"
+        ]
+      },
+      {
+        "id": "RGP-REQ-06",
+        "claim": "Preflight must measure selected snapshots and available staging capacity before payload verification or transfer. Path-backed payload reads, source verification, publication, and destination verification must obey explicit staging, cache, and connection limits. Count VIPER, Hugging Face, and Xet caches and cross-filesystem copies. Persist verified destination bindings before reclaiming task-owned staged files. A snapshot that cannot fit the declared budget must fail before transfer; all unmodified source bytes and shared caches remain intact. Retry and cancellation must leave recoverable evidence and bounded temporary storage.",
+        "depends_on": [
+          "RGP-REQ-05"
+        ],
+        "verifier_ids": [
+          "RGP-VR-06"
+        ]
+      },
+      {
+        "id": "RGP-REQ-07",
+        "claim": "A verifier independent of the rewriting traversal must compare the source and destination graphs using the saved mapping and the frozen inventory. Require exact scientific payload hashes, exact required inventory membership, preserved non-location fields, and an explicit field-level allowlist of derived metadata changes. Every original dependency edge must reach its intended mapped destination object. Reject missing, extra, altered, or substituted required objects even when the destination graph passes ordinary verification. Record the source roots, destination roots, inventory digest, policy digest, mapping digest, and comparison result.",
+        "depends_on": [
+          "RGP-REQ-04",
+          "RGP-REQ-06"
+        ],
+        "verifier_ids": [
+          "RGP-VR-07"
+        ]
+      },
+      {
+        "id": "RGP-REQ-08",
+        "claim": "Acceptance must run ordinary VIPER readers and model loading in a new process and fresh workspace with empty VIPER, Hugging Face, and Xet caches, no source store mounts, and original Mantra storage blocked. Allow only declared pinned external source repositories and the destination. Restore each selected model and run one frozen inference fixture under its recorded environment; compare against a retained expected result with a predeclared exact or numerical comparison rule. Persist inference output before downstream reporting so reporting repair reuses the measurement. Retain existing training and evaluation evidence without rerunning those experiments.",
+        "depends_on": [
+          "RGP-REQ-07"
+        ],
+        "verifier_ids": [
+          "RGP-VR-08"
+        ]
+      },
+      {
+        "id": "RGP-REQ-09",
+        "claim": "Before bulk migration, a small mixed local/GCS/Hugging Face graph with two roots, a shared ancestor, distinct histories sharing payload bytes, and a reuse receipt must pass discovery, publication, restart recovery, independent comparison, and cold model recovery. Interrupt after a remotely committed child before its local acknowledgement and verify restart reuses that exact child. Record actual memory, disk, and connection observations. Preserve ordinary promotion tests and reject early public cloud-root enablement until the complete path passes.",
+        "depends_on": [
+          "RGP-REQ-08"
+        ],
+        "verifier_ids": [
+          "RGP-VR-09"
+        ]
+      },
+      {
+        "id": "RGP-REQ-10",
+        "claim": "Publish the frozen MIL and Hopfield roots to an additional host, preserve source-to-destination mappings and the required-file inventory, and register the accepted publication atomically after all four models pass isolated recovery and frozen inference. Preserve original GCS publications, canonical model pointers, and default storage configuration.",
+        "depends_on": [
+          "RGP-REQ-09"
+        ],
+        "verifier_ids": [
+          "RGP-VR-10"
+        ]
+      },
+      {
+        "id": "RGP-REQ-11",
+        "claim": "Reuse the journal-prepared SnapshotFileRef tuple and RevisionManifest when publishing unchanged staged inputs through the existing provider.publish_revision() path. Hash each upload input once in VIPER per publication attempt; preserve first-use checks, root confinement, intent-before-upload, exact-commit recovery, and destination byte readback before completion. Each HF journal check and graph-comparison snapshot check reads its complete manifest once, retaining complete owner/workspace/revision/files equality and generic-provider inventory checks.",
+        "depends_on": [
+          "RGP-REQ-05",
+          "RGP-REQ-07"
+        ],
+        "verifier_ids": [
+          "RGP-VR-11"
+        ]
+      },
+      {
+        "id": "RGP-REQ-12",
+        "claim": "Compute staging and nested-cache usage in one filesystem traversal per TransferSpace.check(). Preserve independent inode sets and symlink-confinement boundaries for both budgets, temporary-file accounting, peak observations, early reservation failures, and task-owned cleanup. Compare identical trees and report traversal counts and measured duration separately.",
+        "depends_on": [
+          "RGP-REQ-06",
+          "RGP-REQ-11"
+        ],
+        "verifier_ids": [
+          "RGP-VR-12"
+        ]
+      },
+      {
+        "id": "RGP-REQ-13",
+        "claim": "Within one RICO preparation or registration invocation, read each recovery request and model pointer once where its parsed value and digest are reused. Derive both from the same bytes. Preserve exact saved addresses, full journal membership, per-invocation pointer/request/prediction integrity checks, all-four-model coverage, and saved inference reuse.",
+        "depends_on": [
+          "RGP-REQ-10"
+        ],
+        "verifier_ids": [
+          "RGP-VR-13"
+        ]
+      }
+    ],
+    "verifiers": [
+      {
+        "id": "RGP-VR-01",
+        "requirement_ids": [
+          "RGP-REQ-01"
+        ],
+        "acceptance_conditions": [
+          "The promoter calls the supplied fetcher's read() method and returns its bytes.",
+          "A failed document read raises the exact public message and preserves the original cause.",
+          "The fetcher rejects altered content and checks pre-existing artifacts again in a new execution.",
+          "Ordinary local promotion and staging from neighboring stores retain their existing behavior."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_promotion_document_reader_uses_fetcher"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_promotion_document_reader_uses_fetcher"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_storage.py",
+            "symbol": "test_new_execution_checks_a_previously_read_local_file"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_storage.py",
+            "symbol": "test_run_fetcher_checks_download_once_before_caching"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-02",
+        "requirement_ids": [
+          "RGP-REQ-02"
+        ],
+        "acceptance_conditions": [
+          "The same source graph resolves after the destination is changed to Hugging Face.",
+          "RunPromotionError contains \"legacy source binding is required\" for an unbound provider-neutral source.",
+          "RunPromotionError contains \"unclassified graph dependency\" for required storage outside the explicit policy; no publication occurs."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_promotion_discovers_mixed_cloud_ancestors"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_promotion_rejects_missing_legacy_settings"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-03",
+        "requirement_ids": [
+          "RGP-REQ-03"
+        ],
+        "acceptance_conditions": [
+          "A Hugging Face parent pointing to a GCS prior is traversed and rewritten.",
+          "RunPromotionError contains \"inventory item is unreachable\" when a required inventory entry has no graph binding.",
+          "RunPromotionError contains \"storage cycle\" for cyclic snapshot dependencies."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_promotion_discovers_mixed_cloud_ancestors"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_compares_source_and_destination"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-04",
+        "requirement_ids": [
+          "RGP-REQ-04"
+        ],
+        "acceptance_conditions": [
+          "Two producers with identical payloads retain distinct mapped records and consumer edges.",
+          "RunPromotionError contains \"conflicting source identity\" for two identities asserted for the same source object.",
+          "An independently valid substitute ancestor is rejected with \"graph relationship changed\"."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_preserves_files_and_follows_new_references"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_compares_source_and_destination"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-05",
+        "requirement_ids": [
+          "RGP-REQ-05"
+        ],
+        "acceptance_conditions": [
+          "Inject interruption before and after every persistent write and remote commit boundary; recovered references equal the uninterrupted binding.",
+          "A second selected root uses the already-verified shared ancestor binding.",
+          "RunPromotionError contains \"publication journal differs\", \"remote publication outcome is unresolved\", or \"publication journal is locked\" for the corresponding rejection."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_cloud_service.py",
+          "symbol": "test_republication_recovers_commit_after_lost_response"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_republication_keeps_an_uncertain_write_pending"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_republication_recovers_commit_after_lost_response"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-06",
+        "requirement_ids": [
+          "RGP-REQ-06"
+        ],
+        "acceptance_conditions": [
+          "Measured peak staging bytes, cache bytes, and concurrent connections stay within the supplied policy.",
+          "RunPromotionError contains \"staging budget is insufficient\" before a payload download when the snapshot cannot fit.",
+          "Injected transfer failure releases only task-owned disposable files and retains the journal and verified destination bindings."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_obeys_resource_limits"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_transfer_space_checks_capacity_and_preserves_source_files"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_directory_bytes_rejects_links_outside_the_copy"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-07",
+        "requirement_ids": [
+          "RGP-REQ-07"
+        ],
+        "acceptance_conditions": [
+          "Comparison accepts only location changes and their declared derived identities.",
+          "RunPromotionError contains \"graph relationship changed\" for the wrong valid ancestor.",
+          "RunPromotionError contains \"unexpected metadata change\" for altered parameters, code identity, roles, or measurements."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_republication_compares_source_and_destination"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_compares_source_and_destination"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-08",
+        "requirement_ids": [
+          "RGP-REQ-08"
+        ],
+        "acceptance_conditions": [
+          "A fresh process restores the model and produces the expected bounded inference result using only permitted endpoints.",
+          "A deliberately retained Mantra dependency causes an observed blocked read and failed acceptance.",
+          "A changed output fails the fixture comparison; rerunning a report reuses the immutable inference output."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_copy_worker_resumes_and_restores_a_model"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_copy_worker_resumes_and_restores_a_model"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-09",
+        "requirement_ids": [
+          "RGP-REQ-09"
+        ],
+        "acceptance_conditions": [
+          "One retained rehearsal receipt binds all stages and measured resource peaks.",
+          "A missing prior or donor dependency fails before any canonical pointer is updated."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_copy_worker_resumes_and_restores_a_model"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_copy_worker_resumes_and_restores_a_model"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-10",
+        "requirement_ids": [
+          "RGP-REQ-10"
+        ],
+        "acceptance_conditions": [
+          "Registration requires every selected source root and a passing graph comparison covering the frozen inventory.",
+          "Registration rejects changed original model pointers, missing model reports, changed prediction bytes, or requests that differ from their retained reports.",
+          "The retained real publication contains 1305 required payloads and four exact model-recovery results; original source pointers remain unchanged."
+        ],
+        "success_case": {
+          "repository_id": "rico",
+          "path": "tests/test_graph_publication.py",
+          "symbol": "test_registration_requires_all_selected_models"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "rico",
+            "path": "tests/test_graph_publication.py",
+            "symbol": "test_registration_requires_all_selected_models"
+          },
+          {
+            "repository_id": "rico",
+            "path": "tests/test_graph_publication.py",
+            "symbol": "test_recovery_rejects_original_storage"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-11",
+        "requirement_ids": [
+          "RGP-REQ-11"
+        ],
+        "acceptance_conditions": [
+          "A path-backed upload invokes VIPER source_file once and both HF verification sites invoke read_manifest once per snapshot; ordinary public publish still hashes its own sources.",
+          "Changed upload bytes fail destination readback with ViperCloudError containing file identity changed and leave the journal binding pending; an out-of-root source remains rejected.",
+          "Lost-response recovery retains the exact commit; manifest owner/workspace/revision/file mutations raise RunPromotionError containing destination snapshot differs."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_cloud_service.py",
+          "symbol": "test_republication_reuses_prepared_identities"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_republication_reuses_prepared_identities"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_run_execution.py",
+            "symbol": "test_republication_reads_manifest_once"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_republication_recovers_commit_after_lost_response"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-12",
+        "requirement_ids": [
+          "RGP-REQ-12"
+        ],
+        "acceptance_conditions": [
+          "A scan counter observes one visit per real directory while returned staging and cache totals match the original two-pass computation on the same tree.",
+          "Cross-boundary hard links contribute once to each applicable budget; internal file symlinks remain counted and directory symlinks remain untraversed.",
+          "Escaping cache or staging symlinks raise RunPromotionError containing cached file escapes; insufficient reservations retain the existing budget messages and occur before transfer."
+        ],
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_cloud_service.py",
+          "symbol": "test_transfer_space_scans_both_budgets_once"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_transfer_space_scans_both_budgets_once"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_transfer_space_checks_capacity_and_preserves_source_files"
+          }
+        ]
+      },
+      {
+        "id": "RGP-VR-13",
+        "requirement_ids": [
+          "RGP-REQ-13"
+        ],
+        "acceptance_conditions": [
+          "Count one request-byte read per request and one pointer digest per distinct model pointer per invocation; generated requests and registration bytes equal the baseline.",
+          "Changed pointers, report bindings, predictions, or saved addresses retain their current ValueError rejection; saved predictions keep identical bytes and modification times."
+        ],
+        "success_case": {
+          "repository_id": "rico",
+          "path": "tests/test_graph_publication.py",
+          "symbol": "test_registration_reuses_request_and_pointer_reads"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "rico",
+            "path": "tests/test_graph_publication.py",
+            "symbol": "test_registration_requires_all_selected_models"
+          },
+          {
+            "repository_id": "rico",
+            "path": "tests/test_graph_publication.py",
+            "symbol": "test_model_checks_preserve_valid_saved_addresses"
+          }
+        ]
+      }
+    ],
+    "pair_blocks": [
+      {
+        "id": "RGP-PB-01",
+        "requirement_ids": [
+          "RGP-REQ-01"
+        ],
+        "depends_on": [],
+        "repository_id": "viper",
+        "requirement_contribution": "Use one RunFetcher with read() and path(). Reuse content checks within each execution and pass the same fetcher into promotion.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-02",
+        "requirement_ids": [
+          "RGP-REQ-02",
+          "RGP-REQ-03"
+        ],
+        "depends_on": [
+          "RGP-PB-01"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Bind original sources independently of the destination and discover every required dependency before publication.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-03",
+        "requirement_ids": [
+          "RGP-REQ-04"
+        ],
+        "depends_on": [
+          "RGP-PB-02"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Republish cloud snapshots while preserving payload bytes and every mapped provenance relationship.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-04",
+        "requirement_ids": [
+          "RGP-REQ-05"
+        ],
+        "depends_on": [
+          "RGP-PB-03"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Persist publication intents and verified bindings; recover uncertain commits and share ancestors across restarts.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-05",
+        "requirement_ids": [
+          "RGP-REQ-06"
+        ],
+        "depends_on": [
+          "RGP-PB-04"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Enforce measured transfer budgets and reclaim only task-owned disposable files after verified publication.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-06",
+        "requirement_ids": [
+          "RGP-REQ-07"
+        ],
+        "depends_on": [
+          "RGP-PB-05"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Independently compare original and rewritten graphs against the frozen inventory and exact mapping.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-07",
+        "requirement_ids": [
+          "RGP-REQ-08",
+          "RGP-REQ-09"
+        ],
+        "depends_on": [
+          "RGP-PB-06"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Prove small-graph restart recovery and cold model loading with Mantra unavailable and bounded inference.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-08",
+        "requirement_ids": [
+          "RGP-REQ-10"
+        ],
+        "depends_on": [
+          "RGP-PB-07"
+        ],
+        "repository_id": "rico",
+        "requirement_contribution": "Register the completed additional publication after all four model recoveries pass, preserving original source objects and canonical model pointers.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-09",
+        "requirement_ids": [
+          "RGP-REQ-11"
+        ],
+        "depends_on": [
+          "RGP-PB-08"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Reuse prepared upload identities and one complete HF manifest per verification site.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-10",
+        "requirement_ids": [
+          "RGP-REQ-12"
+        ],
+        "depends_on": [
+          "RGP-PB-09"
+        ],
+        "repository_id": "viper",
+        "requirement_contribution": "Measure staging and cache usage together while preserving both resource boundaries.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      },
+      {
+        "id": "RGP-PB-11",
+        "requirement_ids": [
+          "RGP-REQ-13"
+        ],
+        "depends_on": [
+          "RGP-PB-08"
+        ],
+        "repository_id": "rico",
+        "requirement_contribution": "Reuse request bytes and pointer digests within each recovery-tool invocation.",
+        "completion_evidence": [
+          "implementation_review"
+        ]
+      }
+    ]
+  },
+  "other_packages": []
+}

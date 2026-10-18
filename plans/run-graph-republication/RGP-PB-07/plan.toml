@@ -1,0 +1,47 @@
+schema_version = 1
+contract_id = "run-graph-republication"
+package_sha256 = "78bf5f71a9f96c3c9370380a2a27fa6a36553691ff90921876ac8071db1a3541"
+pair_block_id = "RGP-PB-07"
+baseline_commit = "293628b25f5fc313d85c8faf00772753d509c7a0"
+change_summary = ["Retain the completed RGP-PB-07 implementation at f98b694fc938a13ea746a0c7a63fdc9f8883c6f7."]
+deviation_summary = "Historical plan reconstructed on 2026-10-18 from the retained implementation commit. Existing review-checks and migration acceptance record the executed checks; reconstruction does not claim a new gate run."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/implementation.patch"
+target_paths = ["src/viper/execution/__init__.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_compare.py", "src/viper/execution/_promotion_journal.py", "src/viper/execution/_promotion_transfer.py", "src/viper/execution/_promotion_worker.py", "src/viper/storage.py", "tests/fixtures.py", "tests/test_cloud_service.py", "tests/test_run_execution.py"]
+
+[[handoff_targets]]
+label = "Retained implementation diff"
+source = "plan"
+path = "patches/implementation.patch"
+line = 1
+
+[gate]
+source_roots = ["src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = ["pyrefly", "check", "src/viper", "tests"]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_cloud_service.py", "tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model", "tests/test_run_execution.py::test_republication_compares_source_and_destination", "tests/test_retention.py", "tests/test_validation_architecture.py::test_source_tree_uses_one_private_boundary"]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = ["ruff", "check", "--select", "D", "src/viper", "tests"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "format", "--check", "src/viper/execution/__init__.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_compare.py", "src/viper/execution/_promotion_journal.py", "src/viper/execution/_promotion_transfer.py", "src/viper/execution/_promotion_worker.py", "src/viper/storage.py", "tests/fixtures.py", "tests/test_cloud_service.py", "tests/test_run_execution.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "check", "src/viper/execution/__init__.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_compare.py", "src/viper/execution/_promotion_journal.py", "src/viper/execution/_promotion_transfer.py", "src/viper/execution/_promotion_worker.py", "src/viper/storage.py", "tests/fixtures.py", "tests/test_cloud_service.py", "tests/test_run_execution.py"]

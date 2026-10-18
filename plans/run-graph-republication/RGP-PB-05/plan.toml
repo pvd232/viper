@@ -1,0 +1,47 @@
+schema_version = 1
+contract_id = "run-graph-republication"
+package_sha256 = "78bf5f71a9f96c3c9370380a2a27fa6a36553691ff90921876ac8071db1a3541"
+pair_block_id = "RGP-PB-05"
+baseline_commit = "f9817194faa83c495aef9355db93c103b77876a2"
+change_summary = ["Retain the completed RGP-PB-05 implementation at 97cadc32fd7c640a48942933ef24b5e6f052bd54."]
+deviation_summary = "Historical plan reconstructed on 2026-10-18 from the retained implementation commit. Existing review-checks and migration acceptance record the executed checks; reconstruction does not claim a new gate run."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/implementation.patch"
+target_paths = ["src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_journal.py", "src/viper/execution/_promotion_transfer.py", "src/viper/huggingface.py", "tests/fixtures.py", "tests/test_cloud_service.py", "tests/test_retention.py", "tests/test_run_execution.py"]
+
+[[handoff_targets]]
+label = "Retained implementation diff"
+source = "plan"
+path = "patches/implementation.patch"
+line = 1
+
+[gate]
+source_roots = ["src/viper"]
+test_roots = ["tests"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = ["pyrefly", "check", "src/viper", "tests"]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_cloud_service.py", "tests/test_retention.py", "tests/test_storage.py", "tests/test_run_execution.py::test_republication_obeys_resource_limits", "tests/test_run_execution.py::test_promotion_discovers_mixed_cloud_ancestors", "tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references"]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = ["ruff", "check", "--select", "D", "src/viper", "tests"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "format", "--check", "src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_journal.py", "src/viper/execution/_promotion_transfer.py", "src/viper/huggingface.py", "tests/fixtures.py", "tests/test_cloud_service.py", "tests/test_retention.py", "tests/test_run_execution.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "check", "src/viper/_source.py", "src/viper/execution/_promotion.py", "src/viper/execution/_promotion_journal.py", "src/viper/execution/_promotion_transfer.py", "src/viper/huggingface.py", "tests/fixtures.py", "tests/test_cloud_service.py", "tests/test_retention.py", "tests/test_run_execution.py"]

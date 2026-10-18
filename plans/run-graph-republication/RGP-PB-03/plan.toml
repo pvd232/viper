@@ -1,10 +1,10 @@
 schema_version = 1
 contract_id = "run-graph-republication"
-package_sha256 = "332413d182184fa30a647addfba334fcaf4841a156f68ac74fb0cc7f07ea0bb3"
+package_sha256 = "78bf5f71a9f96c3c9370380a2a27fa6a36553691ff90921876ac8071db1a3541"
 pair_block_id = "RGP-PB-03"
 baseline_commit = "2bb68454e92ba04d16fbbb5d015224552ac6fc60"
-change_summary = ["Publish complete graphs through the existing cloud provider"]
-deviation_summary = "Stacked pull requests retain independent review as pending. The original publication and default settings remain intact. Review checks retain the tested source hashes and exact command output."
+change_summary = ["Retain the completed RGP-PB-03 implementation at 2151d6665880ab37e4bb5ad4793525cf599e6975."]
+deviation_summary = "Historical plan reconstructed on 2026-10-18 from the retained implementation commit. Existing review-checks and migration acceptance record the executed checks; reconstruction does not claim a new gate run."
 
 [[actions]]
 operation = "patch"
@@ -12,7 +12,7 @@ patch_path = "patches/implementation.patch"
 target_paths = ["src/viper/execution/_promotion.py", "tests/fixtures.py", "tests/test_run_execution.py"]
 
 [[handoff_targets]]
-label = "Implementation changes"
+label = "Retained implementation diff"
 source = "plan"
 path = "patches/implementation.patch"
 line = 1
@@ -24,7 +24,7 @@ test_roots = ["tests"]
 [[gate.steps]]
 role = "typecheck"
 working_directory = "."
-argv = ["pyright", "--pythonpath", "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python", "src/viper/execution/_promotion.py", "tests/fixtures.py", "tests/test_run_execution.py"]
+argv = ["pyrefly", "check", "src/viper", "tests"]
 
 [[gate.steps]]
 role = "test"
@@ -34,7 +34,7 @@ argv = ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_r
 [[gate.steps]]
 role = "documentation"
 working_directory = "."
-argv = ["ruff", "check", "--select", "D", "src/viper/execution/_promotion.py", "tests/fixtures.py", "tests/test_run_execution.py"]
+argv = ["ruff", "check", "--select", "D", "src/viper", "tests"]
 
 [[gate.steps]]
 role = "lint"

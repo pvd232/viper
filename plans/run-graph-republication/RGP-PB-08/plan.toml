@@ -1,0 +1,47 @@
+schema_version = 1
+contract_id = "run-graph-republication"
+package_sha256 = "78bf5f71a9f96c3c9370380a2a27fa6a36553691ff90921876ac8071db1a3541"
+pair_block_id = "RGP-PB-08"
+baseline_commit = "671a72b8a082c382bf8f8311bd277b89aef8c167"
+change_summary = ["Retain the completed RGP-PB-08 implementation at cd81561d331f9d0a5fed7d16cc1892abffd0611a."]
+deviation_summary = "Historical plan reconstructed on 2026-10-18 from the retained implementation commit. Existing review-checks and migration acceptance record the executed checks; reconstruction does not claim a new gate run."
+
+[[actions]]
+operation = "patch"
+patch_path = "patches/implementation.patch"
+target_paths = ["tests/test_graph_publication.py", "tools/graph_publication/README.md", "tools/graph_publication/checks.py", "tools/graph_publication/prepare.py", "tools/graph_publication/publish.py", "tools/graph_publication/recover.py"]
+
+[[handoff_targets]]
+label = "Retained implementation diff"
+source = "plan"
+path = "patches/implementation.patch"
+line = 1
+
+[gate]
+source_roots = ["tools/graph_publication"]
+test_roots = ["tests/test_graph_publication.py"]
+
+[[gate.steps]]
+role = "typecheck"
+working_directory = "."
+argv = ["pyrefly", "check", "tools/graph_publication", "tests/test_graph_publication.py"]
+
+[[gate.steps]]
+role = "test"
+working_directory = "."
+argv = ["python3", "-m", "pytest", "-q", "tests/test_graph_publication.py"]
+
+[[gate.steps]]
+role = "documentation"
+working_directory = "."
+argv = ["ruff", "check", "--select", "D", "tools/graph_publication", "tests/test_graph_publication.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "format", "--check", "tests/test_graph_publication.py", "tools/graph_publication/README.md", "tools/graph_publication/checks.py", "tools/graph_publication/prepare.py", "tools/graph_publication/publish.py", "tools/graph_publication/recover.py"]
+
+[[gate.steps]]
+role = "lint"
+working_directory = "."
+argv = ["ruff", "check", "tests/test_graph_publication.py", "tools/graph_publication/README.md", "tools/graph_publication/checks.py", "tools/graph_publication/prepare.py", "tools/graph_publication/publish.py", "tools/graph_publication/recover.py"]
