@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -22,16 +23,24 @@ def directory_bytes(root: Path) -> int:
     """Count file bytes once per inode, including temporary downloads."""
     seen = set()
     size = 0
-    if root.exists():
-        for path in root.rglob("*"):
-            if path.is_symlink() and not path.resolve().is_relative_to(root):
-                raise RunPromotionError("cached file escapes the copy directory")
-            if path.is_file():
-                stat = path.stat()
-                identity = (stat.st_dev, stat.st_ino)
-                if identity not in seen:
-                    seen.add(identity)
-                    size += stat.st_size
+    directories = [root] if root.is_dir() else []
+    while directories:
+        with os.scandir(directories.pop()) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                if entry.is_symlink():
+                    if not path.resolve().is_relative_to(root):
+                        raise RunPromotionError(
+                            "cached file escapes the copy directory"
+                        )
+                elif entry.is_dir(follow_symlinks=False):
+                    directories.append(path)
+                if entry.is_file():
+                    stat = entry.stat()
+                    identity = (stat.st_dev, stat.st_ino)
+                    if identity not in seen:
+                        seen.add(identity)
+                        size += stat.st_size
     return size
 
 
@@ -93,7 +102,7 @@ class TransferSpace:
             self.configure_cloud(cloud)
 
     def release(self, fetcher: RunFetcher) -> None:
-        """Remove verified downloads owned by this copy after publication succeeds."""
+        """Remove owned downloads after the caller checks peak usage and limits."""
         if not fetcher.cache_root.is_relative_to(self.cache):
             raise RunPromotionError("cleanup requires the copy's cache")
         cache = fetcher._verified_objects
@@ -107,7 +116,6 @@ class TransferSpace:
             path.unlink(missing_ok=True)
         for reference in completed:
             del fetcher._verified_paths[reference]
-        self.check()
 
     def configure_network(self) -> None:
         """Use a small shared HTTP pool in the dedicated copy process."""

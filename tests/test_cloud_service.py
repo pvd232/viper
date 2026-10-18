@@ -443,6 +443,43 @@ def test_streamed_hub_file_checks_size_and_hash(
     assert len(requests) == 1
 
 
+def test_directory_bytes_counts_files_once_and_skips_directory_links(
+    tmp_path: Path,
+) -> None:
+    """Count hard links and internal aliases once without following directory loops."""
+    root = tmp_path / "cache"
+    nested = root / "nested"
+    nested.mkdir(parents=True)
+    payload = nested / "weights.bin"
+    payload.write_bytes(b"weights")
+    (root / "hard-link").hardlink_to(payload)
+    (root / "file-link").symlink_to(payload)
+    (root / "directory-link").symlink_to(nested, target_is_directory=True)
+    (root / "loop").symlink_to(root, target_is_directory=True)
+    (root / "missing-link").symlink_to(root / "absent")
+    assert directory_bytes(root) == 7
+    assert directory_bytes(tmp_path / "absent") == 0
+
+
+@pytest.mark.parametrize("target_kind", ("file", "directory", "missing"))
+def test_directory_bytes_rejects_links_outside_the_copy(
+    tmp_path: Path, target_kind: str
+) -> None:
+    """Reject outside symlink targets even when they are directories or absent."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    if target_kind == "file":
+        outside.write_bytes(b"outside")
+    elif target_kind == "directory":
+        outside.mkdir()
+    (root / "escape").symlink_to(
+        outside, target_is_directory=target_kind == "directory"
+    )
+    with pytest.raises(RunPromotionError, match="cached file escapes"):
+        directory_bytes(root)
+
+
 def test_transfer_space_checks_capacity_and_preserves_source_files(
     tmp_path: Path,
 ) -> None:
