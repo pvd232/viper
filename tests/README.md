@@ -72,7 +72,7 @@ implementation:
 make check
 ```
 
-The fast gate runs Ruff, formatting, Pyright, and every unit and contract test.
+The fast gate runs Ruff, formatting, Pyrefly, and every unit and contract test.
 The integration gate crosses the process, runner, CLI, resume, and durable
 attempt boundaries:
 

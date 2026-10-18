@@ -33,6 +33,9 @@ For agents using VIPER to run or inspect experiments, start with the
   Python interpreter resolves beneath that directory.
 - Reactivate `.venv` at the start of every new shell. Environment activation
   is session-scoped.
+- Use Pyrefly as the sole Python type checker, as configured in `make check`
+  and CI. Historical Pyright configuration and gate receipts do not define
+  current validation commands.
 
 ## Evidence and documentation
 

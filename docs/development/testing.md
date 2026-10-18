@@ -35,7 +35,7 @@ Use the fast gate while editing:
 make check
 ```
 
-It runs Ruff, the Ruff formatter check, Pyright, and every unit or contract
+It runs Ruff, the Ruff formatter check, Pyrefly, and every unit or contract
 test.
 
 Run the integration gate after changing a process boundary or durable attempt:
