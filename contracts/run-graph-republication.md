@@ -42,6 +42,8 @@ the observed head. All observed PRs remain open without submitted reviews.
 
 | 14 | PB-12 bounded verification cache | [VIPER #16](https://github.com/pvd232/viper/pull/16) | `d69bc6b31a0c57fecbab8056aa9829e43aa9aba9` | `rgp/pb10-single-space-scan` | [Local gates passed](../evidence/rgp-pb12-validation.json); CI pending (2026-10-18 19:58 UTC) | Pending | Open; no merge commit |
 
+| 15 | PB-13 streaming metric hashes | [VIPER #17](https://github.com/pvd232/viper/pull/17) | `6124a74830570ef0eae0bb4dbe63993765d0a03c` | `rgp/pb12-retain-verification-cache` | [Local gates passed](../evidence/rgp-pb13-validation.json); CI pending (2026-10-18 19:59 UTC) | Pending | Open; no merge commit |
+
 PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
 [historical review](../evidence/reviews/rgp-pb-01-implementation.json) and
 [completion](../evidence/lifecycle/rgp-pb-01-complete.json) remain retained.
