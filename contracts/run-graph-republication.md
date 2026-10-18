@@ -2,10 +2,10 @@
 
 ## 1. Status
 
-**Contract status:** Migration validation complete; PR review and integration pending; publication-work optimizations planned.
-RGP-PB-01 through RGP-PB-08 retain the completed migration. RGP-PB-09 is the next
-implementation step. The [checklist](../checklists/run-graph-republication.md)
-and the generated region below derive their statuses from typed records.
+**Contract status:** PB-01–PB-11 validation complete; PR review and integration pending.
+PB-09–11 now have separate implementation PRs and retained checks. Their current
+states are recorded below. The legacy compiler view is retained for historical
+receipts; it does not update the new PR-backed blocks.
 
 The [completion evidence](../evidence/run-graph-republication-completion-20261018.json)
 records 783 completed mappings, zero pending mappings, all 1,305 required
@@ -19,34 +19,36 @@ and merge. The generated `complete` and `bootstrap-complete` labels below
 describe retained acceptance evidence. They do not establish GitHub approval or
 integration into `main`. The current compiler does not ingest PR state.
 
-Refreshed from GitHub on **2026-10-18 19:14 UTC**: all listed PRs are open and
-their review lists are empty. Review is pending and integration is open for
-every listed PR. VIPER #5–12 and RICO #26 have passing checks at the shown heads.
-VIPER #13 has five passing and two running checks at `8380dd9`; its prior
-validation remains retained at `352236a`. These observations identify their
-commits; later pushes receive fresh checks and review.
+GitHub observations refreshed on **2026-10-18 19:35 UTC**.
+Validation, review, and integration are separate. Each local gate is bound to its
+implementation commit through its PR and retained result; CI below describes only
+the observed head. All observed PRs remain open without submitted reviews.
 
 | Order | PairBlock contribution | PR | Observed head | Observed base branch | Validation | Review | Integration |
 |---|---|---|---|---|---|---|---|
-| 1 | PB-02 discovery | [VIPER #5](https://github.com/pvd232/viper/pull/5) | `c3ecfe262b6e88a2fccdb563e9b1f22ce552c4fc` | `main` | [7 checks passed](https://github.com/pvd232/viper/pull/5/checks) | Pending | Open; no merge commit |
-| 2 | PB-03 publication | [VIPER #6](https://github.com/pvd232/viper/pull/6) | `62fb4764fbb1eab54b7f3fadec624e4daf3c2b7e` | `rgp/pb02-discovery-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/6/checks) | Pending | Open; no merge commit |
-| 3 | PB-04 restart | [VIPER #7](https://github.com/pvd232/viper/pull/7) | `995785d9ff3b434362f238a08f7d1ca76dbf5508` | `rgp/pb03-publication-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/7/checks) | Pending | Open; no merge commit |
-| 4 | PB-05 resources | [VIPER #8](https://github.com/pvd232/viper/pull/8) | `8a8788fd5a19130c7501829c4387db43c0359aa5` | `rgp/pb04-recovery-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/8/checks) | Pending | Open; no merge commit |
-| 5 | PB-06 comparison | [VIPER #9](https://github.com/pvd232/viper/pull/9) | `f3c10aaead0ee3dfbaee17fb4e5155f98338788f` | `rgp/pb05-resources-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/9/checks) | Pending | Open; no merge commit |
-| 6 | PB-07 rehearsal | [VIPER #10](https://github.com/pvd232/viper/pull/10) | `f98b694fc938a13ea746a0c7a63fdc9f8883c6f7` | `rgp/pb06-comparison-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/10/checks) | Pending | Open; no merge commit |
-| 7 | PB-07 Pyrefly follow-up | [VIPER #11](https://github.com/pvd232/viper/pull/11) | `06fae367d03b5eca64b3a1910760a0e6c838493e` | `rgp/pb07-rehearsal-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/11/checks) | Pending | Open; no merge commit |
-| 8 | PB-02 supporting inputs | [VIPER #12](https://github.com/pvd232/viper/pull/12) | `4fbe070d2c27eb3c9fd9521486ddc12d74739770` | `rgp/pb07-pyrefly-r2` | [7 checks passed](https://github.com/pvd232/viper/pull/12/checks) | Pending | Open; no merge commit |
-| 9 | PB-04/05/06 recovery and verification follow-ups; PB-09–11 planning | [VIPER #13](https://github.com/pvd232/viper/pull/13) | `8380dd9328dc7a843888b34de550f98ad7e56702` | `rgp/pb02-supporting-r2` | [5 passed; 2 running](https://github.com/pvd232/viper/actions/runs/39157200819); [7 passed at 352236a](https://github.com/pvd232/viper/actions/runs/39152532817) | Pending | Open; no merge commit |
-| 10 | PB-08 publication and recovery | [RICO #26](https://github.com/pvd232/rico-rebuild/pull/26) | `cd81561d331f9d0a5fed7d16cc1892abffd0611a` | `main` | [active-code passed](https://github.com/pvd232/rico-rebuild/actions/runs/39147868154/job/117735289886) | Pending | Open; no merge commit |
+| 1 | PB-02 discovery | [VIPER #5](https://github.com/pvd232/viper/pull/5) | `c3ecfe262b6e88a2fccdb563e9b1f22ce552c4fc` | `main` | [7 passed](https://github.com/pvd232/viper/pull/5/checks) | Pending | Open; no merge commit |
+| 2 | PB-03 publication | [VIPER #6](https://github.com/pvd232/viper/pull/6) | `62fb4764fbb1eab54b7f3fadec624e4daf3c2b7e` | `rgp/pb02-discovery-20261017` | [7 passed](https://github.com/pvd232/viper/pull/6/checks) | Pending | Open; no merge commit |
+| 3 | PB-04 restart | [VIPER #7](https://github.com/pvd232/viper/pull/7) | `995785d9ff3b434362f238a08f7d1ca76dbf5508` | `rgp/pb03-publication-20261017` | [7 passed](https://github.com/pvd232/viper/pull/7/checks) | Pending | Open; no merge commit |
+| 4 | PB-05 resources | [VIPER #8](https://github.com/pvd232/viper/pull/8) | `8a8788fd5a19130c7501829c4387db43c0359aa5` | `rgp/pb04-recovery-20261017` | [7 passed](https://github.com/pvd232/viper/pull/8/checks) | Pending | Open; no merge commit |
+| 5 | PB-06 comparison | [VIPER #9](https://github.com/pvd232/viper/pull/9) | `f3c10aaead0ee3dfbaee17fb4e5155f98338788f` | `rgp/pb05-resources-20261017` | [7 passed](https://github.com/pvd232/viper/pull/9/checks) | Pending | Open; no merge commit |
+| 6 | PB-07 rehearsal | [VIPER #10](https://github.com/pvd232/viper/pull/10) | `f98b694fc938a13ea746a0c7a63fdc9f8883c6f7` | `rgp/pb06-comparison-20261017` | [7 passed](https://github.com/pvd232/viper/pull/10/checks) | Pending | Open; no merge commit |
+| 7 | PB-07 Pyrefly follow-up | [VIPER #11](https://github.com/pvd232/viper/pull/11) | `06fae367d03b5eca64b3a1910760a0e6c838493e` | `rgp/pb07-rehearsal-20261017` | [7 passed](https://github.com/pvd232/viper/pull/11/checks) | Pending | Open; no merge commit |
+| 8 | PB-02 supporting inputs | [VIPER #12](https://github.com/pvd232/viper/pull/12) | `4fbe070d2c27eb3c9fd9521486ddc12d74739770` | `rgp/pb07-pyrefly-r2` | [7 passed](https://github.com/pvd232/viper/pull/12/checks) | Pending | Open; no merge commit |
+| 9 | PB-04/05/06 recovery and verification follow-ups; PB-09–11 planning | [VIPER #13](https://github.com/pvd232/viper/pull/13) | `18794ae34eb259f93cc2d74b062ccd0a19ee013c` | `rgp/pb02-supporting-r2` | [6 passed; 1 running](https://github.com/pvd232/viper/pull/13/checks) | Pending | Open; no merge commit |
+| 10 | PB-08 publication and recovery | [RICO #26](https://github.com/pvd232/rico-rebuild/pull/26) | `cd81561d331f9d0a5fed7d16cc1892abffd0611a` | `main` | [1 passed](https://github.com/pvd232/rico-rebuild/pull/26/checks) | Pending | Open; no merge commit |
+| 11 | PB-09 publication identities | [VIPER #14](https://github.com/pvd232/viper/pull/14) | `ef3d9dd56e351ea6ce19f7c24289cb710d2ddc9a` | `rgp/pb05-connection-reuse-r2` | [Local gates passed](../evidence/rgp-pb09-validation.json); [CI running](https://github.com/pvd232/viper/pull/14/checks) | Pending | Open; no merge commit |
+| 12 | PB-10 disk accounting | [VIPER #15](https://github.com/pvd232/viper/pull/15) | `878acfbbbefa63b8e322a7ac008a1caee64b0f99` | `rgp/pb09-prepared-publication` | [Local gates passed](../evidence/rgp-pb10-validation.json); [CI running](https://github.com/pvd232/viper/pull/15/checks) | Pending | Open; no merge commit |
+| 13 | PB-11 recovery reads | [RICO #27](https://github.com/pvd232/rico-rebuild/pull/27) | `0d2a4e78a43d1b4e79d3aba3d5157115288e9c85` | `rgp/model-publication-20261017` | [Local gates passed](https://github.com/pvd232/rico-rebuild/tree/rgp/pb11-recovery-reads/evidence/graph-publication-pb11); [CI running](https://github.com/pvd232/rico-rebuild/pull/27/checks) | Pending | Open; no merge commit |
 
 PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
 [historical review](../evidence/reviews/rgp-pb-01-implementation.json) and
 [completion](../evidence/lifecycle/rgp-pb-01-complete.json) remain retained.
-No separate PR is recorded for that block. PB-09, PB-10, and PB-11 remain
-**planned / PR not created**; #13 contains their scope, not their implementation.
+No separate PR is recorded for that block. PB-09, PB-10, and PB-11 have completed
+local validation in #14, #15, and RICO #27 respectively. #13 retains their scope.
 
 Review and merge VIPER **#5 → #6 → #7 → #8 → #9 → #10 → #11 → #12 → #13**,
-then RICO **#26**. Prefer **Create a merge commit**, which this repository allows,
+then RICO **#26**. Continue with VIPER **#14 → #15** and RICO **#27**;
+PB-11 can be reviewed independently of PB-09/10 after #26. Prefer **Create a merge commit**, which this repository allows,
 to preserve the existing evidence and descendant commit identities. After each
 VIPER merge, retarget the next PR to `main`, inspect the resulting diff, and
 refresh required CI and review before merging. RICO #26 targets its own `main`;
@@ -68,6 +70,9 @@ preserves prior validation. The checklist links this table as its sole PR view.
 GitHub documents [merge requirements and methods](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/merging-a-pull-request),
 [retargeting](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/changing-the-base-branch-of-a-pull-request),
 and [closure without merge](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/closing-a-pull-request).
+
+<details>
+<summary>Historical compiler view; use the PR table above for PB-09–11 status</summary>
 
 <!-- contract-protocol:generated:start -->
 **In progress.** [Jump to current PairBlock](#rgp-pb-09)
@@ -612,6 +617,8 @@ and [closure without merge](https://docs.github.com/en/pull-requests/how-tos/mer
 | <nobr><code>RGP-VR-12</code></nobr> | <nobr><code>RGP-REQ-12</code></nobr> | A scan counter observes one visit per real directory while returned staging and cache totals match the original two-pass computation on the same tree.<br>Cross-boundary hard links contribute once to each applicable budget; internal file symlinks remain counted and directory symlinks remain untraversed.<br>Escaping cache or staging symlinks raise RunPromotionError containing cached file escapes; insufficient reservations retain the existing budget messages and occur before transfer. | [test_transfer_space_scans_both_budgets_once](../tests/test_cloud_service.py) | [test_transfer_space_scans_both_budgets_once](../tests/test_cloud_service.py)<br>[test_transfer_space_checks_capacity_and_preserves_source_files](../tests/test_cloud_service.py) |
 | <nobr><code>RGP-VR-13</code></nobr> | <nobr><code>RGP-REQ-13</code></nobr> | Count one request-byte read per request and one pointer digest per distinct model pointer per invocation; generated requests and registration bytes equal the baseline.<br>Changed pointers, report bindings, predictions, or saved addresses retain their current ValueError rejection; saved predictions keep identical bytes and modification times. | [test_registration_reuses_request_and_pointer_reads](../../rico-publication-20261017/tests/test_graph_publication.py) | [test_registration_requires_all_selected_models](../../rico-publication-20261017/tests/test_graph_publication.py)<br>[test_model_checks_preserve_valid_saved_addresses](../../rico-publication-20261017/tests/test_graph_publication.py) |
 <!-- contract-protocol:generated:end -->
+
+</details>
 
 ## 2. Claim
 

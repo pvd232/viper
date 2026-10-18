@@ -10,15 +10,20 @@ Review and integration remain pending. The contract's
 [PR tracking table](../contracts/run-graph-republication.md#pr-review-and-integration)
 records each observed head, checks, review decision, and merge state separately
 from completed migration validation. Review and merge VIPER #5 through #13 in
-order, retargeting each successor to `main`, then RICO #26. Planned PB-09–11
-have no implementation PRs yet.
+order, retargeting each successor to `main`, then RICO #26. Continue with VIPER
+#14 → #15 and RICO #27. PB-09–11 local validation is complete; review and merge
+remain pending. The contract links their checks and measurements.
 
 ## Current outcome
 
 Reduce repeated publication hashing, manifest reads, directory traversal, and
 RICO request reads while preserving the completed migration's guarantees.
-Start with RGP-PB-09. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
+All three optimization blocks are implemented. Next: independent PR review,
+then integration in the order above. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
 records projected savings, exact owners, and conditional cache retention.
+
+<details>
+<summary>Historical compiler snapshot; current PR-backed completion is above</summary>
 
 <!-- contract-protocol:generated:start -->
 **Resume here:** [Resume at RGP-PB-09](../contracts/run-graph-republication.md#rgp-pb-09)
@@ -82,6 +87,8 @@ records projected savings, exact owners, and conditional cache retention.
 | <nobr><code>RGP-REQ-12</code></nobr> | planned | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-12) | <nobr><code>RGP-PB-10</code></nobr> | <nobr><code>RGP-REQ-06</code></nobr>, <nobr><code>RGP-REQ-11</code></nobr> |
 | <nobr><code>RGP-REQ-13</code></nobr> | in_progress | [run-graph-republication](../contracts/run-graph-republication.md#rgp-req-13) | <nobr><code>RGP-PB-11</code></nobr> | <nobr><code>RGP-REQ-10</code></nobr> |
 <!-- contract-protocol:generated:end -->
+
+</details>
 
 ## Completion rules
 
