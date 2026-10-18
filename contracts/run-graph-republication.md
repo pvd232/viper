@@ -19,11 +19,12 @@ and merge. The generated `complete` and `bootstrap-complete` labels below
 describe retained acceptance evidence. They do not establish GitHub approval or
 integration into `main`. The current compiler does not ingest PR state.
 
-Observed on **2026-10-18 (UTC; before this documentation revision)**: all listed PRs are open, each has passing
-GitHub checks at the head shown, and their GitHub review lists are empty. Thus
-review is **pending / no recorded GitHub decision**, and integration is **open /
-not merged** for every PR below. These are dated observations, not assertions
-about a later head. The latest push requires its own checks and review.
+Refreshed from GitHub on **2026-10-18 19:14 UTC**: all listed PRs are open and
+their review lists are empty. Review is pending and integration is open for
+every listed PR. VIPER #5–12 and RICO #26 have passing checks at the shown heads.
+VIPER #13 has five passing and two running checks at `8380dd9`; its prior
+validation remains retained at `352236a`. These observations identify their
+commits; later pushes receive fresh checks and review.
 
 | Order | PairBlock contribution | PR | Observed head | Observed base branch | Validation | Review | Integration |
 |---|---|---|---|---|---|---|---|
@@ -35,7 +36,7 @@ about a later head. The latest push requires its own checks and review.
 | 6 | PB-07 rehearsal | [VIPER #10](https://github.com/pvd232/viper/pull/10) | `f98b694fc938a13ea746a0c7a63fdc9f8883c6f7` | `rgp/pb06-comparison-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/10/checks) | Pending | Open; no merge commit |
 | 7 | PB-07 Pyrefly follow-up | [VIPER #11](https://github.com/pvd232/viper/pull/11) | `06fae367d03b5eca64b3a1910760a0e6c838493e` | `rgp/pb07-rehearsal-20261017` | [7 checks passed](https://github.com/pvd232/viper/pull/11/checks) | Pending | Open; no merge commit |
 | 8 | PB-02 supporting inputs | [VIPER #12](https://github.com/pvd232/viper/pull/12) | `4fbe070d2c27eb3c9fd9521486ddc12d74739770` | `rgp/pb07-pyrefly-r2` | [7 checks passed](https://github.com/pvd232/viper/pull/12/checks) | Pending | Open; no merge commit |
-| 9 | PB-04/05/06 recovery and verification follow-ups; PB-09–11 planning | [VIPER #13](https://github.com/pvd232/viper/pull/13) | `352236ad81080fea6c1a4d9237962732e424d270` | `rgp/pb02-supporting-r2` | [7 checks passed](https://github.com/pvd232/viper/pull/13/checks) | Pending | Open; no merge commit |
+| 9 | PB-04/05/06 recovery and verification follow-ups; PB-09–11 planning | [VIPER #13](https://github.com/pvd232/viper/pull/13) | `8380dd9328dc7a843888b34de550f98ad7e56702` | `rgp/pb02-supporting-r2` | [5 passed; 2 running](https://github.com/pvd232/viper/actions/runs/39157200819); [7 passed at 352236a](https://github.com/pvd232/viper/actions/runs/39152532817) | Pending | Open; no merge commit |
 | 10 | PB-08 publication and recovery | [RICO #26](https://github.com/pvd232/rico-rebuild/pull/26) | `cd81561d331f9d0a5fed7d16cc1892abffd0611a` | `main` | [active-code passed](https://github.com/pvd232/rico-rebuild/actions/runs/39147868154/job/117735289886) | Pending | Open; no merge commit |
 
 PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
@@ -52,8 +53,13 @@ refresh required CI and review before merging. RICO #26 targets its own `main`;
 integrate it after its VIPER dependency. Retain branches until any dependent PRs
 have been retargeted and branch cleanup is separately authorized.
 
-Refresh this table from GitHub after each push, review, retarget, merge, or
-closure. Record the reviewer and reviewed SHA with the actual review URL or
+The executing agent automatically queries each linked PR with `gh pr view --json`
+at workflow entry, after PR actions, and before reporting current status. Reuse
+the shared skill's field selection and one observation per PR. Update this table
+within the authorized edit cycle; after the final push, report fresh GitHub
+state and retain it in the next edit cycle to avoid status-commit loops. While
+the agent is idle, GitHub changes are observed on the next workflow entry.
+Record the reviewer and reviewed SHA with the actual review URL or
 user message reference. After merging, record the observed merge SHA, time, and
 destination. Close without merge only for abandoned or superseded work, with
 the reason and replacement PR. Such closure leaves integration incomplete and
