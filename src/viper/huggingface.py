@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import tempfile
+import time
 from collections.abc import Mapping
 from io import BytesIO
 from pathlib import Path
@@ -18,6 +20,7 @@ from huggingface_hub import (
     hf_hub_url,
     hf_raise_for_status,
 )
+from huggingface_hub.errors import HfHubHTTPError
 from huggingface_hub.utils._headers import build_hf_headers
 
 from ._cloud import (
@@ -109,13 +112,30 @@ class HuggingFaceProvider(ViperCloudProvider):
             repo_type=self._api_repo_type,
             exist_ok=True,
         )
-        commit = self.api.create_commit(
-            repo_id=self.repository,
-            repo_type=self._api_repo_type,
-            operations=operations,
-            commit_message=f"Publish VIPER revision {revision}",
-            num_threads=self.upload_threads,
-        )
+        attempt = 0
+        while True:
+            try:
+                commit = self.api.create_commit(
+                    repo_id=self.repository,
+                    repo_type=self._api_repo_type,
+                    operations=operations,
+                    commit_message=f"Publish VIPER revision {revision}",
+                    num_threads=self.upload_threads,
+                )
+                break
+            except HfHubHTTPError as error:
+                if error.response.status_code != 429 or attempt == 3:
+                    raise
+                attempt += 1
+                # A 429 rejects the write; lost responses still reach the journal.
+                retry_after = error.response.headers.get("Retry-After", "").strip()
+                delay = int(retry_after) + 1 if retry_after.isdigit() else 3601
+                logging.getLogger(__name__).warning(
+                    "Hub rejected commit for %s with HTTP 429; retrying in %ss",
+                    self.repository,
+                    delay,
+                )
+                time.sleep(delay)
         return HuggingFaceStageResultSnapshotRef(
             repository=self.repository,
             commit=commit.oid,

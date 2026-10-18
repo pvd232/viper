@@ -13,6 +13,7 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
+from huggingface_hub.errors import HfHubHTTPError
 
 from tests.fixtures import MemoryHub
 from tests.test_storage import InMemoryViperCloudProvider
@@ -119,6 +120,79 @@ def test_hugging_face_snapshot_resolves_through_the_same_service(
     assert isinstance(cloud.repository, HuggingFaceRepository)
     assert cloud.repository.repository == snapshot.repository
     assert cloud.repository.repo_type == snapshot.repo_type
+
+
+@pytest.mark.parametrize("retry_after, delay", [("12", 13), (None, 3601)])
+def test_hub_commit_waits_after_rate_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    retry_after: str | None,
+    delay: int,
+) -> None:
+    """Retry rejected commits with the same payload after the quota delay."""
+    api = _HuggingFaceApi()
+    provider = HuggingFaceProvider(
+        tmp_path, "owner/copies", "dataset", api=cast(Any, api)
+    )
+    original = api.create_commit
+    headers = {} if retry_after is None else {"Retry-After": retry_after}
+    response = httpx.Response(
+        429, headers=headers, request=httpx.Request("POST", "https://hub.test/commit")
+    )
+    calls = []
+    waits = []
+
+    def limited(**kwargs: Any) -> Any:
+        """Reject the first write before accepting the identical operations."""
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise HfHubHTTPError("commit quota", response=response)
+        return original(**kwargs)
+
+    monkeypatch.setattr(api, "create_commit", limited)
+    monkeypatch.setattr("viper.huggingface.time.sleep", waits.append)
+    snapshot, _ = provider.publish(
+        ViperCloudDestination(owner="owner", workspace="models"),
+        {"weights.bin": b"weights"},
+        attempts=1,
+    )
+    assert isinstance(snapshot, HuggingFaceStageResultSnapshotRef)
+    assert snapshot.commit == "a" * 40
+    assert calls[0] == calls[1]
+    assert waits == [delay]
+    assert api.files["weights.bin"] == b"weights"
+
+
+@pytest.mark.parametrize(
+    "status, attempts, delays", [(429, 4, 3), (503, 1, 0), (401, 1, 0)]
+)
+def test_hub_commit_retry_is_bounded_and_only_handles_quota_rejection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+    attempts: int,
+    delays: int,
+) -> None:
+    """Return persistent quota failures and other failures to journal recovery."""
+    api = _HuggingFaceApi()
+    provider = HuggingFaceProvider(
+        tmp_path, "owner/copies", "dataset", api=cast(Any, api)
+    )
+    response = httpx.Response(
+        status, request=httpx.Request("POST", "https://hub.test/commit")
+    )
+    commit = Mock(side_effect=HfHubHTTPError("failed", response=response))
+    wait = Mock()
+    monkeypatch.setattr(api, "create_commit", commit)
+    monkeypatch.setattr("viper.huggingface.time.sleep", wait)
+    with pytest.raises(ViperCloudError):
+        provider.publish(
+            ViperCloudDestination(owner="owner", workspace="models"),
+            {"weights.bin": b"weights"},
+            attempts=1,
+        )
+    assert commit.call_count == attempts
+    assert wait.call_count == delays
 
 
 def test_gcs_repository_receives_progress_sink(
