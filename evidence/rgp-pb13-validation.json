@@ -1,0 +1,29 @@
+{
+  "pair_block": "RGP-PB-13",
+  "base_commit": "c672a36caeafba5d96509182a212126035c99c33",
+  "checks": {
+    "pyrefly check src/viper tests": "PASS: 0 errors",
+    "python -m pytest -q tests/test_metric_provenance.py tests/test_metric_interface.py tests/test_run_execution.py -k metric": "PASS: 19 passed, 69 deselected in 22.35s",
+    "ruff check --select D src/viper tests": "PASS",
+    "ruff format --check src/viper tests": "PASS: 153 files",
+    "ruff check src/viper tests": "PASS"
+  },
+  "measurement": {
+    "fixture_bytes": 67108864,
+    "alternating_pairs": 10,
+    "median_seconds": {
+      "before": 0.037895312532782555,
+      "after": 0.033821500022895634
+    },
+    "peak_python_bytes": {
+      "before": 67113490,
+      "after": 267745
+    },
+    "identical": true
+  },
+  "source_lines": {
+    "added": 4,
+    "removed": 2
+  },
+  "limitations": "Local hash microbenchmark; no claim about total model runtime. Independent review and merge pending."
+}

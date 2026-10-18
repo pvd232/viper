@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ import yaml
 from pydantic import Field
 
 import viper._verification.metrics as metric_verification
+import viper._workers.metrics as metric_worker
 import viper.artifacts as artifacts
 import viper.execution._metric as metric_execution
 import viper.metrics as metrics
@@ -215,3 +217,44 @@ def test_metric_dependency_rejects_republished_payload() -> None:
             ),
             "accuracy",
         )
+
+
+def test_metric_dependency_hashing_streams_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hash multichunk inputs without whole-file reads and detect altered bytes."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    payloads = {"b.bin": b"b" * 1_000_000, "a.bin": b"a" * 600_000}
+    for name, raw in payloads.items():
+        (bundle / name).write_bytes(raw)
+    expected = tuple(
+        (hashlib.sha256(raw).hexdigest(), len(raw))
+        for _, raw in sorted(payloads.items())
+    )
+
+    def whole_file_read(path: Path) -> bytes:
+        """Fail if hashing allocates a complete payload."""
+        raise AssertionError(f"whole-file read: {path}")
+
+    monkeypatch.setattr(Path, "read_bytes", whole_file_read)
+    assert metric_worker._path_identities(bundle) == expected
+    assert metric_worker._path_identities(bundle / "a.bin") == expected[:1]
+    (bundle / "a.bin").write_bytes(b"x" + payloads["a.bin"][1:])
+    assert metric_worker._path_identities(bundle) != expected
+
+
+@pytest.mark.parametrize("kind", ("missing", "empty", "symlink"))
+def test_metric_dependency_hashing_rejects_invalid_paths(
+    tmp_path: Path, kind: str
+) -> None:
+    """Preserve missing, empty-bundle, and symbolic-link rejection."""
+    path = tmp_path / "dependency"
+    if kind == "empty":
+        path.mkdir()
+    elif kind == "symlink":
+        original = tmp_path / "original"
+        original.write_bytes(b"data")
+        path.symlink_to(original)
+    with pytest.raises(ValueError, match="absent|no regular files|symbolic link"):
+        metric_worker._path_identities(path)

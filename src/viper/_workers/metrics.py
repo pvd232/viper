@@ -60,8 +60,10 @@ def _path_identities(path: Path) -> tuple[tuple[str, int], ...]:
     for member in members:
         if member.is_symlink():
             raise ValueError("metric dependency contains a symbolic link")
-        raw = member.read_bytes()
-        identities.append((hashlib.sha256(raw).hexdigest(), len(raw)))
+        with member.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            size = os.fstat(stream.fileno()).st_size
+        identities.append((digest, size))
     return tuple(identities)
 
 
