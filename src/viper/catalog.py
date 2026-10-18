@@ -67,7 +67,7 @@ from .references import (
     ResolvedFileRef,
     ResolvedRunRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
 )
 from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
 from .runs import RunAttempt
@@ -106,7 +106,7 @@ class CatalogFile(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    snapshot: StageResultSnapshot
+    snapshot: StageResultSnapshotRef
     file: SnapshotFileRef
 
 

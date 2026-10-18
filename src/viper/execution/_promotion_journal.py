@@ -27,7 +27,7 @@ from ..references import (
     GcsStageResultSnapshotRef,
     GitSource,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     resolve_snapshot_file_ref,
 )
 from ..serialization import document_digest, parse_yaml_bytes
@@ -40,7 +40,7 @@ from .errors import RunPromotionError
 class SnapshotCopy(ProtocolModel):
     """Describe an original snapshot and its expected destination copy."""
 
-    source: StageResultSnapshot | GitSource = Field(
+    source: StageResultSnapshotRef | GitSource = Field(
         description="Original snapshot address."
     )
     source_files: tuple[SnapshotFileRef, ...] = Field(
@@ -149,7 +149,7 @@ class PublicationJournal:
 
     def publish(
         self,
-        source: StageResultSnapshot | GitSource,
+        source: StageResultSnapshotRef | GitSource,
         source_files: tuple[SnapshotFileRef, ...],
         sources: dict[str, PublicationSource],
         dependencies_sha256: SHA256,

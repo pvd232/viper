@@ -30,7 +30,6 @@ from ..artifacts import (
 )
 from ..cloud import ViperCloud
 from ..evidence import (
-    StageSnapshot,
     StorageFetcher,
     VerificationError,
     VerificationPolicy,
@@ -49,7 +48,7 @@ from ..references import (
     ResolvedFileRef,
     ResolvedStageRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     StorageModel,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
@@ -266,7 +265,7 @@ def list_local_snapshot_files(
 
 
 def list_snapshot_files(
-    snapshot: StageSnapshot,
+    snapshot: StageResultSnapshotRef,
     *,
     fetcher: StorageFetcher | None = None,
 ) -> tuple[RepoRelPath, ...]:
@@ -276,7 +275,7 @@ def list_snapshot_files(
     if callable(custom):
         try:
             custom_listing = cast(
-                Callable[[StageSnapshot], tuple[RepoRelPath, ...]],
+                Callable[[StageResultSnapshotRef], tuple[RepoRelPath, ...]],
                 custom,
             )
             return tuple(custom_listing(snapshot))
@@ -429,7 +428,7 @@ def verify_run_attempt_references(
 
 
 def read_snapshot_file(
-    snapshot: StageResultSnapshot,
+    snapshot: StageResultSnapshotRef,
     reference: SnapshotFileRef,
     *,
     fetcher: StorageFetcher | None = None,
@@ -488,7 +487,7 @@ def read_snapshot_file(
 
 
 def snapshot_identity(
-    snapshot: StageResultSnapshot,
+    snapshot: StageResultSnapshotRef,
 ) -> tuple[str, ...]:
     """Return a backend-qualified identity for one immutable stage snapshot."""
     if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):

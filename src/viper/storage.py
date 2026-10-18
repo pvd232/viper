@@ -38,7 +38,7 @@ from .references import (
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     StorageModel,
 )
 from .repository import PathError, resolve_path
@@ -126,7 +126,7 @@ class SnapshotPublisher(Protocol):
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
         files: Mapping[RepoRelPath, Path],
-    ) -> tuple[StageResultSnapshot, tuple[SnapshotFileRef, ...]]:
+    ) -> tuple[StageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
         """Publish stage files and return their snapshot with computed hashes."""
         ...
 
@@ -135,10 +135,10 @@ class SnapshotPublisher(Protocol):
         *,
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
-        source_snapshot: StageResultSnapshot,
+        source_snapshot: StageResultSnapshotRef,
         files: Mapping[RepoRelPath, SnapshotFileRef],
         source_bytes: Mapping[RepoRelPath, bytes],
-    ) -> StageResultSnapshot:
+    ) -> StageResultSnapshotRef:
         """Publish a target stage document and remapped source snapshot files."""
         ...
 
@@ -378,7 +378,7 @@ class LocalSnapshotPublisher:
         *,
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
-        source_snapshot: StageResultSnapshot,
+        source_snapshot: StageResultSnapshotRef,
         files: Mapping[RepoRelPath, SnapshotFileRef],
         source_bytes: Mapping[RepoRelPath, bytes],
     ) -> LocalStageResultSnapshotRef:
@@ -491,7 +491,7 @@ class ViperCloudSnapshotPublisher:
         *,
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
-        source_snapshot: StageResultSnapshot,
+        source_snapshot: StageResultSnapshotRef,
         files: Mapping[RepoRelPath, SnapshotFileRef],
         source_bytes: Mapping[RepoRelPath, bytes],
     ) -> CloudStageResultSnapshotRef:

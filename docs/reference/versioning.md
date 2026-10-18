@@ -17,6 +17,9 @@ parser and validation contract.
 Alpha releases use PEP 440 pre-release versions such as `0.1.0a1`. During the `0.x`
 series, each release note must identify every incompatible change.
 
+The [unreleased changes](../releases/unreleased.md) list pending Python import
+changes and their compatibility scope.
+
 ## Execution and journal defaults
 
 Workspace stages now default to `reuse="verified"` in Python authoring and

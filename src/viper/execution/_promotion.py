@@ -42,7 +42,7 @@ from ..references import (
     ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     StorageModel,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
@@ -67,8 +67,8 @@ from .errors import RunPromotionError
 _SPEC_ADAPTER = TypeAdapter(Spec)
 _RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
 _DocumentDecoder = Callable[[object], BaseModel]
-_SourceSnapshot = StageResultSnapshot | GitSource
-_SNAPSHOT_ADAPTER = TypeAdapter(_SourceSnapshot)
+_SourceSnapshotRef = StageResultSnapshotRef | GitSource
+_SNAPSHOT_ADAPTER = TypeAdapter(_SourceSnapshotRef)
 
 
 class PromotionInventory(ProtocolModel):
@@ -118,33 +118,33 @@ class RunGraphPromoter:
             space.configure_cloud(cloud)
         self.files: dict[StorageModel, ResolvedFileRef] = {}
         self.snapshots: dict[
-            _SourceSnapshot,
+            _SourceSnapshotRef,
             CloudStageResultSnapshotRef,
         ] = {}
         self.snapshot_files: dict[
-            _SourceSnapshot,
+            _SourceSnapshotRef,
             tuple[SnapshotFileRef, ...],
         ] = {}
         self.documents: dict[
-            _SourceSnapshot,
+            _SourceSnapshotRef,
             dict[str, BaseModel],
         ] = {}
-        self.promoting: set[_SourceSnapshot] = set()
+        self.promoting: set[_SourceSnapshotRef] = set()
         self.receipt_hashes: dict[str, str] = {}
         self.inventory: PromotionInventory | None = None
         self.source_files: dict[StorageModel, tuple[int, str | None]] = {}
-        self.source_members: dict[_SourceSnapshot, tuple[StorageModel, ...]] = {}
-        self.dependencies: dict[_SourceSnapshot, set[_SourceSnapshot]] = {}
+        self.source_members: dict[_SourceSnapshotRef, tuple[StorageModel, ...]] = {}
+        self.dependencies: dict[_SourceSnapshotRef, set[_SourceSnapshotRef]] = {}
         self._reading: list[StorageModel] = []
 
     @staticmethod
-    def snapshot_for(location: StorageModel) -> _SourceSnapshot:
+    def snapshot_for(location: StorageModel) -> _SourceSnapshotRef:
         """Return the snapshot containing a file."""
         return _SNAPSHOT_ADAPTER.validate_python(location.model_dump(exclude={"path"}))
 
     @staticmethod
     def file_in_snapshot(
-        snapshot: _SourceSnapshot, file: SnapshotFileRef
+        snapshot: _SourceSnapshotRef, file: SnapshotFileRef
     ) -> ResolvedFileRef:
         """Combine a file's size and hash with its snapshot address."""
         if isinstance(snapshot, GitSource):
@@ -167,7 +167,7 @@ class RunGraphPromoter:
             digest = digest or previous[1]
         self.source_files[location] = (size, digest)
 
-    def discover_snapshot(self, snapshot: _SourceSnapshot) -> None:
+    def discover_snapshot(self, snapshot: _SourceSnapshotRef) -> None:
         """List a snapshot's files before reading any artifact bodies."""
         if snapshot in self.source_members or isinstance(snapshot, GitSource):
             return
@@ -190,7 +190,7 @@ class RunGraphPromoter:
 
     def discover_inventory(
         self, inventory: PromotionInventory
-    ) -> tuple[_SourceSnapshot, ...]:
+    ) -> tuple[_SourceSnapshotRef, ...]:
         """List the required files and return snapshots in dependency order."""
         self.inventory = inventory
         for reference in inventory.roots:
@@ -202,11 +202,11 @@ class RunGraphPromoter:
             if actual is None:
                 raise RunPromotionError(f"inventory item is unreachable: {role}")
             self._record_file(reference.stored_at, reference.bytes, reference.sha256)
-        ordered: list[_SourceSnapshot] = []
-        active: set[_SourceSnapshot] = set()
-        complete: set[_SourceSnapshot] = set()
+        ordered: list[_SourceSnapshotRef] = []
+        active: set[_SourceSnapshotRef] = set()
+        complete: set[_SourceSnapshotRef] = set()
 
-        def visit(snapshot: _SourceSnapshot) -> None:
+        def visit(snapshot: _SourceSnapshotRef) -> None:
             """Place each dependency before the snapshot that uses it."""
             if snapshot in active:
                 raise RunPromotionError("storage cycle")
@@ -343,7 +343,7 @@ class RunGraphPromoter:
 
     def discover_snapshot_document(
         self,
-        snapshot: _SourceSnapshot,
+        snapshot: _SourceSnapshotRef,
         identity: SnapshotFileRef,
         decoder: _DocumentDecoder,
     ) -> None:
@@ -352,7 +352,7 @@ class RunGraphPromoter:
 
     def discover_plan_document(
         self,
-        snapshot: _SourceSnapshot,
+        snapshot: _SourceSnapshotRef,
         path: str,
         decoder: _DocumentDecoder,
     ) -> None:
@@ -379,7 +379,7 @@ class RunGraphPromoter:
 
     def discover_plan_members(
         self,
-        snapshot: _SourceSnapshot,
+        snapshot: _SourceSnapshotRef,
         run: RunSpec,
     ) -> None:
         """Register every typed document selected by one frozen run plan."""
@@ -490,7 +490,7 @@ class RunGraphPromoter:
         return promoted
 
     def promote_snapshot(
-        self, snapshot: _SourceSnapshot
+        self, snapshot: _SourceSnapshotRef
     ) -> CloudStageResultSnapshotRef:
         """Publish a complete snapshot after updating its saved references."""
         remembered = self.snapshots.get(snapshot)
@@ -565,7 +565,7 @@ class RunGraphPromoter:
         self,
         sources: dict[str, PublicationSource],
         *,
-        snapshot: _SourceSnapshot,
+        snapshot: _SourceSnapshotRef,
         source_files: tuple[SnapshotFileRef, ...],
     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
         """Stage verified neighboring-store files within the publication root."""
@@ -609,7 +609,7 @@ class RunGraphPromoter:
 
     def rewrite_snapshot_documents(
         self,
-        snapshot: _SourceSnapshot,
+        snapshot: _SourceSnapshotRef,
         original: dict[str, PublicationSource],
     ) -> dict[str, PublicationSource]:
         """Rewrite referenced documents and propagate changed stage identities."""

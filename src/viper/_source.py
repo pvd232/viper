@@ -25,7 +25,7 @@ from .references import (
     ResolvedGitFileRef,
     ResolvedRunRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     StorageModel,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
@@ -250,7 +250,7 @@ class RunFetcher:
 
     def list_snapshot_files(
         self,
-        snapshot: StageResultSnapshot,
+        snapshot: StageResultSnapshotRef,
     ) -> tuple[RepoRelPath, ...]:
         """List every regular file in one immutable stage snapshot."""
         if isinstance(

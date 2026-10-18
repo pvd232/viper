@@ -23,7 +23,7 @@ from .references import (
     ResolvedRunSpecRef,
     ResolvedStageInvocationRef,
     ResolvedStageRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
 )
 from .runtime import (
     EnvSpec,
@@ -131,7 +131,7 @@ class RunAttempt(ProtocolModel):
             raise ValueError("attempt completion must be after attempt start")
 
         unique = set()
-        snapshots: set[StageResultSnapshot] = set()
+        snapshots: set[StageResultSnapshotRef] = set()
         for stage in self.resolved_stages:
             if stage.stage_id in unique:
                 raise ValueError("resolved stage IDs must be unique")

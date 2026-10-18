@@ -298,7 +298,6 @@ def test_verification_operations_depend_on_independent_evidence() -> None:
         "StorageFetcher",
         "VerificationPolicy",
         "VerifiedSnapshotFile",
-        "StageSnapshot",
         "VerifiedRunResult",
         "VerifiedArtifact",
     }

@@ -31,7 +31,7 @@ from ..references import (
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     StorageModel,
     StorageRef,
 )
@@ -48,7 +48,7 @@ from .results import (
 )
 
 _STORAGE_ADAPTER = TypeAdapter(StorageRef)
-_SNAPSHOT_ADAPTER = TypeAdapter(StageResultSnapshot)
+_SNAPSHOT_ADAPTER = TypeAdapter(StageResultSnapshotRef)
 
 
 def _canonical_json(value: object) -> bytes:
@@ -62,7 +62,7 @@ def _source_key(source: Mapping[str, Any]) -> str:
 
 
 def _snapshot_location(
-    snapshot: StageResultSnapshot,
+    snapshot: StageResultSnapshotRef,
     path: RepoRelPath,
 ) -> StorageModel:
     """Build the concrete storage location of one snapshot member."""
@@ -170,7 +170,7 @@ class _RecordingFetcher:
 
     def list_snapshot_files(
         self,
-        snapshot: StageResultSnapshot,
+        snapshot: StageResultSnapshotRef,
     ) -> tuple[RepoRelPath, ...]:
         """Record the complete ordered membership of one immutable snapshot."""
         source = snapshot.model_dump(mode="json")
@@ -189,7 +189,7 @@ class _RecordingFetcher:
 
     def observe_snapshot(
         self,
-        snapshot: StageResultSnapshot,
+        snapshot: StageResultSnapshotRef,
         reference: SnapshotFileRef,
     ) -> None:
         """Retain membership and require the referenced file to belong to it."""
@@ -282,7 +282,7 @@ class _BundleFetcher:
 
     def list_snapshot_files(
         self,
-        snapshot: StageResultSnapshot,
+        snapshot: StageResultSnapshotRef,
     ) -> tuple[RepoRelPath, ...]:
         """Return the complete retained membership of one snapshot."""
         key = _source_key(snapshot.model_dump(mode="json"))
@@ -308,7 +308,7 @@ class _BundleFetcher:
 
     def observe_snapshot(
         self,
-        snapshot: StageResultSnapshot,
+        snapshot: StageResultSnapshotRef,
         reference: SnapshotFileRef,
     ) -> None:
         """Consume membership and require the referenced file to belong to it."""

@@ -25,7 +25,7 @@ from ..references import (
     ResolvedFileRef,
     ResolvedGitFileRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     StorageModel,
 )
 from ..reuse import (
@@ -65,7 +65,7 @@ class ReuseStageResult:
     """Return the resolved target stage and its source-file mapping."""
 
     resolved: ResolvedInternalSpec
-    snapshot: StageResultSnapshot
+    snapshot: StageResultSnapshotRef
     files: dict[RepoRelPath, SnapshotFileRef]
 
 

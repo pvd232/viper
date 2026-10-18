@@ -132,7 +132,7 @@ from viper.references import (
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     SnapshotFileRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     StorageModel,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
@@ -1838,7 +1838,7 @@ def copy_snapshot_files(
             store.put(hf_file(target_commit, path), raw)
 
 
-def snapshot_revision(snapshot: StageResultSnapshot) -> str:
+def snapshot_revision(snapshot: StageResultSnapshotRef) -> str:
     """Return the revision field used by a snapshot's storage backend."""
     if isinstance(
         snapshot,

@@ -47,7 +47,7 @@ from ..references import (
     LocalFileRef,
     ResolvedFileRef,
     ResolvedStageInvocationRef,
-    StageResultSnapshot,
+    StageResultSnapshotRef,
     ViperCloudFileRef,
     resolve_snapshot_file_ref,
 )
@@ -515,7 +515,7 @@ def verify_download_retrieval(
     attempt: RunAttempt,
     run: RunSpec,
     resolved: ResolvedDownloadSpec,
-    snapshot: StageResultSnapshot,
+    snapshot: StageResultSnapshotRef,
     input_name: InputName,
     *,
     body_raw: bytes | None = None,
@@ -633,7 +633,7 @@ def _verify_download_retrievals(
     run: RunSpec,
     stage_id: StageId,
     resolved: ResolvedDownloadSpec,
-    snapshot: StageResultSnapshot,
+    snapshot: StageResultSnapshotRef,
     *,
     fetcher: StorageFetcher | None,
 ) -> None:
@@ -1098,7 +1098,7 @@ def verify_external_inputs(
     run: RunSpec,
     stage_id: StageId,
     resolved: ResolvedInternalSpec,
-    snapshot: StageResultSnapshot,
+    snapshot: StageResultSnapshotRef,
     *,
     fetcher: StorageFetcher | None,
 ) -> dict[InputName, VerifiedInput]:

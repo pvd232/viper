@@ -15,7 +15,6 @@ from .metrics import Measurement
 from .references import (
     ResolvedFileRef,
     SnapshotFileRef,
-    StageResultSnapshot,
     StorageModel,
 )
 from .reuse import StageReuseReceipt
@@ -136,11 +135,7 @@ class VerifiedBenchmarkResult:
 
 StorageFetcher = Callable[[StorageModel], bytes]
 
-
-StageSnapshot = StageResultSnapshot
-
 __all__ = [
-    "StageSnapshot",
     "StorageFetcher",
     "VerificationError",
     "VerificationPolicy",

@@ -86,7 +86,7 @@ class HuggingFaceFileRef(ProtocolModel):
 
 
 class LocalFileRef(ProtocolModel):
-    """A file in one immutable revision of a repository-local VIPER store."""
+    """Reference to the file at ``workspace / store / commit / path``."""
 
     kind: Literal["local"] = "local"
     workspace: AbsolutePath = Field(
@@ -94,28 +94,39 @@ class LocalFileRef(ProtocolModel):
     )
     store: RepoRelPath = ".viper/store"
     store_id: LocalStoreId = Field(
-        description="Identity of the local store instance containing the file."
+        description="Store identity saved in workspace / store / '.identity'."
     )
     commit: SHA256
     path: RepoRelPath
 
 
 class LocalStageResultSnapshotRef(ProtocolModel):
-    """One immutable stage-result revision in a repository-local VIPER store."""
+    """Reference to the complete file collection at ``workspace / store / commit``.
 
-    kind: Literal["local"] = "local"
+    The store's persisted identity must match ``store_id``. A newly created
+    store at the same path has a different identity, invalidating old references.
+    A file reference adds its member path to this snapshot's directory.
+    """
+
+    kind: Literal["local"] = Field(
+        default="local", description="Select the repository-local storage backend."
+    )
     workspace: AbsolutePath = Field(
         description="Absolute root of the workspace that owns the local store."
     )
-    store: RepoRelPath = ".viper/store"
-    store_id: LocalStoreId = Field(
-        description="Identity of the local store instance containing the snapshot."
+    store: RepoRelPath = Field(
+        default=".viper/store", description="Store directory relative to workspace."
     )
-    commit: SHA256
+    store_id: LocalStoreId = Field(
+        description="Random store identity saved in workspace / store / '.identity'."
+    )
+    commit: SHA256 = Field(
+        description="Revision directory derived from file paths, sizes, and hashes."
+    )
 
 
 class HuggingFaceStageResultSnapshotRef(ProtocolModel):
-    """The immutable repository revision containing one completed stage."""
+    """Reference to the immutable repository revision containing one completed stage."""
 
     kind: Literal["huggingface"] = "huggingface"
     repository: NonEmptyStr
@@ -146,7 +157,7 @@ class ViperCloudFileRef(ProtocolModel):
 
 
 class GcsStageResultSnapshotRef(ProtocolModel):
-    """One sealed stage snapshot in Google Cloud Storage."""
+    """Reference to one sealed stage snapshot in Google Cloud Storage."""
 
     kind: Literal["gcs"] = "gcs"
     bucket: NonEmptyStr
@@ -157,7 +168,7 @@ class GcsStageResultSnapshotRef(ProtocolModel):
 
 
 class ViperCloudStageResultSnapshotRef(ProtocolModel):
-    """One provider-neutral ViperCloud stage snapshot."""
+    """Reference to one provider-neutral ViperCloud stage snapshot."""
 
     kind: Literal["viper_cloud"] = "viper_cloud"
     owner: HumanId
@@ -165,7 +176,7 @@ class ViperCloudStageResultSnapshotRef(ProtocolModel):
     revision: SHA256
 
 
-StageResultSnapshot = Annotated[
+StageResultSnapshotRef = Annotated[
     GcsStageResultSnapshotRef
     | HuggingFaceStageResultSnapshotRef
     | LocalStageResultSnapshotRef
@@ -204,9 +215,9 @@ class ResolvedFileRef(FileIdentity):
 
 
 class SnapshotFileRef(FileIdentity):
-    """Identify one exact file within a stage-result snapshot."""
+    """Identify one exact file relative to its containing stage-result snapshot."""
 
-    path: RepoRelPath
+    path: RepoRelPath = Field(description="File path relative to the snapshot root.")
 
 
 class ResolvedGitFileRef(ResolvedFileRef):
@@ -219,7 +230,7 @@ class ResolvedStageRef(ProtocolModel):
     """Binds one completed stage to its immutable stage-result snapshot."""
 
     stage_id: StageId
-    snapshot: StageResultSnapshot
+    snapshot: StageResultSnapshotRef
     resolved_spec: SnapshotFileRef
 
 
@@ -288,7 +299,7 @@ __all__ = [
     "ResolvedStageInvocationRef",
     "ResolvedStageRef",
     "SnapshotFileRef",
-    "StageResultSnapshot",
+    "StageResultSnapshotRef",
     "StorageModel",
     "StorageRef",
     "ViperCloudFileRef",
@@ -305,7 +316,7 @@ def storage_file(location: StorageModel, path: RepoRelPath) -> StorageModel:
 
 
 def resolve_snapshot_file_ref(
-    snapshot: StageResultSnapshot,
+    snapshot: StageResultSnapshotRef,
     file: SnapshotFileRef,
 ) -> ResolvedFileRef:
     """Address one snapshot member without reading or republishing its bytes."""
