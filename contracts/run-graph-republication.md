@@ -41,6 +41,7 @@ the observed head. All observed PRs remain open without submitted reviews.
 | 13 | PB-11 recovery reads | [RICO #27](https://github.com/pvd232/rico-rebuild/pull/27) | `0d2a4e78a43d1b4e79d3aba3d5157115288e9c85` | `rgp/model-publication-20261017` | [Local gates passed](https://github.com/pvd232/rico-rebuild/tree/rgp/pb11-recovery-reads/evidence/graph-publication-pb11); [1 passed](https://github.com/pvd232/rico-rebuild/pull/27/checks) | Pending | Open; no merge commit |
 | 14 | PB-12 bounded verification cache | [VIPER #16](https://github.com/pvd232/viper/pull/16) | `c672a36caeafba5d96509182a212126035c99c33` | `rgp/pb10-single-space-scan` | [Local gates passed](../evidence/rgp-pb12-validation.json); [3 passed; 4 pending](https://github.com/pvd232/viper/pull/16/checks) | Pending | Open; no merge commit |
 | 15 | PB-13 streaming metric hashes | [VIPER #17](https://github.com/pvd232/viper/pull/17) | `8c8aacf0698bc9ee05701e615b422d6538aa3318` | `rgp/pb12-retain-verification-cache` | [Local gates passed](../evidence/rgp-pb13-validation.json); [1 passed; 6 pending](https://github.com/pvd232/viper/pull/17/checks) | Pending | Open; no merge commit |
+| 16 | PB-14 benchmark verification | [VIPER #18](https://github.com/pvd232/viper/pull/18) | `ca8fb352d0df90095fbbc2a0e29312dd8cdb282f` | `rgp/pb13-stream-metric-hashes` | [Local gates passed](../evidence/rgp-pb14-validation.json); [CI pending](https://github.com/pvd232/viper/pull/18/checks) | Pending | Open; no merge commit |
 
 PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
 [historical review](../evidence/reviews/rgp-pb-01-implementation.json) and
@@ -78,7 +79,7 @@ and [closure without merge](https://docs.github.com/en/pull-requests/how-tos/mer
 PB-12 retains bounded destination downloads; PB-13 streams metric hashes;
 PB-14 reuses verification within benchmark execution and shares metric criteria.
 All three passed local validation. Continue review and merge after #15 in order
-**#16 → #17 → PB-14**; each PR targets its predecessor branch.
+**#16 → #17 → #18**; each PR targets its predecessor branch.
 Their typed requirements are RGP-REQ-14–16. See the scoped
 [PB-12](../plans/run-graph-republication/RGP-PB-12/README.md),
 [PB-13](../plans/run-graph-republication/RGP-PB-13/README.md), and
@@ -642,64 +643,17 @@ scientific payloads and provenance relationships, recovers the selected models
 using that host alone, and reuses verified work within the declared resource limits.
 
 The [typed declaration](run-graph-republication.toml) owns requirements and
-verifier conditions. RGP-REQ-11 through RGP-REQ-13 govern the new optimization
+verifier conditions. RGP-REQ-11 through RGP-REQ-16 govern the implemented optimization
 work; the completed migration requirements remain the compatibility boundary.
 
-## Current gap
+## Implemented changes
 
-The [accepted impact analysis](run-graph-republication-optimization-impact.md)
-owns the fixed scenario, removal map, cost estimates, and invariant decisions.
-Its three diagrams retain exactly the same nodes and edges.
-
-### Current DAG
-
-```mermaid
-flowchart TD
-    A["Staged sources"]:::current -->|"source_file"| B["Journal: files + expected manifest"]:::implementation
-    B -->|"cloud.publish: source_file again"| C["Provider hashes inputs again"]:::gap
-    C -->|"publish_revision"| D["Pinned destination commit"]:::implementation
-    D -->|"read_manifest then list_files"| E["Same HF manifest read twice"]:::gap
-    E -->|"payload readback"| F["Verified journal binding"]:::implementation
-    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
-    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
-    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
-    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
-    linkStyle default stroke:#94a3b8,stroke-width:2px
-```
-
-### Proposed change DAG
-
-```mermaid
-flowchart TD
-    A["Staged sources"]:::current -->|"source_file once"| B["Journal: files + expected manifest"]:::implementation
-    B -->|"Proposed: reuse files and revision"| C["Existing publish_revision"]:::proposed
-    C -->|"commit"| D["Pinned destination commit"]:::implementation
-    D -->|"Proposed: one full manifest equality check"| E["Existing destination byte readback"]:::proposed
-    E -->|"save after readback"| F["Same verified journal binding"]:::implementation
-    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
-    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
-    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
-    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
-    linkStyle default stroke:#94a3b8,stroke-width:2px
-```
-
-### Integrated DAG
-
-```mermaid
-flowchart TD
-    A["Same staged inputs"]:::current -->|"one identity computation; save intent"| B["Journal + existing provider"]:::proposed
-    B -->|"one manifest check; unchanged byte readback"| C["Same verified journal binding"]:::implementation
-    C -->|"full addresses and frozen inventory"| D["Independent GraphComparison"]:::implementation
-    D -->|"check staging and cache budgets"| E["Proposed: one traversal, two totals"]:::proposed
-    E -->|"same accepted graph"| F["Fresh-process model recovery"]:::implementation
-    F -->|"saved predictions and reports"| G["Proposed: RICO reuses request reads"]:::proposed
-    G -->|"same registration checks"| H["Same additional-publication result"]:::implementation
-    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
-    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
-    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
-    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
-    linkStyle default stroke:#94a3b8,stroke-width:2px
-```
+The [impact analysis](run-graph-republication-optimization-impact.md) retains the
+baseline diagrams, removal decisions, measured counts, and timing limits.
+PB-09–14 reuse prepared publication identities, complete manifests, disk scans,
+recovery requests, destination downloads, and benchmark checks. Metric workers
+stream file hashes. The [PR table](#pr-review-and-integration) records validation
+separately from review and integration.
 
 ## 3. Models
 
@@ -715,11 +669,13 @@ The extension preserves the existing public models, serialized variants, and cac
 
 ## 4. Execution
 
-1. Start RGP-PB-09 from the inspected publication baseline and reuse prepared identities and complete manifest checks.
-2. Validate source mutation, commit recovery, and independent comparison before accepting that block.
-3. Apply RGP-PB-10 to combine capacity scans; preserve two budget totals and confinement boundaries.
-4. Apply RGP-PB-11 in RICO to reuse requests and pointer digests within each invocation.
-5. Measure cache retention separately before promoting the bounded future work.
+Publication reuses prepared identities and complete manifest checks. Capacity
+checks count both budgets in one traversal. Independent comparison retains
+destination downloads until a reservation requires cleanup; semantic verification
+reuses the retained files. RICO reuses request bytes and pointer digests.
+Metric workers still check their own input bytes, using bounded-memory hashes.
+Benchmark execution reuses its candidate and confirmation-stage checks while
+public verification independently checks supplied results.
 
 ## 5. Persisted evidence
 
@@ -728,14 +684,13 @@ The extension preserves the existing public models, serialized variants, and cac
 | [Completion evidence](../evidence/run-graph-republication-completion-20261018.json) | Pinned CI results, exact publication acceptance identity, four recovery results, and historical scan observations. |
 | [Declaration revision](../evidence/revisions/rgp-optimization-plan.json) | Exact prior and candidate packages with the computed affected block set. |
 | [Historical plans](../plans/run-graph-republication/) | Retained Git implementation patches and declared checks for completed blocks. Newly reconstructed plans explicitly identify their reconstruction. |
-| Current PairBlock plan and gate receipt | Freeze implementation bytes at the actual baseline when each new block is ready; record results through the existing protocol. |
+| PR diffs and retained validation results | Git retains new implementation bytes; the PR table links the tested changes, check results, review, and integration separately. |
 
 ## 6. Verification
 
-The generated verifier table gives exact existing or planned test references.
-New test names are marked PlannedAddition in the impact analysis. Each new
-block's planning note supplies its focused command, rejection cases, and stop
-condition. Use Pyrefly, affected tests, discovered documentation checks, then
+The typed verifiers name observing tests for every block. Each new block's
+planning note and validation result record its checks and rejection cases. The
+protected generated table retains the historical declaration. Use Pyrefly, affected tests, discovered documentation checks, then
 non-mutating Ruff format and lint checks after target-path import/format repair.
 
 Contract-only changes use typed package/workspace/revision/compiled-state checks,
@@ -767,16 +722,19 @@ binding. A substituted valid ancestor still raises `RunPromotionError` containin
 
 ## 9. Implementation order
 
-Migration validation for blocks 01–08 is complete; their pending PR integration
-is tracked above. Implement PB-09 first, then PB-10; PB-11 can proceed once its
-RICO baseline is checked. Give each new block its own commit and PR. An authorized
-stack may be implemented before independent review; integrate dependencies first.
+Validation for PB-01–14 is complete. Review the dependency stack in the order
+recorded above, continuing **#16 → #17 → #18** after #15. Each new block has its
+own PR. Review and merge remain pending; integrate dependencies first when
+merging is authorized.
 
 ## 10. Contract-owned PairBlocks
 
 - [RGP-PB-09](../plans/run-graph-republication/RGP-PB-09/README.md): reuse upload identities and HF manifests.
 - [RGP-PB-10](../plans/run-graph-republication/RGP-PB-10/README.md): count both disk budgets in one traversal.
 - [RGP-PB-11](../plans/run-graph-republication/RGP-PB-11/README.md): reuse RICO request bytes and pointer digests.
+- [RGP-PB-12](../plans/run-graph-republication/RGP-PB-12/README.md): retain bounded destination downloads.
+- [RGP-PB-13](../plans/run-graph-republication/RGP-PB-13/README.md): stream metric dependency hashes.
+- [RGP-PB-14](../plans/run-graph-republication/RGP-PB-14/README.md): reuse benchmark verification and share metric criteria.
 
 ## 11. ContractTarget
 
@@ -788,7 +746,9 @@ need no saved patch payload. Existing plans remain historical evidence. A
 missing implementation or failed gate leaves new validation pending while
 completed migration evidence remains valid.
 
-## Future work
+## Remaining measurement
 
-[Verified-download retention](run-graph-republication-optimization-impact.md#bounded-future-work-verified-download-retention)
-remains conditional on measured benefit and an invariant-preserving bounded design.
+[The implemented follow-ups](run-graph-republication-optimization-impact.md#implemented-follow-ups-pb-1214)
+have measured operation counts and a local hashing benchmark. Production network
+and full benchmark wall-time savings remain unmeasured; completed publication
+and scientific measurements were preserved.

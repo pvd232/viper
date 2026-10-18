@@ -35,10 +35,10 @@ source identities, independent graph comparison, capacity limits, and cold
 acceptance with source storage blocked. File mutation between preparation and
 upload must fail destination readback before the binding becomes complete.
 
-## Current gap
+## Baseline analysis for PB-09–11
 
-The first avoidable work is the provider recomputing the identities just
-computed by the journal. The original review also found the following manifest,
+Before PB-09, the first avoidable work was the provider recomputing the identities just
+computed by the journal. That review also found the following manifest,
 filesystem, and RICO repetitions. The diagrams govern the same input and result.
 
 ### Current DAG

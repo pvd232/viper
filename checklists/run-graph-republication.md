@@ -20,7 +20,7 @@ Reduce repeated publication hashing, manifest reads, directory traversal, and
 RICO request reads while preserving the completed migration's guarantees.
 PB-09–14 are implemented and locally validated. PB-12–14 add bounded cache
 retention, streaming metric hashing, and benchmark verification reuse. Continue
-independent review after #15 with #16, #17, then PB-14, and integrate in that order. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
+independent review after #15 with #16, #17, then #18, and integrate in that order. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
 records measured operation counts, memory use, exact owners, and remaining timing limits.
 
 <details>
