@@ -20,7 +20,7 @@ is required before and after each optimization.
 | HF manifest | `PublicationJournal._verify` and `GraphComparison.verify` reuse their full `RevisionManifest` equality check. | Replace the following generic inventory branch with `elif`; other providers retain inventory checks. |
 | Space accounting | Extend `TransferSpace.check` / `directory_bytes` to compute both totals together. | Retire the second traversal; preserve a separate inode set and confinement root for each total. |
 | RICO reads | `model_checks`, `register`, and `recovery_reports` share bytes already read within one invocation. | Retire repeated request parsing and per-seed pointer hashing. |
-| Verified downloads | Retain as the bounded future work below. | The active blocks preserve existing cache ownership and persisted formats. |
+| Verified downloads | PB-12 retains comparison downloads for semantic verification and reclaims only when a reservation needs room. | Reuses existing cleanup; no cache format or durable index. |
 
 Reuse wins for identities, manifests, and RICO records. Extend the existing
 space counter to report staging and cache totals together.
@@ -101,7 +101,7 @@ Paths below belong to VIPER unless prefixed with `rico:`. New tests are
 | [Journal](../src/viper/execution/_promotion_journal.py), [comparison](../src/viper/execution/_promotion_compare.py) | Change in RGP-PB-09 / RGP-REQ-11. Remove duplicate hash/manifest work. |
 | [Provider](../src/viper/_cloud.py), [HF provider](../src/viper/huggingface.py), [cloud service](../src/viper/cloud.py) | Retain APIs and byte validation; reuse `publish_revision`. |
 | [Transfer](../src/viper/execution/_promotion_transfer.py) | Change in RGP-PB-10 / RGP-REQ-12. Replace two traversals with one. |
-| [Worker](../src/viper/execution/_promotion_worker.py), [reader](../src/viper/_source.py), [verified cache](../src/viper/_verified_cache.py) | Retain in active scope; cache handoff is conditional future work. |
+| [Worker](../src/viper/execution/_promotion_worker.py), [reader](../src/viper/_source.py), [verified cache](../src/viper/_verified_cache.py) | PB-12 changes comparison-to-verifier retention; source readback and fresh-process checks stay independent. |
 | `rico:tools/graph_publication/checks.py` | Change in RGP-PB-11 / RGP-REQ-13. Reuse loaded request bytes and pointer digests. |
 | `rico:tools/graph_publication/recover.py` | Retain scientific inference, request binding, and report-repair behavior. |
 | [Cloud tests](../tests/test_cloud_service.py) | PlannedAddition: `test_republication_reuses_prepared_identities`, `test_transfer_space_scans_both_budgets_once`. |
@@ -119,7 +119,7 @@ artifacts, and original model pointers retain their existing owners and values.
 | Manifest reuse | 1,566 fewer manifest loads across publication and comparison | Unmeasured; cached reads may be entirely local | Zero |
 | Combined scans | 5,210 fewer cache traversals for the 2,605-address comparison | About 18 minutes if the recorded 0.21-second scan cost persists | +10 to +25 |
 | RICO reuse | One request read per request and one pointer digest per distinct pointer per invocation | Negligible compared with migration | -10 to +10 |
-| Future cache retention | Up to one 48.9 GB destination pass when retained files fit | 8.2 minutes at an assumed 100 MB/s, plus request overhead | +40 to +100, provisional |
+| Cache retention (original estimate) | Up to one 48.9 GB destination pass when retained files fit | 8.2 minutes at an assumed 100 MB/s, plus request overhead | +40 to +100, provisional |
 
 These projections require candidate measurements; their savings overlap. Retain operation
 counts, elapsed time, input identity, production additions/deletions, and memory /
@@ -128,20 +128,34 @@ measurements in alternating order. Compare the same filesystem tree; concurrent
 file changes invalidated equivalence claims in the older scan observations.
 Fixed local fixtures validate these patches while preserving production transfers and saved model predictions.
 
-## Bounded future work: verified-download retention
+## Implemented follow-ups: PB-12–14
 
-Inputs are the existing journal readback paths, `RunFetcher` verified paths,
-full source/destination addresses, and `TransferLimits`. The proposed result is
-reuse of unchanged, task-owned verified bytes between journal readback,
-comparison, and ordinary verification within one execution.
+The extension keeps the same graph and evidence inputs. It changes only these
+operations within one invocation:
 
-This work is excluded from RGP-REQ-11 through RGP-REQ-13 and their PairBlocks.
-First measure repeated network bytes, requests, hashes, and peak disk usage on
-a connected fixed graph with shared content and distinct producing histories.
-Promote it to the next RGP requirement only after those counts show avoidable
-work, a bounded retention design beats eager deletion on the same inputs, and
-corruption, alias membership, eviction, interruption, and fresh-process rejection
-cases preserve the original outcomes. Cold acceptance always starts with empty
-caches. Prefer extending existing cache ownership; stop if the required eviction
-machinery outweighs the measured benefit. The next decision belongs to this same
-contract and checklist.
+| Block | Removed work and replacement | Observed result |
+|---|---|---|
+| PB-12 | Replace eager destination deletion after every comparison with existing cleanup on budget pressure; reserve missing files before semantic verification. | Two-file fixture: 4 destination downloads become 2 with room, or 3 after eviction. +32/-9 production lines. |
+| PB-13 | Replace whole-file allocation with `hashlib.file_digest` and size from the same open descriptor. | 64 MiB fixture: 67,113,490 peak Python bytes become 267,745; identical hash/size. Median 37.90 ms becomes 33.82 ms over 10 alternating pairs. +4/-2 production lines. |
+| PB-14 | Reuse the candidate and confirmation-stage checks; move metric criteria/status into the existing private verification module. | Candidate full checks 2 → 1; confirmation-stage checks 2 → 1; independent confirmation executions remain 1. +163/-175 production lines. |
+
+The combined production change is **+13 lines**. No new serialized record,
+persistent cache, global verification cache, or public verification bypass is
+introduced. The benchmark helper is outside the public export list; only the
+executor supplies previously checked evidence, under the same policy and fetcher.
+It binds confirmation stages to the exact attempt read back. Public verification
+always checks its own candidate and confirmation. The executor still verifies
+published candidate bytes before accepting the assembled result.
+
+Cache retention excludes journal-to-comparison sharing: independent comparison
+still reads both endpoints. Source cleanup, budget/confinement rejection, final
+cleanup, and fresh-reader corruption checks remain. Streaming hashing preserves
+ordered file identities and the worker's independent pre-execution check.
+Benchmark lineage, new-attempt/snapshot checks, metric receipts, thresholds,
+artifact parity, and status validation remain.
+
+See retained [PB-12](../evidence/rgp-pb12-validation.json),
+[PB-13](../evidence/rgp-pb13-validation.json), and
+[PB-14](../evidence/rgp-pb14-validation.json) results. Network and full benchmark
+wall-time savings are unmeasured. Original GCS publications, model pointers,
+and completed scientific measurements are unchanged.

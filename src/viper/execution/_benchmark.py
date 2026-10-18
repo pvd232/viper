@@ -7,29 +7,28 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
 
 from .. import keys
 from .._source import RunFetcher
 from .._verification.attempt import verify_attempt_stages
-from .._verification.metrics import eval_metric_receipts
-from .._verification.storage import fetch_storage_bytes
+from .._verification.metrics import (
+    benchmark_metric_results,
+    benchmark_status,
+    eval_metric_receipts,
+)
+from .._verification.storage import fetch_storage_bytes, read_resolved_file
 from ..artifacts import StageArtifactRef
 from ..benchmark import (
     ArtifactComparisonReceipt,
-    BenchmarkMetricResult,
     BenchmarkResult,
     BenchmarkSpec,
-    MetricCriterionResult,
 )
 from ..evidence import VerificationPolicy
-from ..metrics import MetricVerificationReceipt, compare_metric_values
 from ..references import (
     GitFileRef,
     LocalFileRef,
     ResolvedBenchmarkResultRef,
     ResolvedBenchmarkSpecRef,
-    ResolvedFileRef,
     ResolvedRunRef,
     storage_file,
 )
@@ -43,7 +42,7 @@ from ..storage import (
     local_artifact_store,
     publish_resolved_files,
 )
-from ..verification import verify_benchmark_result, verify_run_result
+from ..verification import verify_benchmark_evidence, verify_run_result
 from ._run import execute_benchmark_confirmation
 from .errors import BenchmarkExecutionError
 from .results import BenchmarkExecutionResult
@@ -91,81 +90,6 @@ def _benchmark_mirror_path(
         / run_id
         / "benchmark.result.yaml"
     )
-
-
-def _benchmark_metric_results(
-    benchmark: BenchmarkSpec,
-    candidate: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]],
-    confirmation: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]],
-) -> tuple[BenchmarkMetricResult, ...]:
-    """Record every selected metric, then apply any matching criterion."""
-    criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
-    results: list[BenchmarkMetricResult] = []
-    for metric_id in benchmark.metric_ids:
-        try:
-            candidate_ref, candidate_receipt = candidate[metric_id]
-            confirmation_ref, confirmation_receipt = confirmation[metric_id]
-        except KeyError as error:
-            raise BenchmarkExecutionError(
-                f"benchmark metric {metric_id!r} lacks verification evidence"
-            ) from error
-        candidate_value = candidate_receipt.recomputation.value
-        confirmation_value = confirmation_receipt.recomputation.value
-        matched = compare_metric_values(
-            candidate_value,
-            confirmation_value,
-            candidate_receipt.comparator,
-        )
-        criterion = criteria.get(metric_id)
-        criterion_result: MetricCriterionResult | None = None
-        if criterion is not None:
-            candidate_passed = (
-                candidate_value >= criterion.threshold
-                if criterion.comparison == "ge"
-                else candidate_value <= criterion.threshold
-            )
-            confirmation_passed = (
-                confirmation_value >= criterion.threshold
-                if criterion.comparison == "ge"
-                else confirmation_value <= criterion.threshold
-            )
-            criterion_result = MetricCriterionResult(
-                criterion=criterion,
-                candidate_passed=candidate_passed,
-                confirmation_passed=confirmation_passed,
-                passed=candidate_passed and confirmation_passed,
-            )
-        results.append(
-            BenchmarkMetricResult(
-                metric_id=metric_id,
-                candidate_verification=candidate_ref,
-                confirmation_verification=confirmation_ref,
-                candidate_value=candidate_value,
-                confirmation_value=confirmation_value,
-                matched=matched,
-                criterion=criterion_result,
-            )
-        )
-    return tuple(results)
-
-
-def _benchmark_status(
-    benchmark: BenchmarkSpec,
-    artifacts: tuple[ArtifactComparisonReceipt, ...],
-    metrics: tuple[BenchmarkMetricResult, ...],
-) -> Literal["verified", "passed", "failed"]:
-    """Derive the benchmark status from parity, matching, and criteria."""
-    failed = (
-        not all(receipt.passed for receipt in artifacts)
-        or not all(receipt.matched for receipt in metrics)
-        or any(
-            receipt.criterion is not None and not receipt.criterion.passed
-            for receipt in metrics
-        )
-    )
-    if failed:
-        return "failed"
-    return "verified" if not benchmark.criteria else "passed"
 
 
 def benchmark(
@@ -315,7 +239,7 @@ def benchmark(
         reused=None,
         fetcher=fetcher,
     )
-    metric_receipts = _benchmark_metric_results(
+    metric_receipts = benchmark_metric_results(
         benchmark,
         candidate_metrics,
         confirmation_metrics,
@@ -341,10 +265,18 @@ def benchmark(
         confirmation=confirmation_result.attempt_reference,
         artifacts=tuple(artifact_receipts),
         metrics=metric_receipts,
-        status=_benchmark_status(benchmark, tuple(artifact_receipts), metric_receipts),
+        status=benchmark_status(benchmark, tuple(artifact_receipts), metric_receipts),
         completed_at=datetime.now(UTC),
     )
-    verify_benchmark_result(result, policy=policy, fetcher=fetcher)
+    if read_resolved_file(result.run, fetcher=fetcher) != candidate_raw:
+        raise BenchmarkExecutionError("published candidate bytes differ")
+    verify_benchmark_evidence(
+        result,
+        verified_candidate,
+        policy=policy,
+        fetcher=fetcher,
+        verified_confirmation=(confirmation, confirmation_stages),
+    )
     result_raw = serialize_document(result)
     _write_new(result_path, result_raw)
     mirror_path = _benchmark_mirror_path(root, benchmark, candidate_path)

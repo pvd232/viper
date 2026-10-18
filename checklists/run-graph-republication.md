@@ -11,17 +11,17 @@ Review and integration remain pending. The contract's
 records each observed head, checks, review decision, and merge state separately
 from completed migration validation. Review and merge VIPER #5 through #13 in
 order, retargeting each successor to `main`, then RICO #26. Continue with VIPER
-#14 → #15 and RICO #27. PB-09–11 local validation is complete; review and merge
+#14 → #15 and RICO #27. PB-09–14 local validation is complete; review and merge
 remain pending. The contract links their checks and measurements.
 
 ## Current outcome
 
 Reduce repeated publication hashing, manifest reads, directory traversal, and
 RICO request reads while preserving the completed migration's guarantees.
-PB-09–11 are implemented. PB-12–14 extend the same contract with bounded cache
-retention, streaming metric hashing, and benchmark verification reuse. Implement
-and validate each in a separate PR before independent review and integration. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
-records projected savings, exact owners, and conditional cache retention.
+PB-09–14 are implemented and locally validated. PB-12–14 add bounded cache
+retention, streaming metric hashing, and benchmark verification reuse. Continue
+independent review after #15 with #16, #17, then PB-14, and integrate in that order. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
+records measured operation counts, memory use, exact owners, and remaining timing limits.
 
 <details>
 <summary>Historical compiler snapshot; current PR-backed completion is above</summary>

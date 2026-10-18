@@ -1,0 +1,39 @@
+{
+  "pair_block": "RGP-PB-14",
+  "base_commit": "8c8aacf0698bc9ee05701e615b422d6538aa3318",
+  "checks": {
+    "pyrefly check src/viper tests": "PASS: 0 errors",
+    "python -m pytest -q tests/test_benchmark_execution.py": "PASS: 13 passed in 9.96s",
+    "python -m pytest -q tests/test_verification_acceptance.py tests/test_metric_provenance.py": "PASS: 57 passed in 44.45s",
+    "tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result": "PASS in the broader 81.86s run; includes actual independent confirmation, retained without rerun after a test-only comparator fixture fix",
+    "ruff check --select D src/viper tests": "PASS",
+    "ruff format --check src/viper tests": "PASS: 153 files",
+    "ruff check src/viper tests": "PASS",
+    "contract_protocol.load_current_execution_state(checklists/run-graph-republication.toml, evidence/run-graph-republication-state.json)": "PASS: 14 blocks; historical evidence unchanged"
+  },
+  "development_corrections": [
+    "Initial new tests used a Pydantic method on the dataclass policy, a shadowed package attribute for monkeypatching, and a fetch wrapper without snapshot listing. Fixed test setup; production checks passed.",
+    "Broader run: 70 passed, one new test failed because its FloatComparator used atol instead of mode/tolerance. Corrected the fixture; all 13 benchmark tests and 57 verification/metric tests then passed. The successful independent-confirmation execution was unchanged and retained."
+  ],
+  "observed_operations": {
+    "candidate_full_verifications": {
+      "before": 2,
+      "after": 1
+    },
+    "confirmation_stage_verifications": {
+      "before": 2,
+      "after": 1
+    },
+    "confirmation_executions": {
+      "before": 1,
+      "after": 1
+    },
+    "public_verifier": "Repeats full candidate and confirmation verification on every call; changed policy and corrupted bytes rejected"
+  },
+  "source_lines": {
+    "added": 163,
+    "removed": 175
+  },
+  "self_review": "No blocking finding in the final diff. Published candidate bytes remain checked; reused stages bind to the read-back confirmation; public verification accepts no preverified inputs. Shared criteria enforce successful receipts and equal comparators. Review and merge remain pending.",
+  "limitations": "Counts use the existing benchmark fixture. Full benchmark wall-time and live cloud performance are unmeasured. No public schema changes or persistent verification cache."
+}

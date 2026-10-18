@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping
-from typing import cast
+from typing import Literal, cast
 
 import yaml
 
+from ..benchmark import (
+    ArtifactComparisonReceipt,
+    BenchmarkMetricResult,
+    BenchmarkSpec,
+    MetricCriterionResult,
+)
 from ..evidence import (
     StorageFetcher,
     VerificationError,
@@ -358,3 +364,84 @@ def verify_recomputed_metrics(
                 raise VerificationError(
                     f"metric {metric_id!r} verification receipt records failure"
                 )
+
+
+def benchmark_metric_results(
+    benchmark: BenchmarkSpec,
+    candidate: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]],
+    confirmation: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]],
+) -> tuple[BenchmarkMetricResult, ...]:
+    """Record every selected metric, then apply any matching criterion."""
+    criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
+    results: list[BenchmarkMetricResult] = []
+    for metric_id in benchmark.metric_ids:
+        try:
+            candidate_ref, candidate_receipt = candidate[metric_id]
+            confirmation_ref, confirmation_receipt = confirmation[metric_id]
+        except KeyError as error:
+            raise VerificationError(
+                f"benchmark.metrics: metric {metric_id!r} lacks verification evidence"
+            ) from error
+        if candidate_receipt.comparator != confirmation_receipt.comparator:
+            raise VerificationError(
+                "benchmark.metrics: candidate and confirmation comparators differ"
+            )
+        if not candidate_receipt.passed or not confirmation_receipt.passed:
+            raise VerificationError("benchmark.metrics: metric result differs")
+        candidate_value = candidate_receipt.recomputation.value
+        confirmation_value = confirmation_receipt.recomputation.value
+        matched = compare_metric_values(
+            candidate_value,
+            confirmation_value,
+            candidate_receipt.comparator,
+        )
+        criterion = criteria.get(metric_id)
+        criterion_result: MetricCriterionResult | None = None
+        if criterion is not None:
+            candidate_passed = (
+                candidate_value >= criterion.threshold
+                if criterion.comparison == "ge"
+                else candidate_value <= criterion.threshold
+            )
+            confirmation_passed = (
+                confirmation_value >= criterion.threshold
+                if criterion.comparison == "ge"
+                else confirmation_value <= criterion.threshold
+            )
+            criterion_result = MetricCriterionResult(
+                criterion=criterion,
+                candidate_passed=candidate_passed,
+                confirmation_passed=confirmation_passed,
+                passed=candidate_passed and confirmation_passed,
+            )
+        results.append(
+            BenchmarkMetricResult(
+                metric_id=metric_id,
+                candidate_verification=candidate_ref,
+                confirmation_verification=confirmation_ref,
+                candidate_value=candidate_value,
+                confirmation_value=confirmation_value,
+                matched=matched,
+                criterion=criterion_result,
+            )
+        )
+    return tuple(results)
+
+
+def benchmark_status(
+    benchmark: BenchmarkSpec,
+    artifacts: tuple[ArtifactComparisonReceipt, ...],
+    metrics: tuple[BenchmarkMetricResult, ...],
+) -> Literal["verified", "passed", "failed"]:
+    """Derive the benchmark status from parity, matching, and criteria."""
+    failed = (
+        not all(receipt.passed for receipt in artifacts)
+        or not all(receipt.matched for receipt in metrics)
+        or any(
+            receipt.criterion is not None and not receipt.criterion.passed
+            for receipt in metrics
+        )
+    )
+    if failed:
+        return "failed"
+    return "verified" if not benchmark.criteria else "passed"

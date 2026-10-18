@@ -19,7 +19,12 @@ from ._verification.attempt import (
     verify_external_inputs,
     verify_measurement_stage_times,
 )
-from ._verification.metrics import eval_metric_receipts, verify_recomputed_metrics
+from ._verification.metrics import (
+    benchmark_metric_results,
+    benchmark_status,
+    eval_metric_receipts,
+    verify_recomputed_metrics,
+)
 from ._verification.paths import resolved_stage_spec_path, run_root
 from ._verification.plan import verify_run_plan, verify_run_spec
 from ._verification.storage import (
@@ -67,7 +72,6 @@ from .inputs import (
 )
 from .metrics import (
     Measurement,
-    compare_metric_values,
     is_recomputed_metric,
 )
 from .references import (
@@ -1678,14 +1682,6 @@ def verify_benchmark_result(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedBenchmarkResult:
     """Verify benchmark parity and metric criteria across two executions."""
-    benchmark_raw = read_resolved_file(result.benchmark, fetcher=fetcher)
-    try:
-        benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
-    except (yaml.YAMLError, ValueError) as exc:
-        raise VerificationError(
-            "benchmark result does not reference a valid BenchmarkSpec"
-        ) from exc
-
     run_raw = read_resolved_file(result.run, fetcher=fetcher)
     try:
         resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(run_raw))
@@ -1695,6 +1691,35 @@ def verify_benchmark_result(
         ) from exc
 
     verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+    return verify_benchmark_evidence(
+        result, verified_run, policy=policy, fetcher=fetcher
+    )
+
+
+def verify_benchmark_evidence(
+    result: BenchmarkResult,
+    verified_run: VerifiedRunResult,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+    verified_confirmation: tuple[RunAttempt, dict[StageId, ResolvedBaseSpec]]
+    | None = None,
+) -> VerifiedBenchmarkResult:
+    """Check assembled evidence using records verified in this invocation.
+
+    The caller binds result.run to verified_run and uses the same policy and
+    fetcher for both prior checks. Optional confirmation stages must belong to
+    the supplied attempt. Independently supplied results enter through
+    verify_benchmark_result(), which never accepts preverified records.
+    """
+    resolved_run = verified_run.result
+    benchmark_raw = read_resolved_file(result.benchmark, fetcher=fetcher)
+    try:
+        benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            "benchmark result does not reference a valid BenchmarkSpec"
+        ) from exc
 
     if result.completed_at < resolved_run.completed_at:
         raise VerificationError(
@@ -1792,14 +1817,19 @@ def verify_benchmark_result(
             "must be distinct"
         )
 
-    confirmation_stages = verify_attempt_stages(
-        confirmation,
-        verified_run.plan.run,
-        verified_run.plan.stages,
-        require_complete=True,
-        policy=policy,
-        fetcher=fetcher,
-    )
+    if verified_confirmation is None:
+        confirmation_stages = verify_attempt_stages(
+            confirmation,
+            verified_run.plan.run,
+            verified_run.plan.stages,
+            require_complete=True,
+            policy=policy,
+            fetcher=fetcher,
+        )
+    else:
+        checked_attempt, confirmation_stages = verified_confirmation
+        if checked_attempt != confirmation:
+            raise VerificationError("verified confirmation differs from its reference")
     confirmation_stored_inputs = verify_stored_inputs(
         confirmation_stages,
         policy=policy,
@@ -1842,7 +1872,6 @@ def verify_benchmark_result(
     confirmation_estimator = confirmation_stages[estimator_ref.stage_id].artifacts[
         estimator_ref.artifact_name
     ]
-    estimator_parity = selected_estimator == confirmation_estimator
 
     eval_stage_ids = [
         stage_id
@@ -1858,7 +1887,6 @@ def verify_benchmark_result(
     confirmation_predictions = confirmation_stages[eval_stage_id].artifacts[
         keys.Eval.PREDICTIONS
     ]
-    prediction_parity = selected_predictions == confirmation_predictions
 
     expected_artifacts = {
         (estimator_ref.stage_id, estimator_ref.artifact_name): (
@@ -1938,82 +1966,23 @@ def verify_benchmark_result(
         reused=None,
         fetcher=fetcher,
     )
-    criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
+    expected_metrics = benchmark_metric_results(
+        benchmark, candidate_metric_receipts, confirmation_metric_receipts
+    )
     received_metrics = {receipt.metric_id: receipt for receipt in result.metrics}
     if set(received_metrics) != set(benchmark.metric_ids):
         raise VerificationError(
             "benchmark.metrics: result metric IDs differ from the benchmark"
         )
-    criteria_pass = True
-    metrics_match = True
-    for metric_id in benchmark.metric_ids:
-        if (
-            metric_id not in candidate_metric_receipts
-            or metric_id not in confirmation_metric_receipts
-        ):
-            raise VerificationError(
-                f"benchmark.metrics: metric {metric_id!r} lacks verification evidence"
-            )
-        candidate_ref, candidate_receipt = candidate_metric_receipts[metric_id]
-        confirmation_ref, confirmation_receipt = confirmation_metric_receipts[metric_id]
-        if candidate_receipt.comparator != confirmation_receipt.comparator:
-            raise VerificationError(
-                "benchmark.metrics: candidate and confirmation comparators differ"
-            )
-        candidate_value = candidate_receipt.recomputation.value
-        confirmation_value = confirmation_receipt.recomputation.value
-        matched = compare_metric_values(
-            candidate_value,
-            confirmation_value,
-            candidate_receipt.comparator,
-        )
-        receipt = received_metrics[metric_id]
-        if (
-            not candidate_receipt.passed
-            or not confirmation_receipt.passed
-            or receipt.candidate_verification != candidate_ref
-            or receipt.confirmation_verification != confirmation_ref
-            or receipt.candidate_value != candidate_value
-            or receipt.confirmation_value != confirmation_value
-            or receipt.matched != matched
-        ):
-            raise VerificationError("benchmark.metrics: metric result differs")
-        metrics_match &= matched
-
-        criterion = criteria.get(metric_id)
-        if criterion is None:
-            if receipt.criterion is not None:
-                raise VerificationError(
-                    "benchmark.metrics: metric has an undeclared criterion result"
-                )
-            continue
-        candidate_passed = (
-            candidate_value >= criterion.threshold
-            if criterion.comparison == "ge"
-            else candidate_value <= criterion.threshold
-        )
-        confirmation_passed = (
-            confirmation_value >= criterion.threshold
-            if criterion.comparison == "ge"
-            else confirmation_value <= criterion.threshold
-        )
-        criterion_passed = candidate_passed and confirmation_passed
-        if (
-            receipt.criterion is None
-            or receipt.criterion.criterion != criterion
-            or receipt.criterion.candidate_passed != candidate_passed
-            or receipt.criterion.confirmation_passed != confirmation_passed
-            or receipt.criterion.passed != criterion_passed
-        ):
+    for expected in expected_metrics:
+        received = received_metrics[expected.metric_id]
+        if received.criterion != expected.criterion:
             raise VerificationError(
                 "benchmark.metrics: metric criterion result differs"
             )
-        criteria_pass &= criterion_passed
-
-    passed = estimator_parity and prediction_parity and metrics_match and criteria_pass
-    expected_status = (
-        "failed" if not passed else "verified" if not benchmark.criteria else "passed"
-    )
+        if received != expected:
+            raise VerificationError("benchmark.metrics: metric result differs")
+    expected_status = benchmark_status(benchmark, result.artifacts, expected_metrics)
     if result.status != expected_status:
         raise VerificationError(
             "benchmark result status does not match parity and metric checks"
