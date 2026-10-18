@@ -127,13 +127,12 @@ def promote_run_to_cloud(
         capture_output=True,
         check=False,
     )
-    if completed.returncode:
-        message = "additional publication worker failed"
-        try:
-            message = json.loads(completed.stderr.splitlines()[-1])["error"]
-        except (ValueError, IndexError, KeyError, TypeError):
-            pass
-        raise RunPromotionError(message)
+    try:
+        completed.check_returncode()
+    except subprocess.CalledProcessError as error:
+        raise RunPromotionError(
+            f"additional publication worker failed: {completed.stderr.strip() or error}"
+        ) from error
     try:
         response = json.loads(completed.stdout.splitlines()[-1])
         published = []

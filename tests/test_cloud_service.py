@@ -572,10 +572,11 @@ def test_additional_publication_uses_a_separate_process(
             response["host"] = {**response["host"], "repository": "owner/other"}
         if reply == "wrong_roots":
             response["source_roots"] = []
-        return SimpleNamespace(
+        return execution.subprocess.CompletedProcess(
+            args=command,
             returncode=1 if reply == "failed" else 0,
             stdout=json.dumps({"publications": [response]}),
-            stderr=json.dumps({"error": "copy interrupted"}),
+            stderr="copy interrupted\n" if reply == "failed" else "",
         )
 
     monkeypatch.setattr(execution.subprocess, "run", run)

@@ -228,14 +228,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as error:
-        message = (
-            str(error) if isinstance(error, RunPromotionError) else type(error).__name__
-        )
-        print(
-            json.dumps({"error": message, "cause": type(error.__cause__).__name__}),
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from None
+    main()

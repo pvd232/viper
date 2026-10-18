@@ -3509,6 +3509,59 @@ def test_republication_compares_source_and_destination(
                 comparison.verify(inventory.roots, required)
 
 
+@pytest.mark.parametrize("failure", ("invalid_request", "missing_source", "signal"))
+def test_copy_worker_preserves_failure_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Retain validation fields, chained storage errors, and silent worker exits."""
+    store = LocalArtifactStore(tmp_path)
+    (reference,) = store.resolved_files({"run.yaml": b"status: succeeded\n"})
+    source_path = store.path(reference.stored_at)
+    source_path.unlink()
+    roots = (ResolvedRunRef(**reference.model_dump()),)
+    if failure == "invalid_request":
+        roots = ()
+    elif failure == "signal":
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            Mock(return_value=subprocess.CompletedProcess("copy-worker", -15, "", "")),
+        )
+
+    with pytest.raises(RunPromotionError) as raised:
+        execution_module.promote_run_to_cloud(
+            tmp_path,
+            roots,
+            ViperCloudDestination(owner="owner", workspace="models"),
+            policy=RunPromotionPolicy(
+                hosts=(
+                    HuggingFaceRepository(
+                        repository="owner/models", repo_type="dataset"
+                    ),
+                )
+            ),
+            limits=TransferLimits(staging_bytes=1024, cache_bytes=1024, connections=1),
+        )
+
+    cause = raised.value.__cause__
+    assert isinstance(cause, subprocess.CalledProcessError)
+    if failure == "signal":
+        assert cause.returncode == -15
+        assert "SIGTERM" in str(raised.value)
+    else:
+        assert cause.returncode == 1
+        assert cause.stderr.strip() in str(raised.value)
+        if failure == "invalid_request":
+            assert "ValidationError" in cause.stderr
+            assert "inventory.roots" in cause.stderr
+            assert "at least 1" in cause.stderr
+            assert not (tmp_path / ".viper/promotion").exists()
+        else:
+            assert "LocalStoreError: local immutable file is missing" in cause.stderr
+            assert "direct cause" in cause.stderr
+            assert "source run graph is unavailable" in cause.stderr
+
+
 def test_copy_worker_resumes_and_restores_a_model(
     promotion_model: SimpleNamespace,
     tmp_path: Path,
