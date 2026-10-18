@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import os
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -542,6 +543,68 @@ def test_directory_bytes_rejects_links_outside_the_copy(
     )
     with pytest.raises(RunPromotionError, match="cached file escapes"):
         directory_bytes(root)
+
+
+@pytest.mark.parametrize(
+    "layout",
+    ("files", "no_cache", "missing", "cache_escape", "staging_escape", "cache_alias"),
+)
+def test_transfer_space_scans_both_budgets_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str
+) -> None:
+    """Count cross-boundary links in both budgets and visit each directory once."""
+    space = TransferSpace(
+        tmp_path / "copy",
+        TransferLimits(staging_bytes=128, cache_bytes=64, connections=1),
+    )
+    if layout == "missing":
+        space.root.rmdir()
+    elif layout != "no_cache":
+        space.cache.mkdir()
+        payload = space.root / "weights.bin"
+        payload.write_bytes(b"weights")
+        (space.cache / "shared").hardlink_to(payload)
+        (space.cache / "alias").symlink_to(space.cache / "shared")
+        nested = space.cache / "nested"
+        nested.mkdir()
+        (nested / "more").write_bytes(b"abc")
+        (space.cache / "directory-link").symlink_to(nested, target_is_directory=True)
+        (space.cache / "missing-link").symlink_to(space.cache / "absent")
+        if layout == "cache_escape":
+            (space.cache / "escape").symlink_to(payload)
+        elif layout == "staging_escape":
+            (space.root / "escape").symlink_to(tmp_path / "outside")
+        elif layout == "cache_alias":
+            # A directory alias into staging must not hide files from the cache budget.
+            space.cache.rename(space.root / "renamed")
+            space.cache.symlink_to(space.root / "renamed", target_is_directory=True)
+    if layout in {"cache_escape", "staging_escape", "cache_alias"}:
+        with pytest.raises(RunPromotionError, match="cached file escapes"):
+            space.check()
+        return
+    expected = directory_bytes(space.root), directory_bytes(space.cache)
+    scanned: list[Path] = []
+    scandir = os.scandir
+
+    def scan(path: Path):
+        """Count visits without replacing filesystem metadata or link behavior."""
+        scanned.append(Path(path))
+        return scandir(path)
+
+    monkeypatch.setattr(os, "scandir", scan)
+    if layout == "missing":
+        with pytest.raises(FileNotFoundError):
+            space.check()
+    else:
+        space.check()
+    assert (space.peak_bytes, space.peak_cache_bytes) == expected
+    assert (
+        len(scanned)
+        == len(set(scanned))
+        == (3 if layout == "files" else 0 if layout == "missing" else 1)
+    )
+    if layout == "files":
+        assert expected == (10, 10)
 
 
 def test_transfer_space_checks_capacity_and_preserves_source_files(

@@ -15,7 +15,8 @@ Use the [impact decision](../../../contracts/run-graph-republication-optimizatio
 and typed verifier RGP-VR-13. Complete the bounded edit and observing tests,
 then commit the real target files and create a linked implementation PR. This
 note defines scope and checks; Git owns the source and the PR diff owns review.
-**PR:** Not created. Update the [contract tracking table](../../../contracts/run-graph-republication.md#pr-review-and-integration)
+**Validation:** Complete; [results](https://github.com/pvd232/rico-rebuild/tree/rgp/pb11-recovery-reads/evidence/graph-publication-pb11).
+**PR:** [RICO #27](https://github.com/pvd232/rico-rebuild/pull/27). Update the [contract tracking table](../../../contracts/run-graph-republication.md#pr-review-and-integration)
 when the PR exists. Keep validation, review, and integration separate.
 
 ## Focused gate

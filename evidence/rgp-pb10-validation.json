@@ -1,0 +1,31 @@
+{
+  "fixture": "100 nested cache directories; 2000 1-KiB files; one cross-boundary hard link; 20 alternating pairs; no concurrent mutation",
+  "seconds_median": {
+    "baseline": 0.017628166475333273,
+    "candidate": 0.007869438006309792
+  },
+  "directory_visits": {
+    "baseline": 203,
+    "candidate": 102
+  },
+  "identical_totals": [
+    2048000,
+    2048000
+  ],
+  "block": "RGP-PB-10",
+  "requirement": "RGP-REQ-12",
+  "baseline": "ef3d9dd56e351ea6ce19f7c24289cb710d2ddc9a",
+  "validation": {
+    "pyrefly check src/viper tests": "0 errors",
+    "python -m pytest -q tests/test_cloud_service.py tests/test_run_execution.py -k \"resource_limits or transfer_space or directory_bytes\"": "13 passed, 96 deselected in 21.99s",
+    "ruff check --select D src/viper tests": "passed",
+    "ruff format --check src/viper tests": "153 files formatted",
+    "ruff check src/viper tests": "passed"
+  },
+  "production_lines": {
+    "added": 24,
+    "removed": 9,
+    "net": 15
+  },
+  "limits": "Local fixed-tree benchmark; no live migration speedup measured. Separate inode sets and cache/staging symlink confinement retained. Directory aliases at the cache root fail closed, including empty aliases."
+}

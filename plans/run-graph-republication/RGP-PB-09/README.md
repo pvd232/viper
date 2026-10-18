@@ -18,7 +18,7 @@ and typed verifier RGP-VR-11. Complete the bounded edit and observing tests,
 then commit the real target files and create a linked implementation PR. This
 note defines scope and checks; Git owns the source and the PR diff owns review.
 **Validation:** Complete; [results and measurements](../../../evidence/rgp-pb09-validation.json).
-**PR:** Being created from `rgp/pb09-prepared-publication`. Update the [contract tracking table](../../../contracts/run-graph-republication.md#pr-review-and-integration)
+**PR:** [VIPER #14](https://github.com/pvd232/viper/pull/14). Update the [contract tracking table](../../../contracts/run-graph-republication.md#pr-review-and-integration)
 when the PR exists. Keep validation, review, and integration separate.
 
 ## Focused gate

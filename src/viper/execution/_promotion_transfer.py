@@ -21,27 +21,43 @@ from .errors import RunPromotionError
 
 def directory_bytes(root: Path) -> int:
     """Count file bytes once per inode, including temporary downloads."""
+    return _directory_totals(root)[0]
+
+
+def _directory_totals(root: Path, cache: Path | None = None) -> tuple[int, int]:
+    """Count staging and nested cache bytes in one walk with separate inode sets."""
     seen = set()
-    size = 0
-    directories = [root] if root.is_dir() else []
+    cache_seen = set()
+    size = cached = 0
+    directories = [(root, root == cache)] if root.is_dir() else []
     while directories:
-        with os.scandir(directories.pop()) as entries:
+        directory, in_cache = directories.pop()
+        with os.scandir(directory) as entries:
             for entry in entries:
-                path = Path(entry.path)
                 if entry.is_symlink():
-                    if not path.resolve().is_relative_to(root):
+                    path = Path(entry.path)
+                    boundary = (
+                        cache
+                        if cache is not None and (in_cache or path == cache)
+                        else root
+                    )
+                    if not path.resolve().is_relative_to(boundary):
                         raise RunPromotionError(
                             "cached file escapes the copy directory"
                         )
                 elif entry.is_dir(follow_symlinks=False):
-                    directories.append(path)
+                    path = Path(entry.path)
+                    directories.append((path, in_cache or path == cache))
                 if entry.is_file():
                     stat = entry.stat()
                     identity = (stat.st_dev, stat.st_ino)
                     if identity not in seen:
                         seen.add(identity)
                         size += stat.st_size
-    return size
+                    if in_cache and identity not in cache_seen:
+                        cache_seen.add(identity)
+                        cached += stat.st_size
+    return size, cached
 
 
 class TransferSpace:
@@ -59,8 +75,7 @@ class TransferSpace:
 
     def check(self, snapshot_bytes: int = 0, largest_file: int = 0) -> None:
         """Check current use and reserve space for files awaiting verification."""
-        current = directory_bytes(self.root)
-        cached = directory_bytes(self.cache)
+        current, cached = _directory_totals(self.root, self.cache)
         self.peak_bytes = max(self.peak_bytes, current)
         self.peak_cache_bytes = max(self.peak_cache_bytes, cached)
         required = snapshot_bytes + largest_file
