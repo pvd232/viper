@@ -40,6 +40,8 @@ the observed head. All observed PRs remain open without submitted reviews.
 | 12 | PB-10 disk accounting | [VIPER #15](https://github.com/pvd232/viper/pull/15) | `878acfbbbefa63b8e322a7ac008a1caee64b0f99` | `rgp/pb09-prepared-publication` | [Local gates passed](../evidence/rgp-pb10-validation.json); [CI running](https://github.com/pvd232/viper/pull/15/checks) | Pending | Open; no merge commit |
 | 13 | PB-11 recovery reads | [RICO #27](https://github.com/pvd232/rico-rebuild/pull/27) | `0d2a4e78a43d1b4e79d3aba3d5157115288e9c85` | `rgp/model-publication-20261017` | [Local gates passed](https://github.com/pvd232/rico-rebuild/tree/rgp/pb11-recovery-reads/evidence/graph-publication-pb11); [CI running](https://github.com/pvd232/rico-rebuild/pull/27/checks) | Pending | Open; no merge commit |
 
+| 14 | PB-12 bounded verification cache | [VIPER #16](https://github.com/pvd232/viper/pull/16) | `d69bc6b31a0c57fecbab8056aa9829e43aa9aba9` | `rgp/pb10-single-space-scan` | [Local gates passed](../evidence/rgp-pb12-validation.json); CI pending (2026-10-18 19:58 UTC) | Pending | Open; no merge commit |
+
 PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
 [historical review](../evidence/reviews/rgp-pb-01-implementation.json) and
 [completion](../evidence/lifecycle/rgp-pb-01-complete.json) remain retained.

@@ -10,5 +10,5 @@ After target-path import fixes and formatting, run Pyrefly on `src/viper tests`,
 the affected tests, then documentation lint, format check, and lint on those roots.
 Keep measured operations separate from estimates of production runtime.
 
-Validation: passed; [43 tests, Pyrefly and lint](../../../evidence/rgp-pb12-validation.json). PR not created.
+Validation: passed; [43 tests, Pyrefly and lint](../../../evidence/rgp-pb12-validation.json). [PR #16](https://github.com/pvd232/viper/pull/16).
 See the [contract status](../../../contracts/run-graph-republication.md#pr-review-and-integration).
