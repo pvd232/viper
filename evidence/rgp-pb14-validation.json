@@ -9,11 +9,14 @@
     "ruff check --select D src/viper tests": "PASS",
     "ruff format --check src/viper tests": "PASS: 153 files",
     "ruff check src/viper tests": "PASS",
-    "contract_protocol.load_current_execution_state(checklists/run-graph-republication.toml, evidence/run-graph-republication-state.json)": "PASS: 14 blocks; historical evidence unchanged"
+    "contract_protocol.load_current_execution_state(checklists/run-graph-republication.toml, evidence/run-graph-republication-state.json)": "PASS: 14 blocks; historical evidence unchanged",
+    "authored-document links and anchors": "PASS: 62 authored local links and anchors in 6 documents",
+    "new verifier symbols and protected regions": "PASS: six references resolve; protected regions match baseline exactly"
   },
   "development_corrections": [
     "Initial new tests used a Pydantic method on the dataclass policy, a shadowed package attribute for monkeypatching, and a fetch wrapper without snapshot listing. Fixed test setup; production checks passed.",
-    "Broader run: 70 passed, one new test failed because its FloatComparator used atol instead of mode/tolerance. Corrected the fixture; all 13 benchmark tests and 57 verification/metric tests then passed. The successful independent-confirmation execution was unchanged and retained."
+    "Broader run: 70 passed, one new test failed because its FloatComparator used atol instead of mode/tolerance. Corrected the fixture; all 13 benchmark tests and 57 verification/metric tests then passed. The successful independent-confirmation execution was unchanged and retained.",
+    "Updated the retired cache-retention anchor in authored documentation. Link checks exclude unchanged protected compiler output; its historical requirement-anchor links predate this extension."
   ],
   "observed_operations": {
     "candidate_full_verifications": {
