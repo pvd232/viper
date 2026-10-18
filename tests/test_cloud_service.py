@@ -23,6 +23,7 @@ from viper._cloud import (
     HuggingFaceRepository,
     ViperCloudDestination,
     ViperCloudError,
+    source_file,
 )
 from viper._source import RunFetcher
 from viper.authoring import freeze_run_plan
@@ -364,6 +365,69 @@ def test_republication_recovers_commit_after_lost_response(
     with pytest.raises(RunPromotionError, match="publication journal differs"):
         with PublicationJournal(path, "d" * 64, cloud, destination):
             pytest.fail("a different request opened the saved progress")
+
+
+@pytest.mark.parametrize(
+    "change", ("none", "bytes", "size", "outside", "empty", "public")
+)
+def test_republication_reuses_prepared_identities(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    """Hash uploads once; reject changed bytes, escaping paths, and empty copies."""
+    api = MemoryHub(tmp_path / "hub")
+    provider = HuggingFaceProvider(
+        tmp_path, "owner/copies", "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    cloud = ViperCloud(
+        tmp_path,
+        HuggingFaceRepository(repository="owner/copies", repo_type="dataset"),
+        provider=provider,
+    )
+    destination = ViperCloudDestination(owner="owner", workspace="models")
+    source = LocalArtifactStore(tmp_path).snapshot({"weights.bin": b"weights"})
+    payload = tmp_path / "weights.bin"
+    payload.write_bytes(b"weights")
+    counted = Mock(wraps=source_file)
+    monkeypatch.setattr("viper._cloud.source_file", counted)
+    monkeypatch.setattr("viper.execution._promotion_journal.source_file", counted)
+    publish = provider.publish_revision
+    progress = tmp_path / "progress.json"
+
+    def upload(**kwargs: Any):
+        """Mutate after the journal saves the original upload identity."""
+        saved = json.loads(progress.read_bytes())
+        assert all(copy["published"] is None for copy in saved["copies"].values())
+        if change in {"bytes", "size"}:
+            payload.write_bytes(b"WEIGHTS" if change == "bytes" else b"short")
+        return publish(**kwargs)
+
+    if change == "public":
+        cloud.publish(destination, {"weights.bin": payload})
+        assert counted.call_count == 1
+        return
+    monkeypatch.setattr(provider, "publish_revision", upload)
+    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
+        if change == "outside":
+            with pytest.raises(ViperCloudError, match="source is invalid"):
+                journal.publish(
+                    source, (), {"weights.bin": tmp_path.parent / "x"}, "b" * 64
+                )
+            assert not journal.progress.copies
+        elif change == "empty":
+            with pytest.raises(RunPromotionError, match="at least one file"):
+                journal.publish(source, (), {}, "b" * 64)
+            assert not journal.progress.copies
+        elif change in {"bytes", "size"}:
+            with pytest.raises(ViperCloudError, match="file identity changed"):
+                journal.publish(source, (), {"weights.bin": payload}, "b" * 64)
+            assert all(
+                copy.published is None for copy in journal.progress.copies.values()
+            )
+        else:
+            _, files = journal.publish(source, (), {"weights.bin": payload}, "b" * 64)
+            assert files[0].sha256 == hashlib.sha256(b"weights").hexdigest()
+    assert counted.call_count == (0 if change == "empty" else 1)
 
 
 def test_republication_keeps_an_uncertain_write_pending(

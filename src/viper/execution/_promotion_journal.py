@@ -157,6 +157,8 @@ class PublicationJournal:
         """Save intent, publish once, and verify the destination files."""
         if self._lock is None:
             raise RunPromotionError("publication journal is not locked")
+        if not sources:
+            raise RunPromotionError("cloud revision requires at least one file")
         original_files = tuple(sorted(source_files, key=lambda file: file.path))
         files = tuple(
             source_file(self.cloud.root, name, data)
@@ -193,11 +195,12 @@ class PublicationJournal:
             self.progress.copies[key] = saved
             self._save()
             try:
-                published, observed = self.cloud.publish(
-                    self.destination, sources, attempts=1
+                published = self.cloud.provider.publish_revision(
+                    destination=self.destination,
+                    revision=expected.revision,
+                    sources=sources,
+                    files=files,
                 )
-                if observed != files:
-                    raise RunPromotionError("publication file identities changed")
             except Exception as error:
                 raise RunPromotionError(
                     "remote publication outcome is unresolved"
@@ -243,7 +246,7 @@ class PublicationJournal:
         if isinstance(self.cloud.provider, HuggingFaceProvider):
             if self.cloud.provider.read_manifest(snapshot) != expected:
                 raise RunPromotionError("destination snapshot differs")
-        if self.cloud.list_files(snapshot) != expected.files:
+        elif self.cloud.list_files(snapshot) != expected.files:
             raise RunPromotionError("destination snapshot differs")
         if self.space is not None:
             self.space.check(

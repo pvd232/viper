@@ -277,7 +277,7 @@ class GraphComparison:
             if isinstance(cloud.provider, HuggingFaceProvider):
                 if cloud.provider.read_manifest(copy.published) != copy.expected:
                     raise RunPromotionError("destination snapshot differs")
-            if self.destination.snapshot_files(copy.published) != copy.expected.files:
+            elif self.destination.snapshot_files(copy.published) != copy.expected.files:
                 raise RunPromotionError("destination snapshot differs")
             if isinstance(copy.source, LocalStageResultSnapshotRef):
                 if set(self.source.list_snapshot_files(copy.source)) != {

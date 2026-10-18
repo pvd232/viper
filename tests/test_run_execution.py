@@ -3509,6 +3509,76 @@ def test_republication_compares_source_and_destination(
                 comparison.verify(inventory.roots, required)
 
 
+@pytest.mark.parametrize("change", ("none", "owner", "workspace", "revision", "files"))
+def test_republication_reads_manifest_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    """One full manifest check at each site rejects any changed identity field."""
+    api = MemoryHub(tmp_path / "hub")
+    repository = HuggingFaceRepository(repository="owner/copies", repo_type="dataset")
+    provider = HuggingFaceProvider(
+        tmp_path, repository.repository, "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    cloud = ViperCloud(tmp_path, repository, provider=provider)
+    client = httpx.Client(transport=httpx.MockTransport(api.response))
+    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+    monkeypatch.setattr(ViperCloud, "for_reference", lambda *args: cloud)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", lambda *args: cloud)
+    store = LocalArtifactStore(tmp_path)
+    source = store.snapshot({"file.bin": b"x"})
+    files = (
+        SnapshotFileRef(
+            path="file.bin", bytes=1, sha256=hashlib.sha256(b"x").hexdigest()
+        ),
+    )
+    with (
+        client,
+        PublicationJournal(
+            tmp_path / "progress.json",
+            "a" * 64,
+            cloud,
+            ViperCloudDestination(owner="owner", workspace="models"),
+        ) as journal,
+    ):
+        published, _ = journal.publish(source, files, {"file.bin": b"x"}, "b" * 64)
+        copy = next(iter(journal.progress.copies.values()))
+        manifest = copy.expected
+        if change != "none":
+            value = (
+                ()
+                if change == "files"
+                else "b" * 64
+                if change == "revision"
+                else "changed"
+            )
+            manifest = manifest.model_copy(update={change: value})
+        read = Mock(return_value=manifest)
+        monkeypatch.setattr(provider, "read_manifest", read)
+        comparison = GraphComparison(
+            [copy],
+            {},
+            RunFetcher(tmp_path, store, REPOSITORY, cache_root=tmp_path / "source"),
+            RunFetcher(
+                tmp_path, store, REPOSITORY, cache_root=tmp_path / "destination"
+            ),
+            destination_repository=repository,
+        )
+        for verify in (
+            lambda: journal._verify(published, copy.expected),
+            lambda: comparison.verify((), {}),
+        ):
+            read.reset_mock()
+            if change == "none":
+                verify()
+            else:
+                with pytest.raises(
+                    RunPromotionError, match="destination snapshot differs"
+                ):
+                    verify()
+            assert read.call_count == 1
+
+
 @pytest.mark.parametrize("failure", ("invalid_request", "missing_source", "signal"))
 def test_copy_worker_preserves_failure_diagnostics(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
