@@ -181,6 +181,7 @@ from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 from viper.runtime import LocalEnvSpec as LocalEnvironmentSpec
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
+    BuildSpec,
     DownloadSpec,
     ResolvedBuildSpec,
     ResolvedTrainSpec,
@@ -3278,7 +3279,20 @@ def test_republication_obeys_resource_limits(
     assert case.cloud.provider.uploads == before
 
 
-@pytest.mark.parametrize("change", ("valid", "metadata", "ancestor", "missing"))
+@pytest.mark.parametrize(
+    "change",
+    (
+        "valid",
+        "metadata",
+        "ancestor",
+        "missing",
+        "legacy",
+        "legacy-changed-default",
+        "legacy-missing-default",
+        "legacy-extra",
+        "legacy-config",
+    ),
+)
 def test_republication_compares_source_and_destination(
     promotion_graph: SimpleNamespace,
     tmp_path: Path,
@@ -3331,14 +3345,50 @@ def test_republication_compares_source_and_destination(
         inventory = PromotionInventory(roots=(case.selected,), required_files={})
         promoter.discover_inventory(inventory)
         published = promoter.promote_reference(case.selected)
-        copies = list(journal.progress.copies.values())
-        documents = []
-        for copy in copies:
+        documents = {}
+        for copy in journal.progress.copies.values():
             for member in copy.source_files:
                 if member.path in promoter.documents.get(copy.source, {}):
-                    documents.append(
+                    documents[
                         promoter.file_in_snapshot(copy.source, member).stored_at
-                    )
+                    ] = type(promoter.documents[copy.source][member.path])
+
+        if change.startswith("legacy"):
+            stage = next(
+                document
+                for snapshot_documents in promoter.documents.values()
+                for document in snapshot_documents.values()
+                if isinstance(document, BuildSpec)
+            )
+            legacy = stage.model_dump(mode="json")
+            legacy["inputs"] = {}
+            legacy["config"]["preserved_value"] = 7
+            del legacy["input_roots"]
+            del legacy["implementation"]["dependencies"]
+            del legacy["config_type"]["definition_sha256"]
+            del legacy["config_type"]["schema_sha256"]
+            path = "legacy-stage.yaml"
+            legacy_snapshot, legacy_files = target.publish(
+                destination, {path: yaml.safe_dump(legacy).encode()}
+            )
+            canonical = type(stage).model_validate(legacy).model_dump(mode="json")
+            if change == "legacy-changed-default":
+                canonical["input_roots"] = "download"
+            elif change == "legacy-missing-default":
+                del canonical["implementation"]["dependencies"]
+            elif change == "legacy-extra":
+                canonical["unexpected"] = None
+            elif change == "legacy-config":
+                canonical["config"]["preserved_value"] = 8
+            journal.publish(
+                legacy_snapshot,
+                legacy_files,
+                {path: yaml.safe_dump(canonical).encode()},
+                "b" * 64,
+            )
+            documents[target.file_ref(legacy_snapshot, path)] = type(stage)
+
+        copies = list(journal.progress.copies.values())
 
         if change in {"metadata", "ancestor"}:
             selected = None
@@ -3440,7 +3490,7 @@ def test_republication_compares_source_and_destination(
                 sha256="0" * 64,
                 bytes=1,
             )
-        if change == "valid":
+        if change in {"valid", "legacy"}:
             result = comparison.verify(inventory.roots, required)
             assert result["passed"]
             assert result["files_checked"] == len(comparison.files)
@@ -3450,6 +3500,10 @@ def test_republication_compares_source_and_destination(
                 "metadata": "unexpected metadata change",
                 "ancestor": "graph relationship changed",
                 "missing": "inventory item is unreachable",
+                "legacy-changed-default": "unexpected metadata change",
+                "legacy-missing-default": "unexpected metadata change",
+                "legacy-extra": "unexpected metadata change",
+                "legacy-config": "unexpected metadata change",
             }[change]
             with pytest.raises(RunPromotionError, match=message):
                 comparison.verify(inventory.roots, required)
@@ -3516,10 +3570,27 @@ def test_copy_worker_resumes_and_restores_a_model(
     )
     request = CopyRequest.model_validate_json(request.model_dump_json())
     with client:
+        empty_head = api.head
+        with pytest.raises(RunPromotionError, match="publication is incomplete"):
+            copy_graphs(request, verify_only=True)
+        assert api.head == empty_head
         with pytest.raises(RunPromotionError, match="outcome is unresolved"):
             copy_graphs(request)
         first_commit = api.head
+        with pytest.raises(RunPromotionError, match="publication is incomplete"):
+            copy_graphs(request, verify_only=True)
         result = copy_graphs(request)
+        completed_head = api.head
+        with monkeypatch.context() as verification_patch:
+            verification_patch.setattr(
+                ViperCloud, "publish", Mock(side_effect=AssertionError("new upload"))
+            )
+            checked = copy_graphs(request, verify_only=True)
+        assert api.head == completed_head
+        assert (
+            checked["publications"][0]["mapping_sha256"]
+            == result["publications"][0]["mapping_sha256"]
+        )
     assert first_commit in api.commits
     publication = result["publications"][0]
     assert publication["passed"]

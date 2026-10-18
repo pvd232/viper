@@ -57,8 +57,8 @@ class CopyRequest(ProtocolModel):
     )
 
 
-def copy_graphs(request: CopyRequest) -> dict:
-    """Discover, publish, and independently compare every requested graph."""
+def copy_graphs(request: CopyRequest, *, verify_only: bool = False) -> dict:
+    """Copy and compare graphs, or recheck a complete journal without publishing."""
     root = request.repository_root.resolve(strict=True)
     operation = document_digest(request)
     directory = root / ".viper/promotion" / operation
@@ -90,6 +90,22 @@ def copy_graphs(request: CopyRequest) -> dict:
                     space=space,
                 )
                 order = promoter.discover_inventory(request.inventory)
+                if verify_only:
+                    expected = {
+                        snapshot
+                        for snapshot in order
+                        if snapshot in promoter.source_members
+                        or snapshot in promoter.documents
+                    }
+                    copies = tuple(journal.progress.copies.values())
+                    if {copy.source for copy in copies} != expected or any(
+                        copy.published is None for copy in copies
+                    ):
+                        raise RunPromotionError("publication is incomplete")
+                    for copy in copies:
+                        assert copy.published is not None
+                        promoter.snapshots[copy.source] = copy.published
+                        promoter.snapshot_files[copy.source] = copy.expected.files
                 trusted = set(request.trusted_source_repositories)
                 records = []
                 for reference in request.inventory.roots:
@@ -112,8 +128,9 @@ def copy_graphs(request: CopyRequest) -> dict:
                     if digest is not None:
                         unique_sizes[digest] = size
                 space.check(sum(unique_sizes.values()))
-                for record in records:
-                    verify_run_result(record, policy=policy, fetcher=fetcher)
+                if not verify_only:
+                    for record in records:
+                        verify_run_result(record, policy=policy, fetcher=fetcher)
                 space.check()
                 space.release(fetcher)
                 for snapshot in order:
@@ -138,13 +155,13 @@ def copy_graphs(request: CopyRequest) -> dict:
                     fetcher.source_repository,
                     cache_root=space.cache / "destination-check",
                 )
-                documents = []
+                documents = {}
                 for copy in journal.progress.copies.values():
                     for member in copy.source_files:
                         if member.path in promoter.documents.get(copy.source, {}):
-                            documents.append(
+                            documents[
                                 promoter.file_in_snapshot(copy.source, member).stored_at
-                            )
+                            ] = type(promoter.documents[copy.source][member.path])
                 comparison = GraphComparison(
                     tuple(journal.progress.copies.values()),
                     documents,

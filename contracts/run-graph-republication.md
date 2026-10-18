@@ -446,6 +446,10 @@ Comparison must enumerate required roles independently of the rewrite walk. It
 checks the exact old-to-new edge mapping and permits only relocated references,
 document byte counts and hashes, snapshot identities, run-plan member hashes,
 reuse stage hashes, and source-closure identifiers derived from those changes.
+A rewritten typed document may materialize fields omitted by an older writer at
+their declared schema defaults. Comparison derives those defaults from the source
+schema while preserving every explicitly stored source value; destination fields
+remain subject to exact comparison.
 A different ancestor is a rejection even when its own records verify. Key order in JSON mappings is
 nonsemantic; named values and required key sets decide equality.
 

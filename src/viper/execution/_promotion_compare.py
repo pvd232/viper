@@ -74,13 +74,35 @@ def _match(expected: Any, actual: Any, path: str = "document") -> None:
         raise RunPromotionError(f"unexpected metadata change: {path}")
 
 
+def _with_defaults(original: Any, canonical: Any) -> Any:
+    """Add schema defaults while retaining every explicitly saved source value."""
+    if isinstance(original, dict) and isinstance(canonical, dict):
+        return {
+            **canonical,
+            **{
+                name: _with_defaults(value, canonical.get(name))
+                for name, value in original.items()
+            },
+        }
+    if (
+        isinstance(original, list)
+        and isinstance(canonical, list)
+        and len(original) == len(canonical)
+    ):
+        return [
+            _with_defaults(left, right)
+            for left, right in zip(original, canonical, strict=True)
+        ]
+    return original
+
+
 class GraphComparison:
     """Check file contents and allowed metadata changes from saved copy records."""
 
     def __init__(
         self,
         copies: Sequence[SnapshotCopy],
-        documents: Sequence[StorageModel],
+        documents: Mapping[StorageModel, type[BaseModel]],
         source: RunFetcher,
         destination: RunFetcher,
         *,
@@ -93,7 +115,7 @@ class GraphComparison:
                 "source and destination checks require separate caches"
             )
         self.copies = tuple(copies)
-        self.documents = {_key(file) for file in documents}
+        self.documents = {_key(file): schema for file, schema in documents.items()}
         self.source = source
         self.destination = destination
         self.space = space
@@ -129,8 +151,21 @@ class GraphComparison:
                     if previous != copied.sha256:
                         raise RunPromotionError("ambiguous changed document hash")
 
-        if not self.documents <= self.originals.keys():
+        if not self.documents.keys() <= self.originals.keys():
             raise RunPromotionError("document list names an uncopied file")
+
+    def _source_document(self, key: str) -> Any:
+        """Account for defaults serialized only when a typed document changes."""
+        original = self.originals[key]
+        value = parse_yaml_bytes(self.source.read(original))
+        if original.sha256 != self.files[key].sha256:
+            canonical = (
+                self.documents[key]
+                .model_validate(value)
+                .model_dump(mode="json", exclude_computed_fields=True)
+            )
+            value = _with_defaults(value, canonical)
+        return value
 
     def _expected(self, value: Any, copy: SnapshotCopy) -> Any:
         """Calculate the allowed reference and derived-hash changes from the source."""
@@ -186,7 +221,7 @@ class GraphComparison:
             stage = value["source_stage"]
             location = {**stage["snapshot"], "path": stage["resolved_spec"]["path"]}
             key = _key(location)
-            original = parse_yaml_bytes(self.source.read(self.originals[key]))
+            original = self._source_document(key)
             expected_stage = self._expected(original, self.containers[key])
             result["key"]["stage_sha256"] = stage_spec_sha256(
                 _SPEC.validate_python(expected_stage["spec"])
@@ -260,7 +295,7 @@ class GraphComparison:
             if self.space is not None:
                 self.space.check(original.bytes + copied.bytes)
             if key in self.documents:
-                source_document = parse_yaml_bytes(self.source.read(original))
+                source_document = self._source_document(key)
                 copied_document = parse_yaml_bytes(self.destination.read(copied))
                 _match(
                     self._expected(source_document, self.containers[key]),
