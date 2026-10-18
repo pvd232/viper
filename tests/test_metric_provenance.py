@@ -138,7 +138,6 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
         stage_id="eval",
         snapshot=references.LocalStageResultSnapshotRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="b" * 64,
         ),
         resolved_spec=references.SnapshotFileRef(
@@ -171,7 +170,6 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
 
     assert resolved[0].files[0].stored_at == references.LocalFileRef(
         workspace=Path("/workspace"),
-        store_id="0" * 32,
         commit="b" * 64,
         path=file.path,
     )
@@ -184,7 +182,6 @@ def test_metric_dependency_rejects_republished_payload() -> None:
         bytes=4,
         stored_at=references.LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="b" * 64,
             path="predictions.bin",
         ),
@@ -193,7 +190,6 @@ def test_metric_dependency_rejects_republished_payload() -> None:
         update={
             "stored_at": references.LocalFileRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="c" * 64,
                 path="predictions.bin",
             )

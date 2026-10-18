@@ -327,7 +327,6 @@ def test_trusted_source_repositories_extend_only_the_current_source() -> None:
 
 def test_failed_attempt_replaces_provisional_document(tmp_path: Path) -> None:
     """Finalize failure bytes at a path used by provisional success evidence."""
-    store = LocalArtifactStore(tmp_path)
     path = tmp_path / RUN_ROOT / "attempts/1/resolved.yaml"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"provisional success\n")
@@ -338,7 +337,6 @@ def test_failed_attempt_replaces_provisional_document(tmp_path: Path) -> None:
         bytes=1,
         stored_at=LocalFileRef(
             workspace=tmp_path,
-            store_id=store.store_id,
             commit="b" * 64,
             path=f"{RUN_ROOT}/attempts/1/journal.jsonl",
         ),
@@ -427,7 +425,6 @@ def freeze_protocol_plan(
             bytes=len(run_raw),
             stored_at=LocalFileRef(
                 workspace=store.repository_root,
-                store_id=store.store_id,
                 commit=commit,
                 path=run_path,
             ),
@@ -767,7 +764,6 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
                 stored_at=LocalFileRef.model_construct(
                     workspace=root,
                     store=".viper/store",
-                    store_id="0" * 32,
                     commit="b" * 64,
                     path=f"{RUN_ROOT}/resolved.yaml",
                 ),
@@ -1286,7 +1282,6 @@ def test_train_stage_captures_local_external_input(
             LocalFileRef(
                 workspace=root,
                 store=train_stage_ref.snapshot.store,
-                store_id=train_stage_ref.snapshot.store_id,
                 commit=train_stage_ref.snapshot.commit,
                 path=expected_snapshot_path,
             )

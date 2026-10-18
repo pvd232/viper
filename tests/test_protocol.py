@@ -95,7 +95,6 @@ def test_file_reference_types_share_exact_byte_identity() -> None:
         bytes=7,
         stored_at=LocalFileRef(
             workspace=Path("/tmp/workspace"),
-            store_id="a" * 32,
             commit=SHA_A,
             path="objects/value.bin",
         ),
@@ -128,16 +127,14 @@ RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_strand/runs/baseline/{RUN_ID}"
 
 
-@pytest.mark.parametrize("omitted", ("workspace", "store_id"))
-def test_local_file_reference_requires_store_ownership(omitted: str) -> None:
-    """Reject a local reference that cannot identify its owning store."""
+def test_local_file_reference_requires_workspace() -> None:
+    """Reject a local reference that cannot locate its producer workspace."""
     payload = {
         "workspace": "/workspace",
-        "store_id": "0" * 32,
         "commit": SHA_B,
         "path": "runs/final.yaml",
     }
-    payload.pop(omitted)
+    payload.pop("workspace")
 
     with pytest.raises(ValidationError):
         LocalFileRef.model_validate(payload)
@@ -163,7 +160,6 @@ def test_knowledge_ontology_preserves_assignment_provenance() -> None:
         bytes=10,
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit=SHA_B,
             path="runs/final.yaml",
         ),
@@ -217,7 +213,6 @@ def test_knowledge_vectors_preserve_view_identity() -> None:
         bytes=10,
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit=SHA_B,
             path="knowledge/signature.yaml",
         ),
@@ -233,7 +228,6 @@ def test_knowledge_vectors_preserve_view_identity() -> None:
         bytes=10,
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="d" * 64,
             path="knowledge/vector-1.yaml",
         ),
@@ -243,7 +237,6 @@ def test_knowledge_vectors_preserve_view_identity() -> None:
         bytes=10,
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="f" * 64,
             path="knowledge/vector-2.yaml",
         ),

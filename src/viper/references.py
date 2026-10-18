@@ -15,7 +15,7 @@ from ._schema import (
     ProtocolModel,
     RepoRelPath,
 )
-from .ids import HumanId, LocalStoreId, OutputName, StageId
+from .ids import HumanId, OutputName, StageId
 
 
 class GitSource(ProtocolModel):
@@ -93,9 +93,6 @@ class LocalFileRef(ProtocolModel):
         description="Absolute root of the workspace that owns the local store."
     )
     store: RepoRelPath = ".viper/store"
-    store_id: LocalStoreId = Field(
-        description="Store identity saved in workspace / store / '.identity'."
-    )
     commit: SHA256
     path: RepoRelPath
 
@@ -105,7 +102,6 @@ class LocalStageResultSnapshotRef(ProtocolModel):
 
     ``commit`` names the directory derived from file paths, sizes, and hashes.
     A ``LocalFileRef`` adds ``path`` to select one file within that directory.
-    The store's persisted identity must match ``store_id``.
     """
 
     kind: Literal["local"] = Field(
@@ -116,9 +112,6 @@ class LocalStageResultSnapshotRef(ProtocolModel):
     )
     store: RepoRelPath = Field(
         default=".viper/store", description="Store directory relative to workspace."
-    )
-    store_id: LocalStoreId = Field(
-        description="Random store identity saved in workspace / store / '.identity'."
     )
     commit: SHA256 = Field(
         description="Revision directory derived from file paths, sizes, and hashes."
@@ -362,7 +355,6 @@ def resolve_snapshot_file_ref(
         stored_at = LocalFileRef(
             workspace=snapshot.workspace,
             store=snapshot.store,
-            store_id=snapshot.store_id,
             commit=snapshot.commit,
             path=file.path,
         )

@@ -65,7 +65,6 @@ def test_source_and_plan_revisions_are_independent(tmp_path: Path) -> None:
         bytes=len(run_raw),
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="c" * 64,
             path=compiled.run_path,
         ),
@@ -83,7 +82,6 @@ def test_plan_documents_share_one_storage_revision() -> None:
         bytes=10,
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="b" * 64,
             path="runs/run.yaml",
         ),
@@ -101,7 +99,6 @@ def test_benchmark_spec_accepts_the_plan_revision() -> None:
     """Keep benchmark and run specifications in the same storage union."""
     location = LocalFileRef(
         workspace=Path("/workspace"),
-        store_id="0" * 32,
         commit="b" * 64,
         path="benchmarks/tiny.yaml",
     )

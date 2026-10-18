@@ -58,7 +58,7 @@ Terminal run verification repeats the receipt walk and rejects a substituted rec
 A source reference such as `GitFileRef` selects a repository, revision, and path. A
 resolved file reference adds the byte count and SHA-256 digest, which VIPER checks when
 retrieving the file. A local storage reference identifies its producer workspace,
-durable store instance, content-derived revision, and path. This lets another local
+store directory, content-derived revision, and path. This lets another local
 workspace retrieve the referenced bytes without confusing the producer store with its
 own. Git and Hugging Face references use repository commits. See
 [`viper.references`](../../src/viper/references.py).

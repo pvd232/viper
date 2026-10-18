@@ -203,7 +203,7 @@ execution evidence remains verifiable.
 
 The producer and consumer may use different local VIPER workspaces on the same
 machine. A local file reference records the producer workspace's absolute path
-and durable store identity, so the consumer opens the producer's `.viper/store`
+and store directory, so the consumer opens the producer's `.viper/store`
 rather than searching its own store. The producer workspace must remain at that
 recorded path. Use Hugging Face or Viper Cloud storage when the consumer runs on
 another machine or the producer workspace will move.

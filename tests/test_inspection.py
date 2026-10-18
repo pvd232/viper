@@ -522,7 +522,6 @@ def _reuse_receipt() -> StageReuseReceipt:
             bytes=1,
             stored_at=LocalFileRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="2" * 64,
                 path=f"{RUN_ROOT}/resolved.yaml",
             ),
@@ -532,7 +531,6 @@ def _reuse_receipt() -> StageReuseReceipt:
             bytes=1,
             stored_at=LocalFileRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="4" * 64,
                 path=f"{RUN_ROOT}/attempts/1/resolved.yaml",
             ),
@@ -541,7 +539,6 @@ def _reuse_receipt() -> StageReuseReceipt:
             stage_id="download",
             snapshot=LocalStageResultSnapshotRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="5" * 64,
             ),
             resolved_spec=SnapshotFileRef(
@@ -607,7 +604,6 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
             bytes=1,
             stored_at=LocalFileRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="e" * 64,
                 path="attempt.yaml",
             ),
@@ -617,7 +613,6 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
             stage_id="download",
             snapshot=LocalStageResultSnapshotRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="f" * 64,
             ),
             resolved_spec=SnapshotFileRef(
@@ -699,7 +694,6 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
         bytes=10,
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="b" * 64,
             path="runs/final.yaml",
         ),
@@ -723,7 +717,6 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
                 bytes=10,
                 stored_at=LocalFileRef(
                     workspace=Path("/workspace"),
-                    store_id="0" * 32,
                     commit="d" * 64,
                     path="measurements/first.json",
                 ),
@@ -739,7 +732,6 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
                 bytes=10,
                 stored_at=LocalFileRef(
                     workspace=Path("/workspace"),
-                    store_id="0" * 32,
                     commit="f" * 64,
                     path="measurements/second.json",
                 ),

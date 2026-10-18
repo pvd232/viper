@@ -446,7 +446,6 @@ def read_snapshot_file(
         location = LocalFileRef(
             workspace=snapshot.workspace,
             store=snapshot.store,
-            store_id=snapshot.store_id,
             commit=snapshot.commit,
             path=reference.path,
         )
@@ -502,7 +501,6 @@ def snapshot_identity(
             snapshot.kind,
             snapshot.workspace.as_posix(),
             snapshot.store,
-            snapshot.store_id,
             snapshot.commit,
         )
     if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
@@ -536,7 +534,6 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
             location.kind,
             location.workspace.as_posix(),
             location.store,
-            location.store_id,
             location.commit,
         )
     if isinstance(location, GcsFileRef):

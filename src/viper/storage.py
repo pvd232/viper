@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import secrets
 import tempfile
 import tomllib
 from collections.abc import Mapping
@@ -29,7 +28,7 @@ from ._cloud import (
 from ._schema import ProtocolModel, RepoRelPath
 from .cloud import ViperCloud
 from .gcs import GcsProgressSink, stderr_gcs_progress
-from .ids import LocalStoreId, RunId
+from .ids import RunId
 from .references import (
     CloudStageResultSnapshotRef,
     GcsStageResultSnapshotRef,
@@ -175,48 +174,6 @@ class LocalArtifactStore:
             )
         except PathError as error:
             raise LocalStoreError("local store escapes the workspace root") from error
-        self.identity_path = self.store_root / ".identity"
-
-    def _read_identity(self) -> LocalStoreId:
-        """Read and validate this local store's durable identity."""
-        try:
-            value = self.identity_path.read_text(encoding="ascii").strip()
-            return TypeAdapter(LocalStoreId).validate_python(value)
-        except (OSError, UnicodeError, ValidationError) as error:
-            raise LocalStoreError("local store identity is invalid") from error
-
-    def _create_identity(self) -> LocalStoreId:
-        """Create this local store's identity without replacing a peer writer's ID."""
-        self.store_root.mkdir(parents=True, exist_ok=True)
-        value = secrets.token_hex(16)
-        temporary: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                dir=self.store_root,
-                prefix=".identity.",
-                delete=False,
-                mode="w",
-                encoding="ascii",
-            ) as stream:
-                temporary = Path(stream.name)
-                stream.write(f"{value}\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-            try:
-                os.link(temporary, self.identity_path)
-            except FileExistsError:
-                pass
-        finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
-        return self._read_identity()
-
-    @property
-    def store_id(self) -> LocalStoreId:
-        """Return this store's durable identity, creating it when absent."""
-        if self.identity_path.exists():
-            return self._read_identity()
-        return self._create_identity()
 
     def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
         """Write one immutable revision and return its content-derived identity."""
@@ -229,7 +186,6 @@ class LocalArtifactStore:
         """Write one revision and retain the hashes computed from its payloads."""
         if not files:
             raise LocalStoreError("an immutable revision requires at least one file")
-        _ = self.store_id
         identities = tuple(
             snapshot_file(path, raw) for path, raw in sorted(files.items())
         )
@@ -268,7 +224,6 @@ class LocalArtifactStore:
         return LocalStageResultSnapshotRef(
             workspace=self.repository_root,
             store=self.store,
-            store_id=self.store_id,
             commit=self.publish(files),
         )
 
@@ -285,7 +240,6 @@ class LocalArtifactStore:
                 stored_at=LocalFileRef(
                     workspace=self.repository_root,
                     store=self.store,
-                    store_id=self.store_id,
                     commit=commit,
                     path=identity.path,
                 ),
@@ -304,8 +258,6 @@ class LocalArtifactStore:
 
         if location.workspace != self.repository_root or location.store != self.store:
             raise LocalStoreError("local file belongs to a different store")
-        if location.store_id != self.store_id:
-            raise LocalStoreError("local file belongs to a different store instance")
 
         revision_root = (self.store_root / location.commit).resolve()
         target = (revision_root / location.path).resolve()
@@ -320,10 +272,6 @@ class LocalArtifactStore:
         """List every regular file in one immutable local snapshot."""
         if snapshot.workspace != self.repository_root or snapshot.store != self.store:
             raise LocalStoreError("local snapshot belongs to a different store")
-        if snapshot.store_id != self.store_id:
-            raise LocalStoreError(
-                "local snapshot belongs to a different store instance"
-            )
 
         revision_root = (self.store_root / snapshot.commit).resolve()
         if not revision_root.is_dir():
@@ -368,7 +316,6 @@ class LocalSnapshotPublisher:
         snapshot = LocalStageResultSnapshotRef(
             workspace=self.store.repository_root,
             store=self.store.store,
-            store_id=self.store.store_id,
             commit=commit,
         )
         return snapshot, members

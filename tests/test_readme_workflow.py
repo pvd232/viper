@@ -407,7 +407,6 @@ def test_documented_evaluation_writes_predictions_and_computes_rmse(
         bytes=1,
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="b" * 64,
             path="runs/data/resolved.yaml",
         ),

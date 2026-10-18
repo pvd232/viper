@@ -77,7 +77,6 @@ def _snapshot_location(
         return LocalFileRef(
             workspace=snapshot.workspace,
             store=snapshot.store,
-            store_id=snapshot.store_id,
             commit=snapshot.commit,
             path=path,
         )

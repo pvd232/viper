@@ -41,9 +41,10 @@ current authoring API; the parser rejects them with a migration error. Other rec
 types have their own schema versions. Query the installed schema before constructing a
 record directly.
 
-`LocalFileRef` and `LocalStageResultSnapshotRef` require `workspace` and
-`store_id`. Regenerate local references with 0.1.0a4; earlier local references
-lack enough information to distinguish two workspace stores.
+Release 0.1.0a4 introduced required `workspace` and `store_id` fields on local
+references. The [unreleased format](../releases/unreleased.md#local-references-use-content-revisions)
+retires `store_id`; migrate active local records before using that format.
+Original archived records retain their release's schema.
 
 Use `viper.serialization.serialize_document()` to encode a validated record. The
 `serialize_record()` alias has been removed.

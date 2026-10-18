@@ -74,7 +74,6 @@ def _restore_file(path: str) -> ResolvedFileRef:
         bytes=len(payload),
         stored_at=LocalFileRef(
             workspace=Path("/workspace"),
-            store_id="0" * 32,
             commit="a" * 64,
             path=path,
         ),
@@ -478,7 +477,6 @@ def test_run_fetcher_shares_first_content_check_between_read_and_path(
     snapshot = LocalStageResultSnapshotRef(
         workspace=location.workspace,
         store=location.store,
-        store_id=location.store_id,
         commit=location.commit,
     )
     member = SnapshotFileRef(
@@ -657,21 +655,24 @@ def test_run_fetcher_does_not_duplicate_local_store_objects(tmp_path: Path) -> N
     assert not (tmp_path / ".viper/cache/verified-objects").exists()
 
 
-def test_local_stores_persist_distinct_workspace_identities(tmp_path: Path) -> None:
-    """Keep one stable identity per local workspace store."""
-    first_root = tmp_path / "first"
-    second_root = tmp_path / "second"
-    first_root.mkdir()
-    second_root.mkdir()
+def test_local_references_survive_an_identical_store_rebuild(tmp_path: Path) -> None:
+    """Recover original references from rebuilt content and still reject corruption."""
+    original = LocalArtifactStore(tmp_path)
+    files = {"model.bin": b"model bytes"}
+    reference = original.resolved_files(files)[0]
+    snapshot = original.snapshot(files)
+    original.store_root.rename(tmp_path / "original-store")
 
-    first = LocalArtifactStore(first_root)
-    second = LocalArtifactStore(second_root)
+    rebuilt = LocalArtifactStore(tmp_path)
+    assert rebuilt.resolved_files(files)[0] == reference
+    assert rebuilt.snapshot(files) == snapshot
+    assert rebuilt.list_snapshot_files(snapshot) == ("model.bin",)
+    assert set(path.name for path in rebuilt.store_root.iterdir()) == {snapshot.commit}
+    assert RunFetcher(tmp_path, rebuilt, "").read(reference) == b"model bytes"
 
-    assert first.store_id == LocalArtifactStore(first_root).store_id
-    assert first.store_id != second.store_id
-    assert (first.store_root / ".identity").read_text(encoding="ascii").strip() == (
-        first.store_id
-    )
+    rebuilt.path(reference.stored_at).write_bytes(b"wrong bytes")
+    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
+        RunFetcher(tmp_path, rebuilt, "").read(reference)
 
 
 def test_local_store_rejects_a_reference_owned_by_another_workspace(
@@ -708,7 +709,6 @@ def test_storage_publishes_and_retrieves_one_content_revision(
         store.fetch(
             LocalFileRef(
                 workspace=store.repository_root,
-                store_id=store.store_id,
                 commit=first_commit,
                 path="experiments/example/artifacts/parameters.bin",
             )
@@ -1231,7 +1231,6 @@ def test_cloud_verification_rejects_local_references() -> None:
             ResolvedAttemptRef.model_construct(
                 stored_at=LocalFileRef(
                     workspace=Path("/workspace"),
-                    store_id="0" * 32,
                     commit="1" * 64,
                     path="runs/example/attempt.yaml",
                 )
@@ -1442,7 +1441,6 @@ def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
             bytes=len(first),
             stored_at=LocalFileRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="a" * 64,
                 path="artifacts/first.bin",
             ),
@@ -1452,7 +1450,6 @@ def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
             bytes=len(second),
             stored_at=LocalFileRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="a" * 64,
                 path="artifacts/second.bin",
             ),
@@ -1641,7 +1638,6 @@ def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
         store.fetch(
             LocalFileRef(
                 workspace=store.repository_root,
-                store_id=store.store_id,
                 commit=target_snapshot.commit,
                 path="runs/target/artifacts/model.bin",
             )

@@ -827,7 +827,6 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
             bytes=1,
             stored_at=LocalFileRef(
                 workspace=Path("/workspace"),
-                store_id="0" * 32,
                 commit="b" * 64,
                 path="runs/prior/resolved.yaml",
             ),

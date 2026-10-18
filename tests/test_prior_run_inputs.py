@@ -127,7 +127,6 @@ def test_cloud_pointer_rejects_a_local_producer(
             bytes=10,
             stored_at=LocalFileRef(
                 workspace=tmp_path,
-                store_id="0" * 32,
                 commit="b" * 64,
                 path="experiments/source/runs/base/run/resolved.yaml",
             ),
@@ -188,22 +187,16 @@ def test_local_pointer_accepts_a_run_from_another_workspace(
     assert fetch_local_file_bytes(run.stored_at) == b"resolved run"
 
 
-def test_local_pointer_rejects_an_unknown_producer_store(tmp_path) -> None:
-    """Reject a producer reference whose durable store identity does not match."""
+def test_local_pointer_rejects_a_missing_producer_revision(tmp_path) -> None:
+    """Reject a producer reference whose content revision is unavailable."""
     producer = tmp_path / "producer"
     consumer = tmp_path / "consumer"
     producer.mkdir()
     consumer.mkdir()
     run = _publish_run(producer, "runs/source/resolved.yaml")
     assert isinstance(run.stored_at, LocalFileRef)
-    producer_store_id = run.stored_at.store_id
-    unknown_store_id = (
-        "1" if producer_store_id[0] != "1" else "2"
-    ) + producer_store_id[1:]
     run = run.model_copy(
-        update={
-            "stored_at": run.stored_at.model_copy(update={"store_id": unknown_store_id})
-        }
+        update={"stored_at": run.stored_at.model_copy(update={"commit": "0" * 64})}
     )
     draft = RunArtifactDraft(
         run=run,

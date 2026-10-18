@@ -1694,7 +1694,6 @@ def _catalog_run_source(
         bytes=len(raw),
         stored_at=LocalFileRef(
             workspace=store.repository_root,
-            store_id=store.store_id,
             commit=content_revision({relative: raw}),
             path=relative,
         ),

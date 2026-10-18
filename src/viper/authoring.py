@@ -1748,7 +1748,6 @@ def freeze_run_plan(
             bytes=len(run_raw),
             stored_at=LocalFileRef(
                 workspace=store.repository_root,
-                store_id=store.store_id,
                 commit=commit,
                 path=compiled.run_path,
             ),
