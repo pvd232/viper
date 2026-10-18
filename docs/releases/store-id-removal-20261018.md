@@ -1,8 +1,8 @@
 # Local store identity removal — 2026-10-18
 
-The local address is now `workspace / store / commit / path`. The package no
-longer creates or checks a random store identity. This removes 72 net production
-lines across seven files; it adds no replacement storage abstraction.
+The local address is now `workspace / store / commit / path`. The package removes
+random store identity creation and checks. This removes 72 net production lines
+across seven files.
 
 ## Inventory and preservation
 
@@ -13,7 +13,7 @@ with exit status 0; its requests and journals are retained historical records.
 
 Rechecked SHA-256 for 1,490 local and 136 VM original metadata files, including
 108 model/benchmark files: none changed. Original GCS/Hugging Face publications,
-model pointers, frozen experiments, and old store revisions were not rewritten.
+model pointers, frozen experiments, and old store revisions remain unchanged.
 Historical records retain their original schema and need their original reader.
 
 ## Migrated active records
@@ -22,16 +22,16 @@ Converted the five roots indexed by the RICO and MANTRA catalogs. The one-off
 conversion reused graph promotion, wrote new metadata revisions, and hard-linked
 unchanged payloads. MANTRA also required moving captured-input members to the
 current canonical paths inside the new revisions; their bytes were unchanged.
-No training, prediction, or metric recomputation ran.
+Conversion reused the saved training, prediction, and metric artifacts.
 
 The strict current reader verified all five complete run graphs, including
-artifact loaders and reuse relationships, before building converted catalogs. Catalog refresh accepted four RICO runs and
-one MANTRA run with no rejections. Converted graphs and catalog records contain
-no retired identity fields. The installed RICO reader is pinned to
-`a6bc9452a04796fa17397896903bdc13e8afd8bb`; MANTRA uses the older main checkout.
-Both still require the retired field. Their original active catalogs therefore
-remain installed; `catalog.converted.sqlite3` is ready to replace each catalog
-when that workspace upgrades to this reader.
+artifact loaders and reuse relationships, before building converted catalogs.
+Catalog refresh accepted all four RICO runs and the one MANTRA run.
+Both workspaces now install the reader built from commit
+`4682e98cc1cf8bd5e0f7988b733e19f3813edec0` in their own virtual environments.
+Each installed reader verified its converted graphs before atomic catalog
+activation. Active graphs and catalog records omit the retired identity fields.
+Original catalog backups remain available.
 
 | Workspace | Run | New terminal revision |
 | --- | --- | --- |
@@ -48,8 +48,8 @@ one-off conversion scripts are retained locally with the catalog backups:
 .viper/migrations/store-id-removal-20261018/
 ```
 
-The conversion-only reader is outside the package. No compatibility field,
-legacy parser, identity-file reader, or migration command was added to VIPER.
+The conversion-only reader stays outside the package. VIPER ships the strict
+current reader and uses its existing content revision checks.
 
 ## Validation
 
@@ -61,3 +61,35 @@ legacy parser, identity-file reader, or migration command was added to VIPER.
 - Integration tests were excluded from local validation.
 - Regression coverage checks identical-store reconstruction, missing revisions,
   workspace/path confinement, and rejection of corrupted bytes.
+
+## Reader activation
+
+Both environments installed the same wheel, SHA-256
+`dd155dabff44e830769e7049a772c659f765a0458344337afd1a051072fe7660`.
+Every installed Python module matched that wheel. Other installed packages kept
+their existing versions; required missing dependencies and MANTRA's Pyrefly were added.
+Reader changes are in [RICO #29](https://github.com/pvd232/rico-rebuild/pull/29)
+and [MANTRA #28](https://github.com/pvd232/rico-rebuild/pull/28).
+
+| Workspace | Verified runs | Indexed artifacts | Measurements | Reuse candidates |
+| --- | ---: | ---: | ---: | ---: |
+| RICO | 4 | 4 | 0 | 4 |
+| MANTRA | 1 | 15 | 11 | 6 |
+
+The installed readers queried these records after activation. SHA-256 checks
+confirmed that 455 RICO and 634 MANTRA original metadata files were unchanged.
+Cloud publications and model pointers were preserved. Integration was excluded.
+
+RICO passed Pyrefly across active files, 45 affected tests, and active Ruff checks.
+MANTRA passed Pyrefly on changed consumers, 103 affected tests, and changed-file
+Ruff checks. Three MANTRA callers now use `RunFetcher.read()` for verified reads.
+
+Broader scans retain failures outside the changed consumers: MANTRA has four
+existing source/test type errors and 1,705 diagnostics from prose saved as
+`docs/run.py`, plus 28 archived type errors. RICO's archived scan has 530 type
+errors: 528 pre-existing findings and two retired-API errors in a preserved
+publication script. Archived Ruff scans also fail: RICO has 37 format failures
+and 629 lint findings; MANTRA has 14 format failures and 10 lint findings.
+MANTRA's broader active Ruff scan finds the unchanged prose file and one
+unformatted source file. Full reports, file lists, package inventories, and
+activation receipts are retained alongside the catalog backups.
