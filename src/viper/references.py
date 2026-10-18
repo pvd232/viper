@@ -101,18 +101,18 @@ class LocalFileRef(ProtocolModel):
 
 
 class LocalStageResultSnapshotRef(ProtocolModel):
-    """Reference to the complete file collection at ``workspace / store / commit``.
+    """Reference to a saved file collection at ``workspace / store / commit``.
 
-    The store's persisted identity must match ``store_id``. A newly created
-    store at the same path has a different identity, invalidating old references.
-    A file reference adds its member path to this snapshot's directory.
+    ``commit`` names the directory derived from file paths, sizes, and hashes.
+    A ``LocalFileRef`` adds ``path`` to select one file within that directory.
+    The store's persisted identity must match ``store_id``.
     """
 
     kind: Literal["local"] = Field(
         default="local", description="Select the repository-local storage backend."
     )
     workspace: AbsolutePath = Field(
-        description="Absolute root of the workspace that owns the local store."
+        description="Absolute workspace directory beneath which store is located."
     )
     store: RepoRelPath = Field(
         default=".viper/store", description="Store directory relative to workspace."
@@ -126,12 +126,23 @@ class LocalStageResultSnapshotRef(ProtocolModel):
 
 
 class HuggingFaceStageResultSnapshotRef(ProtocolModel):
-    """Reference to the immutable repository revision containing one completed stage."""
+    """Reference to a saved file collection at one Hugging Face repository commit.
 
-    kind: Literal["huggingface"] = "huggingface"
-    repository: NonEmptyStr
-    commit: GitCommit
-    repo_type: Literal["model", "dataset", "space"]
+    ``repository`` and ``repo_type`` select the repository; ``commit`` fixes its
+    version. A ``HuggingFaceFileRef`` adds a repository-relative ``path`` to select
+    one file. The revision manifest lists the collection's members.
+    """
+
+    kind: Literal["huggingface"] = Field(
+        default="huggingface", description="Select the Hugging Face storage backend."
+    )
+    repository: NonEmptyStr = Field(description="Hub repository ID as owner/name.")
+    commit: GitCommit = Field(
+        description="Exact Git commit containing the saved file collection."
+    )
+    repo_type: Literal["model", "dataset", "space"] = Field(
+        description="Hub repository category used with repository to locate the files."
+    )
 
 
 class GcsFileRef(ProtocolModel):
@@ -157,23 +168,43 @@ class ViperCloudFileRef(ProtocolModel):
 
 
 class GcsStageResultSnapshotRef(ProtocolModel):
-    """Reference to one sealed stage snapshot in Google Cloud Storage."""
+    """Reference to a saved file collection in Google Cloud Storage.
 
-    kind: Literal["gcs"] = "gcs"
-    bucket: NonEmptyStr
-    prefix: RepoRelPath = "viper"
-    owner: HumanId
-    workspace: HumanId
-    revision: SHA256
+    Files live under ``gs://{bucket}/{prefix}/{owner}/{workspace}/{revision}/``.
+    A ``GcsFileRef`` adds ``path`` beneath that prefix to select one object.
+    """
+
+    kind: Literal["gcs"] = Field(
+        default="gcs", description="Select the Google Cloud Storage backend."
+    )
+    bucket: NonEmptyStr = Field(description="GCS bucket containing the collection.")
+    prefix: RepoRelPath = Field(
+        default="viper", description="Object-key prefix preceding owner/workspace."
+    )
+    owner: HumanId = Field(description="Owner namespace beneath prefix.")
+    workspace: HumanId = Field(description="Logical workspace name beneath owner.")
+    revision: SHA256 = Field(
+        description="Content-derived revision beneath owner/workspace."
+    )
 
 
 class ViperCloudStageResultSnapshotRef(ProtocolModel):
-    """Reference to one provider-neutral ViperCloud stage snapshot."""
+    """Legacy collection reference requiring a configured GCS repository.
 
-    kind: Literal["viper_cloud"] = "viper_cloud"
-    owner: HumanId
-    workspace: HumanId
-    revision: SHA256
+    Configuration supplies bucket and prefix for
+    ``gs://{bucket}/{prefix}/{owner}/{workspace}/{revision}/``.
+    A ``ViperCloudFileRef`` adds ``path`` to select one member.
+    """
+
+    kind: Literal["viper_cloud"] = Field(
+        default="viper_cloud",
+        description="Select legacy cloud addressing through repository configuration.",
+    )
+    owner: HumanId = Field(description="Owner namespace beneath the configured prefix.")
+    workspace: HumanId = Field(description="Logical workspace name beneath owner.")
+    revision: SHA256 = Field(
+        description="Content-derived revision beneath owner/workspace."
+    )
 
 
 StageResultSnapshotRef = Annotated[
@@ -215,9 +246,15 @@ class ResolvedFileRef(FileIdentity):
 
 
 class SnapshotFileRef(FileIdentity):
-    """Identify one exact file relative to its containing stage-result snapshot."""
+    """Relative path, expected size, and SHA-256 of one file in a snapshot.
 
-    path: RepoRelPath = Field(description="File path relative to the snapshot root.")
+    Pair this with a ``StageResultSnapshotRef`` to locate and verify the file.
+    The snapshot supplies the storage address; ``path`` selects its member.
+    """
+
+    path: RepoRelPath = Field(
+        description="Member path appended to the containing snapshot's root address."
+    )
 
 
 class ResolvedGitFileRef(ResolvedFileRef):
