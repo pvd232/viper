@@ -12,7 +12,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Literal, Protocol
 
-from pydantic import Field, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    Field,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from ._cloud import (
     PublicationSource,
@@ -85,6 +90,15 @@ class StorageSettings(ProtocolModel):
         return self
 
 
+class RunPromotionPolicy(ProtocolModel):
+    """Select cloud hosts receiving the complete run graph."""
+
+    hosts: tuple[ViperCloudRepository, ...] = Field(
+        min_length=1,
+        description="Destination cloud repositories for graph publication.",
+    )
+
+
 class SnapshotPublisher(Protocol):
     """Publish one completed stage snapshot to a selected destination."""
 
@@ -122,7 +136,7 @@ def _content_revision(files: tuple[SnapshotFileRef, ...]) -> str:
     """Derive the existing revision encoding from previously computed hashes."""
     digest = hashlib.sha256()
     for file in files:
-        encoded_path = str(file.path).encode("utf-8")
+        encoded_path = file.path.encode("utf-8")
         digest.update(len(encoded_path).to_bytes(8, "big"))
         digest.update(encoded_path)
         digest.update(file.bytes.to_bytes(8, "big"))

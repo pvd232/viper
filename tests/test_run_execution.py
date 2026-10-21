@@ -32,7 +32,7 @@ from tests.fixtures import (
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper import config
-from viper._cloud import resolve_publication_source
+from viper._cloud import GcsRepository, resolve_publication_source
 from viper._source import RunFetcher
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
@@ -79,7 +79,7 @@ from viper.execution._materialization import (
     verify_captured_inputs,
 )
 from viper.execution._metric import MetricWorkerResult
-from viper.execution._promotion import _RunGraphPromoter
+from viper.execution._promotion import PromotionInventory, _RunGraphPromoter
 from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._stage import (
@@ -117,7 +117,7 @@ from viper.metrics import (
 from viper.metrics import (
     min as minimize,
 )
-from viper.outputs import OutputSpec, StageOutputs, output
+from viper.outputs import OutputDraft, OutputSpec, StageOutputs, output
 from viper.references import (
     GcsFileRef,
     GitFileRef,
@@ -126,10 +126,12 @@ from viper.references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
+    ResolvedFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    ViperCloudFileRef,
 )
 from viper.reuse import (
     ReusedStageCompletion,
@@ -1815,24 +1817,28 @@ def _freeze_retry_plan(
             else {"prior": downloaded.outputs["prior"]}
         ),
         input_roots="any" if downloaded is None else "download",
-        outputs={  # pyright: ignore[reportArgumentType]
-            "features": output(
-                path="features.bin",
-                loader=module.load,
-                data_role="training",
-            )
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{
+                "features": output(
+                    path="features.bin",
+                    loader=module.load,
+                    data_role="training",
+                )
+            }
+        ),
     )
     embedded = stage(
         module.encode,
         inputs={"features": prepared.outputs["features"]},
-        outputs={  # pyright: ignore[reportArgumentType]
-            "embedding": output(
-                path="embedding.bin",
-                loader=module.load,
-                data_role="training",
-            )
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{
+                "embedding": output(
+                    path="embedding.bin",
+                    loader=module.load,
+                    data_role="training",
+                )
+            }
+        ),
         input_roots="download" if download_rooted or downloaded is not None else "any",
     )
     authored = experiment(
@@ -2096,18 +2102,20 @@ def test_cloud_recomputed_metric_reads_declared_artifact_path(
                 data_role="training",
             )
         },
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=module.load,
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=module.load_state,
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{
+                "model": output(
+                    path="model.bin",
+                    loader=module.load,
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=module.load_state,
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(model_bytes,),
         objective=minimize(model_bytes),
     )
@@ -2731,18 +2739,20 @@ def test_verified_reuse_skips_stage_process(
                 data_role="training",
             )
         },
-        outputs={  # pyright: ignore[reportArgumentType]
-            "model": output(
-                path="model.bin",
-                loader=module.load,
-                data_role="training",
-            ),
-            "resume_state": output(
-                path="resume_state.bin",
-                loader=module.load_state,
-                data_role="training",
-            ),
-        },
+        outputs=StageOutputs[OutputDraft](
+            **{
+                "model": output(
+                    path="model.bin",
+                    loader=module.load,
+                    data_role="training",
+                ),
+                "resume_state": output(
+                    path="resume_state.bin",
+                    loader=module.load_state,
+                    data_role="training",
+                ),
+            }
+        ),
         metrics=(loss,),
         objective=minimize(loss),
     )
@@ -2914,3 +2924,143 @@ def test_verified_reuse_skips_stage_process(
         assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
         assert len(Catalog(root).runs().items) == 3
         assert len(verifier_calls) == 3
+
+
+@pytest.fixture(scope="module")
+def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
+    """Build one saved run whose HF attempt refers to GCS stage files."""
+    root = tmp_path_factory.mktemp("promotion-source")
+    frozen = _freeze_retry_plan(root)
+    with pytest.raises(RunError):
+        execute_attempt(root, frozen.files[-1], plan=frozen.reference)
+    completed = execute_retry(root, frozen.files[-1])
+    provider = InMemoryViperCloudProvider(root)
+    cloud = ViperCloud(root, GcsRepository(bucket=provider.bucket), provider=provider)
+    promoter = _RunGraphPromoter(
+        root,
+        cloud,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=RunFetcher(root, LocalArtifactStore(root), REPOSITORY),
+    )
+    promoter.discover_reference(completed.reference, ResolvedRun.model_validate)
+    published = promoter.promote_reference(completed.reference)
+    assert isinstance(published.stored_at, GcsFileRef)
+    record = ResolvedRun.model_validate(
+        parse_yaml_bytes(cloud.fetch(published.stored_at))
+    )
+    attempt = record.attempts[-1]
+    assert isinstance(attempt.stored_at, GcsFileRef)
+    attempt_raw = cloud.fetch(attempt.stored_at)
+    hf_location = HuggingFaceFileRef(
+        repository="owner/attempts",
+        repo_type="dataset",
+        commit="e" * 40,
+        path=attempt.stored_at.path,
+    )
+    changed = attempt.model_copy(update={"stored_at": hf_location})
+    record = record.model_copy(update={"attempts": (*record.attempts[:-1], changed)})
+    raw = serialize_document(record)
+    (local,) = LocalArtifactStore(root).resolved_files({"selected/run.yaml": raw})
+    selected = ResolvedRunRef(**local.model_dump(exclude={"kind"}))
+    hf = Mock(spec=ViperCloud)
+    hf.fetch.side_effect = lambda location: (
+        attempt_raw if location == hf_location else b"missing"
+    )
+    hf.list_files.return_value = (
+        SnapshotFileRef(
+            path=hf_location.path,
+            bytes=len(attempt_raw),
+            sha256=hashlib.sha256(attempt_raw).hexdigest(),
+        ),
+    )
+    return SimpleNamespace(
+        root=root, selected=selected, cloud=cloud, hf=hf, hf_location=hf_location
+    )
+
+
+def test_promotion_discovers_mixed_cloud_ancestors(
+    promotion_graph: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """List a local run's HF and GCS files using document reads only."""
+    case = promotion_graph
+
+    def source_client(root, reference):
+        """Choose the source client from each saved address."""
+        return case.hf if reference.kind == "huggingface" else case.cloud
+
+    monkeypatch.setattr(ViperCloud, "for_reference", source_client)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", source_client)
+    destination = Mock(spec=ViperCloud)
+    fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), REPOSITORY)
+    original = case.cloud.fetch
+    reads = []
+
+    def metadata_only(location):
+        """Reject artifact downloads during file discovery."""
+        assert "/artifacts/" not in location.path
+        reads.append(location)
+        return original(location)
+
+    monkeypatch.setattr(case.cloud, "fetch", metadata_only)
+    promoter = _RunGraphPromoter(
+        tmp_path,
+        destination,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=fetcher,
+    )
+    inventory = PromotionInventory(roots=(case.selected,), required_files={})
+    order = promoter.discover_inventory(inventory)
+    assert {snapshot.kind for snapshot in order} >= {"local", "gcs", "huggingface"}
+    assert any("/artifacts/" in file.path for file in promoter.source_files)
+    assert case.hf_location in promoter.source_files
+    for parent, children in promoter.dependencies.items():
+        for child in children:
+            assert order.index(child) < order.index(parent)
+    destination.publish.assert_not_called()
+    assert len(reads) == len(set(reads))
+    missing = ResolvedFileRef(
+        stored_at=case.hf_location.model_copy(update={"path": "absent.bin"}),
+        bytes=1,
+        sha256="0" * 64,
+    )
+    with pytest.raises(RunPromotionError, match="inventory item is unreachable"):
+        promoter.discover_inventory(
+            inventory.model_copy(update={"required_files": {"missing": missing}})
+        )
+    wrong = case.selected.model_copy(update={"sha256": "0" * 64})
+    with pytest.raises(RunPromotionError, match="conflicting source identity"):
+        promoter.discover_reference(wrong)
+    parent = order[-1]
+    child = next(iter(promoter.dependencies[parent]))
+    promoter.dependencies.setdefault(child, set()).add(parent)
+    with pytest.raises(RunPromotionError, match="storage cycle"):
+        promoter.discover_inventory(inventory)
+    destination.publish.assert_not_called()
+
+
+def test_promotion_rejects_missing_legacy_settings(tmp_path: Path) -> None:
+    """Require the source bucket before reading an older cloud address."""
+    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    reference = ResolvedRunRef(
+        stored_at=ViperCloudFileRef(
+            owner="machina", workspace="models", revision="a" * 64, path="run.yaml"
+        ),
+        bytes=1,
+        sha256="b" * 64,
+    )
+    cloud = Mock(spec=ViperCloud)
+    fetcher = Mock(spec=RunFetcher)
+    promoter = _RunGraphPromoter(
+        tmp_path,
+        cloud,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=fetcher,
+    )
+    with pytest.raises(RunPromotionError, match="legacy source binding is required"):
+        promoter.discover_inventory(
+            PromotionInventory(roots=(reference,), required_files={})
+        )
+    fetcher.read.assert_not_called()
+    cloud.publish.assert_not_called()

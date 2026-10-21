@@ -13,6 +13,7 @@ from ._verified_cache import VerifiedObjectCache
 from .cloud import CloudReference, ViperCloud
 from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
 from .references import (
+    CloudStageResultSnapshotRef,
     GcsFileRef,
     GcsStageResultSnapshotRef,
     GitFileRef,
@@ -22,6 +23,7 @@ from .references import (
     ResolvedFileRef,
     ResolvedGitFileRef,
     ResolvedRunRef,
+    SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
     ViperCloudFileRef,
@@ -228,6 +230,12 @@ class RunFetcher:
         """Reuse one immutable producer proof without retaining artifact bytes."""
         self._verified_producers[(reference, policy)] = producer
 
+    def snapshot_files(
+        self, snapshot: CloudStageResultSnapshotRef
+    ) -> tuple[SnapshotFileRef, ...]:
+        """Return each file's path, size, and SHA-256 hash from a cloud snapshot."""
+        return self._cloud_service(snapshot).list_files(snapshot)
+
     def list_snapshot_files(
         self,
         snapshot: StageResultSnapshot,
@@ -241,8 +249,7 @@ class RunFetcher:
                 ViperCloudStageResultSnapshotRef,
             ),
         ):
-            cloud = self._cloud_service(snapshot)
-            return tuple(file.path for file in cloud.list_files(snapshot))
+            return tuple(file.path for file in self.snapshot_files(snapshot))
         return local_artifact_store(snapshot).list_snapshot_files(snapshot)
 
 

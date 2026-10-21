@@ -41,7 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-    "pyright>=1.1.400,<2",
+    "pyrefly>=0.35,<1",
     "pytest>=9,<10",
     "ruff>=0.12,<1",
 ]

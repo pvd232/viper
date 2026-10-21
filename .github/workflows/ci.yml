@@ -26,13 +26,22 @@ jobs:
           cache: pip
       - name: Install project and validation dependencies
         run: python -m pip install --upgrade pip && python -m pip install -e ".[test,release,mcp,gcs]"
-      - name: Lint and type-check
+      - name: Lint and type-check with Pyrefly
         run: |
+          set -o pipefail
           ruff check setup.py src/viper tests
           ruff format --check setup.py src/viper tests
-          pyright --pythonpath "$(command -v python)"
+          pyrefly --version
+          pyrefly check --python-interpreter-path "$(command -v python)" 2>&1 | tee "$RUNNER_TEMP/pyrefly.log"
       - name: Run unit and contract tests
         run: python -m pytest tests -q -m "unit or contract"
+      - name: Retain failed type-check report
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: pyrefly-diagnostics
+          retention-days: 3
+          path: ${{ runner.temp }}/pyrefly.log
 
   integration:
     needs: fast
@@ -93,7 +102,6 @@ jobs:
           viper init --help
           viper status --help
           viper compare-runs --help
-
       - name: Retain candidate distributions
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
