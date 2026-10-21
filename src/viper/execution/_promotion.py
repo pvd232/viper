@@ -26,9 +26,11 @@ from ..references import (
     ArtifactPointerRef,
     CloudStageResultSnapshotRef,
     GcsFileRef,
+    GcsStageResultSnapshotRef,
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
@@ -42,6 +44,7 @@ from ..references import (
     StageResultSnapshot,
     StorageModel,
     ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
     resolve_snapshot_file_ref,
 )
 from ..reuse import ResolvedStageReuseRef, StageReuseReceipt, stage_spec_sha256
@@ -95,20 +98,20 @@ class _RunGraphPromoter:
         self.cloud = cloud
         self.destination = destination
         self.fetcher = fetcher
-        self.files: dict[LocalFileRef, ResolvedFileRef] = {}
+        self.files: dict[StorageModel, ResolvedFileRef] = {}
         self.snapshots: dict[
-            LocalStageResultSnapshotRef,
+            _SourceSnapshot,
             CloudStageResultSnapshotRef,
         ] = {}
         self.snapshot_files: dict[
-            LocalStageResultSnapshotRef,
+            _SourceSnapshot,
             tuple[SnapshotFileRef, ...],
         ] = {}
         self.documents: dict[
             _SourceSnapshot,
             dict[str, BaseModel],
         ] = {}
-        self.promoting: set[LocalStageResultSnapshotRef] = set()
+        self.promoting: set[_SourceSnapshot] = set()
         self.receipt_hashes: dict[str, str] = {}
         self.inventory: PromotionInventory | None = None
         self.source_files: dict[StorageModel, tuple[int, str | None]] = {}
@@ -428,25 +431,29 @@ class _RunGraphPromoter:
                 self.discover_typed(item)
 
     def promote_reference(self, reference: ResolvedFileRef) -> ResolvedFileRef:
-        """Promote one local file after rewriting its referenced descendants."""
+        """Publish a file after updating the documents it depends on."""
         location = reference.stored_at
-        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
+        snapshot = self.snapshot_for(location)
+        if self.inventory is None and not isinstance(location, LocalFileRef):
             return reference
-        if not isinstance(location, LocalFileRef):
+        if isinstance(location, GitFileRef) and location.path not in self.documents.get(
+            snapshot, {}
+        ):
             return reference
         remembered = self.files.get(location)
         if remembered is not None:
             return remembered
-        snapshot = self.snapshot_for(location)
-        if not isinstance(snapshot, LocalStageResultSnapshotRef):
-            raise RunPromotionError("local promotion requires a local snapshot")
         promoted_snapshot = self.promote_snapshot(snapshot)
-        matches = tuple(
-            file for file in self.snapshot_files[snapshot] if file.path == location.path
+        identity = next(
+            (
+                file
+                for file in self.snapshot_files[snapshot]
+                if file.path == location.path
+            ),
+            None,
         )
-        if len(matches) != 1:
+        if identity is None:
             raise RunPromotionError("source run graph is unavailable")
-        identity = matches[0]
         promoted = ResolvedFileRef(
             sha256=identity.sha256,
             bytes=identity.bytes,
@@ -456,43 +463,62 @@ class _RunGraphPromoter:
         return promoted
 
     def promote_snapshot(
-        self,
-        snapshot: LocalStageResultSnapshotRef,
+        self, snapshot: _SourceSnapshot
     ) -> CloudStageResultSnapshotRef:
-        """Promote every member of one local snapshot as a sealed unit."""
+        """Publish a complete snapshot after updating its saved references."""
         remembered = self.snapshots.get(snapshot)
         if remembered is not None:
             return remembered
         if snapshot in self.promoting:
-            raise RunPromotionError("source run graph contains a storage cycle")
+            raise RunPromotionError("storage cycle")
         self.promoting.add(snapshot)
-        store = local_artifact_store(snapshot)
         try:
-            paths = store.list_snapshot_files(snapshot)
+            self.discover_snapshot(snapshot)
+            if isinstance(snapshot, GitSource):
+                locations = tuple(
+                    file
+                    for file in self.source_files
+                    if self.snapshot_for(file) == snapshot
+                    and file.path in self.documents[snapshot]
+                )
+            else:
+                locations = self.source_members[snapshot]
             original: dict[str, PublicationSource] = {}
             identities = []
-            for path in paths:
-                location = LocalFileRef(
-                    workspace=snapshot.workspace,
-                    store=snapshot.store,
-                    store_id=snapshot.store_id,
-                    commit=snapshot.commit,
-                    path=path,
-                )
-                source = store.path(location)
-                original[path] = source
-                identities.append(self.source_identity(path, source))
-            if manifest_revision(tuple(identities)) != snapshot.commit:
-                raise RunPromotionError("source run graph is unavailable")
+            for location in locations:
+                size, digest = self.source_files[location]
+                if isinstance(location, LocalFileRef):
+                    source = local_artifact_store(location).path(location)
+                    identity = self.source_identity(location.path, source)
+                    self._record_file(location, identity.bytes, identity.sha256)
+                else:
+                    if digest is None:
+                        raise RunPromotionError("source file hash is missing")
+                    identity = SnapshotFileRef(
+                        path=location.path, bytes=size, sha256=digest
+                    )
+                    reference = ResolvedFileRef(
+                        stored_at=location, bytes=size, sha256=digest
+                    )
+                    source = self.fetcher.path(reference)
+                original[location.path] = source
+                identities.append(identity)
+            if (
+                isinstance(snapshot, LocalStageResultSnapshotRef)
+                and manifest_revision(tuple(identities)) != snapshot.commit
+            ):
+                raise RunPromotionError("source snapshot files changed")
             sources = self.rewrite_snapshot_documents(snapshot, original)
-        except (OSError, RuntimeError) as error:
+            promoted, files = self._publish_sources(sources)
+            self.snapshots[snapshot] = promoted
+            self.snapshot_files[snapshot] = files
+            return promoted
+        except RunPromotionError:
+            raise
+        except Exception as error:
             raise RunPromotionError("source run graph is unavailable") from error
         finally:
             self.promoting.remove(snapshot)
-        promoted, files = self._publish_sources(sources)
-        self.snapshots[snapshot] = promoted
-        self.snapshot_files[snapshot] = files
-        return promoted
 
     def _publish_sources(
         self,
@@ -517,7 +543,7 @@ class _RunGraphPromoter:
 
     def rewrite_snapshot_documents(
         self,
-        snapshot: LocalStageResultSnapshotRef,
+        snapshot: _SourceSnapshot,
         original: dict[str, PublicationSource],
     ) -> dict[str, PublicationSource]:
         """Rewrite referenced documents and propagate changed stage identities."""
@@ -552,7 +578,9 @@ class _RunGraphPromoter:
 
     def promote_stage_reference(self, value: ResolvedStageRef) -> ResolvedStageRef:
         """Promote one stage snapshot and bind its rewritten resolved record."""
-        if not isinstance(value.snapshot, LocalStageResultSnapshotRef):
+        if self.inventory is None and not isinstance(
+            value.snapshot, LocalStageResultSnapshotRef
+        ):
             return value
         promoted_snapshot = self.promote_snapshot(value.snapshot)
         matches = tuple(
@@ -627,6 +655,16 @@ class _RunGraphPromoter:
 
     def rewrite_typed(self, value: Any) -> Any:
         """Promote storage references while preserving protocol model types."""
+        if isinstance(value, ArtifactPointerRef) and self.inventory is not None:
+            size, digest = self.source_files[value]
+            if digest is None:
+                raise RunPromotionError("source file hash is missing")
+            original = ResolvedArtifactPointerRef(
+                stored_at=value, bytes=size, sha256=digest
+            )
+            rewritten = self.promote_reference(original)
+            self.receipt_hashes[digest] = rewritten.sha256
+            return ResolvedArtifactPointerRef(**rewritten.model_dump())
         if isinstance(value, StageReuseReceipt):
             return self._rewrite_reuse_receipt(value)
         if isinstance(value, ResolvedStageRef):
@@ -639,6 +677,15 @@ class _RunGraphPromoter:
             payload.update(promoted.model_dump(mode="python"))
             return type(value).model_validate(payload)
         if isinstance(value, LocalStageResultSnapshotRef):
+            return self.promote_snapshot(value)
+        if self.inventory is not None and isinstance(
+            value,
+            (
+                GcsStageResultSnapshotRef,
+                HuggingFaceStageResultSnapshotRef,
+                ViperCloudStageResultSnapshotRef,
+            ),
+        ):
             return self.promote_snapshot(value)
         if isinstance(value, DownloadSourceClosureReceipt):
             return self._rewrite_source_closure(value)
@@ -665,7 +712,9 @@ class _RunGraphPromoter:
     def _rewrite_reuse_receipt(self, value: StageReuseReceipt) -> StageReuseReceipt:
         """Bind the reuse key to its promoted source stage's pointer identities."""
         source = value.source_stage
-        if not isinstance(source.snapshot, LocalStageResultSnapshotRef):
+        if self.inventory is None and not isinstance(
+            source.snapshot, LocalStageResultSnapshotRef
+        ):
             return value
         original = self.documents[source.snapshot][source.resolved_spec.path]
         rewritten_source = self.rewrite_typed(original)

@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -22,6 +23,7 @@ import pytest
 import viper.config as current_config
 import viper.execution as execution_module
 from tests.fixtures import (
+    MemoryHub,
     builtin_http,
     http_policy,
     http_request,
@@ -32,7 +34,11 @@ from tests.fixtures import (
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
 from viper import config
-from viper._cloud import GcsRepository, resolve_publication_source
+from viper._cloud import (
+    GcsRepository,
+    HuggingFaceRepository,
+    resolve_publication_source,
+)
 from viper._source import RunFetcher
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
@@ -95,6 +101,7 @@ from viper.experiments import (
     TrainVariantStageConfig,
     VariantSpec,
 )
+from viper.huggingface import HuggingFaceProvider
 from viper.inputs import (
     ExternalInputRef,
     FutureInputRef,
@@ -1818,7 +1825,7 @@ def _freeze_retry_plan(
         ),
         input_roots="any" if downloaded is None else "download",
         outputs=StageOutputs[OutputDraft](
-            **{
+            **{  # pyright: ignore[reportArgumentType]
                 "features": output(
                     path="features.bin",
                     loader=module.load,
@@ -1831,7 +1838,7 @@ def _freeze_retry_plan(
         module.encode,
         inputs={"features": prepared.outputs["features"]},
         outputs=StageOutputs[OutputDraft](
-            **{
+            **{  # pyright: ignore[reportArgumentType]
                 "embedding": output(
                     path="embedding.bin",
                     loader=module.load,
@@ -2103,7 +2110,7 @@ def test_cloud_recomputed_metric_reads_declared_artifact_path(
             )
         },
         outputs=StageOutputs[OutputDraft](
-            **{
+            **{  # pyright: ignore[reportArgumentType]
                 "model": output(
                     path="model.bin",
                     loader=module.load,
@@ -2740,7 +2747,7 @@ def test_verified_reuse_skips_stage_process(
             )
         },
         outputs=StageOutputs[OutputDraft](
-            **{
+            **{  # pyright: ignore[reportArgumentType]
                 "model": output(
                     path="model.bin",
                     loader=module.load,
@@ -3064,3 +3071,75 @@ def test_promotion_rejects_missing_legacy_settings(tmp_path: Path) -> None:
         )
     fetcher.read.assert_not_called()
     cloud.publish.assert_not_called()
+
+
+def test_republication_preserves_files_and_follows_new_references(
+    promotion_graph: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify an HF publication after blocking the original cloud clients."""
+    case = promotion_graph
+    api = MemoryHub(tmp_path / "hub-cache")
+    provider = HuggingFaceProvider(
+        tmp_path, "owner/additional", "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    target = ViperCloud(
+        tmp_path,
+        HuggingFaceRepository(repository="owner/additional", repo_type="dataset"),
+        provider=provider,
+    )
+
+    def choose_cloud(root, reference):
+        """Read from the repository named by each reference."""
+        if reference.kind == "huggingface":
+            return target if reference.repository == "owner/additional" else case.hf
+        return case.cloud
+
+    monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
+    promoter = _RunGraphPromoter(
+        tmp_path,
+        target,
+        ViperCloudDestination(owner="machina", workspace="models"),
+        fetcher=RunFetcher(tmp_path, LocalArtifactStore(tmp_path), REPOSITORY),
+    )
+    inventory = PromotionInventory(roots=(case.selected,), required_files={})
+    promoter.discover_inventory(inventory)
+    before = case.cloud.provider.uploads.copy()
+    published = promoter.promote_reference(case.selected)
+    assert isinstance(published.stored_at, HuggingFaceFileRef)
+    for snapshot, locations in promoter.source_members.items():
+        copied = promoter.snapshots[snapshot]
+        for location in locations:
+            if location.path in promoter.documents.get(snapshot, {}):
+                continue
+            raw = target.fetch(target.file_ref(copied, location.path))
+            size, digest = promoter.source_files[location]
+            assert len(raw) == size
+            assert hashlib.sha256(raw).hexdigest() == digest
+
+    def destination_only(root, reference):
+        """Fail any attempted read from an original cloud repository."""
+        assert reference.kind == "huggingface"
+        assert reference.repository == "owner/additional"
+        reader_provider = HuggingFaceProvider(
+            root, "owner/additional", "dataset", api=cast(Any, api)
+        )
+        monkeypatch.setattr(reader_provider, "_download", api.download)
+        return ViperCloud(root, target.repository, provider=reader_provider)
+
+    monkeypatch.setattr(ViperCloud, "for_reference", destination_only)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", destination_only)
+    record = ResolvedRun.model_validate(
+        parse_yaml_bytes(target.fetch(published.stored_at))
+    )
+    verified = verify_run_result(
+        record,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(case.root, LocalArtifactStore(case.root), REPOSITORY),
+    )
+    assert verified is not None
+    assert before == case.cloud.provider.uploads
+    assert promoter.promote_reference(case.selected) == published
