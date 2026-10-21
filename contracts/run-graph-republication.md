@@ -27,7 +27,8 @@ the observed head. The user authorized integration in the 2026-10-21 request
 to update and merge the stack. GitHub recorded zero reviews and zero unresolved
 review threads. VIPER #5–18 and #20 are merged into `main`; RICO review and
 integration remain pending. The [0.2.0 record](../docs/releases/receipts/0.2.0.json)
-retains the exact candidate, CI run, merge observations, and publication blocker.
+retains the exact candidate, CI run, merge observations, and published distribution
+hashes. Version 0.2.0 passed exact-wheel L4 acceptance and is published on PyPI.
 
 | Order | PairBlock contribution | PR | Observed head | Observed base branch | Validation | Review | Integration |
 |---|---|---|---|---|---|---|---|

@@ -40,8 +40,7 @@
   },
   "merge_resolution": "Retained the complete stack implementation and Pyrefly 1.4 settings; preserved intermediate PR commit history, CI diagnostics, Makefile interpreter selection, and historical CI revision notes.",
   "gpu_acceptance": {
-    "status": "blocked",
-    "reason": "Exact CI wheel has not run on CUDA; subsequent allocations fail with ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS.",
+    "status": "passed",
     "original_vm_state_restored": true,
     "original_vm_machine_type": "g2-standard-12",
     "temporary_vm_or_disk_created": true,
@@ -74,9 +73,47 @@
       ]
     },
     "temporary_resources_removed": true,
-    "original_instances_stopped_and_original_machine_types_preserved": true
+    "original_instances_stopped_and_original_machine_types_preserved": true,
+    "previous_block_reason": "Exact CI wheel has not run on CUDA; subsequent allocations fail with ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS.",
+    "instance": "viper-release-020-check-20261021",
+    "zone": "asia-northeast1-a",
+    "device": "NVIDIA L4",
+    "python": "3.12.3",
+    "torch": "2.9.1+cu129",
+    "cuda": "12.9",
+    "cudnn": 91002,
+    "driver": "580.178.04",
+    "wheel_sha256": "1b9b11971ed1a9e5404a4a420cb8073c5b26a288bf9a1f1062810da64b95c353",
+    "live_cuda_passed": 7,
+    "live_cuda_deselected": 3,
+    "live_cuda_seconds": 17.37,
+    "autocast_passed": 9,
+    "autocast_seconds": 5.88,
+    "pyrefly_errors": 0,
+    "ruff": "passed",
+    "pip_check": "passed",
+    "image": "deeplearning-platform-release/pytorch-2-9-cu129-ubuntu-2404-nvidia-580-v20261019",
+    "installed_wheel_import_verified": true,
+    "commands": [
+      "VIPER_LIVE_CUDA=1 VIPER_POLICY_EVIDENCE_DIR=\"$PWD/evidence\" python -I -m pytest tests/test_live_process_startup.py tests/test_execution_policy_acceptance.py -q -m live_cuda -o pythonpath=",
+      "python -I -m pytest tests/test_autocast_weight_updates.py -q -o pythonpath="
+    ],
+    "evidence": [
+      {
+        "path": "0.2.0-cuda-reproducible.json",
+        "sha256": "f1abed31d2bf40ddeefa3dd00abfbc35ff95ec548c89ec05c76c25b0424a2359"
+      },
+      {
+        "path": "0.2.0-cuda-relaxed.json",
+        "sha256": "8ff6c995a80d7f648644dcfd137644e727c8f9042a28e762ad4de85be1a27ee6"
+      },
+      {
+        "path": "0.2.0-cuda-custom.json",
+        "sha256": "b214ba2e7fc399239f1ba069908b7540c5ee54ac2c0e6738d3fe6b8b64e11423"
+      }
+    ]
   },
-  "status": "prepared; hardware acceptance pending",
+  "status": "published",
   "ci_conclusion": "success",
   "ci_tests": {
     "jobs_passed": 7,
@@ -270,15 +307,60 @@
     }
   ],
   "registry": {
-    "observed_at": "2026-10-21T18:43:57.785348+00:00",
-    "pypi_latest": "0.1.2",
-    "version_0_2_0_published": false,
-    "release_tag_created": false
+    "observed_at": "2026-10-21T19:42:57.973146+00:00",
+    "pypi_latest": "0.2.0",
+    "version_0_2_0_published": true,
+    "release_tag_created": true,
+    "initial_listing_contained_only_wheel": true,
+    "fresh_listing_contains_both_matching_files": true
   },
   "record_validation": {
     "pyrefly_errors": 0,
     "documentation_workflow_release_tests_passed": 44,
     "ruff_format": "passed",
     "ruff_check": "passed"
+  },
+  "tag": "v0.2.0",
+  "tag_object": "9a74d74bdc6385bc4abd82c5c9d85fcfa3ecce6e",
+  "tag_signature_verified": true,
+  "publication_run": 39662765054,
+  "publication_conclusion": "success",
+  "published_at": "2026-10-21T19:40:18.533379Z",
+  "registry_hashes_match": {
+    "testpypi": true,
+    "pypi": true
+  },
+  "trusted_publisher": {
+    "kind": "GitHub",
+    "repository": "pvd232/viper",
+    "workflow": "release.yml",
+    "environment": "pypi",
+    "wheel_attestation_subject_matches": true,
+    "sdist_attestation_subject_matches": true,
+    "attestation_urls": [
+      "https://pypi.org/integrity/viper-provenance/0.2.0/viper_provenance-0.2.0-py3-none-any.whl/provenance",
+      "https://pypi.org/integrity/viper-provenance/0.2.0/viper_provenance-0.2.0.tar.gz/provenance"
+    ]
+  },
+  "testpypi_validation": {
+    "public_api_passed": 14,
+    "generated_project_passed": 1,
+    "generated_project_seconds": 145.73
+  },
+  "pypi_clean_installation": {
+    "python": "3.14",
+    "source": "https://pypi.org/simple",
+    "public_api_and_generated_project_passed": 15,
+    "seconds": 95.03,
+    "pyrefly_errors": 0,
+    "ruff": "passed",
+    "pip_check": "passed",
+    "acceptance_outside_source_checkout": true
+  },
+  "documentation": {
+    "testpypi_render_inspected": true,
+    "pypi_render_inspected": true,
+    "readme_links_pin_tag": "v0.2.0",
+    "project_urls_http_200": 3
   }
 }
