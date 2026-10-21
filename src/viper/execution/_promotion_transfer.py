@@ -100,14 +100,14 @@ class TransferSpace:
 
     def prepare_reader(self, fetcher: RunFetcher) -> None:
         """Configure the source clients used by the selected graph."""
-        if fetcher.cache_root != self.cache:
+        if not fetcher.cache_root.is_relative_to(self.cache):
             raise RunPromotionError("source reader must use the copy's cache")
         for cloud in fetcher._cloud_services.values():
             self.configure_cloud(cloud)
 
     def release(self, fetcher: RunFetcher) -> None:
         """Remove verified downloads owned by this copy after publication succeeds."""
-        if fetcher.cache_root != self.cache:
+        if not fetcher.cache_root.is_relative_to(self.cache):
             raise RunPromotionError("cleanup requires the copy's cache")
         cache = fetcher._verified_objects
         completed = {}

@@ -37,7 +37,7 @@ from ._publication import replace_synchronized
 from .errors import RunPromotionError
 
 
-class _Copy(ProtocolModel):
+class SnapshotCopy(ProtocolModel):
     """Describe an original snapshot and its expected destination copy."""
 
     source: StageResultSnapshot | GitSource = Field(
@@ -67,7 +67,7 @@ class _Progress(ProtocolModel):
     operation_sha256: SHA256 = Field(
         description="Hash of the inventory, policy, and destination."
     )
-    copies: dict[str, _Copy] = Field(
+    copies: dict[str, SnapshotCopy] = Field(
         default_factory=dict,
         description="Expected and completed copies, keyed by source snapshot.",
     )
@@ -183,7 +183,7 @@ class PublicationJournal:
             previous = None
             if isinstance(self.cloud.provider, HuggingFaceProvider):
                 previous = self.cloud.provider.publication_head()
-            saved = _Copy(
+            saved = SnapshotCopy(
                 source=source,
                 source_files=original_files,
                 expected=expected,
@@ -207,7 +207,7 @@ class PublicationJournal:
         self._save()
         return published, files
 
-    def _recover(self, saved: _Copy) -> CloudStageResultSnapshotRef:
+    def _recover(self, saved: SnapshotCopy) -> CloudStageResultSnapshotRef:
         """Find an earlier successful copy using its exact manifest."""
         provider = self.cloud.provider
         if isinstance(provider, HuggingFaceProvider):
