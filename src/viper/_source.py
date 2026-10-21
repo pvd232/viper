@@ -12,6 +12,7 @@ from ._verification.storage import fetch_git_file_bytes, verify_resolved_file_by
 from ._verified_cache import VerifiedObjectCache
 from .cloud import CloudReference, ViperCloud
 from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
+from .huggingface import HuggingFaceProvider
 from .references import (
     CloudStageResultSnapshotRef,
     GcsFileRef,
@@ -54,22 +55,28 @@ class RunFetcher:
         repository_root: Path,
         store: LocalArtifactStore,
         source_repository: str,
+        *,
+        cache_root: Path | None = None,
     ) -> None:
         """Bind retrieval and its per-file cache to one execution.
 
+        cache_root selects a task-owned cache beneath the workspace.
         Files must remain unchanged for the lifetime of the fetcher. A new
         execution creates a new fetcher and checks pre-existing files again.
         """
         self.repository_root = repository_root.resolve()
         self.store = store
         self.source_repository = source_repository
+        self.cache_root = (
+            cache_root or self.repository_root / ".viper/cache"
+        ).resolve()
+        if not self.cache_root.is_relative_to(self.repository_root):
+            raise ValueError("file cache must be inside the workspace")
         self._external_git_files: dict[GitFileRef, bytes] = {}
         self._external_git_cache_bytes = 0
-        self._external_git_checkout_root = (
-            self.repository_root / ".viper/cache/git-checkouts"
-        )
+        self._external_git_checkout_root = self.cache_root / "git-checkouts"
         self._verified_objects = VerifiedObjectCache(
-            self.repository_root / ".viper/cache/verified-objects"
+            self.cache_root / "verified-objects"
         )
         self._verified_paths: dict[ResolvedFileRef, Path] = {}
         self._verified_producers: dict[
@@ -97,6 +104,11 @@ class RunFetcher:
             cloud = ViperCloud.for_reference(self.repository_root, reference)
         else:
             cloud = ViperCloud.for_snapshot(self.repository_root, reference)
+        if self.cache_root != self.repository_root / ".viper/cache" and isinstance(
+            cloud.provider, HuggingFaceProvider
+        ):
+            cloud.provider.cache_dir = self.cache_root / "hub"
+            cloud.provider.stream_files = True
         self._cloud_services[key] = cloud
         return cloud
 

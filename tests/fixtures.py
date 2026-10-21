@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
+
 from viper import config
 from viper._schema import DataRole
 from viper.artifacts import ArtifactLoaderRef
@@ -296,6 +298,7 @@ class MemoryHub:
     def __init__(self, cache: Path) -> None:
         """Start an empty repository and a separate download cache."""
         self.cache = cache
+        self.token = None
         self.head: str = "0" * 40
         self.commits: dict[str, dict[str, bytes]] = {self.head: {}}
         self.messages: dict[str, str] = {}
@@ -345,3 +348,9 @@ class MemoryHub:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw)
         return path
+
+    def response(self, request: httpx.Request) -> httpx.Response:
+        """Serve an exact commit through an in-memory HTTP connection."""
+        _, selected = request.url.path.split("/resolve/", 1)
+        commit, path = selected.split("/", 1)
+        return httpx.Response(200, content=self.commits[commit][path])

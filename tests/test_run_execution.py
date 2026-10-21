@@ -18,6 +18,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock
 
+import httpx
 import pytest
 
 import viper.config as current_config
@@ -86,6 +87,12 @@ from viper.execution._materialization import (
 )
 from viper.execution._metric import MetricWorkerResult
 from viper.execution._promotion import PromotionInventory, _RunGraphPromoter
+from viper.execution._promotion_journal import PublicationJournal
+from viper.execution._promotion_transfer import (
+    TransferLimits,
+    TransferSpace,
+    directory_bytes,
+)
 from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._stage import (
@@ -2973,6 +2980,17 @@ def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace
     hf.fetch.side_effect = lambda location: (
         attempt_raw if location == hf_location else b"missing"
     )
+
+    def hf_file(reference: ResolvedFileRef, destination: Path) -> Path:
+        """Restore the saved test document after a task clears its cache."""
+        raw = hf.fetch(reference.stored_at)
+        assert len(raw) == reference.bytes
+        assert hashlib.sha256(raw).hexdigest() == reference.sha256
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(raw)
+        return destination
+
+    hf.fetch_to_path.side_effect = hf_file
     hf.list_files.return_value = (
         SnapshotFileRef(
             path=hf_location.path,
@@ -3143,3 +3161,75 @@ def test_republication_preserves_files_and_follows_new_references(
     assert verified is not None
     assert before == case.cloud.provider.uploads
     assert promoter.promote_reference(case.selected) == published
+
+
+@pytest.mark.parametrize("interrupted", (False, True))
+def test_republication_obeys_resource_limits(
+    promotion_graph: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    interrupted: bool,
+) -> None:
+    """Copy a connected graph within its budget and retain interrupted progress."""
+    case = promotion_graph
+    limits = TransferLimits(
+        staging_bytes=8_000_000, cache_bytes=4_000_000, connections=2
+    )
+    space = TransferSpace(tmp_path / "work", limits)
+    api = MemoryHub(space.cache / "hub")
+    api.fail_after_commit = interrupted
+    provider = HuggingFaceProvider(
+        tmp_path, "owner/additional", "dataset", api=cast(Any, api)
+    )
+    monkeypatch.setattr(provider, "_download", api.download)
+    target = ViperCloud(
+        tmp_path,
+        HuggingFaceRepository(repository="owner/additional", repo_type="dataset"),
+        provider=provider,
+    )
+    client = httpx.Client(transport=httpx.MockTransport(api.response))
+    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+    case.hf.provider = Mock()
+
+    def choose_cloud(root, reference):
+        """Keep the original graph's clients separate from the additional host."""
+        return case.hf if reference.kind == "huggingface" else case.cloud
+
+    monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
+    fetcher = RunFetcher(
+        tmp_path, LocalArtifactStore(tmp_path), REPOSITORY, cache_root=space.cache
+    )
+    destination = ViperCloudDestination(owner="machina", workspace="models")
+    before = case.cloud.provider.uploads.copy()
+    progress = tmp_path / "progress.json"
+    with client, PublicationJournal(progress, "a" * 64, target, destination) as journal:
+        promoter = _RunGraphPromoter(
+            tmp_path,
+            target,
+            destination,
+            fetcher=fetcher,
+            journal=journal,
+            space=space,
+        )
+        promoter.discover_inventory(
+            PromotionInventory(roots=(case.selected,), required_files={})
+        )
+        if interrupted:
+            with pytest.raises(RunPromotionError, match="outcome is unresolved"):
+                promoter.promote_reference(case.selected)
+            assert progress.is_file()
+            assert any(
+                copy.published is None for copy in journal.progress.copies.values()
+            )
+        else:
+            published = promoter.promote_reference(case.selected)
+            assert isinstance(published.stored_at, HuggingFaceFileRef)
+            assert all(
+                copy.published is not None for copy in journal.progress.copies.values()
+            )
+            assert directory_bytes(fetcher._verified_objects.root) == 0
+        space.check()
+    assert 0 < space.peak_bytes <= limits.staging_bytes
+    assert space.peak_cache_bytes <= limits.cache_bytes
+    assert case.cloud.provider.uploads == before

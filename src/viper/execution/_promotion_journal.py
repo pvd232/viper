@@ -32,6 +32,7 @@ from ..references import (
 )
 from ..serialization import document_digest, parse_yaml_bytes
 from ..storage import ViperCloudDestination
+from ._promotion_transfer import TransferSpace
 from ._publication import replace_synchronized
 from .errors import RunPromotionError
 
@@ -88,6 +89,7 @@ class PublicationJournal:
         self.destination = destination
         self.progress = _Progress(operation_sha256=operation_sha256)
         self._lock: int | None = None
+        self.space: TransferSpace | None = None
 
     def __enter__(self) -> Self:
         """Lock the progress file and check the request it describes."""
@@ -243,7 +245,13 @@ class PublicationJournal:
                 raise RunPromotionError("destination snapshot differs")
         if self.cloud.list_files(snapshot) != expected.files:
             raise RunPromotionError("destination snapshot differs")
-        directory = self.cloud.root / ".viper/promotion/verification"
+        if self.space is not None:
+            self.space.check(
+                largest_file=max((file.bytes for file in expected.files), default=0)
+            )
+            directory = self.space.root / "verification"
+        else:
+            directory = self.cloud.root / ".viper/promotion/verification"
         directory.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=directory) as scratch:
             for member in expected.files:
@@ -251,4 +259,6 @@ class PublicationJournal:
                 self.cloud.fetch_to_path(
                     resolve_snapshot_file_ref(snapshot, member), target
                 )
+                if self.space is not None:
+                    self.space.check()
                 target.unlink()
