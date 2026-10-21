@@ -299,6 +299,18 @@ graph while keeping the stage-execution count at zero. The caller must pass an e
 `ViperCloudDestination` to that operation; ordinary runs continue
 publishing to `.viper/store`.
 
+`execution.promote_run_to_cloud()` also accepts `policy=RunPromotionPolicy(...)`
+and `limits=TransferLimits(...)`. Both types are defined in `viper.storage`.
+The policy's `hosts` tuple names the additional repositories. The limits supply
+`staging_bytes`, `cache_bytes`, and `connections`. This form accepts one source
+run or a tuple of source runs and returns a tuple of additional `ResolvedRunRef`
+objects, ordered by host and then by source run. `required_files` names exact
+files that discovery must reach. `trusted_source_repositories` permits additional
+pinned code used by the verifier. A separate process owns its caches, connection
+pool, durable progress, and independent graph comparison. Existing publications
+and default settings remain unchanged. See the
+[additional-host guide](../how-to/cloud-storage.md#publish-to-additional-hosts).
+
 `probe_gcs_storage()` remains the GCS launch probe. It publishes one immutable object,
 restores it, compares the digest, and writes a local receipt. See
 [Workspace and cloud paths](protocol.md#workspace-and-cloud-paths) for the object-key

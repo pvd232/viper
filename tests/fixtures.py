@@ -1,10 +1,12 @@
 """Shared protocol objects used by independent test modules."""
 
 import hashlib
+from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -354,3 +356,98 @@ class MemoryHub:
         _, selected = request.url.path.split("/resolve/", 1)
         commit, path = selected.split("/", 1)
         return httpx.Response(200, content=self.commits[commit][path])
+
+
+def hub_handler(api: MemoryHub, requests: list[str]) -> type[BaseHTTPRequestHandler]:
+    """Serve committed files to the real Hub downloader in a child process."""
+
+    class Handler(BaseHTTPRequestHandler):
+        """Answer HEAD and GET requests for the additional repository."""
+
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, format: str, *args: Any) -> None:
+            """Keep test logs focused on failed assertions."""
+
+        def do_HEAD(self) -> None:
+            """Return the file identity required by the Hub downloader."""
+            self.reply(False)
+
+        def do_GET(self) -> None:
+            """Return the exact file bytes from the requested commit."""
+            self.reply(True)
+
+        def reply(self, body: bool) -> None:
+            """Return a file or an explicit missing-file response."""
+            path = unquote(self.path.split("?", 1)[0])
+            requests.append(path)
+            try:
+                prefix, selected = path.split("/resolve/", 1)
+                if prefix != "/datasets/owner/additional":
+                    raise KeyError(prefix)
+                commit, name = selected.split("/", 1)
+                raw = api.commits[commit][name]
+            except (ValueError, KeyError):
+                self.send_response(404)
+                self.send_header("Content-Length", "0")
+                self.send_header("X-Error-Code", "EntryNotFound")
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("ETag", '"' + hashlib.sha256(raw).hexdigest() + '"')
+            self.send_header("X-Repo-Commit", commit)
+            self.end_headers()
+            if body:
+                self.wfile.write(raw)
+
+    return Handler
+
+
+RECOVERY_PROGRAM = '''"""Restore a test model from its additional cloud host."""
+import json
+import sys
+from pathlib import Path
+
+from viper._source import RunFetcher
+from viper.execution import restore
+from viper.references import ResolvedRunRef
+from viper.restoration import ArtifactRestoreSelector
+
+root = Path.cwd()
+settings = json.loads(Path(sys.argv[1]).read_text())
+original_client = RunFetcher._cloud_service
+
+
+def allowed_client(self, reference):
+    """Reject an attempted read from any original storage location."""
+    if reference.kind != "huggingface" or reference.repository != "owner/additional":
+        (root / "blocked.json").write_text(reference.model_dump_json())
+        raise RuntimeError("original storage is blocked")
+    return original_client(self, reference)
+
+
+RunFetcher._cloud_service = allowed_client
+output = root / "prediction.json"
+if not output.exists():
+    assert not (root / ".viper/cache").exists()
+    assert not (root / "hf").exists()
+    restored = restore(
+        root, ResolvedRunRef.model_validate(settings["run"]),
+        artifacts=(
+            ArtifactRestoreSelector(stage_id="embed", artifact_name="embedding"),
+        ),
+        output=root / "model.json",
+    )
+    model = json.loads(restored.artifacts[0].files[0].path.read_text())
+    result = {
+        "inputs": settings["inputs"],
+        "prediction": [model["weight"] * value for value in settings["inputs"]],
+    }
+    with output.open("x") as stream:
+        json.dump(result, stream, sort_keys=True)
+result = json.loads(output.read_text())
+assert result["inputs"] == settings["inputs"]
+assert result["prediction"] == settings["expected"], "prediction differs"
+print(json.dumps(result, sort_keys=True))
+'''

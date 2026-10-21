@@ -99,6 +99,24 @@ class RunPromotionPolicy(ProtocolModel):
     )
 
 
+class TransferLimits(ProtocolModel):
+    """Limit disk use and connections for one graph copy."""
+
+    staging_bytes: int = Field(
+        gt=0, strict=True, description="Maximum bytes in the copy's working directory."
+    )
+    cache_bytes: int = Field(
+        gt=0,
+        strict=True,
+        description="Maximum bytes kept in the copy's download cache.",
+    )
+    connections: int = Field(
+        gt=0,
+        strict=True,
+        description="Maximum active connections used by a transfer client.",
+    )
+
+
 class SnapshotPublisher(Protocol):
     """Publish one completed stage snapshot to a selected destination."""
 

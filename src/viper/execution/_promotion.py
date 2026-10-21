@@ -85,7 +85,7 @@ class PromotionInventory(ProtocolModel):
     )
 
 
-class _RunGraphPromoter:
+class RunGraphPromoter:
     """Rewrite one verified local reference DAG from its leaves upward."""
 
     def __init__(
@@ -848,7 +848,7 @@ def promote_run_to_cloud(
     settings = load_storage_settings(root)
     if settings.repository is None:
         raise RunPromotionError("cloud destination is not configured")
-    promoter = _RunGraphPromoter(
+    promoter = RunGraphPromoter(
         root,
         ViperCloud(root, settings.repository),
         destination,

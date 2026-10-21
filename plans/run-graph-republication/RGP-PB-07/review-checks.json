@@ -1,0 +1,160 @@
+{
+  "pair_block": "RGP-PB-07",
+  "status": "review",
+  "baseline": "293628b25f5fc313d85c8faf00772753d509c7a0",
+  "commands": [
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "--select",
+        "I",
+        "--fix",
+        "src/viper/execution/__init__.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/execution/_promotion_worker.py",
+        "src/viper/storage.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "format",
+        "src/viper/execution/__init__.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/execution/_promotion_worker.py",
+        "src/viper/storage.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "10 files left unchanged\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "pyright",
+        "--pythonpath",
+        "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python",
+        "src/viper/execution/__init__.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/execution/_promotion_worker.py",
+        "src/viper/storage.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "0 errors, 0 warnings, 0 informations\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/Users/machina/Developer/ChatGPT/viper-republication-20261017/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model",
+        "tests/test_run_execution.py::test_republication_compares_source_and_destination",
+        "tests/test_retention.py",
+        "tests/test_validation_architecture.py::test_source_tree_uses_one_private_boundary"
+      ],
+      "exit_code": 0,
+      "stdout": ".........................                                                [100%]\n25 passed in 54.19s\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "--select",
+        "D",
+        "src/viper/execution/__init__.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/execution/_promotion_worker.py",
+        "src/viper/storage.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "format",
+        "--check",
+        "src/viper/execution/__init__.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/execution/_promotion_worker.py",
+        "src/viper/storage.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "10 files already formatted\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "check",
+        "src/viper/execution/__init__.py",
+        "src/viper/execution/_promotion.py",
+        "src/viper/execution/_promotion_compare.py",
+        "src/viper/execution/_promotion_journal.py",
+        "src/viper/execution/_promotion_transfer.py",
+        "src/viper/execution/_promotion_worker.py",
+        "src/viper/storage.py",
+        "tests/fixtures.py",
+        "tests/test_cloud_service.py",
+        "tests/test_run_execution.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    }
+  ],
+  "source_sha256": {
+    "src/viper/execution/__init__.py": "9a83acd350ff220aa055de44d6ab0214313d5614b6d4d84d1f0dd6bee04ef03e",
+    "src/viper/execution/_promotion.py": "bd970b70453dd8be55bf7cd24b15d3d6832f776bd4051790b6afbf4cecfd8856",
+    "src/viper/execution/_promotion_compare.py": "91f3d0e5f54db54c8a571cf139d9f52fe11eae307432c0f454a7f7d3cdcd081b",
+    "src/viper/execution/_promotion_journal.py": "ceb964eb4d570269b6259fec9dde5fcb6a3dc9731445bb9b8ae4435154f977da",
+    "src/viper/execution/_promotion_transfer.py": "03a90cba05504e22d481903cd8d977dba4eb23c94f885cf370a36be98e94f7c0",
+    "src/viper/execution/_promotion_worker.py": "8caafc12b6a35250876ba3bb0806e8c048c9d73bb362733525a96ff6811c5e47",
+    "src/viper/storage.py": "09d83e1501b863d631dde8a759f011bdfa03ac757b61719634540be52ccc282f",
+    "tests/fixtures.py": "baa70e7c9c453abe029a3c439d8a08b292c5c8bdcc4df56a5ae514f225c9f7b1",
+    "tests/test_cloud_service.py": "2448701c507cd6d1468c5a20c368bd94d0fbe02925f5c314d6466d7acb75d462",
+    "tests/test_run_execution.py": "ff376b0b2aee178abd3425f2993b02569b863918ae3fc00a858e3cfe467d7d43"
+  },
+  "code_growth": "122\t1\tsrc/viper/execution/__init__.py\n2\t2\tsrc/viper/execution/_promotion.py\n5\t5\tsrc/viper/execution/_promotion_compare.py\n4\t4\tsrc/viper/execution/_promotion_journal.py\n2\t20\tsrc/viper/execution/_promotion_transfer.py\n215\t0\tsrc/viper/execution/_promotion_worker.py\n18\t0\tsrc/viper/storage.py\n97\t0\ttests/fixtures.py\n82\t2\ttests/test_cloud_service.py\n226\t17\ttests/test_run_execution.py\n",
+  "independent_review": "pending"
+}

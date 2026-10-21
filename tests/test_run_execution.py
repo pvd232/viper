@@ -6,8 +6,11 @@ import ast
 import hashlib
 import importlib.util
 import inspect
+import json
 import os
+import shutil
 import sqlite3
+import sys
 import threading
 import time
 from collections.abc import Iterator
@@ -25,16 +28,19 @@ import yaml
 import viper.config as current_config
 import viper.execution as execution_module
 from tests.fixtures import (
+    RECOVERY_PROGRAM,
     MemoryHub,
     builtin_http,
     http_policy,
     http_request,
+    hub_handler,
     python_environment,
     reproducibility,
     resume_state,
 )
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_storage import InMemoryViperCloudProvider, install_in_memory_cloud
+from viper import _subprocess as subprocess
 from viper import config
 from viper._cloud import (
     GcsRepository,
@@ -89,14 +95,14 @@ from viper.execution._materialization import (
     verify_captured_inputs,
 )
 from viper.execution._metric import MetricWorkerResult
-from viper.execution._promotion import PromotionInventory, _RunGraphPromoter
+from viper.execution._promotion import PromotionInventory, RunGraphPromoter
 from viper.execution._promotion_compare import GraphComparison
 from viper.execution._promotion_journal import PublicationJournal
 from viper.execution._promotion_transfer import (
-    TransferLimits,
     TransferSpace,
     directory_bytes,
 )
+from viper.execution._promotion_worker import CopyRequest, copy_graphs
 from viper.execution._publication import write_attempt_document
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._stage import (
@@ -186,6 +192,8 @@ from viper.stages import (
 from viper.storage import (
     LocalArtifactStore,
     LocalStorageDestination,
+    RunPromotionPolicy,
+    TransferLimits,
     ViperCloudDestination,
     load_storage_settings,
 )
@@ -1736,6 +1744,7 @@ def _freeze_retry_plan(
     root: Path,
     *,
     download_rooted: bool = False,
+    numeric_model: bool = False,
     cloud_native: bool = False,
     download_source: tuple[str, int] | None = None,
     stored_prior: RunArtifactDraft | None = None,
@@ -1748,7 +1757,10 @@ def _freeze_retry_plan(
     run_git(root, "remote", "add", "origin", REPOSITORY)
     source = root / "project/retry_pipeline.py"
     source.parent.mkdir()
+    feature_bytes = b'{"weight": 2.0}' if numeric_model else b"features"
+    loader = "json.loads(path.read_text())" if numeric_model else "path.read_bytes()"
     source.write_text(
+        "import json\n"
         "from pathlib import Path\n"
         "from viper import config\n"
         "from viper.stages import StageContext, build, embed\n\n"
@@ -1765,7 +1777,7 @@ def _freeze_retry_plan(
         "    target = context.outputs['features']\n"
         "    record_path('prepare_features_output_path.txt', target)\n"
         "    target.parent.mkdir(parents=True, exist_ok=True)\n"
-        "    target.write_bytes(b'features')\n\n"
+        f"    target.write_bytes({feature_bytes!r})\n\n"
         "@embed(config=config.EmbedConfig)\n"
         "def encode(context: StageContext[config.EmbedConfig]):\n"
         "    marker = Path('embed_calls.txt')\n"
@@ -1784,7 +1796,7 @@ def _freeze_retry_plan(
         "    target.parent.mkdir(parents=True, exist_ok=True)\n"
         "    target.write_bytes(context.inputs['features'].read_bytes())\n\n"
         "def load(path):\n"
-        "    return path.read_bytes()\n\n"
+        f"    return {loader}\n\n"
         "def load_state(path):\n"
         f"    return {resume_state().model_dump(mode='python')!r}\n",
         encoding="utf-8",
@@ -2225,7 +2237,7 @@ def test_promotion_document_reader_uses_fetcher(
     cloud = install_in_memory_cloud(
         monkeypatch, tmp_path, InMemoryViperCloudProvider(tmp_path)
     )
-    promoter = _RunGraphPromoter(
+    promoter = RunGraphPromoter(
         tmp_path,
         cloud,
         ViperCloudDestination(owner="machina", workspace="models"),
@@ -2428,7 +2440,7 @@ def test_cloud_promotion_stages_verified_neighboring_store(
     monkeypatch.setattr(cloud, "publish", confined_publish)
     if copy_required:
         monkeypatch.setattr("viper.execution._promotion.os.link", cross_device_link)
-    promoter = _RunGraphPromoter(
+    promoter = RunGraphPromoter(
         root,
         cloud,
         ViperCloudDestination(owner="machina", workspace="models"),
@@ -2945,17 +2957,15 @@ def test_verified_reuse_skips_stage_process(
         assert len(verifier_calls) == 3
 
 
-@pytest.fixture(scope="module")
-def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
-    """Build one saved run whose HF attempt refers to GCS stage files."""
-    root = tmp_path_factory.mktemp("promotion-source")
-    frozen = _freeze_retry_plan(root)
+def _promotion_graph(root: Path, *, numeric_model: bool = False) -> SimpleNamespace:
+    """Build a saved run whose HF attempt refers to GCS stage files."""
+    frozen = _freeze_retry_plan(root, numeric_model=numeric_model)
     with pytest.raises(RunError):
         execute_attempt(root, frozen.files[-1], plan=frozen.reference)
     completed = execute_retry(root, frozen.files[-1])
     provider = InMemoryViperCloudProvider(root)
     cloud = ViperCloud(root, GcsRepository(bucket=provider.bucket), provider=provider)
-    promoter = _RunGraphPromoter(
+    promoter = RunGraphPromoter(
         root,
         cloud,
         ViperCloudDestination(owner="machina", workspace="models"),
@@ -3009,6 +3019,20 @@ def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace
     )
 
 
+@pytest.fixture(scope="module")
+def promotion_graph(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
+    """Share the saved three-backend graph between publication tests."""
+    return _promotion_graph(tmp_path_factory.mktemp("promotion-source"))
+
+
+@pytest.fixture(scope="module")
+def promotion_model(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
+    """Save a small numerical model for a fresh-process recovery test."""
+    return _promotion_graph(
+        tmp_path_factory.mktemp("promotion-model"), numeric_model=True
+    )
+
+
 def test_promotion_discovers_mixed_cloud_ancestors(
     promotion_graph: SimpleNamespace,
     tmp_path: Path,
@@ -3035,7 +3059,7 @@ def test_promotion_discovers_mixed_cloud_ancestors(
         return original(location)
 
     monkeypatch.setattr(case.cloud, "fetch", metadata_only)
-    promoter = _RunGraphPromoter(
+    promoter = RunGraphPromoter(
         tmp_path,
         destination,
         ViperCloudDestination(owner="machina", workspace="models"),
@@ -3083,7 +3107,7 @@ def test_promotion_rejects_missing_legacy_settings(tmp_path: Path) -> None:
     )
     cloud = Mock(spec=ViperCloud)
     fetcher = Mock(spec=RunFetcher)
-    promoter = _RunGraphPromoter(
+    promoter = RunGraphPromoter(
         tmp_path,
         cloud,
         ViperCloudDestination(owner="machina", workspace="models"),
@@ -3123,7 +3147,7 @@ def test_republication_preserves_files_and_follows_new_references(
 
     monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
     monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
-    promoter = _RunGraphPromoter(
+    promoter = RunGraphPromoter(
         tmp_path,
         target,
         ViperCloudDestination(owner="machina", workspace="models"),
@@ -3210,7 +3234,7 @@ def test_republication_obeys_resource_limits(
     before = case.cloud.provider.uploads.copy()
     progress = tmp_path / "progress.json"
     with client, PublicationJournal(progress, "a" * 64, target, destination) as journal:
-        promoter = _RunGraphPromoter(
+        promoter = RunGraphPromoter(
             tmp_path,
             target,
             destination,
@@ -3284,7 +3308,7 @@ def test_republication_compares_source_and_destination(
             tmp_path / "progress.json", "a" * 64, target, destination
         ) as journal,
     ):
-        promoter = _RunGraphPromoter(
+        promoter = RunGraphPromoter(
             tmp_path,
             target,
             destination,
@@ -3416,3 +3440,188 @@ def test_republication_compares_source_and_destination(
             }[change]
             with pytest.raises(RunPromotionError, match=message):
                 comparison.verify(inventory.roots, required)
+
+
+def test_copy_worker_resumes_and_restores_a_model(
+    promotion_model: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recover an interrupted graph copy and restore its numerical model."""
+    case = promotion_model
+    api = MemoryHub(tmp_path / "hub")
+    repository = HuggingFaceRepository(
+        repository="owner/additional", repo_type="dataset"
+    )
+    api.fail_after_commit = True
+
+    def provider_for(cloud, selected):
+        """Use the real Hub provider with the test's complete commit history."""
+        assert selected == repository
+        provider = HuggingFaceProvider(
+            cloud.root, selected.repository, "dataset", api=cast(Any, api)
+        )
+        monkeypatch.setattr(provider, "_download", api.download)
+        return provider
+
+    monkeypatch.setattr(ViperCloud, "_create_provider", provider_for)
+
+    def choose_cloud(root, reference):
+        """Select source storage or the additional publication from the address."""
+        if (
+            reference.kind == "huggingface"
+            and reference.repository == repository.repository
+        ):
+            return ViperCloud(root, repository)
+        return case.hf if reference.kind == "huggingface" else case.cloud
+
+    monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
+    monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
+    monkeypatch.setattr(TransferSpace, "configure_network", lambda self: None)
+    client = httpx.Client(transport=httpx.MockTransport(api.response))
+    monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+    original_raw = LocalArtifactStore(case.root).fetch(case.selected.stored_at)
+    (another,) = LocalArtifactStore(case.root).resolved_files(
+        {"selected/another.yaml": original_raw}
+    )
+    roots = (case.selected, ResolvedRunRef(**another.model_dump()))
+    request = CopyRequest(
+        repository_root=case.root,
+        inventory=PromotionInventory(roots=roots, required_files={}),
+        policy=RunPromotionPolicy(hosts=(repository,)),
+        destination=ViperCloudDestination(owner="machina", workspace="models"),
+        limits=TransferLimits(
+            staging_bytes=64_000_000, cache_bytes=32_000_000, connections=2
+        ),
+    )
+    with client:
+        with pytest.raises(RunPromotionError, match="outcome is unresolved"):
+            copy_graphs(request)
+        first_commit = api.head
+        result = copy_graphs(request)
+    assert first_commit in api.commits
+    publication = result["publications"][0]
+    assert publication["passed"]
+    assert len(publication["destination_roots"]) == 2
+    assert publication["peak_staging_bytes"] <= request.limits.staging_bytes
+    assert LocalArtifactStore(case.root).fetch(case.selected.stored_at) == original_raw
+    progress = case.root / ".viper/promotion" / result["operation_sha256"]
+    journals = tuple(progress.glob("*/progress.json"))
+    assert journals
+    saved = json.loads(journals[0].read_bytes())
+    assert any(
+        copy["published"]["commit"] == first_commit for copy in saved["copies"].values()
+    )
+
+    target = ViperCloud(case.root, repository)
+    valid_root = ResolvedRunRef.model_validate(publication["destination_roots"][0])
+    assert isinstance(valid_root.stored_at, HuggingFaceFileRef)
+    valid_record = ResolvedRun.model_validate(
+        parse_yaml_bytes(target.fetch(valid_root.stored_at))
+    )
+    attempt_raw = case.hf.fetch(case.hf_location)
+    copied_attempt = target.resolved_files(
+        request.destination,
+        {case.hf_location.path: attempt_raw},
+    )[case.hf_location.path]
+    changed_attempt = type(valid_record.attempts[-1]).model_validate(
+        {
+            **valid_record.attempts[-1].model_dump(),
+            **copied_attempt.model_dump(),
+        }
+    )
+    bad_record = valid_record.model_copy(
+        update={"attempts": (*valid_record.attempts[:-1], changed_attempt)}
+    )
+    copied_bad_root = target.resolved_files(
+        request.destination,
+        {"bad/run.yaml": serialize_document(bad_record)},
+    )["bad/run.yaml"]
+    bad_root = ResolvedRunRef(**copied_bad_root.model_dump())
+    reads = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), hub_handler(api, reads))
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    program = tmp_path / "recover_model.py"
+    program.write_text(RECOVERY_PROGRAM)
+    port = server.server_address[1]
+    package = Path(__file__).resolve().parents[1]
+    sandbox = shutil.which("sandbox-exec")
+    try:
+        for failure in ("none", "source", "prediction"):
+            recovery = tmp_path / failure
+            recovery.mkdir()
+            (recovery / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+            settings = {
+                "run": (bad_root if failure == "source" else valid_root).model_dump(
+                    mode="json"
+                ),
+                "inputs": [3.0, -2.0, 0.0],
+                "expected": [7.0, -4.0, 0.0]
+                if failure == "prediction"
+                else [6.0, -4.0, 0.0],
+            }
+            settings_path = recovery / "request.json"
+            settings_path.write_text(json.dumps(settings))
+            environment = {
+                **os.environ,
+                "HOME": str(recovery),
+                "HF_HOME": str(recovery / "hf"),
+                "HF_TOKEN": "",
+                "HF_HUB_DISABLE_XET": "1",
+                "HF_HUB_DISABLE_TELEMETRY": "1",
+                "HF_ENDPOINT": f"http://127.0.0.1:{port}",
+                "NO_PROXY": "127.0.0.1,localhost",
+                "PYTHONPATH": str(package / "src"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+            }
+            command = [sys.executable, "-B", str(program), str(settings_path)]
+            if sandbox:
+                profile = (
+                    "(version 1) (allow default) "
+                    "(deny file-read* (subpath "
+                    f"{json.dumps(str(case.root.resolve()))})) "
+                    "(deny network*) "
+                    f'(allow network-outbound (remote ip "localhost:{port}"))'
+                )
+                command = [sandbox, "-p", profile, *command]
+            completed = subprocess.run(
+                command,
+                cwd=recovery,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            if failure == "none":
+                assert completed.returncode == 0, completed.stderr
+                assert json.loads(completed.stdout)["prediction"] == [6.0, -4.0, 0.0]
+            elif failure == "source":
+                assert completed.returncode != 0
+                assert "original storage is blocked" in completed.stderr
+                assert (recovery / "blocked.json").is_file()
+            else:
+                assert completed.returncode != 0
+                assert "prediction differs" in completed.stderr
+                output = recovery / "prediction.json"
+                before = output.read_bytes()
+                settings["expected"] = [6.0, -4.0, 0.0]
+                settings_path.write_text(json.dumps(settings))
+                request_count = len(reads)
+                repaired = subprocess.run(
+                    command,
+                    cwd=recovery,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=90,
+                )
+                assert repaired.returncode == 0, repaired.stderr
+                assert output.read_bytes() == before
+                assert len(reads) == request_count
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    assert reads
