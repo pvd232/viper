@@ -4,6 +4,9 @@ VIPER assigns every test module one cost tier and one implementation domain.
 The tier selects when the test runs. The domain selects the test set affected by
 one implementation area.
 
+The [worker autocast incident](autocast-cache-incident.md) records the precision
+regression, its reproducer and its CPU and CUDA checks.
+
 ## Activate the environment
 
 Create the project environment once and install the development dependencies:

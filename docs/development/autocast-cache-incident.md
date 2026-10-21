@@ -64,3 +64,9 @@ The pull request records commands, CPU and CUDA results, and a focused runtime
 comparison. Tests check changed weights, repeated backward passes, and cache
 state restoration. Existing policy, metric provenance and execution tests check
 worker receipts and saved run behavior.
+
+The [L4 benchmark measurements](evidence/autocast_l4_20261021.json) compare the
+original helper with the application cache workaround against the corrected
+helper with ordinary nested autocast. Median times were 0.1467 and 0.1454
+seconds for 200 updates. Both runs ended at the same loss. These measurements
+describe the recorded linear-layer workload.
