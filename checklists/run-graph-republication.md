@@ -6,21 +6,20 @@ complete: 1,305 required payloads and four recovered models, with original GCS
 objects and model pointers preserved. The [completion record](../evidence/run-graph-republication-completion-20261018.json)
 binds acceptance and passing GitHub checks.
 
-Review and integration remain pending. The contract's
+The VIPER stack is merged; RICO #26 and #27 remain open. The contract's
 [PR tracking table](../contracts/run-graph-republication.md#pr-review-and-integration)
 records each observed head, checks, review decision, and merge state separately
-from completed migration validation. Review and merge VIPER #5 through #13 in
-order, retargeting each successor to `main`, then RICO #26. Continue with VIPER
-#14 → #15 and RICO #27. PB-09–14 local validation is complete; review and merge
-remain pending. The contract links their checks and measurements.
+from completed migration validation. PB-09–14 validation is complete. RICO
+review and integration proceeds **#26 → #27**. The contract links the checks,
+measurements, and observed VIPER merges.
 
 ## Current outcome
 
 Reduce repeated publication hashing, manifest reads, directory traversal, and
 RICO request reads while preserving the completed migration's guarantees.
 PB-09–14 are implemented and locally validated. PB-12–14 add bounded cache
-retention, streaming metric hashing, and benchmark verification reuse. Continue
-independent review after #15 with #16, #17, then #18, and integrate in that order. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
+retention, streaming metric hashing, and benchmark verification reuse. Their
+VIPER PRs are integrated. The [impact analysis](../contracts/run-graph-republication-optimization-impact.md)
 records measured operation counts, memory use, exact owners, and remaining timing limits.
 
 <details>

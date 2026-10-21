@@ -1,0 +1,284 @@
+{
+  "version": "0.2.0",
+  "source_commit": "a9c9de19bc2b52f965a19edb2af9a7f6f8e44bc9",
+  "ci_run": 39646286554,
+  "ci_url": "https://github.com/pvd232/viper/actions/runs/39646286554",
+  "local_validation": {
+    "pyrefly_errors": 0,
+    "affected": {
+      "passed": 72,
+      "cuda_skipped": 4
+    },
+    "workflow_release_after_reconciliation": {
+      "passed": 44
+    },
+    "initial_unit_contract": {
+      "passed": 619,
+      "failed": 3,
+      "skipped": 4,
+      "failure_cause": "Version references; corrected and covered by subsequent passing affected checks"
+    },
+    "ruff_format": "passed",
+    "ruff_check": "passed"
+  },
+  "autocast_runtime_and_regression_tests_match_main_commit": "98667271ef1697d8623061c0651f1b55b5b28304",
+  "preserved_user_worktree": "/Users/machina/Developer/ChatGPT/viper",
+  "ci_artifact": {
+    "id": 12368376619,
+    "name": "python-package-distributions",
+    "zip_sha256": "098a7c1e529d0ff66725fd8c5a24253a341e991b8b815db20d45d7bbb08c9685"
+  },
+  "clean_installation": {
+    "python": "3.14",
+    "wheel_public_api_and_generated_project_passed": 15,
+    "wheel_seconds": 105.62,
+    "sdist_public_api_and_generated_project_passed": 15,
+    "sdist_seconds": 102.89,
+    "pyrefly_errors": 0,
+    "ruff": "passed",
+    "pip_check": "passed"
+  },
+  "merge_resolution": "Retained the complete stack implementation and Pyrefly 1.4 settings; preserved intermediate PR commit history, CI diagnostics, Makefile interpreter selection, and historical CI revision notes.",
+  "gpu_acceptance": {
+    "status": "blocked",
+    "reason": "Exact CI wheel has not run on CUDA; subsequent allocations fail with ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS.",
+    "original_vm_state_restored": true,
+    "original_vm_machine_type": "g2-standard-12",
+    "temporary_vm_or_disk_created": true,
+    "billing_enabled": true,
+    "ssh_diagnosis": {
+      "instance": "rico-train-20261007",
+      "first_connection_failed_utc": "2026-10-21T17:46:00.333Z",
+      "last_connection_failed_utc": "2026-10-21T17:46:15.046Z",
+      "sshd_listening_utc": "2026-10-21T17:46:17Z",
+      "agent_requested_stop_utc": "2026-10-21T17:47:27.685Z",
+      "conclusion": "Both failed connection attempts preceded SSH startup. The agent misclassified a boot-time connection failure and stopped the VM after SSH became ready.",
+      "guest_ufw_enabled": false,
+      "cloud_firewall_allows_tcp_22": true,
+      "same_zone_cpu_helper_iap_ssh": "passed",
+      "original_disk_inspection": "Snapshot restored to separate disk; attached read-only and mounted ro,noload; original disk unchanged.",
+      "subsequent_restart_error": "ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS; reason gpu_availability",
+      "next_attempt": "Keep an allocated L4 running and wait for SSH readiness with bounded retries before judging access.",
+      "sources": [
+        {
+          "log": "gcloud/2026.10.21/13.46.14.706541.log",
+          "line": 15,
+          "message": "2026-10-21 13:46:15,046 ERROR Error while connecting [4003: 'failed to connect to backend']. (Failed to connect to port 22)",
+          "timezone": "America/New_York"
+        },
+        {
+          "log": "rico-train-20261007 systemd journal, ssh.service",
+          "message": "Oct 21 17:46:17 rico-train-20261007 sshd[1497]: Server listening on 0.0.0.0 port 22.",
+          "timezone": "UTC"
+        }
+      ]
+    },
+    "temporary_resources_removed": true,
+    "original_instances_stopped_and_original_machine_types_preserved": true
+  },
+  "status": "prepared; hardware acceptance pending",
+  "ci_conclusion": "success",
+  "ci_tests": {
+    "jobs_passed": 7,
+    "fast_passed": 622,
+    "fast_skipped": 4,
+    "integration_passed": 225,
+    "integration_seconds": 1413.05
+  },
+  "distributions": [
+    {
+      "filename": "viper_provenance-0.2.0-py3-none-any.whl",
+      "bytes": 326836,
+      "sha256": "1b9b11971ed1a9e5404a4a420cb8073c5b26a288bf9a1f1062810da64b95c353"
+    },
+    {
+      "filename": "viper_provenance-0.2.0.tar.gz",
+      "bytes": 627055,
+      "sha256": "1bb11e9d8b6c310e4e80e5cae0ab1b9f56e4653041d2ae3309417742ed915478"
+    }
+  ],
+  "wheel_members": 94,
+  "sdist_members": 263,
+  "runtime_files_match_source": 87,
+  "metadata_version": "0.2.0",
+  "readme_links_pin": "v0.2.0",
+  "pull_requests": [
+    {
+      "number": 5,
+      "url": "https://github.com/pvd232/viper/pull/5",
+      "state": "MERGED",
+      "headRefOid": "c3ecfe262b6e88a2fccdb563e9b1f22ce552c4fc",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "9585aa89ab486351f1e1303c07ed7a2338cf3bd0"
+      },
+      "mergedAt": "2026-10-21T17:36:56Z"
+    },
+    {
+      "number": 6,
+      "url": "https://github.com/pvd232/viper/pull/6",
+      "state": "MERGED",
+      "headRefOid": "62fb4764fbb1eab54b7f3fadec624e4daf3c2b7e",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "abdd02b2373b87f6b1a7e3612652b35fdf675c50"
+      },
+      "mergedAt": "2026-10-21T17:41:08Z"
+    },
+    {
+      "number": 7,
+      "url": "https://github.com/pvd232/viper/pull/7",
+      "state": "MERGED",
+      "headRefOid": "995785d9ff3b434362f238a08f7d1ca76dbf5508",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "34384d0d0de884420c6a88e28822ff3a4ab88fdd"
+      },
+      "mergedAt": "2026-10-21T17:41:16Z"
+    },
+    {
+      "number": 8,
+      "url": "https://github.com/pvd232/viper/pull/8",
+      "state": "MERGED",
+      "headRefOid": "8a8788fd5a19130c7501829c4387db43c0359aa5",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "d702870906ea91362733a7ea3eb3255eb54a9b16"
+      },
+      "mergedAt": "2026-10-21T17:41:22Z"
+    },
+    {
+      "number": 9,
+      "url": "https://github.com/pvd232/viper/pull/9",
+      "state": "MERGED",
+      "headRefOid": "f3c10aaead0ee3dfbaee17fb4e5155f98338788f",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "522d2f73d61ada7ac97c26f8c1e70c82bb928b5b"
+      },
+      "mergedAt": "2026-10-21T17:41:28Z"
+    },
+    {
+      "number": 10,
+      "url": "https://github.com/pvd232/viper/pull/10",
+      "state": "MERGED",
+      "headRefOid": "f98b694fc938a13ea746a0c7a63fdc9f8883c6f7",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "45e0ba9d9f1b68dd960344fd543ea12dd50ae1c2"
+      },
+      "mergedAt": "2026-10-21T17:41:35Z"
+    },
+    {
+      "number": 11,
+      "url": "https://github.com/pvd232/viper/pull/11",
+      "state": "MERGED",
+      "headRefOid": "06fae367d03b5eca64b3a1910760a0e6c838493e",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "885322bb45cea312dc3e5a3bafed8d4b887ddc9d"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 12,
+      "url": "https://github.com/pvd232/viper/pull/12",
+      "state": "MERGED",
+      "headRefOid": "4fbe070d2c27eb3c9fd9521486ddc12d74739770",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "4fbe070d2c27eb3c9fd9521486ddc12d74739770"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 13,
+      "url": "https://github.com/pvd232/viper/pull/13",
+      "state": "MERGED",
+      "headRefOid": "18794ae34eb259f93cc2d74b062ccd0a19ee013c",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "18794ae34eb259f93cc2d74b062ccd0a19ee013c"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 14,
+      "url": "https://github.com/pvd232/viper/pull/14",
+      "state": "MERGED",
+      "headRefOid": "ef3d9dd56e351ea6ce19f7c24289cb710d2ddc9a",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "ef3d9dd56e351ea6ce19f7c24289cb710d2ddc9a"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 15,
+      "url": "https://github.com/pvd232/viper/pull/15",
+      "state": "MERGED",
+      "headRefOid": "d68a0411ecd3389672633b33ea4d16fed531de1e",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "d68a0411ecd3389672633b33ea4d16fed531de1e"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 16,
+      "url": "https://github.com/pvd232/viper/pull/16",
+      "state": "MERGED",
+      "headRefOid": "c672a36caeafba5d96509182a212126035c99c33",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "c672a36caeafba5d96509182a212126035c99c33"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 17,
+      "url": "https://github.com/pvd232/viper/pull/17",
+      "state": "MERGED",
+      "headRefOid": "8c8aacf0698bc9ee05701e615b422d6538aa3318",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "8c8aacf0698bc9ee05701e615b422d6538aa3318"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 18,
+      "url": "https://github.com/pvd232/viper/pull/18",
+      "state": "MERGED",
+      "headRefOid": "5319a0edf1fcb4e83e77bbdfd771eaa74e178cf2",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "5319a0edf1fcb4e83e77bbdfd771eaa74e178cf2"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    },
+    {
+      "number": 20,
+      "url": "https://github.com/pvd232/viper/pull/20",
+      "state": "MERGED",
+      "headRefOid": "a9c9de19bc2b52f965a19edb2af9a7f6f8e44bc9",
+      "baseRefName": "main",
+      "mergeCommit": {
+        "oid": "a9c9de19bc2b52f965a19edb2af9a7f6f8e44bc9"
+      },
+      "mergedAt": "2026-10-21T18:13:23Z"
+    }
+  ],
+  "registry": {
+    "observed_at": "2026-10-21T18:43:57.785348+00:00",
+    "pypi_latest": "0.1.2",
+    "version_0_2_0_published": false,
+    "release_tag_created": false
+  },
+  "record_validation": {
+    "pyrefly_errors": 0,
+    "documentation_workflow_release_tests_passed": 44,
+    "ruff_format": "passed",
+    "ruff_check": "passed"
+  }
+}

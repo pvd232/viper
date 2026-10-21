@@ -2,7 +2,8 @@
 
 ## 1. Status
 
-**Contract status:** PB-01–PB-14 validation complete; PR review and integration pending.
+**Contract status:** PB-01–PB-14 validation complete. VIPER contributions are
+merged; RICO #26 and #27 remain open.
 The optimization blocks have retained checks and separate PRs. Their current
 states are recorded below. The legacy compiler view is retained for historical
 receipts; it does not update the new PR-backed blocks.
@@ -14,34 +15,39 @@ payloads, four recovered models, and passing checks at VIPER `462b202` and RICO
 
 ### PR review and integration
 
-The migration's completed validation remains valid while its PRs await review
+The migration's completed validation remains valid independently of PR review
 and merge. The generated `complete` and `bootstrap-complete` labels below
 describe retained acceptance evidence. They do not establish GitHub approval or
 integration into `main`. The current compiler does not ingest PR state.
 
-GitHub observations refreshed on **2026-10-18 20:11 UTC**.
+GitHub observations refreshed on **2026-10-21 18:14 UTC**.
 Validation, review, and integration are separate. Each local gate is bound to its
 implementation commit through its PR and retained result; CI below describes only
-the observed head. All observed PRs remain open without submitted reviews.
+the observed head. The user authorized integration in the 2026-10-21 request
+to update and merge the stack. GitHub recorded zero reviews and zero unresolved
+review threads. VIPER #5–18 and #20 are merged into `main`; RICO review and
+integration remain pending. The [0.2.0 record](../docs/releases/receipts/0.2.0.json)
+retains the exact candidate, CI run, merge observations, and publication blocker.
 
 | Order | PairBlock contribution | PR | Observed head | Observed base branch | Validation | Review | Integration |
 |---|---|---|---|---|---|---|---|
-| 1 | PB-02 discovery | [VIPER #5](https://github.com/pvd232/viper/pull/5) | `c3ecfe262b6e88a2fccdb563e9b1f22ce552c4fc` | `main` | [7 passed](https://github.com/pvd232/viper/pull/5/checks) | Pending | Open; no merge commit |
-| 2 | PB-03 publication | [VIPER #6](https://github.com/pvd232/viper/pull/6) | `62fb4764fbb1eab54b7f3fadec624e4daf3c2b7e` | `rgp/pb02-discovery-20261017` | [7 passed](https://github.com/pvd232/viper/pull/6/checks) | Pending | Open; no merge commit |
-| 3 | PB-04 restart | [VIPER #7](https://github.com/pvd232/viper/pull/7) | `995785d9ff3b434362f238a08f7d1ca76dbf5508` | `rgp/pb03-publication-20261017` | [7 passed](https://github.com/pvd232/viper/pull/7/checks) | Pending | Open; no merge commit |
-| 4 | PB-05 resources | [VIPER #8](https://github.com/pvd232/viper/pull/8) | `8a8788fd5a19130c7501829c4387db43c0359aa5` | `rgp/pb04-recovery-20261017` | [7 passed](https://github.com/pvd232/viper/pull/8/checks) | Pending | Open; no merge commit |
-| 5 | PB-06 comparison | [VIPER #9](https://github.com/pvd232/viper/pull/9) | `f3c10aaead0ee3dfbaee17fb4e5155f98338788f` | `rgp/pb05-resources-20261017` | [7 passed](https://github.com/pvd232/viper/pull/9/checks) | Pending | Open; no merge commit |
-| 6 | PB-07 rehearsal | [VIPER #10](https://github.com/pvd232/viper/pull/10) | `f98b694fc938a13ea746a0c7a63fdc9f8883c6f7` | `rgp/pb06-comparison-20261017` | [7 passed](https://github.com/pvd232/viper/pull/10/checks) | Pending | Open; no merge commit |
-| 7 | PB-07 Pyrefly follow-up | [VIPER #11](https://github.com/pvd232/viper/pull/11) | `06fae367d03b5eca64b3a1910760a0e6c838493e` | `rgp/pb07-rehearsal-20261017` | [7 passed](https://github.com/pvd232/viper/pull/11/checks) | Pending | Open; no merge commit |
-| 8 | PB-02 supporting inputs | [VIPER #12](https://github.com/pvd232/viper/pull/12) | `4fbe070d2c27eb3c9fd9521486ddc12d74739770` | `rgp/pb07-pyrefly-r2` | [7 passed](https://github.com/pvd232/viper/pull/12/checks) | Pending | Open; no merge commit |
-| 9 | PB-04/05/06 recovery and verification follow-ups; PB-09–11 planning | [VIPER #13](https://github.com/pvd232/viper/pull/13) | `18794ae34eb259f93cc2d74b062ccd0a19ee013c` | `rgp/pb02-supporting-r2` | [7 passed](https://github.com/pvd232/viper/pull/13/checks) | Pending | Open; no merge commit |
+| 1 | PB-02 discovery | [VIPER #5](https://github.com/pvd232/viper/pull/5) | `c3ecfe262b6e88a2fccdb563e9b1f22ce552c4fc` | `main` | [7 passed](https://github.com/pvd232/viper/pull/5/checks) | 0 GitHub reviews | Merged [9585aa8](https://github.com/pvd232/viper/commit/9585aa89ab486351f1e1303c07ed7a2338cf3bd0), 2026-10-21T17:36:56Z |
+| 2 | PB-03 publication | [VIPER #6](https://github.com/pvd232/viper/pull/6) | `62fb4764fbb1eab54b7f3fadec624e4daf3c2b7e` | `main` | [7 passed](https://github.com/pvd232/viper/pull/6/checks) | 0 GitHub reviews | Merged [abdd02b](https://github.com/pvd232/viper/commit/abdd02b2373b87f6b1a7e3612652b35fdf675c50), 2026-10-21T17:41:08Z |
+| 3 | PB-04 restart | [VIPER #7](https://github.com/pvd232/viper/pull/7) | `995785d9ff3b434362f238a08f7d1ca76dbf5508` | `main` | [7 passed](https://github.com/pvd232/viper/pull/7/checks) | 0 GitHub reviews | Merged [34384d0](https://github.com/pvd232/viper/commit/34384d0d0de884420c6a88e28822ff3a4ab88fdd), 2026-10-21T17:41:16Z |
+| 4 | PB-05 resources | [VIPER #8](https://github.com/pvd232/viper/pull/8) | `8a8788fd5a19130c7501829c4387db43c0359aa5` | `main` | [7 passed](https://github.com/pvd232/viper/pull/8/checks) | 0 GitHub reviews | Merged [d702870](https://github.com/pvd232/viper/commit/d702870906ea91362733a7ea3eb3255eb54a9b16), 2026-10-21T17:41:22Z |
+| 5 | PB-06 comparison | [VIPER #9](https://github.com/pvd232/viper/pull/9) | `f3c10aaead0ee3dfbaee17fb4e5155f98338788f` | `main` | [7 passed](https://github.com/pvd232/viper/pull/9/checks) | 0 GitHub reviews | Merged [522d2f7](https://github.com/pvd232/viper/commit/522d2f73d61ada7ac97c26f8c1e70c82bb928b5b), 2026-10-21T17:41:28Z |
+| 6 | PB-07 rehearsal | [VIPER #10](https://github.com/pvd232/viper/pull/10) | `f98b694fc938a13ea746a0c7a63fdc9f8883c6f7` | `main` | [7 passed](https://github.com/pvd232/viper/pull/10/checks) | 0 GitHub reviews | Merged [45e0ba9](https://github.com/pvd232/viper/commit/45e0ba9d9f1b68dd960344fd543ea12dd50ae1c2), 2026-10-21T17:41:35Z |
+| 7 | PB-07 Pyrefly follow-up | [VIPER #11](https://github.com/pvd232/viper/pull/11) | `06fae367d03b5eca64b3a1910760a0e6c838493e` | `main` | [7 passed](https://github.com/pvd232/viper/pull/11/checks) | 0 GitHub reviews | Merged [885322b](https://github.com/pvd232/viper/commit/885322bb45cea312dc3e5a3bafed8d4b887ddc9d), 2026-10-21T18:13:23Z |
+| 8 | PB-02 supporting inputs | [VIPER #12](https://github.com/pvd232/viper/pull/12) | `4fbe070d2c27eb3c9fd9521486ddc12d74739770` | `main` | [7 passed](https://github.com/pvd232/viper/pull/12/checks) | 0 GitHub reviews | Merged [4fbe070](https://github.com/pvd232/viper/commit/4fbe070d2c27eb3c9fd9521486ddc12d74739770), 2026-10-21T18:13:23Z |
+| 9 | PB-04/05/06 recovery and verification follow-ups; PB-09–11 planning | [VIPER #13](https://github.com/pvd232/viper/pull/13) | `18794ae34eb259f93cc2d74b062ccd0a19ee013c` | `main` | [7 passed](https://github.com/pvd232/viper/pull/13/checks) | 0 GitHub reviews | Merged [18794ae](https://github.com/pvd232/viper/commit/18794ae34eb259f93cc2d74b062ccd0a19ee013c), 2026-10-21T18:13:23Z |
 | 10 | PB-08 publication and recovery | [RICO #26](https://github.com/pvd232/rico-rebuild/pull/26) | `cd81561d331f9d0a5fed7d16cc1892abffd0611a` | `main` | [1 passed](https://github.com/pvd232/rico-rebuild/pull/26/checks) | Pending | Open; no merge commit |
-| 11 | PB-09 publication identities | [VIPER #14](https://github.com/pvd232/viper/pull/14) | `ef3d9dd56e351ea6ce19f7c24289cb710d2ddc9a` | `rgp/pb05-connection-reuse-r2` | [Local gates passed](../evidence/rgp-pb09-validation.json); [6 passed; 1 pending](https://github.com/pvd232/viper/pull/14/checks) | Pending | Open; no merge commit |
-| 12 | PB-10 disk accounting | [VIPER #15](https://github.com/pvd232/viper/pull/15) | `d68a0411ecd3389672633b33ea4d16fed531de1e` | `rgp/pb09-prepared-publication` | [Local gates passed](../evidence/rgp-pb10-validation.json); [6 passed; 1 pending](https://github.com/pvd232/viper/pull/15/checks) | Pending | Open; no merge commit |
+| 11 | PB-09 publication identities | [VIPER #14](https://github.com/pvd232/viper/pull/14) | `ef3d9dd56e351ea6ce19f7c24289cb710d2ddc9a` | `main` | [Local gates passed](../evidence/rgp-pb09-validation.json); [7 passed](https://github.com/pvd232/viper/pull/14/checks) | 0 GitHub reviews | Merged [ef3d9dd](https://github.com/pvd232/viper/commit/ef3d9dd56e351ea6ce19f7c24289cb710d2ddc9a), 2026-10-21T18:13:23Z |
+| 12 | PB-10 disk accounting | [VIPER #15](https://github.com/pvd232/viper/pull/15) | `d68a0411ecd3389672633b33ea4d16fed531de1e` | `main` | [Local gates passed](../evidence/rgp-pb10-validation.json); [7 passed](https://github.com/pvd232/viper/pull/15/checks) | 0 GitHub reviews | Merged [d68a041](https://github.com/pvd232/viper/commit/d68a0411ecd3389672633b33ea4d16fed531de1e), 2026-10-21T18:13:23Z |
 | 13 | PB-11 recovery reads | [RICO #27](https://github.com/pvd232/rico-rebuild/pull/27) | `0d2a4e78a43d1b4e79d3aba3d5157115288e9c85` | `rgp/model-publication-20261017` | [Local gates passed](https://github.com/pvd232/rico-rebuild/tree/rgp/pb11-recovery-reads/evidence/graph-publication-pb11); [1 passed](https://github.com/pvd232/rico-rebuild/pull/27/checks) | Pending | Open; no merge commit |
-| 14 | PB-12 bounded verification cache | [VIPER #16](https://github.com/pvd232/viper/pull/16) | `c672a36caeafba5d96509182a212126035c99c33` | `rgp/pb10-single-space-scan` | [Local gates passed](../evidence/rgp-pb12-validation.json); [3 passed; 4 pending](https://github.com/pvd232/viper/pull/16/checks) | Pending | Open; no merge commit |
-| 15 | PB-13 streaming metric hashes | [VIPER #17](https://github.com/pvd232/viper/pull/17) | `8c8aacf0698bc9ee05701e615b422d6538aa3318` | `rgp/pb12-retain-verification-cache` | [Local gates passed](../evidence/rgp-pb13-validation.json); [1 passed; 6 pending](https://github.com/pvd232/viper/pull/17/checks) | Pending | Open; no merge commit |
-| 16 | PB-14 benchmark verification | [VIPER #18](https://github.com/pvd232/viper/pull/18) | `ca8fb352d0df90095fbbc2a0e29312dd8cdb282f` | `rgp/pb13-stream-metric-hashes` | [Local gates passed](../evidence/rgp-pb14-validation.json); [CI pending](https://github.com/pvd232/viper/pull/18/checks) | Pending | Open; no merge commit |
+| 14 | PB-12 bounded verification cache | [VIPER #16](https://github.com/pvd232/viper/pull/16) | `c672a36caeafba5d96509182a212126035c99c33` | `main` | [Local gates passed](../evidence/rgp-pb12-validation.json); [7 passed](https://github.com/pvd232/viper/pull/16/checks) | 0 GitHub reviews | Merged [c672a36](https://github.com/pvd232/viper/commit/c672a36caeafba5d96509182a212126035c99c33), 2026-10-21T18:13:23Z |
+| 15 | PB-13 streaming metric hashes | [VIPER #17](https://github.com/pvd232/viper/pull/17) | `8c8aacf0698bc9ee05701e615b422d6538aa3318` | `main` | [Local gates passed](../evidence/rgp-pb13-validation.json); [7 passed](https://github.com/pvd232/viper/pull/17/checks) | 0 GitHub reviews | Merged [8c8aacf](https://github.com/pvd232/viper/commit/8c8aacf0698bc9ee05701e615b422d6538aa3318), 2026-10-21T18:13:23Z |
+| 16 | PB-14 benchmark verification | [VIPER #18](https://github.com/pvd232/viper/pull/18) | `5319a0edf1fcb4e83e77bbdfd771eaa74e178cf2` | `main` | [Local gates passed](../evidence/rgp-pb14-validation.json); [7 passed](https://github.com/pvd232/viper/pull/18/checks) | 0 GitHub reviews | Merged [5319a0e](https://github.com/pvd232/viper/commit/5319a0edf1fcb4e83e77bbdfd771eaa74e178cf2), 2026-10-21T18:13:23Z |
+| 17 | Snapshot references, store identity removal, autocast integration, and 0.2.0 | [VIPER #20](https://github.com/pvd232/viper/pull/20) | `a9c9de19bc2b52f965a19edb2af9a7f6f8e44bc9` | `main` | [7 candidate jobs passed](https://github.com/pvd232/viper/actions/runs/39646286554) | 0 GitHub reviews | Merged [a9c9de1](https://github.com/pvd232/viper/commit/a9c9de19bc2b52f965a19edb2af9a7f6f8e44bc9), 2026-10-21T18:13:23Z |
 
 PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
 [historical review](../evidence/reviews/rgp-pb-01-implementation.json) and
@@ -49,14 +55,11 @@ PB-01's accepted `8ae1631` is already an ancestor of VIPER `origin/main`; its
 No separate PR is recorded for that block. PB-09, PB-10, and PB-11 have completed
 local validation in #14, #15, and RICO #27 respectively. #13 retains their scope.
 
-Review and merge VIPER **#5 → #6 → #7 → #8 → #9 → #10 → #11 → #12 → #13**,
-then RICO **#26**. Continue with VIPER **#14 → #15** and RICO **#27**;
-PB-11 can be reviewed independently of PB-09/10 after #26. Prefer **Create a merge commit**, which this repository allows,
-to preserve the existing evidence and descendant commit identities. After each
-VIPER merge, retarget the next PR to `main`, inspect the resulting diff, and
-refresh required CI and review before merging. RICO #26 targets its own `main`;
-integrate it after its VIPER dependency. Retain branches until any dependent PRs
-have been retargeted and branch cleanup is separately authorized.
+VIPER #5–10 were merged in order. The remaining PRs were retargeted to `main`
+and integrated by fast-forwarding `main` to the combined, CI-validated #20 head.
+This preserves their original commits and the autocast repair from #21. GitHub
+marked every remaining VIPER PR merged. RICO **#26 → #27** remains a separate
+review and integration sequence. Branch cleanup requires separate authorization.
 
 The executing agent automatically queries each linked PR with `gh pr view --json`
 at workflow entry, after PR actions, and before reporting current status. Reuse
@@ -78,8 +81,7 @@ and [closure without merge](https://docs.github.com/en/pull-requests/how-tos/mer
 
 PB-12 retains bounded destination downloads; PB-13 streams metric hashes;
 PB-14 reuses verification within benchmark execution and shares metric criteria.
-All three passed local validation. Continue review and merge after #15 in order
-**#16 → #17 → #18**; each PR targets its predecessor branch.
+All three passed local validation and are integrated through **#16 → #17 → #18**.
 Their typed requirements are RGP-REQ-14–16. See the scoped
 [PB-12](../plans/run-graph-republication/RGP-PB-12/README.md),
 [PB-13](../plans/run-graph-republication/RGP-PB-13/README.md), and
@@ -722,10 +724,9 @@ binding. A substituted valid ancestor still raises `RunPromotionError` containin
 
 ## 9. Implementation order
 
-Validation for PB-01–14 is complete. Review the dependency stack in the order
-recorded above, continuing **#16 → #17 → #18** after #15. Each new block has its
-own PR. Review and merge remain pending; integrate dependencies first when
-merging is authorized.
+Validation for PB-01–14 is complete. The VIPER stack is integrated in `main`;
+the table above records each contribution separately. RICO #26 and #27 still
+require their repository's review and integration.
 
 ## 10. Contract-owned PairBlocks
 
