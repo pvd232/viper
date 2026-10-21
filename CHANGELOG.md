@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-21
+
+- Publish complete run graphs with restart recovery and bounded staging and
+  verification caches. Reuse prepared identities and completed checks, and
+  stream metric dependency hashes.
+- Rename the snapshot-reference union to `StageResultSnapshotRef` and remove
+  `store_id` from local references. Existing local records require migration;
+  the retired import aliases and legacy parser are absent.
+- Refresh autocast weight copies across optimizer updates and select the
+  declared metric backend. Add CPU and CUDA regressions for weight updates
+  and repeated backward passes.
+- Use Pyrefly as the sole Python type checker. See the
+  [release notes](docs/releases/0.2.0.md) for compatibility and validation.
+
 ## 0.1.2 — 2026-10-10
 
 - Raise the default journal encoder budget from 120 to 600 seconds for the

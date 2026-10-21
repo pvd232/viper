@@ -14,6 +14,7 @@ import sys
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
@@ -1098,10 +1099,11 @@ def autocast_context(
     *,
     backend: Literal["cpu", "cuda"] | None = None,
 ) -> Any:
-    """Construct the autocast context for the selected worker backend."""
+    """Apply worker precision without caching weights across optimizer steps."""
     precision = reproducibility.precision
+    if not precision.autocast_enabled:
+        # A disabled outer autocast still extends the lifetime of nested caches.
+        return nullcontext()
     device_type = backend or ("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.float16 if precision.autocast_dtype == "float16" else torch.bfloat16
-    return torch.autocast(
-        device_type=device_type, dtype=dtype, enabled=precision.autocast_enabled
-    )
+    return torch.autocast(device_type=device_type, dtype=dtype, cache_enabled=False)

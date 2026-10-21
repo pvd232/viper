@@ -50,6 +50,10 @@ public interfaces and distinguishes contributor instructions.
 
 ## Release notes
 
+[0.2.0](releases/0.2.0.md) adds complete graph publication, bounded verification
+reuse, and the autocast training repair. Local references and snapshot imports
+have incompatible changes described in the release notes.
+
 [0.1.2](releases/0.1.2.md) increases the journal encoder's default time limit,
 checks learned semantic search through MCP, and repairs package-description
 links while retaining relative repository links.

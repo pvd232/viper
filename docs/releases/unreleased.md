@@ -1,4 +1,6 @@
-# Unreleased changes
+# Changes released in 0.2.0
+
+See the [0.2.0 release notes](0.2.0.md) for the complete release scope.
 
 ## Snapshot reference imports
 

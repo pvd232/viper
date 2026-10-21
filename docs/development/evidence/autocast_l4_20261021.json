@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-21",
+  "device": "NVIDIA L4",
+  "torch": "2.14.0+cu130",
+  "steps": 200,
+  "batch": 64,
+  "width": 512,
+  "comparison": "Old VIPER with user cache workaround versus patched VIPER with normal inner autocast",
+  "old_seconds": [
+    0.1467301010270603,
+    0.145837475953158,
+    0.14589248597621918,
+    0.14690103399334475,
+    0.14741968299495056
+  ],
+  "patched_seconds": [
+    0.15013647096930072,
+    0.1477033100090921,
+    0.1449118769960478,
+    0.1453874610015191,
+    0.14479019900318235
+  ],
+  "old_median_seconds": 0.1467301010270603,
+  "patched_median_seconds": 0.1453874610015191,
+  "old_final_loss": 0.2943796217441559,
+  "patched_final_loss": 0.2943796217441559
+}

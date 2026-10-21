@@ -119,7 +119,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             if _path_identities(path) != recorded_identities:
                 raise ValueError("metric dependency bytes differ from their receipt")
-        with autocast_context(context.run.reproducibility):
+        with autocast_context(
+            context.run.reproducibility, backend=effective_environment.compute.kind
+        ):
             startup = observe_process_startup(
                 initialization=initialization,
                 reproducibility=context.run.reproducibility,

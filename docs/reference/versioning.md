@@ -17,8 +17,8 @@ parser and validation contract.
 Alpha releases use PEP 440 pre-release versions such as `0.1.0a1`. During the `0.x`
 series, each release note must identify every incompatible change.
 
-The [unreleased changes](../releases/unreleased.md) list pending Python import
-changes and their compatibility scope.
+The [0.2.0 release notes](../releases/0.2.0.md) identify the current Python import
+and local-reference changes and their compatibility scope.
 
 ## Execution and journal defaults
 
@@ -42,7 +42,7 @@ types have their own schema versions. Query the installed schema before construc
 record directly.
 
 Release 0.1.0a4 introduced required `workspace` and `store_id` fields on local
-references. The [unreleased format](../releases/unreleased.md#local-references-use-content-revisions)
+references. The [0.2.0 format](../releases/0.2.0.md#compatibility)
 retires `store_id`; migrate active local records before using that format.
 Original archived records retain their release's schema.
 
