@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import tempfile
@@ -58,6 +59,7 @@ from ..storage import (
     local_artifact_store,
 )
 from ..verification import verify_run_result
+from ._promotion_journal import PublicationJournal
 from ._restore import resolve_run_reference
 from .errors import RunPromotionError
 
@@ -92,12 +94,14 @@ class _RunGraphPromoter:
         destination: ViperCloudDestination,
         *,
         fetcher: RunFetcher,
+        journal: PublicationJournal | None = None,
     ) -> None:
         """Use the supplied fetcher for source documents."""
         self.root = root
         self.cloud = cloud
         self.destination = destination
         self.fetcher = fetcher
+        self.journal = journal
         self.files: dict[StorageModel, ResolvedFileRef] = {}
         self.snapshots: dict[
             _SourceSnapshot,
@@ -509,7 +513,9 @@ class _RunGraphPromoter:
             ):
                 raise RunPromotionError("source snapshot files changed")
             sources = self.rewrite_snapshot_documents(snapshot, original)
-            promoted, files = self._publish_sources(sources)
+            promoted, files = self._publish_sources(
+                sources, snapshot=snapshot, source_files=tuple(identities)
+            )
             self.snapshots[snapshot] = promoted
             self.snapshot_files[snapshot] = files
             return promoted
@@ -523,6 +529,9 @@ class _RunGraphPromoter:
     def _publish_sources(
         self,
         sources: dict[str, PublicationSource],
+        *,
+        snapshot: _SourceSnapshot,
+        source_files: tuple[SnapshotFileRef, ...],
     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
         """Stage verified neighboring-store files within the publication root."""
         staging_root = self.root / ".viper" / "promotion"
@@ -539,6 +548,22 @@ class _RunGraphPromoter:
                 except OSError:
                     shutil.copyfile(source, staged)
                 confined[path] = staged
+            if self.journal is not None:
+                children = [
+                    (
+                        child.model_dump(mode="json"),
+                        self.snapshots[child].model_dump(mode="json"),
+                    )
+                    for child in sorted(
+                        self.dependencies.get(snapshot, ()),
+                        key=lambda item: item.model_dump_json(),
+                    )
+                    if child in self.snapshots
+                ]
+                digest = hashlib.sha256(
+                    json.dumps(children, sort_keys=True).encode()
+                ).hexdigest()
+                return self.journal.publish(snapshot, source_files, confined, digest)
             return self.cloud.publish(self.destination, confined)
 
     def rewrite_snapshot_documents(

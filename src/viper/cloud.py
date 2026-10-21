@@ -164,9 +164,11 @@ class ViperCloud:
         self,
         destination: ViperCloudDestination,
         sources: Mapping[RepoRelPath, PublicationSource],
+        *,
+        attempts: int = 3,
     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
-        """Publish one sealed revision through the selected provider."""
-        return self.provider.publish(destination, sources)
+        """Publish a snapshot with the requested number of attempts."""
+        return self.provider.publish(destination, sources, attempts=attempts)
 
     def resolved_files(
         self,
