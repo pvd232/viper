@@ -91,6 +91,8 @@ def _load_artifact_value(context: ArtifactLoaderWorkerContext) -> object:
     if module_spec is None or module_spec.loader is None:
         raise ArtifactLoaderError("artifact.loader: loader module could not be loaded")
     module = importlib.util.module_from_spec(module_spec)
+    # Dataclasses and postponed schema annotations inspect their defining module.
+    sys.modules[module_name] = module
     try:
         module_spec.loader.exec_module(module)
     except Exception as exc:

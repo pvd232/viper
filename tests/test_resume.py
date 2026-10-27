@@ -8,12 +8,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import torch
 from torch.optim import Adam
 from torch.utils.data import TensorDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
+from examples.jax_training import (
+    TrainingState,
+    load_checkpoint,
+    restore_state,
+    save_state,
+    update,
+)
 from tests.fixtures import resume_state
 from viper.randomness import (
     capture_main_process_rng,
@@ -256,6 +265,73 @@ class ResumeTests(unittest.TestCase):
                         rtol=0,
                         atol=0,
                     )
+
+
+class JaxCheckpointTests(unittest.TestCase):
+    """Observe explicit JAX keys and momentum across saved checkpoint boundaries."""
+
+    def test_stochastic_updates_continue_exactly(self) -> None:
+        """Match uninterrupted updates for each supported PRNG implementation."""
+        x = jnp.arange(1, 5, dtype=jnp.float32)
+        y = 2 * x
+        for implementation in ("threefry2x32", "rbg", "unsafe_rbg"):
+            with self.subTest(implementation=implementation):
+                initial = TrainingState(
+                    weight=jnp.asarray(0.0),
+                    velocity=jnp.asarray(0.0),
+                    key=jax.random.key(7, impl=implementation),
+                    step=jnp.asarray(0, dtype=jnp.int32),
+                )
+                expected = initial
+                for _ in range(8):
+                    expected = update(expected, x, y)
+                interrupted = initial
+                for _ in range(3):
+                    interrupted = update(interrupted, x, y)
+                with tempfile.TemporaryDirectory() as directory:
+                    model_path = Path(directory) / "model.json"
+                    checkpoint_path = Path(directory) / "state.pt"
+                    save_state(interrupted, model_path, checkpoint_path)
+                    restored = restore_state(model_path, checkpoint_path)
+                for _ in range(5):
+                    restored = update(restored, x, y)
+                np.testing.assert_array_equal(restored.weight, expected.weight)
+                np.testing.assert_array_equal(restored.velocity, expected.velocity)
+                np.testing.assert_array_equal(restored.step, expected.step)
+                np.testing.assert_array_equal(
+                    jax.random.key_data(restored.key), jax.random.key_data(expected.key)
+                )
+                self.assertEqual(
+                    jax.random.key_impl(restored.key), jax.random.key_impl(expected.key)
+                )
+
+    def test_invalid_checkpoint_keys_fail_when_loaded(self) -> None:
+        """Reject malformed keys and inconsistent sampler positions before resume."""
+        state = TrainingState(
+            weight=jnp.asarray(0.0),
+            velocity=jnp.asarray(0.0),
+            key=jax.random.key(7),
+            step=jnp.asarray(0, dtype=jnp.int32),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory) / "model.json"
+            path = Path(directory) / "state.pt"
+            save_state(state, model_path, path)
+            saved = load_checkpoint(path)
+            for corruption in (
+                {"key_data": (1,)},
+                {"key_data": (-1, 0)},
+                {"key_data": (2**32, 0)},
+                {"key_implementation": "unknown"},
+                {"step": 123},
+            ):
+                with self.subTest(corruption=corruption):
+                    optimizer = saved.optimizer_state | corruption
+                    save_resume_state(
+                        path, saved.model_copy(update={"optimizer_state": optimizer})
+                    )
+                    with self.assertRaises((ValueError, TypeError)):
+                        load_checkpoint(path)
 
 
 if __name__ == "__main__":
