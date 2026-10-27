@@ -52,6 +52,7 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
         "knowledge_search.py",
         "export_run.py",
         "journal_search.py",
+        "jax_training.py",
     ),
 )
 def test_extended_examples_execute_complete_workflows(
@@ -112,7 +113,10 @@ def test_extended_examples_execute_complete_workflows(
         else 240,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    if example == "reuse.py":
+    if example == "jax_training.py":
+        assert "status: succeeded" in completed.stdout
+        assert "next key match after checkpoint resume" in completed.stdout
+    elif example == "reuse.py":
         assert "first: succeeded; reused stages: 0" in completed.stdout
         assert "default: succeeded; reused stages: 1" in completed.stdout
         assert "forced: succeeded; reused stages: 0" in completed.stdout

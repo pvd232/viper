@@ -140,14 +140,53 @@ python -m examples.export_run
 The program trains once, calls `execution.export_run()` with the saved result
 path and explicit source trust, then calls `execution.verify_run_bundle()` with
 the returned `bundle_path` and `manifest_sha256`. Verification uses the exported
-files rather than the original workspace or immutable store. Neither operation
-executes the training stage again. Preserve the manifest digest separately when
+files. Both operations preserve the completed training stage. Preserve the
+manifest digest separately when
 transferring a bundle so the recipient can check the expected identity.
 
 The export result exposes `bundle_path`, `manifest_path`, `manifest_sha256`,
-`file_count`, and `total_bytes`; it is not a `RunResult` and has no `.path` property.
+`file_count`, and `total_bytes`. Use `bundle_path` to locate the exported archive.
 
 ## Resume training from a checkpoint
+
+### JAX training
+
+Install the optional CPU JAX dependency with `python -m pip install '.[jax]'`
+from the repository root. Run `python -m examples.jax_training` from a committed
+checkout to execute the [JAX example](../../examples/jax_training.py).
+
+The example uses the existing training-stage and artifact-loader interfaces.
+It compares eight uninterrupted stochastic SGD updates with three updates,
+a saved checkpoint, and five additional updates in another worker process.
+The comparison requires identical parameters, momentum, update count and next
+unused random key on the same CPU runtime.
+
+The model output stores the prediction parameter as validated JSON. The
+`resume_state` output uses VIPER's existing `ResumeState` and restricted
+serializer. Its `optimizer_state` mapping stores the JAX accumulator, completed
+update count, key words and PRNG implementation. It also preserves the process
+random generators and array sampler position required by the shared schema.
+A Pydantic model validates the JAX values; a registered dataclass carries
+arrays through the compiled update.
+
+JAX passes random keys explicitly. Save the current unused key, including its
+implementation, alongside optimizer and data-position state. Recreating a key
+from the initial seed restarts its sequence. The example initializes its first
+key from VIPER's replicate-seeded Python generator and restores subsequent keys
+with JAX's [`key_data`](https://docs.jax.dev/en/latest/_autosummary/jax.random.key_data.html)
+and [`wrap_key_data`](https://docs.jax.dev/en/latest/_autosummary/jax.random.wrap_key_data.html).
+
+Workspace-owned loaders also support larger JAX checkpoints. Authors must save
+every parameter, optimizer leaf, live key and sampling position their training
+function uses. The scalar example demonstrates that boundary. Serializing
+arbitrary training states remains the application's responsibility.
+
+VIPER's `capture_resume_state()` and `restore_resume_state()` helpers continue
+to target PyTorch. Its runtime receipts record Python, NumPy and PyTorch
+controls. JAX compiler settings and GPU determinism remain application-owned.
+The example checks exact CPU continuation separately from those receipts.
+
+### PyTorch training
 
 Retrying a failed run and continuing training from a saved checkpoint are
 separate operations. A retry executes another attempt of the original plan.

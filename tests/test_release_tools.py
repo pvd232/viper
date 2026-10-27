@@ -39,7 +39,14 @@ def test_release_metadata_matches_the_approved_public_identity() -> None:
         "Issues": "https://github.com/pvd232/viper/issues",
     }
     assert project["scripts"] == {"viper": "viper.cli:main"}
-    assert set(project["optional-dependencies"]) == {"test", "release", "mcp", "gcs"}
+    assert set(project["optional-dependencies"]) == {
+        "test",
+        "release",
+        "mcp",
+        "gcs",
+        "jax",
+    }
+    assert project["optional-dependencies"]["jax"] == ["jax>=0.4.36,<1"]
     assert project["dependencies"] == [
         "google-cloud-storage>=3.4,<4",
         "huggingface_hub>=1,<2",
