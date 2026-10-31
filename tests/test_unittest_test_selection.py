@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import subprocess
 import sys
 from pathlib import Path
 
 from source_impact import codeql, models
 
 from tools.select_unittest_tests import select_unittest_tests
+from viper import _subprocess
 
 ANALYZED_ROOTS = frozenset({"contract_protocol", "tests"})
 TEST_REFERENCE = (
@@ -245,7 +245,7 @@ def test_uses_fallback_for_unresolved_declaration(tmp_path: Path) -> None:
     assert result["unresolved"] == ("contract_protocol/compiler.py:missing",)
     references = result["unittest_args"]
     assert isinstance(references, tuple)
-    actual = subprocess.run(
+    actual = _subprocess.run(
         [sys.executable, "-m", "unittest", *references],
         cwd=tmp_path,
         capture_output=True,
