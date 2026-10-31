@@ -223,14 +223,15 @@ def test_public_modules_export_owned_definitions_or_impact_aliases() -> None:
         if module_name.endswith(".__init__"):
             module_name = module_name.removesuffix(".__init__")
         module = PUBLIC_MODULES_BY_NAME[module_name]
+        exports = getattr(module, "__all__", ())
         if module_name == "viper.test_impact":
-            assert set(module.__all__) == {
+            assert set(exports) == {
                 "DeclarationId",
                 "TestRef",
                 "TestSelection",
                 "select_tests",
             }
-            for name in module.__all__:
+            for name in exports:
                 assert getattr(module, name) is getattr(source_selection, name)
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -247,7 +248,7 @@ def test_public_modules_export_owned_definitions_or_impact_aliases() -> None:
                 local_names.update(
                     target.id for target in targets if isinstance(target, ast.Name)
                 )
-        assert set(getattr(module, "__all__", ())) <= local_names, module_name
+        assert set(exports) <= local_names, module_name
 
 
 def test_api_exports_and_registries_are_complete() -> None:
