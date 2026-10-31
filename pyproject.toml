@@ -46,7 +46,6 @@ test = [
     "pytest>=9,<10",
     "ruff>=0.12,<1",
 ]
-test-impact = []
 release = [
     "build>=1.2,<2",
     "twine>=6,<7",

@@ -99,7 +99,7 @@ python -m pytest tests/test_run_execution.py -q
 The independent [source-impact package](https://github.com/pvd232/source-impact/tree/98b4f2baaf7f612b83d338f4542725bd3dd0daa3)
 owns source graphs and repository-neutral test selection. VIPER declares this
 package as a normal dependency. Its `test` extra supplies pytest and the quality
-tools; the existing `test-impact` extra remains accepted. `viper.test_impact`
+tools. `viper.test_impact`
 preserves its import surface through a compatibility re-export.
 
 `tools/select_impacted_tests.py` keeps VIPER's pytest tier and domain policy.
