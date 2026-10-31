@@ -1,6 +1,17 @@
 """Verify test selection from declaration relationships."""
 
+from source_impact import selection
+
+from viper import test_impact
 from viper.test_impact import DeclarationId, TestRef, select_tests
+
+
+def test_legacy_imports_are_the_shared_owners() -> None:
+    """Keep compatibility without a second algorithm or copied public types."""
+    assert DeclarationId is selection.DeclarationId
+    assert TestRef is selection.TestRef
+    assert test_impact.TestSelection is selection.TestSelection
+    assert select_tests is selection.select_tests
 
 
 def test_selects_explicit_direct_and_reachable_tests() -> None:
@@ -34,7 +45,7 @@ def test_selects_explicit_direct_and_reachable_tests() -> None:
 
 
 def test_reports_unobserved_cycle_for_fallback() -> None:
-    """Terminate a dependency cycle and report the unresolved declaration."""
+    """Terminate a dependency cycle and retain both uncovered declarations."""
     first = DeclarationId("src/first.py:first")
     second = DeclarationId("src/second.py:second")
 
@@ -49,4 +60,4 @@ def test_reports_unobserved_cycle_for_fallback() -> None:
     )
 
     assert selection.tests == ()
-    assert selection.unresolved == (first,)
+    assert selection.unresolved == (first, second)

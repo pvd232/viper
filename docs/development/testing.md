@@ -96,53 +96,33 @@ python -m pytest tests/test_run_execution.py -q
 
 ## Declaration-impact selection
 
-`viper.test_impact.select_tests()` owns repository-neutral test selection. It
-combines dependency relationships, explicit observer links, and declarations
-recognized as tests. It returns the selected test references and every
-declaration that still needs fallback coverage. The function does not interpret
-repository paths, test frameworks, marker expressions, or commands.
+The independent [source-impact package](https://github.com/pvd232/agents/tree/bf9d975d620ce720fcd116d6d1590d9892302255/packages/source-impact)
+owns source graphs and repository-neutral test selection. VIPER declares this
+package as a normal dependency. Its `test` extra supplies pytest and the quality
+tools; the existing `test-impact` extra remains accepted. `viper.test_impact`
+preserves its import surface through a compatibility re-export.
 
-`tools/select_impacted_tests.py` adapts that engine to VIPER. It validates the
-version-3 `SourceGraph` emitted by VIPER's CodeQL analyzer and AST-location
-lowerer, converts graph test declarations into pytest node IDs, and reads test
-tiers and fallback domains from VIPER's test configuration.
+`tools/select_impacted_tests.py` keeps VIPER's pytest tier and domain policy.
+It loads a current format-4 graph, resolves executable test declarations, and
+collects graph observers plus `tests/declaration_observers.toml`. Explicit
+observers apply at every reachable declaration. Traversal continues through
+tests used by other tests. An uncovered dependent branch remains unresolved
+even when another branch has an observer.
 
-`tools/select_unittest_tests.py` adapts the same graph and selection engine to
-repositories that use importable unittest names. The caller supplies the
-analyzed top-level directories and one fallback module. The adapter returns
-exact test names when the graph reaches tests and returns the fallback module
-when any changed declaration remains unresolved.
+Fallback adds the affected domain's fast test modules to the already selected
+node IDs. An unmapped declaration or explicit analysis limitation widens
+fallback to the full unit/contract set. It never replaces selected tests with
+a marker expression that could exclude an observer in another domain.
+Integration, release and live-CUDA observers remain visible as deferred tests
+and run at their declared closure gate.
 
-The adapter starts from the changed `path:symbol` declarations and their direct
-dependents. The selection engine follows further dependents until each path
-reaches a pytest test. `tests/declaration_observers.toml` adds test relationships
-that source analysis cannot prove; these observers supplement rather than
-replace graph-reachable tests.
-
-When neither source identifies a test for an affected declaration, the adapter
-widens selection to its owning domain. An unmapped path widens selection to
-every unit and contract test. Integration, release, and live-CUDA observers
-remain visible as deferred tests and run at their declared closure gate.
-
-The analyzer boundary is inherited from source revision
-`4840ee9875b5382d547595b2bee62b8f16365611`: CodeQL locates dependency
-operations, and the lowerer joins each CodeQL binding location to an exact
-Python AST declaration and byte span. The selector preserves those AST binding
-locations in its JSON result; it does not reconstruct source relationships.
-It recomputes the inherited Python-source manifest digest and rejects a cached
-graph whose source identity differs from the current checkout.
-
-Build the graph with the pinned analyzer, then select tests from declaration
-IDs:
+Build and select with the installed shared implementation:
 
 ```bash
 python tools/build_test_impact_graph.py \
   --codeql /path/to/codeql \
   --cache /path/outside/the/repository/cache \
-  --output /path/outside/the/repository/source-graph.json \
-  --analyzed-root src \
-  --analyzed-root tests \
-  --analyzed-root tools
+  --output /path/outside/the/repository/source-graph.json
 python tools/select_impacted_tests.py \
   --graph /path/outside/the/repository/source-graph.json \
   --source-root . \
@@ -150,33 +130,23 @@ python tools/select_impacted_tests.py \
   --declaration src/viper/storage.py:LocalArtifactStore
 ```
 
-To analyze another repository, keep the command in the VIPER checkout and pass
-that repository plus its source roots. The builder uses VIPER's pinned analyzer
-and query pack while CodeQL reads the supplied repository:
+The builder supplies VIPER's `src`, `tests` and `tools` roots to the shared
+package. It does not check out an old VIPER revision or apply a patch. Other
+repositories use `python -m source_impact build` and `select` directly, with
+explicit roots and framework. `tools/select_unittest_tests.py` is a compatibility
+command for existing users of that adapter.
 
-```bash
-python tools/build_test_impact_graph.py \
-  --repository /path/to/repository \
-  --codeql /path/to/codeql \
-  --cache /path/outside/both/repositories/cache \
-  --output /path/outside/both/repositories/source-graph.json \
-  --analyzed-root package \
-  --analyzed-root tests
-python -m tools.select_unittest_tests \
-  --graph /path/outside/both/repositories/source-graph.json \
-  --source-root /path/to/repository \
-  --analyzed-root package \
-  --analyzed-root tests \
-  --fallback tests \
-  --declaration package/module.py:changed_function
-```
+Each node identifies an exact binding occurrence in one source snapshot;
+duplicate names are valid, while ambiguous name selection remains unresolved.
+Current source paths and bytes, query assets, conversion identity, graph
+content and analysis limitations are verified before selection. Old format-3
+graphs and graphs describing a different source inventory require rebuilding.
+A separate newer test checkout cannot make an old graph current.
 
-The compatibility patch defaults analysis to `src`, `tests`, and `tools`; an
-external-repository command replaces those roots explicitly. It omits typing
-overload stubs, applies the existing module/class scope rule to assignments,
-and accepts a CodeQL name-column anchor only when the AST lowerer finds one
-declaration of the same kind on that line. Ambiguous bindings still fail. The
-builder removes its detached analyzer worktree after success or failure.
+A selection describes the static profile and supplied observer relationships.
+It is not proof of complete Python dispatch inference, behavioral coverage or
+test success. Keep narrow tests first, run necessary broad gates durably in the
+background, and retain their actual results before claiming release closure.
 
 The marker declarations in `pyproject.toml` are authoritative.
 

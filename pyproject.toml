@@ -34,6 +34,7 @@ dependencies = [
     "numpy>=2,<3",
     "pydantic>=2.12,<3",
     "PyYAML>=6,<7",
+    "source-impact @ git+https://github.com/pvd232/agents.git@bf9d975d620ce720fcd116d6d1590d9892302255#subdirectory=packages/source-impact",
     "torch>=2.6,<3",
     "torchdata==0.11.0",
     "transformers>=5.19,<6",
@@ -45,6 +46,7 @@ test = [
     "pytest>=9,<10",
     "ruff>=0.12,<1",
 ]
+test-impact = []
 release = [
     "build>=1.2,<2",
     "twine>=6,<7",

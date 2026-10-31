@@ -1,39 +1,28 @@
-"""Select declaration-linked pytest checks from a CodeQL source graph."""
+"""Apply VIPER's test tiers and domains to portable graph-based selection."""
 
 from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import json
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from pathlib import Path, PurePosixPath
 
-from viper.test_impact import DeclarationId, TestRef, select_tests
+from source_impact import codeql, testing
+from source_impact.models import SourceGraph, SourceNode
 
-IGNORED_SOURCE_PARTS = frozenset(
-    {
-        ".git",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".venv",
-        ".viper",
-        "node_modules",
-    }
-)
 ANALYZED_SOURCE_ROOTS = frozenset({"src", "tests", "tools"})
 
 
 class ImpactSelectionError(ValueError):
-    """Report an invalid source graph, observer manifest, or target selection."""
+    """Report invalid graph evidence, observer ownership, or test selection."""
 
 
 @dataclass(frozen=True, slots=True)
 class DeclarationObserver:
-    """Link one source declaration to its tests and conservative fallback domain."""
+    """Link one declaration to explicit tests and its fallback domain."""
 
     declaration: str
     tests: tuple[str, ...]
@@ -42,7 +31,7 @@ class DeclarationObserver:
 
 @dataclass(frozen=True, slots=True)
 class ImpactManifest:
-    """Hold declaration observers and source-file fallback ownership."""
+    """Hold VIPER's explicit observers and source-file fallback ownership."""
 
     observers: dict[str, DeclarationObserver]
     source_domains: dict[str, str]
@@ -52,32 +41,43 @@ def source_digest(
     root: Path,
     analyzed_roots: frozenset[str] = ANALYZED_SOURCE_ROOTS,
 ) -> str:
-    """Hash Python paths and bytes exactly as the inherited graph lowerer does."""
-    rows = [
-        {
-            "path": path.relative_to(root).as_posix(),
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        }
-        for path in sorted(
-            (
-                candidate
-                for candidate in root.rglob("*.py")
-                if candidate.relative_to(root).parts[0] in analyzed_roots
-                if not any(
-                    part in IGNORED_SOURCE_PARTS
-                    for part in candidate.relative_to(root).parts
-                )
-            ),
-            key=lambda candidate: candidate.relative_to(root).as_posix(),
-        )
-    ]
-    return hashlib.sha256(
-        json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    """Apply VIPER's default scope to the shared source identity implementation."""
+    return codeql.source_digest(root, analyzed_roots)
+
+
+def load_source_graph(
+    path: Path,
+    source_root: Path,
+    analyzed_roots: frozenset[str],
+) -> SourceGraph:
+    """Load the full current graph without dropping analysis limitations."""
+    try:
+        return codeql.load_source_graph(path, source_root, analyzed_roots)
+    except (ValueError, OSError, RuntimeError) as error:
+        raise ImpactSelectionError(str(error)) from error
+
+
+def _pytest_module(reference: str) -> str:
+    """Read one repository-relative pytest module, including nested directories."""
+    path = reference.split("::", 1)[0]
+    parts = PurePosixPath(path).parts
+    filename = parts[-1] if parts else ""
+    if (
+        not parts
+        or PurePosixPath(path).is_absolute()
+        or parts[0] != "tests"
+        or len(parts) < 2
+        or ".." in parts
+        or "\\" in path
+        or not filename.endswith(".py")
+        or not (filename.startswith("test_") or filename.endswith("_test.py"))
+    ):
+        raise ImpactSelectionError(f"invalid pytest module reference: {reference!r}")
+    return path
 
 
 def load_observers(path: Path) -> ImpactManifest:
-    """Load the unique declaration-to-test records from one TOML manifest."""
+    """Load unique explicit observers without imposing flat test directories."""
     payload = tomllib.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1:
         raise ImpactSelectionError("observer manifest schema_version must equal 1")
@@ -99,14 +99,11 @@ def load_observers(path: Path) -> ImpactManifest:
         if (
             not isinstance(tests, list)
             or not tests
-            or not all(
-                isinstance(test, str)
-                and test.startswith("tests/test_")
-                and "::" in test
-                for test in tests
-            )
+            or not all(isinstance(test, str) and "::" in test for test in tests)
         ):
             raise ImpactSelectionError(f"invalid observing tests for {declaration}")
+        for test in tests:
+            _pytest_module(test)
         if not isinstance(domain, str) or not domain.startswith("domain_"):
             raise ImpactSelectionError(f"invalid fallback domain for {declaration}")
         observers[declaration] = DeclarationObserver(
@@ -132,7 +129,7 @@ def load_observers(path: Path) -> ImpactManifest:
 
 
 def _test_classification(path: Path) -> tuple[dict[str, str], dict[str, str]]:
-    """Read pytest tier and domain maps without importing test configuration."""
+    """Read VIPER's tier and domain maps without importing test configuration."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     assignments: dict[str, dict[str, str]] = {}
     for statement in tree.body:
@@ -152,73 +149,59 @@ def _test_classification(path: Path) -> tuple[dict[str, str], dict[str, str]]:
             raise ImpactSelectionError(f"invalid pytest classification: {target.id}")
         assignments[target.id] = value
     try:
-        return assignments["TIER_BY_MODULE"], assignments["DOMAIN_BY_MODULE"]
+        tiers = assignments["TIER_BY_MODULE"]
+        domains = assignments["DOMAIN_BY_MODULE"]
     except KeyError as error:
         raise ImpactSelectionError("pytest classification maps are missing") from error
+    if tiers.keys() != domains.keys():
+        raise ImpactSelectionError("test tier and domain ownership must agree")
+    return tiers, domains
 
 
-def _test_module(node_id: str) -> str:
-    """Return the Python module stem selected by one pytest node ID."""
-    return Path(node_id.split("::", 1)[0]).stem
+def _fallback_domain(
+    declaration: str,
+    nodes: Mapping[str, SourceNode],
+    manifest: ImpactManifest,
+    domains: Mapping[str, str],
+) -> str:
+    """Prefer a declaration's explicit fallback owner over file-level ownership."""
+    node = nodes.get(declaration)
+    symbolic = f"{node.path}:{node.symbol}" if node is not None else declaration
+    observer = manifest.observers.get(declaration) or manifest.observers.get(symbolic)
+    if observer is not None:
+        return observer.fallback_domain
+    source_path = node.path if node is not None else declaration.partition(":")[0]
+    if PurePosixPath(source_path).parts[:1] == ("tests",):
+        return domains.get(PurePosixPath(source_path).stem, "all")
+    return manifest.source_domains.get(source_path, "all")
 
 
-def load_source_graph(
-    path: Path,
-    source_root: Path,
-    analyzed_roots: frozenset[str],
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
-    """Load the version-3 graph emitted by VIPER's CodeQL/AST lowerer."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or payload.get("schema_version") != 3:
-        raise ImpactSelectionError("source graph schema_version must equal 3")
-    snapshot = payload.get("snapshot")
-    if not isinstance(snapshot, dict) or snapshot.get("source_sha256") != source_digest(
-        source_root, analyzed_roots
-    ):
-        raise ImpactSelectionError("source graph does not describe the current source")
-    raw_nodes = payload.get("nodes")
-    raw_edges = payload.get("edges")
-    if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
-        raise ImpactSelectionError("source graph needs node and edge lists")
-
-    nodes: dict[str, dict[str, Any]] = {}
-    for node in raw_nodes:
-        if not isinstance(node, dict):
-            raise ImpactSelectionError("source graph node must be an object")
-        node_id = node.get("node_id")
-        if not isinstance(node_id, str) or node_id in nodes:
-            raise ImpactSelectionError("source graph node IDs must be unique strings")
-        for field in ("path", "symbol", "binding_start_line", "binding_start_col"):
-            if field not in node:
-                raise ImpactSelectionError(
-                    f"source graph node lacks {field}: {node_id}"
-                )
-        nodes[node_id] = node
-
-    edges: list[dict[str, Any]] = []
-    for edge in raw_edges:
-        if not isinstance(edge, dict):
-            raise ImpactSelectionError("source graph edge must be an object")
-        source = edge.get("source")
-        target = edge.get("target")
-        if source not in nodes or target not in nodes:
-            raise ImpactSelectionError("source graph edge references an absent node")
-        edges.append(edge)
-    return nodes, edges
-
-
-def _pytest_node_id(node: dict[str, Any]) -> str | None:
-    """Convert one CodeQL/AST test declaration into its pytest node ID."""
-    path = node["path"]
-    symbol = node["symbol"]
-    if not (
-        isinstance(path, str)
-        and path.startswith("tests/test_")
-        and isinstance(symbol, str)
-        and (symbol.startswith("test_") or ".test_" in symbol)
-    ):
-        return None
-    return f"{path}::{symbol.replace('.', '::')}"
+def _fallback_modules(
+    root: Path,
+    requested_domains: set[str],
+    tiers: Mapping[str, str],
+    domains: Mapping[str, str],
+) -> list[str]:
+    """Materialize fast modules so fallback cannot filter out known observers."""
+    if not requested_domains:
+        return []
+    modules = []
+    for path in sorted((root / "tests").rglob("*.py")):
+        if tiers.get(path.stem) not in {"unit", "contract"}:
+            continue
+        if (
+            "all" not in requested_domains
+            and domains.get(path.stem) not in requested_domains
+        ):
+            continue
+        relative = path.relative_to(root).as_posix()
+        _pytest_module(relative)
+        if not path.resolve().is_relative_to(root):
+            raise ImpactSelectionError(
+                f"fallback test is outside the repository: {relative}"
+            )
+        modules.append(relative)
+    return modules
 
 
 def select_impacted_tests(
@@ -230,123 +213,120 @@ def select_impacted_tests(
     changed_tests: tuple[str, ...] = (),
     classification_path: Path = Path("tests/conftest.py"),
     analyzed_roots: frozenset[str] = ANALYZED_SOURCE_ROOTS,
-) -> dict[str, Any]:
-    """Select impacted tests or widen when graph coverage remains incomplete."""
-    if not declarations:
-        raise ImpactSelectionError("at least one changed declaration is required")
-
-    nodes, edges = load_source_graph(
-        graph_path,
-        source_root.resolve(),
-        analyzed_roots,
-    )
+) -> dict[str, object]:
+    """Keep known observers while widening every explicit coverage gap."""
+    root = source_root.resolve()
+    graph = load_source_graph(graph_path, root, analyzed_roots)
     manifest = load_observers(observer_path)
-    observers = manifest.observers
-    tier_by_module, domain_by_module = _test_classification(classification_path)
-    target_set = set(declarations)
-    missing_targets = {
-        DeclarationId(declaration) for declaration in target_set - nodes.keys()
+    tiers, domains = _test_classification(classification_path)
+    try:
+        selection = testing.select_graph_tests(
+            graph,
+            source_root=root,
+            framework="pytest",
+            declarations=declarations,
+            observers={key: value.tests for key, value in manifest.observers.items()},
+            changed_tests=changed_tests,
+        )
+    except (ValueError, OSError) as error:
+        raise ImpactSelectionError(str(error)) from error
+
+    nodes = {node.node_id: node for node in graph.nodes}
+    fallback_domains = {
+        _fallback_domain(str(declaration), nodes, manifest, domains)
+        for declaration in selection.unresolved
     }
+    if selection.analysis_unknowns:
+        fallback_domains.add("all")
 
-    fallback_domains: set[str] = set()
-    incoming: dict[str, set[str]] = {}
-    for edge in edges:
-        incoming.setdefault(str(edge["target"]), set()).add(str(edge["source"]))
-
-    neighbors = sorted(
-        {
-            str(edge["source"])
-            for edge in edges
-            if edge.get("target") in target_set and edge.get("kind") != "imports"
-        }
-    )
-
-    dependents = {
-        DeclarationId(declaration): {
-            DeclarationId(dependent) for dependent in declaration_dependents
-        }
-        for declaration, declaration_dependents in incoming.items()
-    }
-    observer_refs = {
-        DeclarationId(declaration): tuple(TestRef(test) for test in observer.tests)
-        for declaration, observer in observers.items()
-    }
-    test_refs_by_declaration = {
-        DeclarationId(declaration): TestRef(test)
-        for declaration, node in nodes.items()
-        if (test := _pytest_node_id(node)) is not None
-    }
-
-    selection = select_tests(
-        (DeclarationId(declaration) for declaration in target_set | set(neighbors)),
-        dependents=dependents,
-        observers=observer_refs,
-        test_refs_by_declaration=test_refs_by_declaration,
-    )
-
-    selected_tests: set[str] = set(changed_tests)
-    selected_tests.update(selection.tests)
-    incomplete_declarations = set(selection.unresolved) | missing_targets
-    for declaration in incomplete_declarations:
-        node = nodes.get(declaration)
-        source_path = declaration.split(":", 1)[0] if node is None else node["path"]
-        if source_path.startswith("tests/test_"):
-            domain = domain_by_module.get(Path(source_path).stem)
-        else:
-            domain = manifest.source_domains.get(source_path)
-        fallback_domains.add(domain or "all")
-
+    selected = [str(reference) for reference in selection.known_tests]
+    for reference in selected:
+        _pytest_module(reference)
     unknown_tests = sorted(
-        test for test in selected_tests if _test_module(test) not in tier_by_module
+        reference
+        for reference in selected
+        if PurePosixPath(_pytest_module(reference)).stem not in tiers
     )
     if unknown_tests:
         raise ImpactSelectionError(
             f"observing tests lack tier ownership: {unknown_tests}"
         )
     active_tests = sorted(
-        test
-        for test in selected_tests
-        if tier_by_module[_test_module(test)] in {"unit", "contract"}
+        reference
+        for reference in selected
+        if tiers[PurePosixPath(_pytest_module(reference)).stem] in {"unit", "contract"}
     )
-    deferred_tests = sorted(set(selected_tests) - set(active_tests))
-
-    if "all" in fallback_domains:
-        pytest_args = ["tests", "-m", "unit or contract"]
-        mode = "fast_repository"
-    elif fallback_domains:
-        expression = " or ".join(sorted(fallback_domains))
-        pytest_args = ["tests", "-m", f"({expression}) and (unit or contract)"]
-        mode = "domain"
-    else:
-        pytest_args = active_tests
-        mode = "nodeids"
-
-    selected_nodes = [nodes[node_id] for node_id in sorted(target_set & nodes.keys())]
+    deferred_tests = sorted(set(selected) - set(active_tests))
+    fallback_modules = _fallback_modules(root, fallback_domains, tiers, domains)
+    available_fallback_domains = {
+        domains[PurePosixPath(module).stem] for module in fallback_modules
+    }
+    if fallback_modules:
+        available_fallback_domains.add("all")
+    uncovered_fallback_domains = sorted(fallback_domains - available_fallback_domains)
+    # A module already includes its selected node IDs. Preserve their identity
+    # in selected_tests while avoiding duplicate execution in the command.
+    pytest_args = sorted(
+        set(fallback_modules)
+        | {
+            reference
+            for reference in active_tests
+            if _pytest_module(reference) not in fallback_modules
+        }
+    )
+    mode = (
+        "fast_repository"
+        if "all" in fallback_domains
+        else "domain"
+        if fallback_domains
+        else "nodeids"
+    )
+    targets = set(selection.target_node_ids)
+    neighbors = sorted(
+        {
+            edge.source
+            for edge in graph.edges
+            if edge.target in targets and edge.kind != "imports"
+        }
+    )
+    if (
+        codeql.source_digest(root, graph.snapshot.analyzed_roots)
+        != graph.snapshot.source_sha256
+    ):
+        raise ImpactSelectionError("source changed during test selection")
     return {
         "schema_version": 1,
         "mode": mode,
-        "targets": sorted(target_set),
+        "targets": sorted(set(declarations)),
         "target_ast_bindings": [
             {
-                "node_id": node["node_id"],
-                "path": node["path"],
-                "symbol": node["symbol"],
-                "line": node["binding_start_line"],
-                "byte_column": node["binding_start_col"],
+                "node_id": node.node_id,
+                "path": node.path,
+                "symbol": node.symbol,
+                "line": node.binding_start_line,
+                "byte_column": node.binding_start_col,
             }
-            for node in selected_nodes
+            for node in graph.nodes
+            if node.node_id in targets
         ],
         "one_hop_neighbors": neighbors,
         "selected_tests": active_tests,
         "deferred_tests": deferred_tests,
-        "incomplete_declarations": sorted(incomplete_declarations),
+        "incomplete_declarations": list(selection.unresolved),
+        "analysis_unknowns": list(selection.analysis_unknowns),
         "fallback_domains": sorted(fallback_domains),
+        "fallback_modules": fallback_modules,
+        "uncovered_fallback_domains": uncovered_fallback_domains,
         "pytest_args": pytest_args,
+        "complete": selection.complete,
+        "requires_manual_selection": (
+            not pytest_args or bool(uncovered_fallback_domains)
+        ),
     }
 
 
 def _parser() -> argparse.ArgumentParser:
-    """Define the command-line boundary for reproducible test selection."""
+    """Define the VIPER adapter command line."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--graph", required=True, type=Path)
     parser.add_argument("--source-root", required=True, type=Path)
@@ -355,15 +335,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--changed-test", action="append", default=[])
     parser.add_argument("--analyzed-root", action="append", dest="analyzed_roots")
     parser.add_argument(
-        "--classifications",
-        type=Path,
-        default=Path("tests/conftest.py"),
+        "--classifications", type=Path, default=Path("tests/conftest.py")
     )
     return parser
 
 
 def main() -> int:
-    """Print one deterministic declaration-impact selection as JSON."""
+    """Print selection evidence and refuse a runnable-plan claim without coverage."""
     arguments = _parser().parse_args()
     result = select_impacted_tests(
         graph_path=arguments.graph,
@@ -375,7 +353,7 @@ def main() -> int:
         analyzed_roots=frozenset(arguments.analyzed_roots or ANALYZED_SOURCE_ROOTS),
     )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
-    return 0
+    return 1 if result["requires_manual_selection"] else 0
 
 
 if __name__ == "__main__":
