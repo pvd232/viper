@@ -1,99 +1,56 @@
-"""Guard the pinned CodeQL/AST graph-builder boundary."""
-
-from __future__ import annotations
+"""Guard VIPER's thin adapter to the independently installed graph builder."""
 
 from pathlib import Path
 
 import pytest
 
-from tools.build_test_impact_graph import (
-    ANALYZER_REVISION,
-    GraphBuildError,
-    build_graph,
-)
-from viper._subprocess import run as run_subprocess
+from tools.build_test_impact_graph import build_graph
 
 
-def test_compatibility_patch_applies_to_the_pinned_analyzer(tmp_path: Path) -> None:
-    """Reject drift between the retained revision and its compatibility patch."""
-    root = Path(__file__).parents[1]
-    worktree = tmp_path / "analyzer"
-    run_subprocess(
-        ("git", "worktree", "add", "--detach", str(worktree), ANALYZER_REVISION),
-        cwd=root,
-        check=True,
-        capture_output=True,
-    )
-    try:
-        run_subprocess(
-            (
-                "git",
-                "apply",
-                "--check",
-                "--unidiff-zero",
-                str(root / "tools/codeql/test-impact-compat.patch"),
-            ),
-            cwd=worktree,
-            check=True,
-            capture_output=True,
-        )
-    finally:
-        run_subprocess(
-            ("git", "worktree", "remove", "--force", str(worktree)),
-            cwd=root,
-            check=True,
-            capture_output=True,
-        )
-
-
-def test_graph_builder_removes_worktree_after_worker_failure(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+def test_graph_builder_uses_shared_owner_with_explicit_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Remove the detached analyzer checkout when graph construction fails."""
-    root = tmp_path / "repository"
-    analyzer = tmp_path / "viper"
-    patch = analyzer / "tools/codeql/test-impact-compat.patch"
-    worker = analyzer / "tools/codeql/historical_test_impact_worker.py.txt"
-    patch.parent.mkdir(parents=True)
-    patch.write_text("patch", encoding="utf-8")
-    worker.write_text("worker", encoding="utf-8")
-    commands: list[tuple[str, ...]] = []
+    """Preserve caller inputs without a historical checkout or source patch."""
+    received: list[dict[str, object]] = []
 
-    def fake_run(
-        command: tuple[str, ...],
-        *,
-        cwd: Path,
-        env: dict[str, str] | None = None,
-    ) -> None:
-        del cwd, env
-        commands.append(command)
-        if command[0].endswith("python"):
-            raise GraphBuildError("worker failed")
+    def capture(**kwargs: object) -> None:
+        """Record the one shared operation at the adapter boundary."""
+        received.append(kwargs)
 
-    monkeypatch.setattr("tools.build_test_impact_graph._run", fake_run)
-    monkeypatch.setattr("tools.build_test_impact_graph.ANALYZER_ROOT", analyzer)
-    monkeypatch.setattr(
-        "tools.build_test_impact_graph.shutil.copyfile",
-        lambda *_: None,
+    monkeypatch.setattr("source_impact.build.build_graph", capture)
+    build_graph(
+        repository=tmp_path,
+        codeql=tmp_path / "codeql",
+        cache=tmp_path / "cache",
+        output=tmp_path / "graph.json",
+        analyzed_roots=("contract_protocol", "tests"),
     )
+    assert received == [
+        {
+            "repository": tmp_path,
+            "codeql_executable": tmp_path / "codeql",
+            "cache": tmp_path / "cache",
+            "output": tmp_path / "graph.json",
+            "analyzed_roots": ("contract_protocol", "tests"),
+        }
+    ]
 
-    with pytest.raises(GraphBuildError, match="worker failed"):
+
+def test_shared_builder_failure_is_visible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Let validation failures stop the command before a graph is advertised."""
+
+    def fail(**kwargs: object) -> None:
+        """Model an invalid source inventory from the shared owner."""
+        del kwargs
+        raise ValueError("source inventory changed")
+
+    monkeypatch.setattr("source_impact.build.build_graph", fail)
+    with pytest.raises(ValueError, match="source inventory changed"):
         build_graph(
-            repository=root,
+            repository=tmp_path,
             codeql=tmp_path / "codeql",
             cache=tmp_path / "cache",
             output=tmp_path / "graph.json",
-            analyzed_roots=("contract_protocol", "tests"),
         )
-
-    assert commands[-1][0:4] == ("git", "worktree", "remove", "--force")
-    worker_command = next(
-        command for command in commands if command[0].endswith("python")
-    )
-    assert worker_command[-4:] == (
-        "--analyzed-root",
-        "contract_protocol",
-        "--analyzed-root",
-        "tests",
-    )

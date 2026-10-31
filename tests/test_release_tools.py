@@ -47,6 +47,7 @@ def test_release_metadata_matches_the_approved_public_identity() -> None:
         "numpy>=2,<3",
         "pydantic>=2.12,<3",
         "PyYAML>=6,<7",
+        "source-impact @ git+https://github.com/pvd232/source-impact.git@98b4f2baaf7f612b83d338f4542725bd3dd0daa3",
         "torch>=2.6,<3",
         "torchdata==0.11.0",
         "transformers>=5.19,<6",

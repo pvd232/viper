@@ -7,6 +7,8 @@ from importlib import resources
 from importlib.util import resolve_name
 from pathlib import Path
 
+import source_impact.selection as source_selection
+
 import viper
 import viper.api as api
 import viper.artifact_loaders as artifact_loaders
@@ -210,8 +212,8 @@ def test_stage_interface_names_its_context_and_operations() -> None:
     assert stages.eval.__name__ == "eval"
 
 
-def test_public_modules_export_only_local_definitions() -> None:
-    """Reject a public ``__all__`` entry imported from another module."""
+def test_public_modules_export_owned_definitions_or_impact_aliases() -> None:
+    """Require owned exports or the exact shared impact compatibility aliases."""
     package_root = Path(viper.__file__).parent
     for path in sorted(package_root.rglob("*.py")):
         relative = path.relative_to(package_root)
@@ -221,6 +223,17 @@ def test_public_modules_export_only_local_definitions() -> None:
         if module_name.endswith(".__init__"):
             module_name = module_name.removesuffix(".__init__")
         module = PUBLIC_MODULES_BY_NAME[module_name]
+        exports = getattr(module, "__all__", ())
+        if module_name == "viper.test_impact":
+            assert set(exports) == {
+                "DeclarationId",
+                "TestRef",
+                "TestSelection",
+                "select_tests",
+            }
+            for name in exports:
+                assert getattr(module, name) is getattr(source_selection, name)
+            continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         local_names = {
             node.name
@@ -235,7 +248,7 @@ def test_public_modules_export_only_local_definitions() -> None:
                 local_names.update(
                     target.id for target in targets if isinstance(target, ast.Name)
                 )
-        assert set(getattr(module, "__all__", ())) <= local_names, module_name
+        assert set(exports) <= local_names, module_name
 
 
 def test_api_exports_and_registries_are_complete() -> None:

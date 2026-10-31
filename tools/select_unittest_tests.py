@@ -1,30 +1,12 @@
-"""Select unittest test names from a current VIPER source graph."""
+"""Apply portable graph selection to importable unittest references."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import Any
 
-from tools.select_impacted_tests import load_source_graph
-from viper.test_impact import DeclarationId, TestRef, select_tests
-
-
-def _unittest_ref(node: dict[str, Any]) -> str | None:
-    """Convert one test declaration into an importable unittest name."""
-    path = node["path"]
-    symbol = node["symbol"]
-    if not (
-        isinstance(path, str)
-        and path.startswith("tests/")
-        and path.endswith(".py")
-        and isinstance(symbol, str)
-        and (symbol.startswith("test_") or ".test_" in symbol)
-    ):
-        return None
-    module = path.removesuffix(".py").replace("/", ".")
-    return f"{module}.{symbol}"
+from source_impact import codeql, testing
 
 
 def select_unittest_tests(
@@ -35,48 +17,30 @@ def select_unittest_tests(
     analyzed_roots: frozenset[str],
     fallback: str,
 ) -> dict[str, object]:
-    """Return exact unittest names or one conservative fallback module."""
-    if not declarations:
-        raise ValueError("at least one changed declaration is required")
-    nodes, edges = load_source_graph(
-        graph_path,
-        source_root.resolve(),
-        analyzed_roots,
+    """Union known tests with the supplied fallback and retain every graph gap."""
+    graph = codeql.load_source_graph(graph_path, source_root.resolve(), analyzed_roots)
+    selection = testing.select_graph_tests(
+        graph,
+        source_root=source_root,
+        framework="unittest",
+        declarations=declarations,
+        fallback_tests=(fallback,),
     )
-    dependents: dict[DeclarationId, set[DeclarationId]] = {}
-    for edge in edges:
-        target = DeclarationId(str(edge["target"]))
-        dependents.setdefault(target, set()).add(DeclarationId(str(edge["source"])))
-    test_refs = {
-        DeclarationId(declaration): TestRef(test)
-        for declaration, node in nodes.items()
-        if (test := _unittest_ref(node)) is not None
-    }
-    selection = select_tests(
-        (DeclarationId(declaration) for declaration in declarations),
-        dependents=dependents,
-        observers={},
-        test_refs_by_declaration=test_refs,
-    )
-    missing = {
-        DeclarationId(declaration)
-        for declaration in declarations
-        if declaration not in nodes
-    }
-    unresolved = tuple(sorted(set(selection.unresolved) | missing))
-    selected = tuple(selection.tests)
-    arguments = (fallback,) if unresolved else selected
     return {
         "schema_version": 1,
-        "mode": "fallback" if unresolved else "tests",
-        "selected_tests": selected,
-        "unresolved": unresolved,
-        "unittest_args": arguments,
+        "mode": "fallback" if not selection.complete else "tests_and_fallback",
+        "selected_tests": selection.known_tests,
+        "unresolved": selection.unresolved,
+        "analysis_unknowns": selection.analysis_unknowns,
+        "fallback_tests": selection.fallback_tests,
+        "complete": selection.complete,
+        "requires_manual_selection": selection.requires_manual_selection,
+        "unittest_args": selection.tests,
     }
 
 
 def _parser() -> argparse.ArgumentParser:
-    """Define the unittest adapter command line."""
+    """Define the existing unittest adapter command line."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--graph", required=True, type=Path)
     parser.add_argument("--source-root", required=True, type=Path)
@@ -87,7 +51,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    """Print one deterministic unittest selection as JSON."""
+    """Print a deterministic selection without hiding unknown relationships."""
     arguments = _parser().parse_args()
     result = select_unittest_tests(
         graph_path=arguments.graph,
@@ -97,7 +61,7 @@ def main() -> int:
         fallback=arguments.fallback,
     )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
-    return 0
+    return 1 if result["requires_manual_selection"] else 0
 
 
 if __name__ == "__main__":
