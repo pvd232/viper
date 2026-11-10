@@ -121,6 +121,35 @@ for the remaining rejection conditions. Provider tests use controlled stores;
 their success does not establish that your credentials or live bucket work.
 
 
+
+## Release closed files outside a run
+
+A browser runner or another producer can publish its closed files with
+`ViperCloud.resolved_files` and retain the returned `ResolvedFileRef` values.
+After the producer finishes, the background worker can apply VIPER retention:
+
+```python
+from datetime import timedelta
+from viper.file_retention import evict_cloud_backed_files
+
+released = evict_cloud_backed_files(
+    root,
+    tuple(references.values()),
+    cloud=cloud,
+    not_before=completed_at + timedelta(hours=24),
+    minimum_bytes=64 * 1024,
+)
+print(released.bytes_released)
+```
+
+Persist the absolute `not_before` time with the publication request and reuse
+it on later calls. VIPER keeps files before that time and files below the size
+threshold. After expiry it verifies all selected local and cloud identities,
+checks the local bytes again, and removes the eligible copies under a retention
+lock. A changed file or failed cloud read preserves the selection. Small local
+reports and retained cloud references remain available to the caller. This API
+accepts explicitly selected closed files without requiring an ML run graph.
+
 ## Plan an additional cloud publication
 
 `RunPromotionPolicy` in `viper.storage` names the target repositories in its

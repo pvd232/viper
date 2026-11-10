@@ -264,6 +264,7 @@ without parsing journals or invoking an encoder.
 | `viper.storage` | Immutable publication and retrieval |
 | `viper.cloud` | Provider-neutral cloud publication, restore, and verification |
 | `viper.retention` | Verified release of local copies of cloud-backed run artifacts |
+| `viper.file_retention` | Verified release of local copies of closed cloud-backed files |
 | `viper.test_impact` | Repository-neutral selection from source declarations to observing tests |
 | `viper.gcs` | Google Cloud Storage provider and publish-restore probing |
 | `viper.huggingface` | Hugging Face repository provider |
@@ -419,3 +420,7 @@ See the [CLI reference](cli.md) for command groups and the [formal
 protocol](protocol.md) for serialized records.
 
 For MCP setup and connection-specific schemas, see [the agent interface](agents.md).
+
+### Closed-file retention
+
+`viper.file_retention.evict_cloud_backed_files(root, references, *, cloud=None, not_before=None, minimum_bytes=0)` accepts immutable GCS or Hugging Face file references. It applies the absolute retention boundary and file-size threshold, verifies every eligible local and remote identity, rechecks local bytes, and deletes the selected copies under a workspace retention lock. The caller closes its producers and retains the references for restoration. `FileEviction` reports removed `SnapshotFileRef` identities and `bytes_released`; `FileEvictionError` preserves the selection when verification fails before deletion.
