@@ -37,7 +37,7 @@ class OutputSpec(ProtocolModel):
 
     kind: Literal["file", "bundle"] = "file"
     path: RepoRelPath = Field(
-        description="Run-owned workspace path where the stage writes the output."
+        description="Declared output path; StageContext supplies its local write path."
     )
     relative_path: RepoRelPath = Field(
         description="Output path chosen by the stage author before run namespacing."

@@ -14,10 +14,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 import viper._subprocess as subprocess
 
+from .._cloud import source_file
 from .._config.validation import (
     ConfigValidationError,
     validate_stage_config,
@@ -31,7 +32,7 @@ from ..artifacts import (
 )
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
 from ..outputs import OutputSpec
-from ..references import SnapshotFileRef
+from ..references import FileIdentity, SnapshotFileRef
 from ..repository import PathError, resolve_path
 from ..runs import (
     RunSpec,
@@ -98,6 +99,12 @@ class StageWorkerContext(BaseModel):
     binding: StageContextBinding
     result_path: Path
     physical_inputs: dict[str, RepoRelPath] | None = None
+    reader_files: tuple[FileIdentity, ...] = ()
+    reader_store: RepoRelPath = ".viper/store"
+    physical_outputs: dict[str, RepoRelPath] | None = Field(
+        default=None,
+        description="Attempt-owned paths to the files the stage writes.",
+    )
 
 
 class StageWorkerResult(BaseModel):
@@ -127,6 +134,7 @@ class StageProcessResult:
     invocation: StageInvocationReceipt
     stdout: bytes
     stderr: bytes
+    output_paths: dict[ArtifactName, Path] | None = None
 
 
 def _stop_process_group(
@@ -171,12 +179,7 @@ def _snapshot_file(
     )
     if path.is_symlink() or not path.is_file():
         raise StageExecutionError(f"declared artifact file is missing: {relative_path}")
-    raw = path.read_bytes()
-    return SnapshotFileRef(
-        path=relative_path,
-        sha256=hashlib.sha256(raw).hexdigest(),
-        bytes=len(raw),
-    )
+    return source_file(repository_root, relative_path, path)
 
 
 def _resolve_artifact(
@@ -241,13 +244,22 @@ def _resolve_artifact(
 def _resolved_output_paths(
     repository_root: Path,
     outputs: dict[ArtifactName, OutputSpec],
+    *,
+    output_root: Path | None = None,
 ) -> dict[ArtifactName, Path]:
     """Reject symlinks and detach immutable inodes before a worker writes outputs."""
     resolved: dict[ArtifactName, Path] = {}
     for name, declaration in outputs.items():
+        relative_path = declaration.path
+        if output_root is not None:
+            relative_path = (
+                (output_root / name / declaration.relative_path)
+                .relative_to(repository_root)
+                .as_posix()
+            )
         try:
             physical_path = resolve_path(
-                repository_root, declaration.path, operation="write"
+                repository_root, relative_path, operation="write"
             )
         except PathError as error:
             raise StageExecutionError(str(error)) from error
@@ -349,6 +361,8 @@ def execute_stage_process(
     attempt_id: int = 1,
     input_paths: dict[str, Path] | None = None,
     timeout_seconds: float | None = None,
+    reader_files: tuple[FileIdentity, ...] = (),
+    reader_store: RepoRelPath = ".viper/store",
 ) -> StageProcessResult:
     """Invoke one frozen callable and hash every declared output file."""
     root = repository_root.resolve()
@@ -401,9 +415,13 @@ def execute_stage_process(
         attempt_id,
         supplied_inputs,
     )
+    attempt_root = (
+        root / ".viper/workspaces" / str(run.run_id) / f"attempt-{attempt_id}"
+    )
     physical_output_paths = _resolved_output_paths(
         root,
         dict(stage_spec.outputs.items()),
+        output_root=attempt_root / "stages" / stage_reference.stage_id,
     )
     binding = StageContextBinding(
         run_id=run.run_id,
@@ -441,15 +459,7 @@ def execute_stage_process(
     )
     runtime_root = root / ".viper" / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
-    runtime_temp_path = (
-        root
-        / ".viper"
-        / "workspaces"
-        / str(run.run_id)
-        / f"attempt-{attempt_id}"
-        / "runtime"
-        / str(stage_reference.stage_id)
-    )
+    runtime_temp_path = attempt_root / "runtime" / stage_reference.stage_id
     if runtime_temp_path.exists():
         shutil.rmtree(runtime_temp_path)
     runtime_temp_path.mkdir(parents=True)
@@ -467,6 +477,12 @@ def execute_stage_process(
             stage_spec_path=spec_path,
             binding=binding,
             result_path=result_path,
+            reader_files=reader_files,
+            reader_store=reader_store,
+            physical_outputs={
+                name: path.relative_to(root).as_posix()
+                for name, path in physical_output_paths.items()
+            },
             physical_inputs=physical_inputs
             if physical_inputs != logical_inputs
             else None,
@@ -566,6 +582,7 @@ def execute_stage_process(
             _artifact_publication_sources(artifact, physical_output_paths[name])
         )
     return StageProcessResult(
+        output_paths=physical_output_paths,
         command=command,
         started_at=started_at,
         completed_at=completed_at,

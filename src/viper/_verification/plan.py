@@ -12,10 +12,7 @@ import yaml
 from pydantic import TypeAdapter
 
 from .. import keys
-from .._config.validation import (
-    ConfigValidationError,
-    verify_config_type_bytes,
-)
+from .._config.validation import ConfigValidationError, verify_config_type_bytes
 from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
 from ..artifact_loaders import ArtifactLoaderError, verify_artifact_loader_bytes
 from ..benchmark import BenchmarkSpec
@@ -69,11 +66,9 @@ _DATA_ROLE_RANK: dict[DataRole, int] = {
 
 
 def _source_file(run: RunSpec, path: RepoRelPath) -> GitFileRef:
-    """Address one workspace definition in the run's source commit."""
+    """Locate a source file in the run's pinned Git commit."""
     return GitFileRef(
-        repository=run.source.repository,
-        commit=run.source.commit,
-        path=path,
+        repository=run.source.repository, commit=run.source.commit, path=path
     )
 
 
@@ -82,7 +77,7 @@ def _config_type_source(
     reference: ConfigTypeRef,
     fetcher: StorageFetcher | None,
 ) -> bytes:
-    """Read one workspace or VIPER config source through the active evidence path."""
+    """Read the source of one workspace or installed Viper config class."""
     retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     if reference.owner == "workspace":
         return retrieve(_source_file(run, reference.path))
@@ -348,8 +343,7 @@ def verify_experiment_and_variant(
 
     for metric in experiment.metrics:
         implementation = metric.implementation
-        metric_location = _source_file(run, implementation.path)
-        metric_raw = retrieve(metric_location)
+        metric_raw = retrieve(_source_file(run, implementation.path))
         if len(metric_raw) != implementation.bytes:
             raise VerificationError("metric implementation byte count differs")
         if hashlib.sha256(metric_raw).hexdigest() != implementation.sha256:
@@ -636,7 +630,6 @@ def verify_stage_plan(
     fetcher: StorageFetcher | None = None,
 ) -> dict[StageId, BaseSpec]:
     """Load and verify stage specs from the run-plan snapshot."""
-    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     loaded_stages: dict[StageId, BaseSpec] = {}
 
     for stage in run.stages:
@@ -652,7 +645,7 @@ def verify_stage_plan(
             bytes=stage.bytes,
             stored_at=location,
         )
-        raw = storage.verify_resolved_file_bytes(stage_reference, retrieve(location))
+        raw = storage.read_resolved_file(stage_reference, fetcher=fetcher)
 
         try:
             spec = SPEC_ADAPTER.validate_python(parse_yaml_bytes(raw))
@@ -665,8 +658,8 @@ def verify_stage_plan(
         if plan_reader is not None:
             for artifact_name, artifact in spec.outputs.items():
                 loader = artifact.loader
-                loader_raw = plan_reader(_source_file(run, loader.path))
                 try:
+                    loader_raw = plan_reader(_source_file(run, loader.path))
                     verify_artifact_loader_bytes(loader, loader_raw)
                 except ArtifactLoaderError as exc:
                     raise VerificationError(
@@ -679,9 +672,9 @@ def verify_stage_plan(
 
         if isinstance(spec, ParameterizedSpec):
             implementation = spec.implementation
-            implementation_location = _source_file(run, implementation.path)
             try:
-                implementation_raw = retrieve(implementation_location)
+                retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
+                implementation_raw = retrieve(_source_file(run, implementation.path))
                 verify_stage_implementation_bytes(implementation, implementation_raw)
                 implementation_tree = ast.parse(
                     implementation_raw,

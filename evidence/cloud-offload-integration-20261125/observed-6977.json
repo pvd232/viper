@@ -1,0 +1,14 @@
+{
+  "pid": 6977,
+  "group": "mixed_repair",
+  "passed": [],
+  "failed": [
+    "tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git"
+  ],
+  "expected": 0,
+  "nonintegration_passed_count": 15,
+  "summary": "Observed tool result: 15 non-integration workflow cases passed; fresh producer integration case failed during receipt import because duplicate content replacement invalidated registry file observations. Root fixed shared-cache installation; later run 10333 passed.",
+  "evidence_kind": "conversation_tool_result_transcription",
+  "raw_buffer_retained": false,
+  "derivation": "Passed node IDs use the exact deterministic pytest -x selected prefix and the observed pass count. The original completed terminal session buffer expired; this file is not raw stdout."
+}

@@ -1,0 +1,37 @@
+.............F
+=================================== FAILURES ===================================
+_____ test_run_fetcher_checks_download_once_before_caching[evidence-False] _____
+src/viper/_verification/storage.py:102: in run_git
+    return subprocess.run(
+src/viper/_subprocess.py:159: in run
+    raise _stdlib_subprocess.CalledProcessError(
+E   subprocess.CalledProcessError: Command '('git', '-C', '/private/var/folders/9l/fkn8y6_51_q96tgtwj39ps880000gn/T/pytest-of-machina/pytest-103/test_run_fetcher_checks_downlo0/.viper/cache/git-checkouts/b0cada1a88636015021cc5e8b1051afcbe81bed181248f243d3569f0c66fe0f2', 'fetch', '--quiet', '--depth=1', 'origin', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')' returned non-zero exit status 128.
+
+The above exception was the direct cause of the following exception:
+tests/test_storage.py:592: in test_run_fetcher_checks_download_once_before_caching
+    result = read(reference)
+             ^^^^^^^^^^^^^^^
+src/viper/_source.py:371: in read
+    raw, path = self._git_file(reference.stored_at)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/_source.py:297: in _git_file
+    root, raw = self._actual_git_file(location)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/_source.py:283: in _actual_git_file
+    return checkout, fetch_git_file_bytes(location, checkout=checkout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/_verification/storage.py:190: in fetch_git_file_bytes
+    return read_from_checkout(checkout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/_verification/storage.py:125: in read_from_checkout
+    return read_from_locked_checkout(checkout_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/_verification/storage.py:165: in read_from_locked_checkout
+    run_git(
+src/viper/_verification/storage.py:114: in run_git
+    raise VerificationError(
+E   viper.evidence.VerificationError: Git could not retrieve the referenced file
+=========================== short test summary info ============================
+FAILED tests/test_storage.py::test_run_fetcher_checks_download_once_before_caching[evidence-False]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 13 passed in 32.29s

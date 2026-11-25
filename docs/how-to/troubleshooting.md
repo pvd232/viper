@@ -67,7 +67,11 @@ See [journal recovery](journals.md#recover-from-publication-failure).
 
 ## Reclaim verification-cache space
 
-VIPER stores reusable remote bytes in `.viper/cache/verified-objects/` and
-external Git commits in `.viper/cache/git-checkouts/`. These directories contain
-retrieval caches, not run evidence. They may be removed while no VIPER process is
-using the workspace. The next verification retrieves the required objects again.
+VIPER stores reusable file bytes under `.viper/store/objects/`. This shared
+store can also contain the only copy of a locally published file. Keep
+`.viper/store` intact: it contains published files, their inventories and the
+registry database.
+
+External Git checkouts live under `.viper/cache/git-checkouts/`. You can remove
+those checkouts while no VIPER process is using the workspace. A later execution
+retrieves the required commits again.

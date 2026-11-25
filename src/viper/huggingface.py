@@ -63,6 +63,7 @@ class HuggingFaceProvider(ViperCloudProvider):
         self.repo_type: Literal["model", "dataset", "space"] = repo_type
         self.api = api or HfApi()
         self.stream_files = False
+        self.wait_for_rate_limit = True
         self.cache_dir: Path | None = None
         self.upload_threads = 5
 
@@ -124,7 +125,11 @@ class HuggingFaceProvider(ViperCloudProvider):
                 )
                 break
             except HfHubHTTPError as error:
-                if error.response.status_code != 429 or attempt == 3:
+                if (
+                    error.response.status_code != 429
+                    or attempt == 3
+                    or not self.wait_for_rate_limit
+                ):
                     raise
                 attempt += 1
                 # A 429 rejects the write; lost responses still reach the journal.
@@ -143,7 +148,12 @@ class HuggingFaceProvider(ViperCloudProvider):
         )
 
     def publication_head(self) -> str:
-        """Read the current commit before saving a publication intent."""
+        """Create the repository if needed and return its current commit."""
+        self.api.create_repo(
+            repo_id=self.repository,
+            repo_type=self._api_repo_type,
+            exist_ok=True,
+        )
         head = self.api.repo_info(self.repository, repo_type=self._api_repo_type).sha
         if head is None:
             raise ViperCloudError("destination commit is unavailable")

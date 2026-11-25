@@ -38,18 +38,16 @@ def test_download_body_becomes_declared_artifact(tmp_path: Path) -> None:
     assert reference.bytes == len(body)
 
 
-def test_download_publication_rejects_cloud_only_output_materialization(
+def test_download_publication_reuses_attempt_owned_body(
     tmp_path: Path,
 ) -> None:
-    """Materialize HTTP bodies at the declared artifact path only."""
+    """Keep the completed attempt body while preserving its logical reference."""
     body = b"tiny response body"
     scratch = tmp_path / ".viper/workspaces/run/attempts/1/http/body"
     scratch.parent.mkdir(parents=True)
     scratch.write_bytes(body)
     destination = "experiments/example/artifacts/datasets/tiny/dataset.bin"
-    cloud_only_destination = (
-        tmp_path / ".viper/workspaces/run/attempt-1/stages/download/outputs/tiny.bin"
-    )
+    original_inode = scratch.stat().st_ino
 
     reference = publish_download_body(
         repository_root=tmp_path,
@@ -57,16 +55,21 @@ def test_download_publication_rejects_cloud_only_output_materialization(
         destination=destination,
         expected_sha256=hashlib.sha256(body).hexdigest(),
         expected_bytes=len(body),
+        physical_destination=scratch,
     )
 
-    assert (tmp_path / destination).read_bytes() == body
-    assert not cloud_only_destination.exists()
+    assert scratch.read_bytes() == body
+    assert scratch.stat().st_ino == original_inode
+    assert not (tmp_path / destination).exists()
     assert reference.path == destination
     assert reference.sha256 == hashlib.sha256(body).hexdigest()
     assert reference.bytes == len(body)
 
 
-def test_download_body_mutation_prevents_artifact_publication(tmp_path: Path) -> None:
+@pytest.mark.parametrize("retain_original", [False, True])
+def test_download_body_mutation_prevents_artifact_publication(
+    tmp_path: Path, retain_original: bool
+) -> None:
     """Reject a same-size body mutation before the artifact becomes visible."""
     expected = b"prior"
     scratch = tmp_path / ".viper/workspaces/run/attempts/1/http/body"
@@ -81,6 +84,7 @@ def test_download_body_mutation_prevents_artifact_publication(tmp_path: Path) ->
             destination=destination,
             expected_sha256=hashlib.sha256(expected).hexdigest(),
             expected_bytes=len(expected),
+            physical_destination=scratch if retain_original else None,
         )
 
     assert not (tmp_path / destination).exists()
@@ -121,4 +125,5 @@ def test_attempt_publishes_evidence_to_selected_destination(
         logs[0].stored_at,
     )
     assert all(isinstance(item, GcsFileRef) for item in stored)
-    assert not (tmp_path / ".viper/store").exists()
+    assert (tmp_path / ".viper/store/registry.sqlite3").is_file()
+    assert not (tmp_path / ".viper/store/objects").exists()

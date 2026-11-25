@@ -1,0 +1,113 @@
+{
+  "pair_block_id": "CFO-PB-01",
+  "requirements": [
+    "CFO-REQ-01"
+  ],
+  "depends_on": [],
+  "status": "guided_foundations_partially_applied_gates_not_run",
+  "files": [
+    {
+      "target_path": "src/viper/_cloud.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/_cloud.py",
+      "expected_before_sha256": "ebd3ba2ee800ce1d380e0c2124060ea6566b78cc695b7619b624e85acc9ccb3b",
+      "proposed_sha256": "c188277b34bc4c7bcf026147d8667c3ad43ca0933a3eceb9c0529273e05d5c14",
+      "lines": 362
+    },
+    {
+      "target_path": "src/viper/storage.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/storage.py",
+      "expected_before_sha256": "3d8777b3b7fc0616c11d3d0de40e1c0259ddacdcc382d6c06d2a1f3789cb62ad",
+      "proposed_sha256": "4413a7d8307cfbd8473b706d9b999219ae7e343d09f61edcd203b9dfa47cf7d0",
+      "lines": 548
+    },
+    {
+      "target_path": "src/viper/_verification/storage.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/_verification/storage.py",
+      "expected_before_sha256": "06329933b3710710c4a5f0f6d20df62982069a72e4736ac9ce8e0abcc2d6ec75",
+      "proposed_sha256": "e47de79957314fee35df865a7039fc7aba201dd6633264ecef3cea08a11e5c6b",
+      "lines": 736
+    },
+    {
+      "target_path": "src/viper/execution/_promotion_journal.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/execution/_promotion_journal.py",
+      "expected_before_sha256": "4aeee504e9a4e436d1cebf6d63e586232c9dbbe1ce6afc8c10aa8bcd5d80c41c",
+      "proposed_sha256": "00608d99c23c5f1e86df230451e638e975775868ad9f5376170adae21290959a",
+      "lines": 264
+    },
+    {
+      "target_path": "tests/test_offload.py",
+      "operation": "add",
+      "source_path": "add/tests/test_offload.py",
+      "expected_before_sha256": null,
+      "proposed_sha256": "95346ddacf89ac860d5db5ad30d0c1ba1ce9d09019fda9d663eed023a4504f2a",
+      "lines": 103
+    },
+    {
+      "target_path": "tests/conftest.py",
+      "operation": "replace",
+      "source_path": "replace/tests/conftest.py",
+      "expected_before_sha256": "5b54a97bafd8b27283816cb127a95c91c2a6df8bac1e41e2dba98c8cef86e5b9",
+      "proposed_sha256": "63dcb29c6f916be3120adca7109a80a0672cd8b7d2f2a22da1caebd0d4984c1d",
+      "lines": 156
+    },
+    {
+      "target_path": "src/viper/execution/_promotion_compare.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/execution/_promotion_compare.py",
+      "expected_before_sha256": "6bf4fd764748f4ffcd418cc4d1dc7c436f0c647722e3f2fe2a5d47d214e0af53",
+      "proposed_sha256": "fc5fba6c17c5c1d3342fe685c43bd57e61313d685c05c6dbd8b27691032b5b82",
+      "lines": 332
+    }
+  ],
+  "focused_test_argv": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_offload.py"
+  ],
+  "actions": [
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/_cloud.py",
+      "target_path": "src/viper/_cloud.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/storage.py",
+      "target_path": "src/viper/storage.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/_verification/storage.py",
+      "target_path": "src/viper/_verification/storage.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/execution/_promotion_journal.py",
+      "target_path": "src/viper/execution/_promotion_journal.py"
+    },
+    {
+      "operation": "add",
+      "source_path": "add/tests/test_offload.py",
+      "target_path": "tests/test_offload.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/tests/conftest.py",
+      "target_path": "tests/conftest.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/execution/_promotion_compare.py",
+      "target_path": "src/viper/execution/_promotion_compare.py"
+    }
+  ],
+  "limitation": "Identity foundations and observing declarations only. User has typed these foundations; application gates remain deferred."
+}

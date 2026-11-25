@@ -1,0 +1,30 @@
+schema_version = 1
+contract_id = "cloud-offload"
+title = "Cloud Offload"
+
+[[requirements]]
+id = "CFO-REQ-01"
+claim = "An accepted exact-byte offload binding preserves its original LocalStageResultSnapshotRef and complete SnapshotFileRef inventory. The original inventory must reproduce the local snapshot commit. The source and destination inventories must contain exactly the same unique paths, and corresponding declared members must have equal byte counts and SHA-256 values. Reject changed identities, missing members, extra members, or duplicate paths before accepting the binding for later cloud-backed read or eviction checks."
+depends_on = []
+verifier_ids = ["CFO-VR-01"]
+
+[[verifiers]]
+id = "CFO-VR-01"
+requirement_ids = ["CFO-REQ-01"]
+acceptance_conditions = [
+  "Matching declared inventories preserve the original snapshot reference, reproduce its commit, and establish a one-to-one correspondence of unique paths and file identities.",
+  "Changed declared payload identities, missing or extra members, duplicate paths, and source and destination inventories changed together under an unchanged original snapshot reference are rejected before later read or eviction checks.",
+]
+success_case = { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_preserves_original_snapshot_identity" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_rejects_changed_payload" },
+  { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_rejects_changed_snapshot_membership" },
+]
+
+[[pair_blocks]]
+id = "CFO-PB-01"
+requirement_ids = ["CFO-REQ-01"]
+depends_on = []
+repository_id = "viper"
+requirement_contribution = "Validate exact-byte snapshot bindings while preserving existing reference formats."
+completion_evidence = ["implementation_review"]

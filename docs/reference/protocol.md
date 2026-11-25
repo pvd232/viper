@@ -96,7 +96,7 @@ the complete encoder/runtime digest in their version. See the
 
 `viper.repository.init_workspace()` creates the starter files returned by
 [`workspace_files()`](../../src/viper/repository.py). A run then writes its records and
-artifacts under the same workspace root:
+logical artifact addresses under the same workspace root:
 
 ```text
 <workspace>/
@@ -107,14 +107,19 @@ artifacts under the same workspace root:
 │   └── runs/<variant_id>/<run_id>/
 │       ├── resolved.yaml
 │       ├── stages/<stage_id>/
-│       ├── artifacts/<stage_id>/<output_name>/<relative_path>
+│       ├── artifacts/<stage_id>/<output_name>/<relative_path>  # logical address
 │       └── attempts/<attempt_id>/
 └── .viper/
-    ├── store/                     # immutable local objects
-    ├── workspaces/                # materialized execution workspaces
+    ├── store/                     # immutable inventories and shared payloads
+    ├── workspaces/<run_id>/attempt-<n>/stages/<stage>/<output>/  # physical outputs
     ├── pointers/                  # retained artifact pointers
     └── catalog.sqlite3
 ```
+
+The artifact address in a snapshot reference is logical. Use Viper resolution for
+an actual path; native original outputs live under the attempt-owned directory above,
+and restored bytes normally live under `.viper/store/objects`. `api.execute_stage()`
+returns its actual `output_paths` alongside logical artifact identities.
 
 The GCS client stores one sealed content revision at:
 
@@ -130,34 +135,41 @@ manifest, then verify the restored byte count and SHA-256 digest.
 
 ### Disk retention boundary
 
-Cloud publication makes a stage output eligible for local eviction only after the
-run succeeds and its parity decision is accepted. Call
-`retention.evict_cloud_backed_run_files()` with that `RunResult`, or its retained
-`ResolvedRunRef` after a restart, on any host running the workspace. VIPER reads the
-provider from `viper.toml` and verifies the local terminal record, selected attempt, sealed
-snapshot manifest, and the complete local and remote bytes before deleting any
-artifact. It checks every candidate before the first deletion, so one mismatch leaves
-the complete local set untouched.
+Immutable references identify exact bytes and snapshot membership. The registry keeps
+complete inventory, current local bindings and retention preferences separately.
+A reference's embedded workspace is its original address; the current workspace's
+registered bindings and verified cloud copies take precedence after relocation.
+Serialized `<commit>/<path>` addressing does not require a physical payload at that
+location. Original files and equal-content store payloads can satisfy the same identity.
 
-The operation preserves canonical inputs, the terminal record, attempt records,
-journals, resolved stage documents, measurements, and logs. It removes the selected
-attempt's transient `.viper/workspaces` materializations. A second call releases zero
-bytes. It refuses unsuccessful runs, attempts containing local-only stage snapshots,
-and workspaces with an active owner. A download cache may be removed without another
-cloud copy when its exact upstream reference and expected digest are retained. Never
-manually evict a file selected only by a `LocalFileRef` or a local stage snapshot.
+Native cloud publication is durably queued before acceptance. Cloud completion is
+separate from local scientific success; the original references and records do not
+change when publication completes. Final portable receipts cover the closed collection
+at every required destination. Existing explicit cloud-return APIs still verify before
+returning. Older direct-cloud terminal references may retain `resolved.ref.yaml`.
 
-`ViperCloud` delegates streaming to the configured GCS or Hugging Face provider.
-Path-backed restores use a temporary file followed by an atomic rename. Small protocol
-documents may be read in memory. A cloud-backed terminal also stores an adjacent
-`resolved.ref.yaml`, so later consumers recover the durable reference without knowing
-which provider owns it.
+With `storage.offload = true`, successful outer workflow completion requests cleanup.
+The worker requires verified backing, complete required publication, unanimous current
+retention permission, finished readers and the exact owned physical copy. It rechecks
+permission under reader exclusion and a short registry transaction. There is no network
+transfer or full file hash under that final transaction. Shared-reader protection covers
+admitted later actions and queued inputs, including gaps between child calls.
 
-Cloud configuration and cloud publication are separate choices. A workspace may
-configure a repository while keeping the default local destination. Local runs then
-publish to `.viper/store`, and local provenance traversal uses only local storage.
-Only a `viper://` run destination or an explicit promotion operation publishes bytes
-to the configured repository.
+Cleanup preserves inventory, preferences, references and recovery records. It removes
+only selected owned payloads; unknown files and external outputs remain protected.
+Explicit keep saves its preference before restoring complete bundle availability.
+Download and upload failures retain the recoverable local sources. Later cleanup reuses
+verified proof rather than uploading or verifying all remote bytes again.
+
+The shared resolver prefers resident verified originals and payloads. Restores verify
+size and SHA-256 in a temporary file before atomic installation. Full snapshot import
+verifies and materializes its supplied copies into the current store. Individually
+verified file proofs certify only those files, never an unexamined bundle.
+
+The legacy `retention.evict_cloud_backed_run_files()` API applies the same deletion
+decision to older cloud-terminal runs. Native stable-local references use their
+finalized publication operation. Explicit promotion remains available for older local
+runs and keeps its existing synchronous cloud-reference guarantees.
 
 ## Attempt and terminal states
 

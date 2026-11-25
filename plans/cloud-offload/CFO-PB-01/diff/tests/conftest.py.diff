@@ -1,0 +1,18 @@
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -5,6 +5,7 @@
+ import pytest
+ 
+ TIER_BY_MODULE = {
++    "test_offload": "contract",
+     "test_autocast_weight_updates": "unit",
+     "test_journals": "contract",
+     "test_mcp_transport": "integration",
+@@ -68,6 +69,7 @@
+ }
+ 
+ DOMAIN_BY_MODULE = {
++    "test_offload": "domain_storage",
+     "test_autocast_weight_updates": "domain_execution",
+     "test_journals": "domain_verification",
+     "test_mcp_transport": "domain_application",

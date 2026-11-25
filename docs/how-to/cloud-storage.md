@@ -6,11 +6,11 @@ selecting a cloud destination. VIPER does not provision a machine or bucket.
 
 ## Choose a repository and destination
 
-VIPER installs the GCS client as a base dependency. From the checkout with its
-virtual environment active, install VIPER and authenticate:
+VIPER installs the GCS client as a base dependency. In your activated Python
+environment, install VIPER and authenticate:
 
 ```bash
-python -m pip install -e .
+python -m pip install --upgrade 'viper-provenance==0.3.0'
 gcloud auth application-default login
 ```
 
@@ -21,6 +21,7 @@ below with your own values:
 ```toml
 [storage]
 destination = "viper://researcher/model_runs"
+offload = false
 
 [viper_cloud]
 provider = "gcs"
@@ -38,6 +39,7 @@ hf auth login
 ```toml
 [storage]
 destination = "viper://researcher/model_runs"
+offload = false
 
 [viper_cloud]
 provider = "huggingface"
@@ -51,17 +53,149 @@ with a cloud repository configured.
 
 ## Execute with cloud publication
 
-After saving `viper.toml`, run the complete [CPU quickstart](../../examples/cpu_quickstart.py):
+After saving `viper.toml`, run your existing experiment as usual. From the VIPER
+repository, you can also run the complete [CPU quickstart](../../examples/cpu_quickstart.py):
 
 ```bash
 python -m examples.cpu_quickstart
 ```
 
-The same `plan()` and `execution.run()` calls now publish to the configured
-destination. Returned file references identify the provider and sealed revision.
-`resolved.ref.yaml` beside the local terminal result preserves its durable
-reference after a restart. Changing the workspace destination does not relocate
-an existing run or change a retry's destination.
+Native `plan()` and `execution.run()` calls keep their existing invocation.
+Completed outputs are registered at their original paths and queued for publication.
+Small protocol records use the immutable store. The runner returns after local
+verification and durable admission; network transfer and cloud verification continue
+in a separate process. References, file hashes and run-record bytes stay unchanged.
+New native runs do not use graph-rewriting promotion or a cloud `resolved.ref.yaml`.
+Changing the workspace destination still does not change a retry's recorded destination.
+
+Set `storage.offload = true` to permit automatic removal of managed payloads.
+The default `false` retains produced and accessed files. Neither setting downloads
+historical artifacts proactively. Cloud destinations control publication independently.
+
+Keep related calls inside one driver lifetime:
+
+```python
+from viper import execution
+from viper.storage import publication_status, workflow
+
+with workflow(root) as storage_work:
+    candidate = execution.run(draft, repository_root=root)
+    comparison = execution.benchmark(root, candidate.path, benchmark_spec)
+
+print(publication_status(storage_work.operation_path).status)
+```
+
+`draft` is an existing `RunPlanDraft`; `benchmark_spec` is its saved benchmark path.
+Native child calls borrow the driver lifetime. Training, evaluation, diagnostics
+and confirmation can use the same local bytes between calls. Separate future Python
+calls are not predicted. Applications that already register their whole driver need
+no extra scope at each read.
+
+The result's `publication_path` locates pending, complete or failed publication.
+Use `publication_status(path, wait=True, timeout_seconds=...)` only after the outer
+scope closes when completion is required. `retry_publication(path)` retries saved
+failed uploads without recomputing the experiment. `publication_copies(path, source,
+wait=True)` observes one enrolled snapshot while the outer scope remains open.
+Existing explicit APIs promising a verified cloud reference continue to wait.
+
+Upload failure preserves local sources and does not turn successful scientific
+results into failed results. Scope failure prevents automatic deletion. Pending bytes
+and their disk must remain available until verification completes; a queue record
+cannot preserve a disk that is destroyed.
+
+### Follow an artifact through the workflow
+
+| Point in the workflow | Local payload | Cloud publication |
+| --- | --- | --- |
+| Training finishes writing an output | The completed original is registered without a mandatory second payload copy. | The durable worker can begin uploading while later computation continues. |
+| Inference, evaluation or diagnostics still use it | Readers use the available local bytes. | Upload and verification continue independently. |
+| The whole driver succeeds | Current readers and keep preferences still protect required bytes. | Collection closes; required objects and final receipts must verify. |
+| Offload becomes eligible | The worker may delete the exact managed local copy. Inventory and references remain. | Verified backing supplies future restoration. |
+| A later workflow requests an absent payload | The resolver downloads, verifies and installs it in the store before returning a path. | The existing published artifact is reused. |
+
+The worker queues cleanup for reconsideration; it checks current policy and
+readers when removing a file. Finishing one training or read call does not by
+itself authorize deletion. Keep all related calls in the same outer workflow
+when their local files should remain available between calls.
+
+### Local availability and retention
+
+Viper returns a verified resident original or shared store payload first. Only a
+missing payload needs restoration. Exact-artifact preferences are `inherit`, `keep`
+and `offload`; `inherit` follows the current global setting. Use
+`retention.set_artifact_retention(root, snapshot, selection, preference)` for an
+explicit override. A bundle preference covers its complete membership. `keep` saves
+the preference before resolving every member and returns only after local availability.
+One keep subscriber preserves shared bytes; reading adds no permanent subscription.
+
+Automatic cleanup runs in the same worker after successful whole-driver completion,
+closed publication collection, verified required copies and final receipts. It also
+requires current offload permission, completed readers and an unchanged owned file.
+Busy or retained files remain local. Cleanup never treats a directory name as permission
+to delete its contents. Inventory, reference and recovery metadata survive removal.
+
+`execution.artifact_reference(root, run_ref, selection, member=...)` returns an expected
+immutable file reference. `execution.artifact_path(...)` resolves a verified path and
+requires the enclosing `workflow`, so cleanup cannot remove it before its consumer
+finishes. Ordinary native stages already have that protection. Physical paths may
+change after restoration; serialized references remain unchanged.
+
+### Restore on another machine
+
+`publication_receipt(path)` returns the completed portable receipt after all required
+cloud proofs verify. Copy that small receipt to the new workspace and call
+`import_publication_receipt(root, receipt, targets=...)`. The importer independently
+verifies each new supplied remote copy and retains downloaded bytes for reuse;
+already registered verified proofs are reused. Reimporting a known proof does not
+prefetch its evicted payloads; the resolver restores requested files. Complete inventory remains separate
+from resident files, including inventories whose bytes share another snapshot's backing.
+It does not recreate the previous machine's absolute directories.
+
+For a selected set of snapshot proofs use `import_publication_copies(...)`. These are
+verified per-snapshot copies; they do not assert that a still-open driver has finished.
+Explicit imports are restoration operations and can transfer the complete supplied
+snapshots. Use only the proofs needed for the restoration.
+
+Applications requiring an attached GCP identity can pass explicit `PublicationTarget`
+records to the outer `workflow`. `google_project_id` and `gcp_service_account` select
+attached credentials without a key or ADC fallback; nested default scopes inherit those
+targets. Keep credential secrets outside records and configuration.
+
+## Publish files from an application
+
+An application can use the same workflow for completed files outside an
+experiment. The example assumes the configured cloud destination above and an
+existing `results/diagnostics.json` whose writer has finished and closed it:
+
+```python
+from pathlib import Path
+
+from viper.storage import (
+    load_storage_settings,
+    publication_status,
+    publish_resolved_files,
+    workflow,
+)
+
+root = Path.cwd()
+settings = load_storage_settings(root)
+with workflow(root) as storage_work:
+    references = publish_resolved_files(
+        root,
+        settings.destination,
+        {"results/diagnostics.json": root / "results/diagnostics.json"},
+    )
+
+print(references["results/diagnostics.json"].model_dump_json())
+print(publication_status(storage_work.operation_path).status)
+```
+
+This call enrolls the supplied completed files as managed outputs. With offload
+enabled, VIPER can remove them after the workflow and publication conditions
+pass. Keep the source available and unchanged until publication verifies.
+The returned references identify exact bytes; pending work is not a completed
+cloud reference. Applications use the native status and recovery operations
+instead of starting another uploader or maintaining another publication queue.
 
 ## Promote a completed local run without rerunning it
 
@@ -94,32 +228,18 @@ Replace the owner and workspace names. Promotion returns a new immutable
 verifies the saved graph and uploads its files. It performs no training or model
 inference. The original local reference remains a distinct local object.
 
-## Release local copies after accepting a cloud run
+## Explicit cleanup of older cloud-backed runs
 
-For a run originally published to cloud, continue inside the CPU quickstart's
-`main()` after inspecting `resolved_run` and accepting its result:
+`retention.evict_cloud_backed_run_files(root, result)` remains the explicit compatibility
+API for older runs whose terminal records already contain verified cloud references.
+It uses the same current policy, reader and exact-file deletion checks as automatic
+cleanup. An explicit keep still vetoes removal. Inherited preferences honor this
+explicit cleanup request even if the automatic global default is keep.
 
-```python
-from viper.repository import resolve_root
-from viper.retention import evict_cloud_backed_run_files
-
-released = evict_cloud_backed_run_files(resolve_root(), resolved_run)
-print(released.bytes_released)
-print(released.attempt_workspace_bytes_released)
-```
-
-This call deletes local output copies and transient attempt materializations
-only after checking every candidate's local and cloud bytes. It preserves plans,
-terminal and attempt records, measurements, journals, logs, and canonical inputs.
-Restore can retrieve the deleted outputs from their immutable cloud references.
-Run the call only after accepting the result; deletion is not part of the
-quickstart by default. A local-only run is rejected. A promotion reference alone
-does not replace the local terminal record required by retention.
-
-See [the protocol's retention boundary](../reference/protocol.md#disk-retention-boundary)
-for the remaining rejection conditions. Provider tests use controlled stores;
-their success does not establish that your credentials or live bucket work.
-
+Native runs retain their original local references and use their finalized publication
+operation for automatic cleanup. Passing a promoted reference does not replace an
+older local terminal record. Explicit promotion remains useful for migrating existing
+local runs; new cloud-managed runs use direct queued publication.
 
 ## Plan an additional cloud publication
 

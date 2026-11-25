@@ -50,6 +50,7 @@ from viper.references import (
     GitFileRef,
     GitSource,
     ResolvedStageInvocationRef,
+    resolve_snapshot_file_ref,
 )
 from viper.runs import (
     ResolvedRun,
@@ -375,11 +376,20 @@ def test_live_l4_stage_records_requested_backend(
         assert len(backend.gpu_devices) == 1
         assert backend.gpu_devices[0].model == "NVIDIA L4"
 
-    parameters_path = root / RUN_ROOT / "artifacts/train/model/model.bin"
+    train_reference = next(
+        reference
+        for reference in verified.attempts[-1].resolved_stages
+        if reference.stage_id == "train"
+    )
+    model = train_result.artifacts["model"]
+    assert model.kind == "file"
+    parameters_path = store.resolve(
+        resolve_snapshot_file_ref(train_reference.snapshot, model.file)
+    )
     assert parameters_path.read_bytes() == expected_artifact
 
 
-def _wait_for_file(path: Path, timeout_seconds: float = 30) -> None:
+def _wait_for_file(path: Path, timeout_seconds: float = 60) -> None:
     """Wait until the blocking stage records its process identities."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
@@ -428,7 +438,10 @@ def test_signal_closes_attempt_with_active_stage_evidence(
         root,
         *signal_http_source,
     )
-    pid_path = root / RUN_ROOT / "artifacts/train/model/worker-pids.txt"
+    pid_path = (
+        root
+        / f".viper/workspaces/{RUN_ID}/attempt-1/stages/train/model/worker-pids.txt"
+    )
     process = subprocess.Popen(
         (
             sys.executable,

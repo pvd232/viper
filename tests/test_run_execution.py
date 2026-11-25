@@ -49,6 +49,7 @@ from viper._cloud import (
     manifest_revision,
     resolve_publication_source,
 )
+from viper._graph import PromotionInventory
 from viper._source import RunFetcher
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
@@ -75,7 +76,7 @@ from viper.authoring import (
 )
 from viper.authoring import input as external_input
 from viper.catalog import Catalog, CatalogRunSource
-from viper.cloud import ViperCloud
+from viper.cloud import PublicationTarget, ViperCloud
 from viper.config import ConfigTypeRef
 from viper.evidence import (
     VerificationError,
@@ -95,7 +96,8 @@ from viper.execution._materialization import (
     verify_captured_inputs,
 )
 from viper.execution._metric import MetricWorkerResult
-from viper.execution._promotion import PromotionInventory, RunGraphPromoter
+from viper.execution._offload_worker import drain_once
+from viper.execution._promotion import RunGraphPromoter
 from viper.execution._promotion_compare import GraphComparison
 from viper.execution._promotion_journal import PublicationJournal
 from viper.execution._promotion_transfer import (
@@ -124,7 +126,6 @@ from viper.inputs import (
     FutureInputRef,
     LocalSource,
     ResolvedExternalInputRef,
-    StoredInputMaterialization,
     StoredInputRef,
 )
 from viper.journal import DurableJournal
@@ -152,11 +153,13 @@ from viper.references import (
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
     ResolvedFileRef,
+    ResolvedGitFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
     ViperCloudFileRef,
+    resolve_snapshot_file_ref,
 )
 from viper.reuse import (
     ReusedStageCompletion,
@@ -196,14 +199,18 @@ from viper.storage import (
     RunPromotionPolicy,
     TransferLimits,
     ViperCloudDestination,
+    import_publication_receipt,
     load_storage_settings,
+    publication_receipt,
+    publication_status,
+    snapshot_file,
+    workflow,
 )
 from viper.verification import verify_download_source_closure, verify_run_result
 from viper.workspace import (
     AttemptWorkspace,
     captured_input_path,
     captured_input_snapshot_path,
-    stored_input_path,
 )
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -433,6 +440,36 @@ def freeze_protocol_plan(
     )
 
 
+@pytest.fixture(autouse=True)
+def no_detached_publication_workers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drain cloud test work explicitly with the in-memory provider."""
+    monkeypatch.setattr(
+        "viper._offload.start_publication_worker", lambda *args, **kwargs: None
+    )
+
+
+def _drain_native_publication(
+    monkeypatch: pytest.MonkeyPatch,
+    root: Path,
+    provider: InMemoryViperCloudProvider,
+    *operations: Path | None,
+) -> None:
+    """Complete queued test transfers without constructing a live cloud client."""
+
+    def for_target(
+        cls: type[ViperCloud], selected_root: Path, target: PublicationTarget
+    ) -> ViperCloud:
+        assert selected_root == root
+        return ViperCloud(root, target.repository, provider=provider)
+
+    monkeypatch.setattr(ViperCloud, "for_target", classmethod(for_target))
+    for _ in range(2):
+        drain_once(root)
+    for operation in operations:
+        assert operation is not None
+        assert publication_status(operation).status == "complete"
+
+
 @pytest.fixture
 def http_source() -> Iterator[tuple[str, int]]:
     """Serve one redirect followed by the exact body selected by the run."""
@@ -484,9 +521,26 @@ def test_local_fetcher_dispatches_hugging_face_inputs(
     )
 
     class _Remote:
-        def fetch(self, location: HuggingFaceFileRef) -> bytes:
-            assert location == reference
-            return b"remote bytes"
+        """Expose the cloud listing and verified streamed-download interfaces."""
+
+        provider = object()
+
+        def list_files(
+            self, snapshot: HuggingFaceStageResultSnapshotRef
+        ) -> tuple[SnapshotFileRef, ...]:
+            """Return the complete immutable inventory for this remote snapshot."""
+            assert snapshot.repository == reference.repository
+            assert snapshot.commit == reference.commit
+            return (snapshot_file(reference.path, b"remote bytes"),)
+
+        def fetch_to_path(self, resolved: ResolvedFileRef, destination: Path) -> Path:
+            """Write and verify the exact file selected by the caller."""
+            assert resolved.stored_at == reference
+            raw = b"remote bytes"
+            assert resolved.bytes == len(raw)
+            assert resolved.sha256 == hashlib.sha256(raw).hexdigest()
+            destination.write_bytes(raw)
+            return destination
 
     monkeypatch.setattr(
         ViperCloud,
@@ -1003,11 +1057,11 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
 
     first_snapshot = attempts[1].resolved_stages[0].snapshot
     assert first_snapshot.kind == "local"
-    stored_artifact = (
-        root
-        / first_snapshot.store
-        / first_snapshot.commit
-        / f"{RUN_ROOT}/artifacts/download/prior/prior.bin"
+    stored_artifact = store.resolve(
+        resolve_snapshot_file_ref(
+            first_snapshot,
+            snapshot_file(f"{RUN_ROOT}/artifacts/download/prior/prior.bin", b"prior"),
+        )
     )
     stored_artifact.write_bytes(b"tampered")
     with pytest.raises(VerificationError, match="byte-count mismatch"):
@@ -1347,11 +1401,11 @@ def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
     assert resolved.file.bytes == len(b"dataset")
 
 
-def test_stored_input_is_materialized_inside_attempt_workspace(
+def test_stored_input_reuses_verified_local_payload(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Keep verified prior-run bytes out of stable repository input paths."""
+    """Share a verified prior-run file without another input payload copy."""
     root = tmp_path / "project"
     root.mkdir()
     pointer_raw = b"pointer"
@@ -1385,7 +1439,7 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         sha256=hashlib.sha256(b"predictions").hexdigest(),
         bytes=len(b"predictions"),
     )
-    cached_predictions = root / ".viper/cache/verified-objects/predictions"
+    cached_predictions = root / ".viper/store/objects/predictions"
     cached_predictions.parent.mkdir(parents=True)
     cached_predictions.write_bytes(b"predictions")
     verified = VerifiedArtifact(
@@ -1440,22 +1494,14 @@ def test_stored_input_is_materialized_inside_attempt_workspace(
         VerificationPolicy(trusted_source_repositories=frozenset()),
     )
 
-    expected = stored_input_path(
-        run_id=RUN_ID,
-        attempt_id=2,
-        stage_id="evaluate",
-        input_name="reference_predictions",
-        declared_path="inputs/parity/historical_predictions.npz",
-        materialization=StoredInputMaterialization.ATTEMPT_WORKSPACE,
-    )
-    assert paths["reference_predictions"] == root / expected
+    assert paths["reference_predictions"] == cached_predictions
+    assert paths["reference_predictions_copy"] == cached_predictions
     assert paths["reference_predictions"].read_bytes() == b"predictions"
     assert paths["reference_predictions"].samefile(cached_predictions)
-    assert paths["reference_predictions"].stat().st_mode & 0o222 == 0
     assert paths["reference_predictions_copy"].read_bytes() == b"predictions"
     assert paths["reference_predictions_copy"].samefile(cached_predictions)
-    assert paths["reference_predictions_copy"].stat().st_mode & 0o222 == 0
     assert len(verified_runs) == 1
+    assert not any(workspace.inputs.rglob("*.npz"))
     assert not (root / "inputs/parity/historical_predictions.npz").exists()
 
 
@@ -1636,6 +1682,8 @@ def test_run_many_retains_one_result_per_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Bound active runs and preserve success, failure, and skip positions."""
+    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    monkeypatch.setattr(_batch, "enroll_plan_inputs", lambda *args: None)
     paths = tuple(tmp_path / f"{name}.yaml" for name in ("first", "second", "third"))
     run_ids = (
         "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -1914,7 +1962,7 @@ def test_cloud_native_run_returns_and_persists_one_terminal_reference(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Return the same cloud run reference that the workspace persists."""
+    """Keep original references unchanged while native uploads complete."""
     root = tmp_path / "project"
     root.mkdir()
     provider = InMemoryViperCloudProvider(root)
@@ -1922,30 +1970,28 @@ def test_cloud_native_run_returns_and_persists_one_terminal_reference(
     frozen = _freeze_retry_plan(root, cloud_native=True)
     run_id = frozen.run.run_id
     (root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
-
     result = execute_run(frozen.files[-1], repository_root=root)
-
-    assert isinstance(result.reference.stored_at, GcsFileRef)
-    assert (
-        root
-        / "experiments/retry/runs/baseline"
-        / run_id
-        / "artifacts/prepare/features/features.bin"
-    ).read_bytes() == b"features"
-    assert (
-        root
-        / "experiments/retry/runs/baseline"
-        / run_id
-        / "artifacts/embed/embedding/embedding.bin"
-    ).read_bytes() == b"features"
+    assert isinstance(result.reference.stored_at, LocalFileRef)
+    original_reference = result.reference
+    assert not provider.uploads
+    for stage_id, name, filename in (
+        ("prepare", "features", "features.bin"),
+        ("embed", "embedding", "embedding.bin"),
+    ):
+        path = (
+            root / f".viper/workspaces/{run_id}/attempt-1/stages/{stage_id}"
+            f"/{name}/{filename}"
+        )
+        assert path.read_bytes() == b"features"
+    _drain_native_publication(
+        monkeypatch, root, provider, frozen.publication_path, result.publication_path
+    )
+    assert result.reference == original_reference
     assert {
         f"experiments/retry/runs/baseline/{run_id}/artifacts/prepare/features/features.bin",
         f"experiments/retry/runs/baseline/{run_id}/artifacts/embed/embedding/embedding.bin",
     } <= {path for _owner, _workspace, _revision, path in provider.uploads}
-    sidecar = result.path.with_name("resolved.ref.yaml")
-    assert ResolvedRunRef.model_validate(parse_yaml_bytes(sidecar.read_bytes())) == (
-        result.reference
-    )
+    assert not result.path.with_name("resolved.ref.yaml").exists()
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
@@ -1953,7 +1999,7 @@ def test_cloud_run_exposes_declared_output_paths_to_stage_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Pass the same declared output paths to stage code under local and cloud."""
+    """Use the same attempt-owned output layout under local and cloud settings."""
     local_root = tmp_path / "local"
     cloud_root = tmp_path / "cloud"
     local_frozen = _freeze_retry_plan(local_root)
@@ -1973,26 +2019,26 @@ def test_cloud_run_exposes_declared_output_paths_to_stage_context(
     assert (local_root / "prepare_features_output_path.txt").read_text(
         encoding="utf-8"
     ) == (
-        f"experiments/retry/runs/baseline/{local_run_id}/"
-        "artifacts/prepare/features/features.bin"
+        f".viper/workspaces/{local_run_id}/attempt-1/"
+        "stages/prepare/features/features.bin"
     )
     assert (cloud_root / "prepare_features_output_path.txt").read_text(
         encoding="utf-8"
     ) == (
-        f"experiments/retry/runs/baseline/{cloud_run_id}/"
-        "artifacts/prepare/features/features.bin"
+        f".viper/workspaces/{cloud_run_id}/attempt-1/"
+        "stages/prepare/features/features.bin"
     )
     assert (local_root / "encode_embedding_output_path.txt").read_text(
         encoding="utf-8"
     ) == (
-        f"experiments/retry/runs/baseline/{local_run_id}/"
-        "artifacts/embed/embedding/embedding.bin"
+        f".viper/workspaces/{local_run_id}/attempt-1/"
+        "stages/embed/embedding/embedding.bin"
     )
     assert (cloud_root / "encode_embedding_output_path.txt").read_text(
         encoding="utf-8"
     ) == (
-        f"experiments/retry/runs/baseline/{cloud_run_id}/"
-        "artifacts/embed/embedding/embedding.bin"
+        f".viper/workspaces/{cloud_run_id}/attempt-1/"
+        "stages/embed/embedding/embedding.bin"
     )
 
 
@@ -2012,8 +2058,7 @@ def test_cloud_run_exposes_destination_independent_input_paths(
     execute_run(frozen.files[-1], repository_root=root)
 
     assert (root / "encode_features_input_path.txt").read_text(encoding="utf-8") == (
-        f"experiments/retry/runs/baseline/{run_id}/"
-        "artifacts/prepare/features/features.bin"
+        f".viper/workspaces/{run_id}/attempt-1/stages/prepare/features/features.bin"
     )
     assert not (
         root
@@ -2036,7 +2081,11 @@ def test_cloud_snapshot_uses_declared_paths_after_context_path_parity(
     run_id = frozen.run.run_id
     (root / "embed_failures_remaining.txt").write_text("0\n", encoding="utf-8")
 
-    execute_run(frozen.files[-1], repository_root=root)
+    result = execute_run(frozen.files[-1], repository_root=root)
+    assert not provider.uploads
+    _drain_native_publication(
+        monkeypatch, root, provider, frozen.publication_path, result.publication_path
+    )
 
     uploaded_paths = {path for _owner, _workspace, _revision, path in provider.uploads}
     assert {
@@ -2053,7 +2102,7 @@ def test_cloud_recomputed_metric_reads_declared_artifact_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Give recomputed cloud metrics the declared artifact path."""
+    """Give independent metrics the actual attempt-owned output path."""
     root = tmp_path / "project"
     root.mkdir()
     provider = InMemoryViperCloudProvider(root)
@@ -2185,8 +2234,7 @@ def test_cloud_recomputed_metric_reads_declared_artifact_path(
     execute_run(frozen.files[-1], repository_root=root)
 
     assert (root / "metric_model_artifact_path.txt").read_text(encoding="utf-8") == (
-        f"experiments/metric_paths/runs/baseline/{frozen.run.run_id}/"
-        "artifacts/train/model/model.bin"
+        f".viper/workspaces/{frozen.run.run_id}/attempt-1/stages/train/model/model.bin"
     )
 
 
@@ -2194,28 +2242,31 @@ def test_cloud_native_retry_replaces_the_verified_terminal_reference(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Advance a verified failed cloud terminal to its successful retry."""
+    """Keep both immutable terminal versions while retry updates the local head."""
     root = tmp_path / "project"
     root.mkdir()
     provider = InMemoryViperCloudProvider(root)
     install_in_memory_cloud(monkeypatch, root, provider)
     frozen = _freeze_retry_plan(root, cloud_native=True)
-
     with pytest.raises(RunError, match="attempt 1 failed") as failure:
         execute_run(frozen.files[-1], repository_root=root)
     failed = failure.value.result
     assert failed is not None
-    sidecar = failed.path.with_name("resolved.ref.yaml")
-    assert ResolvedRunRef.model_validate(parse_yaml_bytes(sidecar.read_bytes())) == (
-        failed.reference
-    )
-
+    failed_raw = LocalArtifactStore(root).read(failed.reference)
     result = execute_retry(root, frozen.files[-1])
-
     assert result.reference != failed.reference
-    assert ResolvedRunRef.model_validate(parse_yaml_bytes(sidecar.read_bytes())) == (
-        result.reference
+    assert isinstance(result.reference.stored_at, LocalFileRef)
+    assert LocalArtifactStore(root).read(failed.reference) == failed_raw
+    _drain_native_publication(
+        monkeypatch,
+        root,
+        provider,
+        frozen.publication_path,
+        failed.publication_path,
+        result.publication_path,
     )
+    assert LocalArtifactStore(root).read(failed.reference) == failed_raw
+    assert not result.path.with_name("resolved.ref.yaml").exists()
     assert execution_module.resolve_run_reference(root, result.path) == result.reference
 
 
@@ -2577,8 +2628,13 @@ def test_retry_rejects_tampered_prior_attempt_evidence(tmp_path: Path) -> None:
     assert failed is not None
     snapshot = failed.latest_attempt.resolved_stages[0].snapshot
     assert isinstance(snapshot, LocalStageResultSnapshotRef)
-    stored = root / snapshot.store / snapshot.commit
-    artifact = next(stored.glob("**/artifacts/prepare/features/features.bin"))
+    store = LocalArtifactStore(root)
+    member = next(
+        file
+        for file in store.snapshot_files(snapshot)
+        if file.path.endswith("/artifacts/prepare/features/features.bin")
+    )
+    artifact = store.resolve(resolve_snapshot_file_ref(snapshot, member))
     artifact.write_bytes(b"tampered")
 
     with pytest.raises(RunError) as retried:
@@ -2610,7 +2666,7 @@ def test_retry_setup_failure_releases_run_lock(tmp_path: Path) -> None:
     assert failed is not None
     stored_at = failed.record.attempts[-1].stored_at
     assert isinstance(stored_at, LocalFileRef)
-    stored_attempt = root / stored_at.store / stored_at.commit / stored_at.path
+    stored_attempt = LocalArtifactStore(root).path(stored_at)
     stored_attempt.write_bytes(stored_attempt.read_bytes() + b"\n")
 
     for _ in range(2):
@@ -3192,11 +3248,15 @@ def test_republication_preserves_files_and_follows_new_references(
     record = ResolvedRun.model_validate(
         parse_yaml_bytes(target.fetch(published.stored_at))
     )
-    verified = verify_run_result(
-        record,
-        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
-        fetcher=RunFetcher(case.root, LocalArtifactStore(case.root), REPOSITORY),
-    )
+    with httpx.Client(transport=httpx.MockTransport(api.response)) as client:
+        monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+        verified = verify_run_result(
+            record,
+            policy=VerificationPolicy(
+                trusted_source_repositories=frozenset({REPOSITORY})
+            ),
+            fetcher=RunFetcher(case.root, LocalArtifactStore(case.root), REPOSITORY),
+        )
     assert verified is not None
     assert before == case.cloud.provider.uploads
     assert promoter.promote_reference(case.selected) == published
@@ -3622,7 +3682,10 @@ def test_copy_worker_preserves_failure_diagnostics(
             assert "at least 1" in cause.stderr
             assert not (tmp_path / ".viper/promotion").exists()
         else:
-            assert "LocalStoreError: local immutable file is missing" in cause.stderr
+            assert (
+                "LocalStoreError: registered local payload is unavailable"
+                in cause.stderr
+            )
             assert "direct cause" in cause.stderr
             assert "source run graph is unavailable" in cause.stderr
 
@@ -3839,3 +3902,84 @@ def test_copy_worker_resumes_and_restores_a_model(
         server.server_close()
         thread.join(timeout=5)
     assert reads
+
+
+def test_fresh_workspace_verifies_producer_without_original_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Restore unchanged producer and source refs through verified publication."""
+    original = tmp_path / "original"
+    frozen = _freeze_retry_plan(original)
+    with pytest.raises(RunError):
+        execute_attempt(original, frozen.files[-1], plan=frozen.reference)
+    produced = execute_retry(original, frozen.files[-1])
+    source_raw = (original / "project/retry_pipeline.py").read_bytes()
+    source_reference = ResolvedGitFileRef(
+        stored_at=GitFileRef(
+            repository=frozen.run.source.repository,
+            commit=frozen.run.source.commit,
+            path="project/retry_pipeline.py",
+        ),
+        sha256=hashlib.sha256(source_raw).hexdigest(),
+        bytes=len(source_raw),
+    )
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    provider = InMemoryViperCloudProvider(fresh)
+    install_in_memory_cloud(monkeypatch, fresh, provider)
+    target = PublicationTarget(
+        repository=GcsRepository(bucket=provider.bucket, prefix=provider.prefix),
+        destination=ViperCloudDestination(owner="owner", workspace="models"),
+    )
+    with workflow(original, targets=(target,)) as owner:
+        execution_module.enroll(produced.reference, repository_root=original)
+    _drain_native_publication(monkeypatch, original, provider, owner.operation_path)
+    receipt = publication_receipt(owner.operation_path)
+    original_reference = produced.reference.model_dump(mode="json")
+    shutil.rmtree(original)
+    (fresh / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    run_git(fresh, "init", "--quiet")
+    run_git(fresh, "remote", "add", "origin", REPOSITORY)
+    run_git(fresh, "add", "viper.toml")
+    run_git(
+        fresh,
+        "-c",
+        "user.name=Viper tests",
+        "-c",
+        "user.email=viper@example.com",
+        "commit",
+        "--quiet",
+        "-m",
+        "fresh workspace",
+    )
+    absent = subprocess.run(
+        ("git", "-C", str(fresh), "cat-file", "-e", frozen.run.source.commit),
+        capture_output=True,
+    )
+    assert absent.returncode != 0
+    forbidden = Mock(side_effect=AssertionError("Git remote must not be contacted"))
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", forbidden)
+    monkeypatch.setattr(
+        ViperCloud,
+        "for_target",
+        classmethod(
+            lambda cls, root, selected: ViperCloud(
+                root, selected.repository, provider=provider
+            )
+        ),
+    )
+    with workflow(fresh, targets=(target,)):
+        import_publication_receipt(fresh, receipt, targets=(target,))
+        store = LocalArtifactStore(fresh)
+        store.resolve(source_reference).unlink()
+        downloads = len(provider.fetch_to_path_calls)
+        uploads = len(provider.upload_calls)
+        restored = execution_module.artifact_path(
+            fresh, produced.reference, frozen.run.estimator
+        )
+        assert restored.read_bytes() == b"features"
+        assert len(provider.fetch_to_path_calls) > downloads
+        assert len(provider.upload_calls) == uploads
+    forbidden.assert_not_called()
+    assert not original.exists()
+    assert produced.reference.model_dump(mode="json") == original_reference

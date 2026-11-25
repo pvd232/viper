@@ -14,6 +14,7 @@ from tests.test_verification_acceptance import (
     fetch_attempt,
 )
 from viper._verification.metrics import benchmark_metric_results, benchmark_status
+from viper._verification.storage import verify_resolved_file_bytes
 from viper.api import ExecuteBenchmarkRequest
 from viper.api import execute_benchmark as execute_benchmark_application
 from viper.benchmark import (
@@ -279,6 +280,14 @@ def test_benchmark_reuses_verified_execution(
 
     monkeypatch.setattr(
         fetch, "list_snapshot_files", store.list_snapshot_files, raising=False
+    )
+    monkeypatch.setattr(
+        fetch,
+        "read",
+        lambda reference: verify_resolved_file_bytes(
+            reference, fetch(reference.stored_at)
+        ),
+        raising=False,
     )
     monkeypatch.setitem(
         benchmark.__globals__, "RunFetcher", lambda *args, **kwargs: fetch

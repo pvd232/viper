@@ -148,11 +148,25 @@ class StageFileAccessObserver:
         managed_writes: tuple[Path, ...] = (),
         source_reads: tuple[Path, ...] = (),
         runtime_paths: tuple[Path, ...] = (),
+        *,
+        logical_inputs: Mapping[str, str] | None = None,
+        logical_outputs: Mapping[str, str] | None = None,
     ) -> None:
         """Resolve stage data paths and private runtime-scratch paths."""
         self._root = repository_root.resolve()
         self._inputs = {name: path.resolve() for name, path in sorted(inputs.items())}
         self._outputs = tuple(path.resolve() for path in outputs.values())
+        self._logical_paths: list[tuple[Path, Path]] = []
+        for physical, logical in (
+            (inputs, logical_inputs),
+            (outputs, logical_outputs),
+        ):
+            if logical is None:
+                continue
+            if set(physical) != set(logical):
+                raise ValueError("stage file-access names differ")
+            for name, path in physical.items():
+                self._logical_paths.append((path.resolve(), Path(logical[name])))
         self._managed_writes = tuple(path.resolve() for path in managed_writes)
         self._source_reads = frozenset(path.resolve() for path in source_reads)
         self._runtime_paths = tuple(path.resolve() for path in runtime_paths)
@@ -319,13 +333,22 @@ class StageFileAccessObserver:
                 + ", ".join(missing)
             )
 
+    def _recorded_locations(self, paths: set[Path]) -> tuple[str, ...]:
+        """Record checked file accesses using their declared paths."""
+        locations: set[str] = set()
+        for path in paths:
+            mapped = False
+            for physical, logical in self._logical_paths:
+                if path.is_relative_to(physical):
+                    locations.add((logical / path.relative_to(physical)).as_posix())
+                    mapped = True
+            if not mapped:
+                locations.add(path.relative_to(self._root).as_posix())
+        return tuple(sorted(locations))
+
     def receipt(self) -> StageFileAccessReceipt:
-        """Return repository-relative paths observed by this invocation."""
+        """Return checked reads and writes under their declared names."""
         return StageFileAccessReceipt(
-            reads=tuple(
-                sorted(path.relative_to(self._root).as_posix() for path in self._reads)
-            ),
-            writes=tuple(
-                sorted(path.relative_to(self._root).as_posix() for path in self._writes)
-            ),
+            reads=self._recorded_locations(self._reads),
+            writes=self._recorded_locations(self._writes),
         )

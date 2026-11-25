@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0 -- /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/machina/Developer/ChatGPT/viper-cloud-offload
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 1 item
+
+tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model PASSED [100%]
+
+- generated xml file: /Users/machina/Developer/ChatGPT/viper-cloud-offload/evidence/cloud-offload-integration-20261125/native-model-final.xml -
+============================= slowest 10 durations =============================
+128.36s setup    tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model
+51.37s call     tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model
+0.00s teardown tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model
+======================== 1 passed in 181.74s (0:03:01) =========================

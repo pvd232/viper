@@ -180,13 +180,12 @@ def test_evicts_only_verified_cloud_backed_run_artifacts(
 
     assert all(not artifact.exists() for artifact in artifacts)
     assert result.path.is_file()
-    assert not (
-        tmp_path / ".viper/workspaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/attempt-1"
-    ).exists()
-    assert eviction.attempt_workspace_bytes_released == len(b"copied input")
-    assert eviction.bytes_released == (
-        len(b"parameters") + len(b'{"loss":[1.0]}\n') + len(b"copied input")
-    )
+    attempt_root = tmp_path / ".viper/workspaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/attempt-1"
+    remaining = tuple(path for path in attempt_root.rglob("*") if path.is_file())
+    assert len(remaining) == 1
+    assert remaining[0].read_bytes() == b"copied input"
+    assert eviction.attempt_workspace_bytes_released == 0
+    assert eviction.bytes_released == (len(b"parameters") + len(b'{"loss":[1.0]}\n'))
     assert tuple(file.path for file in eviction.artifacts) == (
         artifacts[0].relative_to(tmp_path).as_posix(),
         artifacts[1].relative_to(tmp_path).as_posix(),

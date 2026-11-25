@@ -11,6 +11,8 @@ from pathlib import Path
 from threading import current_thread, main_thread
 from typing import Literal
 
+from .._graph import enroll_plan_inputs, register_stage_artifacts
+from .._offload import PublicationSession
 from .._source import RunFetcher, resolve_git_file, run_git
 from .._verification.storage import read_attempt_reference
 from ..catalog import Catalog, CatalogRunSource
@@ -27,6 +29,7 @@ from ..journals import capture_completed_journal
 from ..metrics import is_recomputed_metric
 from ..preflight import preflight_plan
 from ..references import (
+    FileIdentity,
     GcsFileRef,
     GitFileRef,
     LocalFileRef,
@@ -54,7 +57,13 @@ from ..runs import (
     RunAttempt,
     RunSpec,
 )
-from ..serialization import load_stage_spec, parse_yaml_bytes, serialize_document
+from ..serialization import (
+    load_stage_spec,
+    parse_yaml_bytes,
+    replace_synchronized,
+    serialize_document,
+    write_synchronized,
+)
 from ..stages import (
     BaseSpec,
     DownloadSpec,
@@ -72,6 +81,7 @@ from ..storage import (
     local_artifact_store,
     publish_resolved_files,
     snapshot_file,
+    workflow,
 )
 from ..verification import verify_download_source_closure, verify_run_result
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
@@ -85,9 +95,7 @@ from ._publication import (
     persist_terminal_reference,
     publish_attempt_files,
     publish_invocation_receipt,
-    replace_synchronized,
     write_attempt_document,
-    write_synchronized,
 )
 from ._recovery import reconcile_abandoned_attempts
 from ._resolution import (
@@ -243,753 +251,810 @@ def execute_attempt(
     retry: bool = False,
     purpose: AttemptPurpose = "run",
     trusted_source_repositories: frozenset[str] = frozenset(),
+    _session: PublicationSession | None = None,
 ) -> RunResult | ConfirmationRunResult:
     """Execute one ordinary or benchmark-confirmation attempt."""
     root = repository_root.resolve()
-    run_path = run_spec_path.resolve()
-    run_raw = run_path.read_bytes()
-    run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
-    store = LocalArtifactStore(root)
-    fetcher = RunFetcher(
-        root,
-        store,
-        str(run.source.repository),
-    )
-    origin = run_git(root, "remote", "get-url", "origin").decode().strip()
-    if origin != str(run.source.repository):
-        raise RunError("Git origin differs from RunSpec.source.repository")
-    relative_run_path = run_path.relative_to(root).as_posix()
-    if plan is None and retry:
-        # A run authored through execution.run() stores its plan outside Git.
-        # Retry follows that saved reference and verifies its bytes below.
-        previous_result = run_path.parent / "resolved.yaml"
-        if previous_result.is_file():
-            plan = ResolvedRun.model_validate(
-                parse_yaml_bytes(previous_result.read_bytes())
-            ).spec
-    if plan is None:
-        plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
-        if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
-            raise RunError("RunSpec bytes are absent from the current Git commit")
-        plan_location = GitFileRef(
-            repository=run.source.repository,
-            commit=plan_commit,
-            path=relative_run_path,
+    with workflow(root, session=_session) as publication:
+        run_path = run_spec_path.resolve()
+        run_raw = run_path.read_bytes()
+        run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
+        store = LocalArtifactStore(root)
+        fetcher = RunFetcher(
+            root,
+            store,
+            str(run.source.repository),
         )
-    else:
-        if plan.stored_at.path != relative_run_path:
-            raise RunError("run path differs from the immutable plan reference")
-        if fetcher.read(plan) != run_raw:
-            raise RunError("RunSpec bytes differ from the immutable plan")
-        plan_location = plan.stored_at
-    plan_revision = (
-        plan_location.revision
-        if isinstance(plan_location, (GcsFileRef, ViperCloudFileRef))
-        else plan_location.commit
-    )
+        origin = run_git(root, "remote", "get-url", "origin").decode().strip()
+        if origin != str(run.source.repository):
+            raise RunError("Git origin differs from RunSpec.source.repository")
+        enroll_plan_inputs(
+            root, run, trusted_source_repositories=trusted_source_repositories
+        )
+        relative_run_path = run_path.relative_to(root).as_posix()
+        if plan is None and retry:
+            # A run authored through execution.run() stores its plan outside Git.
+            # Retry follows that saved reference and verifies its bytes below.
+            previous_result = run_path.parent / "resolved.yaml"
+            if previous_result.is_file():
+                plan = ResolvedRun.model_validate(
+                    parse_yaml_bytes(previous_result.read_bytes())
+                ).spec
+        if plan is None:
+            plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
+            if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
+                raise RunError("RunSpec bytes are absent from the current Git commit")
+            plan_location = GitFileRef(
+                repository=run.source.repository,
+                commit=plan_commit,
+                path=relative_run_path,
+            )
+        else:
+            if plan.stored_at.path != relative_run_path:
+                raise RunError("run path differs from the immutable plan reference")
+            if fetcher.read(plan) != run_raw:
+                raise RunError("RunSpec bytes differ from the immutable plan")
+            plan_location = plan.stored_at
+        plan_revision = (
+            plan_location.revision
+            if isinstance(plan_location, (GcsFileRef, ViperCloudFileRef))
+            else plan_location.commit
+        )
 
-    destination = bind_run_destination(
-        root,
-        run.run_id,
-        load_storage_settings(root).destination,
-    )
-    snapshot_publisher = create_snapshot_publisher(
-        root,
-        destination,
-    )
-    policy = _verification_policy(
-        str(run.source.repository),
-        trusted_source_repositories,
-    )
-    experiment = ExperimentSpec.model_validate(
-        parse_yaml_bytes(
-            fetcher(
-                storage_file(
-                    plan_location,
-                    f"experiments/{run.experiment_id}/spec.yaml",
+        destination = bind_run_destination(
+            root,
+            run.run_id,
+            load_storage_settings(root).destination,
+        )
+        snapshot_publisher = create_snapshot_publisher(
+            root,
+            destination,
+        )
+        policy = _verification_policy(
+            str(run.source.repository),
+            trusted_source_repositories,
+        )
+        experiment = ExperimentSpec.model_validate(
+            parse_yaml_bytes(
+                fetcher(
+                    storage_file(
+                        plan_location,
+                        f"experiments/{run.experiment_id}/spec.yaml",
+                    )
                 )
             )
         )
-    )
-    run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+        run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
 
-    owns_signals = current_thread() is main_thread()
-    previous_sigint = signal.getsignal(signal.SIGINT)
-    previous_sigterm = signal.getsignal(signal.SIGTERM)
-    allocation = _allocate_attempt(
-        root=root,
-        run_path=run_path,
-        run=run,
-        run_root=run_root,
-        destination=destination,
-        purpose=purpose,
-        retry=retry,
-        fetcher=fetcher,
-    )
-    run_lock = allocation.lock
-    terminal_path = allocation.terminal_path
-    previous_run = allocation.previous_run
-    previous_run_raw = allocation.previous_run_raw
-    previous_attempts = allocation.previous_attempts
-    attempt_id = allocation.attempt_id
-    workspace = allocation.workspace
-    journal = allocation.journal
-    attempt_started = datetime.now(UTC)
-    resolved_stage_refs: list[ResolvedStageRef] = []
-    invocation_refs: list[ResolvedStageInvocationRef] = []
-    completed: dict[StageId, ResolvedStageRef] = {}
-    completed_results: dict[StageId, ResolvedBaseSpec] = {}
-    loaded_stages: dict[StageId, BaseSpec] = {}
-    measurement_paths: list[Path] = []
-    metric_verification_paths: list[Path] = []
-    log_files: dict[str, bytes] = {}
-    active_stage_id: StageId | None = None
-
-    def cancel_attempt(signum: int, frame: object) -> None:
-        """Convert an interrupt request into a durable cancellation outcome."""
-        del signum, frame
-        raise StageProcessInterrupted("cancelled")
-
-    def preempt_attempt(signum: int, frame: object) -> None:
-        """Convert host termination into a durable preemption outcome."""
-        del signum, frame
-        raise StageProcessInterrupted("preempted")
-
-    # Batch runs execute in threads. Python permits signal-handler changes
-    # only in the main thread; those runs leave the caller's handlers intact.
-    try:
-        if owns_signals:
-            signal.signal(signal.SIGINT, cancel_attempt)
-            signal.signal(signal.SIGTERM, preempt_attempt)
-        journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
-        preflight = preflight_plan(
-            root,
-            run_path,
-            plan=plan,
+        owns_signals = current_thread() is main_thread()
+        previous_sigint = signal.getsignal(signal.SIGINT)
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+        allocation = _allocate_attempt(
+            root=root,
+            run_path=run_path,
+            run=run,
+            run_root=run_root,
+            destination=destination,
+            purpose=purpose,
+            retry=retry,
             fetcher=fetcher,
         )
-        preflight_path = workspace.control / "preflight.json"
-        write_synchronized(
-            preflight_path,
-            f"{preflight.model_dump_json()}\n".encode(),
-        )
-        journal.append(
-            "preflighting",
-            "preflight completed and immutable plan located",
-            recorded_at=datetime.now(UTC),
-            details={
-                "plan_commit": plan_revision,
-                "report": preflight_path.relative_to(workspace.root).as_posix(),
-            },
-        )
-        if not preflight.ready:
-            failed_codes = ", ".join(
-                check.code for check in preflight.checks if check.status == "failure"
-            )
-            raise RunError(f"plan preflight failed: {failed_codes}")
-        retry_candidates: dict[StageId, StageReuseCandidate] = {}
-        verified_previous: VerifiedRunResult | None = None
-        if retry and previous_run is not None and previous_run_raw is not None:
-            terminal_relative_path = terminal_path.relative_to(root).as_posix()
-            published = publish_resolved_files(
-                root,
-                destination,
-                {terminal_relative_path: previous_run_raw},
-            )[terminal_relative_path]
-            previous_reference = ResolvedRunRef(
-                sha256=published.sha256,
-                bytes=published.bytes,
-                stored_at=published.stored_at,
-            )
-            try:
-                verified_previous = verify_run_result(
-                    previous_run,
-                    policy=policy,
-                    fetcher=fetcher,
-                )
-            except VerificationError:
-                verified_previous = None
-            if verified_previous is not None:
-                for previous_attempt in reversed(verified_previous.attempts):
-                    for candidate in attempt_reuse_candidates(
-                        previous_reference,
-                        verified_previous,
-                        previous_attempt.attempt_id,
-                    ):
-                        retry_candidates.setdefault(candidate.key.stage_id, candidate)
-        for stage_reference in run.stages:
-            active_stage_id = stage_reference.stage_id
-            stage = load_stage_spec(root / stage_reference.spec)
-            loaded_stages[stage_reference.stage_id] = stage
-            effective_environment = stage.env or run.env
-            resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
-            resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
-            captured_inputs: dict[InputName, SnapshotFileRef] = {}
-            stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
-            reuse_input_identities: tuple[ReuseInputIdentity, ...] = ()
-            input_paths: dict[str, Path] = {}
-            download_source_closure: DownloadSourceClosureReceipt | None = None
-            process = None
-            journal.append(
-                "running_stage",
-                "stage execution started",
-                recorded_at=datetime.now(UTC),
-                details={"stage_id": stage_reference.stage_id},
-            )
+        run_lock = allocation.lock
+        terminal_path = allocation.terminal_path
+        previous_run = allocation.previous_run
+        previous_run_raw = allocation.previous_run_raw
+        previous_attempts = allocation.previous_attempts
+        attempt_id = allocation.attempt_id
+        workspace = allocation.workspace
+        journal = allocation.journal
+        attempt_started = datetime.now(UTC)
+        resolved_stage_refs: list[ResolvedStageRef] = []
+        invocation_refs: list[ResolvedStageInvocationRef] = []
+        completed: dict[StageId, ResolvedStageRef] = {}
+        completed_results: dict[StageId, ResolvedBaseSpec] = {}
+        loaded_stages: dict[StageId, BaseSpec] = {}
+        measurement_paths: list[Path] = []
+        metric_verification_paths: list[Path] = []
+        log_files: dict[str, bytes] = {}
+        active_stage_id: StageId | None = None
 
-            if isinstance(stage, DownloadSpec):
-                runner_environment, execution_context = resolve_runner_env(
-                    fetcher,
-                    effective_environment,
+        def cancel_attempt(signum: int, frame: object) -> None:
+            """Convert an interrupt request into a durable cancellation outcome."""
+            del signum, frame
+            raise StageProcessInterrupted("cancelled")
+
+        def preempt_attempt(signum: int, frame: object) -> None:
+            """Convert host termination into a durable preemption outcome."""
+            del signum, frame
+            raise StageProcessInterrupted("preempted")
+
+        # Batch runs execute in threads. Python permits signal-handler changes
+        # only in the main thread; those runs leave the caller's handlers intact.
+        try:
+            if owns_signals:
+                signal.signal(signal.SIGINT, cancel_attempt)
+                signal.signal(signal.SIGTERM, preempt_attempt)
+            journal.append(
+                "allocated", "attempt allocated", recorded_at=attempt_started
+            )
+            preflight = preflight_plan(
+                root,
+                run_path,
+                plan=plan,
+                fetcher=fetcher,
+            )
+            preflight_path = workspace.control / "preflight.json"
+            write_synchronized(
+                preflight_path,
+                f"{preflight.model_dump_json()}\n".encode(),
+            )
+            journal.append(
+                "preflighting",
+                "preflight completed and immutable plan located",
+                recorded_at=datetime.now(UTC),
+                details={
+                    "plan_commit": plan_revision,
+                    "report": preflight_path.relative_to(workspace.root).as_posix(),
+                },
+            )
+            if not preflight.ready:
+                failed_codes = ", ".join(
+                    check.code
+                    for check in preflight.checks
+                    if check.status == "failure"
                 )
-                (
-                    resolved_retrievals,
-                    resolved_artifacts,
-                    input_paths,
-                ) = retrieve_download_inputs(
+                raise RunError(f"plan preflight failed: {failed_codes}")
+            retry_candidates: dict[StageId, StageReuseCandidate] = {}
+            verified_previous: VerifiedRunResult | None = None
+            if retry and previous_run is not None and previous_run_raw is not None:
+                terminal_relative_path = terminal_path.relative_to(root).as_posix()
+                published = publish_resolved_files(
                     root,
-                    workspace,
-                    stage_reference.stage_id,
-                    stage,
+                    destination,
+                    {terminal_relative_path: previous_run_raw},
+                )[terminal_relative_path]
+                previous_reference = ResolvedRunRef(
+                    sha256=published.sha256,
+                    bytes=published.bytes,
+                    stored_at=published.stored_at,
                 )
-                stage_completed = datetime.now(UTC)
-                resolved = resolve_download_stage(
-                    stage,
-                    env=runner_environment,
-                    execution_context=execution_context,
-                    artifacts=resolved_artifacts,
-                    retrievals=resolved_retrievals,
-                    completed_at=stage_completed,
+                try:
+                    verified_previous = verify_run_result(
+                        previous_run,
+                        policy=policy,
+                        fetcher=fetcher,
+                    )
+                except VerificationError:
+                    verified_previous = None
+                if verified_previous is not None:
+                    for previous_attempt in reversed(verified_previous.attempts):
+                        for candidate in attempt_reuse_candidates(
+                            previous_reference,
+                            verified_previous,
+                            previous_attempt.attempt_id,
+                        ):
+                            retry_candidates.setdefault(
+                                candidate.key.stage_id, candidate
+                            )
+            for stage_reference in run.stages:
+                active_stage_id = stage_reference.stage_id
+                stage = load_stage_spec(root / stage_reference.spec)
+                loaded_stages[stage_reference.stage_id] = stage
+                effective_environment = stage.env or run.env
+                resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
+                resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = (
+                    None
                 )
-            else:
-                if not isinstance(stage, ParameterizedSpec):
-                    raise RunError("workspace stage lacks its parameterized contract")
-                source_location = GitFileRef(
-                    repository=run.source.repository,
-                    commit=run.source.commit,
-                    path=stage.implementation.path,
+                captured_inputs: dict[InputName, SnapshotFileRef] = {}
+                stored_input_references: dict[
+                    InputName, tuple[ResolvedFileRef, ...]
+                ] = {}
+                reuse_input_identities: tuple[ReuseInputIdentity, ...] = ()
+                input_paths: dict[str, Path] = {}
+                download_source_closure: DownloadSourceClosureReceipt | None = None
+                process = None
+                journal.append(
+                    "running_stage",
+                    "stage execution started",
+                    recorded_at=datetime.now(UTC),
+                    details={"stage_id": stage_reference.stage_id},
                 )
-                source = resolve_git_file(fetcher, source_location)
-                if (root / stage.implementation.path).read_bytes() != fetcher(
-                    source_location
-                ):
-                    raise RunError("stage source differs from the frozen source")
-                if isinstance(stage, InternalSpec):
+
+                if isinstance(stage, DownloadSpec):
+                    runner_environment, execution_context = resolve_runner_env(
+                        fetcher,
+                        effective_environment,
+                    )
                     (
-                        resolved_inputs,
+                        resolved_retrievals,
+                        resolved_artifacts,
                         input_paths,
-                        captured_inputs,
-                        stored_input_references,
-                        reuse_input_identities,
-                    ) = resolve_inputs(
+                    ) = retrieve_download_inputs(
                         root,
                         workspace,
-                        run.run_id,
-                        attempt_id,
                         stage_reference.stage_id,
                         stage,
-                        completed,
-                        completed_results,
-                        loaded_stages,
-                        fetcher,
-                        policy,
                     )
-                    if stage.input_roots == "download":
-                        download_source_closure = verify_download_source_closure(
+                    stage_completed = datetime.now(UTC)
+                    resolved = resolve_download_stage(
+                        stage,
+                        env=runner_environment,
+                        execution_context=execution_context,
+                        artifacts=resolved_artifacts,
+                        retrievals=resolved_retrievals,
+                        completed_at=stage_completed,
+                    )
+                else:
+                    if not isinstance(stage, ParameterizedSpec):
+                        raise RunError(
+                            "workspace stage lacks its parameterized contract"
+                        )
+                    source_location = GitFileRef(
+                        repository=run.source.repository,
+                        commit=run.source.commit,
+                        path=stage.implementation.path,
+                    )
+                    source = resolve_git_file(fetcher, source_location)
+                    if (root / stage.implementation.path).read_bytes() != fetcher(
+                        source_location
+                    ):
+                        raise RunError("stage source differs from the frozen source")
+                    if isinstance(stage, InternalSpec):
+                        (
+                            resolved_inputs,
+                            input_paths,
+                            captured_inputs,
+                            stored_input_references,
+                            reuse_input_identities,
+                        ) = resolve_inputs(
+                            root,
+                            workspace,
+                            run.run_id,
+                            attempt_id,
                             stage_reference.stage_id,
                             stage,
-                            run=run,
-                            attempt_id=attempt_id,
-                            resolved_inputs=resolved_inputs,
-                            stage_specs=loaded_stages,
-                            completed_stages=completed,
-                            completed_results=completed_results,
-                            policy=policy,
-                            fetcher=fetcher,
+                            completed,
+                            completed_results,
+                            loaded_stages,
+                            fetcher,
+                            policy,
                         )
-                if (
-                    isinstance(stage, InternalSpec)
-                    and purpose == "run"
-                    and (
-                        stage.reuse == "verified"
-                        or stage_reference.stage_id in retry_candidates
+                        if stage.input_roots == "download":
+                            download_source_closure = verify_download_source_closure(
+                                stage_reference.stage_id,
+                                stage,
+                                run=run,
+                                attempt_id=attempt_id,
+                                resolved_inputs=resolved_inputs,
+                                stage_specs=loaded_stages,
+                                completed_stages=completed,
+                                completed_results=completed_results,
+                                policy=policy,
+                                fetcher=fetcher,
+                            )
+                    if (
+                        isinstance(stage, InternalSpec)
+                        and purpose == "run"
+                        and (
+                            stage.reuse == "verified"
+                            or stage_reference.stage_id in retry_candidates
+                        )
+                    ):
+                        resolved_lockfile = resolve_git_file(
+                            fetcher,
+                            effective_environment.lockfile,
+                        )
+                        metric_specs = {
+                            metric.metric_id: metric for metric in experiment.metrics
+                        }
+                        key = build_stage_reuse_key(
+                            stage_id=stage_reference.stage_id,
+                            stage=stage,
+                            inputs=reuse_input_identities,
+                            seed=run.seed,
+                            env=effective_environment,
+                            reproducibility=run.reproducibility,
+                            metrics=metric_specs,
+                            lockfile=resolved_lockfile,
+                        )
+                        resolved_path = (
+                            f"experiments/{run.experiment_id}/runs/{run.variant_id}/"
+                            f"{run.run_id}/stages/{stage_reference.stage_id}/resolved.yaml"
+                        )
+                        reused = reuse_stage(
+                            root=root,
+                            catalog=Catalog(root),
+                            key=key,
+                            stage=stage,
+                            inputs=resolved_inputs or {},
+                            captured_inputs=captured_inputs,
+                            input_paths=input_paths,
+                            resolved_stage_path=resolved_path,
+                            fetcher=fetcher,
+                            policy=policy,
+                            publisher=snapshot_publisher,
+                            destination=destination,
+                            metrics=metric_specs,
+                            lockfile=resolved_lockfile,
+                            download_source_closure=download_source_closure,
+                            candidate=retry_candidates.get(stage_reference.stage_id),
+                            verified_source=(
+                                verified_previous
+                                if stage_reference.stage_id in retry_candidates
+                                else None
+                            ),
+                        )
+                        if reused is not None:
+                            journal.append(
+                                "publishing_stage",
+                                "verified stage reuse published",
+                                recorded_at=datetime.now(UTC),
+                                details={"stage_id": stage_reference.stage_id},
+                            )
+                            resolved_raw = serialize_document(reused.resolved)
+                            resolved_stage_ref = ResolvedStageRef(
+                                stage_id=stage_reference.stage_id,
+                                snapshot=reused.snapshot,
+                                resolved_spec=snapshot_file(
+                                    resolved_path, resolved_raw
+                                ),
+                            )
+                            register_stage_artifacts(
+                                store,
+                                stage_reference.stage_id,
+                                reused.snapshot,
+                                reused.resolved.artifacts,
+                                captured_inputs,
+                            )
+                            resolved_stage_refs.append(resolved_stage_ref)
+                            completed[stage_reference.stage_id] = resolved_stage_ref
+                            completed_results[stage_reference.stage_id] = (
+                                reused.resolved
+                            )
+                            active_stage_id = None
+                            continue
+                    reader_files = tuple(
+                        FileIdentity(sha256=file.sha256, bytes=file.bytes)
+                        for input_identity in reuse_input_identities
+                        for file in input_identity.files
                     )
-                ):
-                    resolved_lockfile = resolve_git_file(
-                        fetcher,
-                        effective_environment.lockfile,
+                    for identity in reader_files:
+                        publication.hold(identity, store=store.store)
+                    try:
+                        process = execute_stage_process(
+                            root,
+                            run,
+                            stage_reference,
+                            stage,
+                            attempt_id=attempt_id,
+                            input_paths=input_paths,
+                            reader_files=reader_files,
+                            reader_store=store.store,
+                            timeout_seconds=timeout_seconds,
+                        )
+                    except (StageExecutionError, StageProcessInterrupted) as exc:
+                        run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
+                        log_files[
+                            f"{run_log_root}/{stage_reference.stage_id}.stdout.log"
+                        ] = exc.stdout
+                        log_files[
+                            f"{run_log_root}/{stage_reference.stage_id}.stderr.log"
+                        ] = exc.stderr
+                        if exc.invocation is not None:
+                            invocation_path = (
+                                f"{run_root}/attempts/{attempt_id}/invocations/"
+                                f"{stage_reference.stage_id}.yaml"
+                            )
+                            invocation_refs.append(
+                                publish_invocation_receipt(
+                                    root,
+                                    destination,
+                                    invocation_path,
+                                    exc.invocation,
+                                )
+                            )
+                        raise
+                    invocation_path = (
+                        f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                        f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
                     )
+                    invocation_ref = publish_invocation_receipt(
+                        root,
+                        destination,
+                        invocation_path,
+                        process.invocation,
+                    )
+                    invocation_refs.append(invocation_ref)
+                    stage_completed = datetime.now(UTC)
+                    resolved = resolve_stage(
+                        stage,
+                        source=source,
+                        env=resolve_env(
+                            fetcher,
+                            effective_environment,
+                            process,
+                        ),
+                        process=process,
+                        invocation=invocation_ref,
+                        inputs=resolved_inputs,
+                        download_source_closure=download_source_closure,
+                        completed_at=stage_completed,
+                    )
+                    resolved_artifacts = process.artifacts
                     metric_specs = {
                         metric.metric_id: metric for metric in experiment.metrics
                     }
-                    key = build_stage_reuse_key(
-                        stage_id=stage_reference.stage_id,
-                        stage=stage,
-                        inputs=reuse_input_identities,
-                        seed=run.seed,
-                        env=effective_environment,
-                        reproducibility=run.reproducibility,
-                        metrics=metric_specs,
-                        lockfile=resolved_lockfile,
-                    )
-                    resolved_path = (
-                        f"experiments/{run.experiment_id}/runs/{run.variant_id}/"
-                        f"{run.run_id}/stages/{stage_reference.stage_id}/resolved.yaml"
-                    )
-                    reused = reuse_stage(
-                        root=root,
-                        catalog=Catalog(root),
-                        key=key,
-                        stage=stage,
-                        inputs=resolved_inputs or {},
-                        captured_inputs=captured_inputs,
-                        input_paths=input_paths,
-                        resolved_stage_path=resolved_path,
-                        fetcher=fetcher,
-                        policy=policy,
-                        publisher=snapshot_publisher,
-                        destination=destination,
-                        metrics=metric_specs,
-                        lockfile=resolved_lockfile,
-                        download_source_closure=download_source_closure,
-                        candidate=retry_candidates.get(stage_reference.stage_id),
-                        verified_source=(
-                            verified_previous
-                            if stage_reference.stage_id in retry_candidates
-                            else None
-                        ),
-                    )
-                    if reused is not None:
-                        journal.append(
-                            "publishing_stage",
-                            "verified stage reuse published",
-                            recorded_at=datetime.now(UTC),
-                            details={"stage_id": stage_reference.stage_id},
+                    for metric_id in stage.metric_ids:
+                        if is_recomputed_metric(metric_specs[metric_id]):
+                            continue
+                        measurement_path = (
+                            root
+                            / (
+                                f"experiments/{run.experiment_id}/runs/"
+                                f"{run.variant_id}/{run.run_id}"
+                            )
+                            / f"attempts/{attempt_id}/measurements"
+                            / f"{stage_reference.stage_id}.{metric_id}.jsonl"
                         )
-                        resolved_raw = serialize_document(reused.resolved)
-                        resolved_stage_ref = ResolvedStageRef(
-                            stage_id=stage_reference.stage_id,
-                            snapshot=reused.snapshot,
-                            resolved_spec=snapshot_file(resolved_path, resolved_raw),
+                        if (
+                            measurement_path.is_file()
+                            and measurement_path not in measurement_paths
+                        ):
+                            measurement_paths.append(measurement_path)
+                resolved_path = (
+                    f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                    f"/stages/{stage_reference.stage_id}/resolved.yaml"
+                )
+                resolved_raw = serialize_document(resolved)
+                verify_captured_inputs(captured_inputs, input_paths)
+                snapshot_paths: dict[str, Path] = {
+                    reference.path: input_paths[input_name]
+                    for input_name, reference in captured_inputs.items()
+                }
+                if resolved_retrievals is not None:
+                    for input_name, retrieval in resolved_retrievals.items():
+                        retrieval_path = retrieval.body.path
+                        snapshot_paths[retrieval_path] = input_paths[input_name]
+                artifact_publication_sources = (
+                    process.publication_sources if process is not None else {}
+                )
+                for artifact in resolved_artifacts.values():
+                    artifact_references: tuple[SnapshotFileRef, ...]
+                    if artifact.kind == "file":
+                        artifact_references = (artifact.file,)
+                    else:
+                        artifact_references = tuple(
+                            member.file for member in artifact.members
                         )
-                        resolved_stage_refs.append(resolved_stage_ref)
-                        completed[stage_reference.stage_id] = resolved_stage_ref
-                        completed_results[stage_reference.stage_id] = reused.resolved
-                        active_stage_id = None
-                        continue
-                try:
-                    process = execute_stage_process(
-                        root,
-                        run,
-                        stage_reference,
-                        stage,
-                        attempt_id=attempt_id,
-                        input_paths=input_paths,
-                        timeout_seconds=timeout_seconds,
-                    )
-                except (StageExecutionError, StageProcessInterrupted) as exc:
-                    run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
-                    log_files[
-                        f"{run_log_root}/{stage_reference.stage_id}.stdout.log"
-                    ] = exc.stdout
-                    log_files[
-                        f"{run_log_root}/{stage_reference.stage_id}.stderr.log"
-                    ] = exc.stderr
-                    if exc.invocation is not None:
-                        invocation_path = (
-                            f"{run_root}/attempts/{attempt_id}/invocations/"
-                            f"{stage_reference.stage_id}.yaml"
-                        )
-                        invocation_refs.append(
-                            publish_invocation_receipt(
-                                root,
-                                destination,
-                                invocation_path,
-                                exc.invocation,
+                    for reference in artifact_references:
+                        snapshot_paths[reference.path] = (
+                            artifact_publication_sources.get(
+                                reference.path,
+                                snapshot_paths.get(
+                                    reference.path, root / reference.path
+                                ),
                             )
                         )
-                    raise
-                invocation_path = (
-                    f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
-                    f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
+                journal.append(
+                    "publishing_stage",
+                    "stage snapshot publication started",
+                    recorded_at=datetime.now(UTC),
+                    details={"stage_id": stage_reference.stage_id},
                 )
-                invocation_ref = publish_invocation_receipt(
-                    root,
-                    destination,
-                    invocation_path,
-                    process.invocation,
+                snapshot, published_files = snapshot_publisher.publish(
+                    resolved_stage_path=resolved_path,
+                    resolved_stage=resolved_raw,
+                    files=snapshot_paths,
                 )
-                invocation_refs.append(invocation_ref)
-                stage_completed = datetime.now(UTC)
-                resolved = resolve_stage(
-                    stage,
-                    source=source,
-                    env=resolve_env(
-                        fetcher,
-                        effective_environment,
-                        process,
-                    ),
-                    process=process,
-                    invocation=invocation_ref,
-                    inputs=resolved_inputs,
-                    download_source_closure=download_source_closure,
-                    completed_at=stage_completed,
-                )
-                resolved_artifacts = process.artifacts
-                metric_specs = {
-                    metric.metric_id: metric for metric in experiment.metrics
-                }
-                for metric_id in stage.metric_ids:
-                    if is_recomputed_metric(metric_specs[metric_id]):
-                        continue
-                    measurement_path = (
-                        root
-                        / (
-                            f"experiments/{run.experiment_id}/runs/"
-                            f"{run.variant_id}/{run.run_id}"
-                        )
-                        / f"attempts/{attempt_id}/measurements"
-                        / f"{stage_reference.stage_id}.{metric_id}.jsonl"
-                    )
-                    if (
-                        measurement_path.is_file()
-                        and measurement_path not in measurement_paths
-                    ):
-                        measurement_paths.append(measurement_path)
-            resolved_path = (
-                f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
-                f"/stages/{stage_reference.stage_id}/resolved.yaml"
-            )
-            resolved_raw = serialize_document(resolved)
-            verify_captured_inputs(captured_inputs, input_paths)
-            snapshot_paths: dict[str, Path] = {
-                reference.path: input_paths[input_name]
-                for input_name, reference in captured_inputs.items()
-            }
-            if resolved_retrievals is not None:
-                for input_name, retrieval in resolved_retrievals.items():
-                    retrieval_path = retrieval.body.path
-                    snapshot_paths[retrieval_path] = input_paths[input_name]
-            artifact_publication_sources = (
-                process.publication_sources if process is not None else {}
-            )
-            for artifact in resolved_artifacts.values():
-                artifact_references: tuple[SnapshotFileRef, ...]
-                if artifact.kind == "file":
-                    artifact_references = (artifact.file,)
-                else:
-                    artifact_references = tuple(
-                        member.file for member in artifact.members
-                    )
-                for reference in artifact_references:
-                    snapshot_paths[reference.path] = artifact_publication_sources.get(
-                        reference.path,
-                        root / reference.path,
-                    )
-            journal.append(
-                "publishing_stage",
-                "stage snapshot publication started",
-                recorded_at=datetime.now(UTC),
-                details={"stage_id": stage_reference.stage_id},
-            )
-            snapshot, published_files = snapshot_publisher.publish(
-                resolved_stage_path=resolved_path,
-                resolved_stage=resolved_raw,
-                files=snapshot_paths,
-            )
-            published = {file.path: file for file in published_files}
-            for path, source_path in snapshot_paths.items():
-                reference = resolve_snapshot_file_ref(snapshot, published[path])
-                if isinstance(reference.stored_at, LocalFileRef):
-                    source_path = local_artifact_store(reference.stored_at).path(
-                        reference.stored_at
-                    )
-                fetcher.remember_path(reference, source_path)
-            resolved_stage_ref = ResolvedStageRef(
-                stage_id=stage_reference.stage_id,
-                snapshot=snapshot,
-                resolved_spec=snapshot_file(resolved_path, resolved_raw),
-            )
-            resolved_stage_refs.append(resolved_stage_ref)
-            completed[stage_reference.stage_id] = resolved_stage_ref
-            completed_results[stage_reference.stage_id] = resolved
-            if isinstance(stage, InternalSpec):
-                resolved_internal = ResolvedInternalSpec.model_validate(resolved)
-                run_after_stage_metrics(
-                    root,
-                    run,
+                register_stage_artifacts(
+                    store,
                     stage_reference.stage_id,
-                    stage,
-                    resolved_internal,
-                    resolved_stage_ref,
-                    completed_results,
-                    stored_input_references,
-                    experiment,
-                    input_paths,
-                    measurement_paths,
-                    metric_verification_paths,
-                    timeout_seconds,
-                    attempt_id,
+                    snapshot,
+                    resolved_artifacts,
+                    captured_inputs,
                 )
-            if process is not None:
-                log_files[
-                    f"{run_root}/attempts/{attempt_id}/logs/"
-                    f"{stage_reference.stage_id}.stdout.log"
-                ] = process.stdout
-                log_files[
-                    f"{run_root}/attempts/{attempt_id}/logs/"
-                    f"{stage_reference.stage_id}.stderr.log"
-                ] = process.stderr
-            active_stage_id = None
+                published = {file.path: file for file in published_files}
+                for path, source_path in snapshot_paths.items():
+                    reference = resolve_snapshot_file_ref(snapshot, published[path])
+                    if isinstance(reference.stored_at, LocalFileRef):
+                        source_path = local_artifact_store(reference.stored_at).path(
+                            reference.stored_at
+                        )
+                    fetcher.remember_path(reference, source_path)
+                resolved_stage_ref = ResolvedStageRef(
+                    stage_id=stage_reference.stage_id,
+                    snapshot=snapshot,
+                    resolved_spec=snapshot_file(resolved_path, resolved_raw),
+                )
+                resolved_stage_refs.append(resolved_stage_ref)
+                completed[stage_reference.stage_id] = resolved_stage_ref
+                completed_results[stage_reference.stage_id] = resolved
+                if isinstance(stage, InternalSpec):
+                    resolved_internal = ResolvedInternalSpec.model_validate(resolved)
+                    run_after_stage_metrics(
+                        root,
+                        run,
+                        stage_reference.stage_id,
+                        stage,
+                        resolved_internal,
+                        resolved_stage_ref,
+                        completed_results,
+                        stored_input_references,
+                        experiment,
+                        input_paths,
+                        measurement_paths,
+                        metric_verification_paths,
+                        timeout_seconds,
+                        attempt_id,
+                        artifact_paths=None
+                        if process is None
+                        else process.output_paths,
+                        reader_store=store.store,
+                    )
+                if process is not None:
+                    log_files[
+                        f"{run_root}/attempts/{attempt_id}/logs/"
+                        f"{stage_reference.stage_id}.stdout.log"
+                    ] = process.stdout
+                    log_files[
+                        f"{run_root}/attempts/{attempt_id}/logs/"
+                        f"{stage_reference.stage_id}.stderr.log"
+                    ] = process.stderr
+                active_stage_id = None
 
-        journal.append(
-            "closing_attempt",
-            "all planned stages completed",
-            recorded_at=datetime.now(UTC),
-        )
-        journal.append(
-            "publishing_attempt_files",
-            "attempt evidence publication started",
-            recorded_at=datetime.now(UTC),
-            details={},
-        )
-        journal.append(
-            "terminal",
-            "attempt succeeded",
-            recorded_at=datetime.now(UTC),
-        )
-        (
-            journal_reference,
-            measurement_references,
-            metric_verification_references,
-            log_references,
-        ) = publish_attempt_files(
-            root,
-            destination,
-            run_root,
-            attempt_id,
-            journal,
-            log_files,
-            measurement_paths,
-            metric_verification_paths,
-        )
-        attempt_completed = datetime.now(UTC)
-        attempt = RunAttempt(
-            attempt_id=attempt_id,
-            purpose=purpose,
-            status="succeeded",
-            started_at=attempt_started,
-            completed_at=attempt_completed,
-            resolved_stages=tuple(resolved_stage_refs),
-            invocations=tuple(invocation_refs),
-            journal=journal_reference,
-            measurement_files=measurement_references,
-            metric_verification_files=metric_verification_references,
-            log_files=log_references,
-            failure=None,
-        )
-        attempt_reference = write_attempt_document(
-            root,
-            run_root,
-            attempt,
-            destination,
-        )
-        if purpose == "benchmark_confirmation":
-            return ConfirmationRunResult(
-                attempt=attempt,
-                attempt_reference=attempt_reference,
-                attempt_path=(
-                    root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
-                ),
-                journal_path=journal.path,
+            journal.append(
+                "closing_attempt",
+                "all planned stages completed",
+                recorded_at=datetime.now(UTC),
             )
-        attempt_references = tuple(
-            write_attempt_document(
-                root,
-                run_root,
-                value,
-                destination,
+            journal.append(
+                "publishing_attempt_files",
+                "attempt evidence publication started",
+                recorded_at=datetime.now(UTC),
+                details={},
             )
-            for value in previous_attempts
-        ) + (attempt_reference,)
-        resolved_run = ResolvedRun(
-            spec=ResolvedRunSpecRef(
-                sha256=hashlib.sha256(run_raw).hexdigest(),
-                bytes=len(run_raw),
-                stored_at=plan_location,
-            ),
-            status="succeeded",
-            attempts=attempt_references,
-            successful_attempt_id=attempt_id,
-            completed_at=datetime.now(UTC),
-        )
-        terminal_raw = serialize_document(resolved_run)
-        verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
-        replace_synchronized(terminal_path, terminal_raw)
-        write_synchronized(workspace.terminal, terminal_raw)
-        terminal_reference = publish_resolved_files(
-            root,
-            destination,
-            {terminal_path.relative_to(root).as_posix(): terminal_raw},
-        )[terminal_path.relative_to(root).as_posix()]
-        run_reference = ResolvedRunRef(
-            sha256=terminal_reference.sha256,
-            bytes=terminal_reference.bytes,
-            stored_at=terminal_reference.stored_at,
-        )
-        persist_terminal_reference(
-            terminal_path,
-            run_reference,
-            replace_existing=previous_run is not None,
-        )
-        _index_completed_run(root, run_reference, verified_run)
-        capture_completed_journal(root, run_reference, verified_run)
-        return RunResult(
-            record=resolved_run,
-            reference=run_reference,
-            path=terminal_path,
-            journal_path=journal.path,
-            latest_attempt=attempt,
-        )
-    except (Exception, KeyboardInterrupt) as exc:
-        failed_at = datetime.now(UTC)
-        status: Literal["failed", "cancelled", "preempted"]
-        if isinstance(exc, StageProcessInterrupted):
-            status = exc.outcome
-        elif isinstance(exc, KeyboardInterrupt):
-            status = "cancelled"
-        else:
-            status = "failed"
-        latest = journal.latest()
-        if latest is not None and latest.state != "terminal":
             journal.append(
                 "terminal",
-                f"attempt {status}",
-                recorded_at=failed_at,
-                details={
-                    "stage_id": active_stage_id,
-                    "exception": type(exc).__name__,
-                },
+                "attempt succeeded",
+                recorded_at=datetime.now(UTC),
             )
-        code = (
-            "cancelled"
-            if status == "cancelled"
-            else "preempted"
-            if status == "preempted"
-            else "preflight_failed"
-            if isinstance(exc, RunError)
-            and str(exc).startswith("plan preflight failed")
-            else "verification_failed"
-            if isinstance(exc, VerificationError)
-            else "execution_failed"
-            if isinstance(
-                exc,
-                (StageExecutionError, MetricExecutionError, HttpRetrievalError),
+            (
+                journal_reference,
+                measurement_references,
+                metric_verification_references,
+                log_references,
+            ) = publish_attempt_files(
+                root,
+                destination,
+                run_root,
+                attempt_id,
+                journal,
+                log_files,
+                measurement_paths,
+                metric_verification_paths,
             )
-            else "internal_error"
-        )
-        (
-            journal_reference,
-            measurement_references,
-            metric_verification_references,
-            log_references,
-        ) = publish_attempt_files(
-            root,
-            destination,
-            run_root,
-            attempt_id,
-            journal,
-            log_files,
-            measurement_paths,
-            metric_verification_paths,
-        )
-        completed_at = datetime.now(UTC)
-        failed_attempt = RunAttempt(
-            attempt_id=attempt_id,
-            purpose=purpose,
-            status=status,
-            started_at=attempt_started,
-            completed_at=completed_at,
-            resolved_stages=tuple(resolved_stage_refs),
-            invocations=tuple(invocation_refs),
-            journal=journal_reference,
-            measurement_files=measurement_references,
-            metric_verification_files=metric_verification_references,
-            log_files=log_references,
-            failure=AttemptFailure(
-                code=code,
-                stage_id=active_stage_id,
-                message=str(exc) or type(exc).__name__,
-                occurred_at=failed_at,
-            ),
-        )
-        failed_attempt_reference = write_attempt_document(
-            root,
-            run_root,
-            failed_attempt,
-            destination,
-            replace_existing=True,
-        )
-        if purpose == "benchmark_confirmation":
-            failed_attempt_path = (
-                root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+            attempt_completed = datetime.now(UTC)
+            attempt = RunAttempt(
+                attempt_id=attempt_id,
+                purpose=purpose,
+                status="succeeded",
+                started_at=attempt_started,
+                completed_at=attempt_completed,
+                resolved_stages=tuple(resolved_stage_refs),
+                invocations=tuple(invocation_refs),
+                journal=journal_reference,
+                measurement_files=measurement_references,
+                metric_verification_files=metric_verification_references,
+                log_files=log_references,
+                failure=None,
             )
-            raise RunError(
-                f"benchmark confirmation attempt {attempt_id} failed; evidence "
-                f"written to {failed_attempt_path}"
-            ) from exc
-        attempt_references = tuple(
-            write_attempt_document(
+            attempt_reference = write_attempt_document(
                 root,
                 run_root,
-                value,
+                attempt,
                 destination,
             )
-            for value in previous_attempts
-        ) + (failed_attempt_reference,)
-        failed_run = ResolvedRun(
-            spec=ResolvedRunSpecRef(
-                sha256=hashlib.sha256(run_raw).hexdigest(),
-                bytes=len(run_raw),
-                stored_at=plan_location,
-            ),
-            status="cancelled" if status == "cancelled" else "failed",
-            attempts=attempt_references,
-            successful_attempt_id=None,
-            completed_at=datetime.now(UTC),
-        )
-        terminal_raw = serialize_document(failed_run)
-        replace_synchronized(terminal_path, terminal_raw)
-        replace_synchronized(workspace.terminal, terminal_raw)
-        terminal_relative_path = terminal_path.relative_to(root).as_posix()
-        terminal_reference = publish_resolved_files(
-            root,
-            destination,
-            {terminal_relative_path: terminal_raw},
-        )[terminal_relative_path]
-        run_reference = ResolvedRunRef(
-            sha256=terminal_reference.sha256,
-            bytes=terminal_reference.bytes,
-            stored_at=terminal_reference.stored_at,
-        )
-        persist_terminal_reference(
-            terminal_path,
-            run_reference,
-            replace_existing=previous_run is not None,
-        )
-        result = RunResult(
-            record=failed_run,
-            reference=run_reference,
-            path=terminal_path,
-            journal_path=journal.path,
-            latest_attempt=failed_attempt,
-        )
-        raise RunError(
-            f"attempt {attempt_id} failed; evidence written to {terminal_path}",
-            result=result,
-        ) from exc
-    finally:
-        if owns_signals:
-            signal.signal(signal.SIGINT, previous_sigint)
-            signal.signal(signal.SIGTERM, previous_sigterm)
-        run_lock.release()
+            if purpose == "benchmark_confirmation":
+                return ConfirmationRunResult(
+                    attempt=attempt,
+                    attempt_reference=attempt_reference,
+                    attempt_path=(
+                        root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+                    ),
+                    journal_path=journal.path,
+                )
+            attempt_references = tuple(
+                write_attempt_document(
+                    root,
+                    run_root,
+                    value,
+                    destination,
+                )
+                for value in previous_attempts
+            ) + (attempt_reference,)
+            resolved_run = ResolvedRun(
+                spec=ResolvedRunSpecRef(
+                    sha256=hashlib.sha256(run_raw).hexdigest(),
+                    bytes=len(run_raw),
+                    stored_at=plan_location,
+                ),
+                status="succeeded",
+                attempts=attempt_references,
+                successful_attempt_id=attempt_id,
+                completed_at=datetime.now(UTC),
+            )
+            terminal_raw = serialize_document(resolved_run)
+            verified_run = verify_run_result(
+                resolved_run, policy=policy, fetcher=fetcher
+            )
+            replace_synchronized(terminal_path, terminal_raw)
+            write_synchronized(workspace.terminal, terminal_raw)
+            terminal_reference = publish_resolved_files(
+                root,
+                destination,
+                {terminal_path.relative_to(root).as_posix(): terminal_raw},
+            )[terminal_path.relative_to(root).as_posix()]
+            run_reference = ResolvedRunRef(
+                sha256=terminal_reference.sha256,
+                bytes=terminal_reference.bytes,
+                stored_at=terminal_reference.stored_at,
+            )
+            persist_terminal_reference(
+                terminal_path,
+                run_reference,
+                replace_existing=previous_run is not None,
+            )
+            _index_completed_run(root, run_reference, verified_run)
+            capture_completed_journal(root, run_reference, verified_run)
+            return RunResult(
+                publication_path=publication.operation_path,
+                record=resolved_run,
+                reference=run_reference,
+                path=terminal_path,
+                journal_path=journal.path,
+                latest_attempt=attempt,
+            )
+        except (Exception, KeyboardInterrupt) as exc:
+            publication.note_result(False)
+            failed_at = datetime.now(UTC)
+            status: Literal["failed", "cancelled", "preempted"]
+            if isinstance(exc, StageProcessInterrupted):
+                status = exc.outcome
+            elif isinstance(exc, KeyboardInterrupt):
+                status = "cancelled"
+            else:
+                status = "failed"
+            latest = journal.latest()
+            if latest is not None and latest.state != "terminal":
+                journal.append(
+                    "terminal",
+                    f"attempt {status}",
+                    recorded_at=failed_at,
+                    details={
+                        "stage_id": active_stage_id,
+                        "exception": type(exc).__name__,
+                    },
+                )
+            code = (
+                "cancelled"
+                if status == "cancelled"
+                else "preempted"
+                if status == "preempted"
+                else "preflight_failed"
+                if isinstance(exc, RunError)
+                and str(exc).startswith("plan preflight failed")
+                else "verification_failed"
+                if isinstance(exc, VerificationError)
+                else "execution_failed"
+                if isinstance(
+                    exc,
+                    (StageExecutionError, MetricExecutionError, HttpRetrievalError),
+                )
+                else "internal_error"
+            )
+            (
+                journal_reference,
+                measurement_references,
+                metric_verification_references,
+                log_references,
+            ) = publish_attempt_files(
+                root,
+                destination,
+                run_root,
+                attempt_id,
+                journal,
+                log_files,
+                measurement_paths,
+                metric_verification_paths,
+            )
+            completed_at = datetime.now(UTC)
+            failed_attempt = RunAttempt(
+                attempt_id=attempt_id,
+                purpose=purpose,
+                status=status,
+                started_at=attempt_started,
+                completed_at=completed_at,
+                resolved_stages=tuple(resolved_stage_refs),
+                invocations=tuple(invocation_refs),
+                journal=journal_reference,
+                measurement_files=measurement_references,
+                metric_verification_files=metric_verification_references,
+                log_files=log_references,
+                failure=AttemptFailure(
+                    code=code,
+                    stage_id=active_stage_id,
+                    message=str(exc) or type(exc).__name__,
+                    occurred_at=failed_at,
+                ),
+            )
+            failed_attempt_reference = write_attempt_document(
+                root,
+                run_root,
+                failed_attempt,
+                destination,
+                replace_existing=True,
+            )
+            if purpose == "benchmark_confirmation":
+                failed_attempt_path = (
+                    root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+                )
+                raise RunError(
+                    f"benchmark confirmation attempt {attempt_id} failed; evidence "
+                    f"written to {failed_attempt_path}"
+                ) from exc
+            attempt_references = tuple(
+                write_attempt_document(
+                    root,
+                    run_root,
+                    value,
+                    destination,
+                )
+                for value in previous_attempts
+            ) + (failed_attempt_reference,)
+            failed_run = ResolvedRun(
+                spec=ResolvedRunSpecRef(
+                    sha256=hashlib.sha256(run_raw).hexdigest(),
+                    bytes=len(run_raw),
+                    stored_at=plan_location,
+                ),
+                status="cancelled" if status == "cancelled" else "failed",
+                attempts=attempt_references,
+                successful_attempt_id=None,
+                completed_at=datetime.now(UTC),
+            )
+            terminal_raw = serialize_document(failed_run)
+            replace_synchronized(terminal_path, terminal_raw)
+            replace_synchronized(workspace.terminal, terminal_raw)
+            terminal_relative_path = terminal_path.relative_to(root).as_posix()
+            terminal_reference = publish_resolved_files(
+                root,
+                destination,
+                {terminal_relative_path: terminal_raw},
+            )[terminal_relative_path]
+            run_reference = ResolvedRunRef(
+                sha256=terminal_reference.sha256,
+                bytes=terminal_reference.bytes,
+                stored_at=terminal_reference.stored_at,
+            )
+            persist_terminal_reference(
+                terminal_path,
+                run_reference,
+                replace_existing=previous_run is not None,
+            )
+            result = RunResult(
+                publication_path=publication.operation_path,
+                record=failed_run,
+                reference=run_reference,
+                path=terminal_path,
+                journal_path=journal.path,
+                latest_attempt=failed_attempt,
+            )
+            raise RunError(
+                f"attempt {attempt_id} failed; evidence written to {terminal_path}",
+                result=result,
+            ) from exc
+        finally:
+            if owns_signals:
+                signal.signal(signal.SIGINT, previous_sigint)
+                signal.signal(signal.SIGTERM, previous_sigterm)
+            run_lock.release()

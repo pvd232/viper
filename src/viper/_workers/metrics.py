@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .._storage_locks import PayloadLocks, WorkflowReaders
 from ..execution._metric import MetricWorkerContext, MetricWorkerResult
 from ..metrics import (
     MetricContext,
@@ -82,7 +83,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     root = context.repository_root.resolve()
     started_at = datetime.now(UTC)
+    readers = WorkflowReaders(PayloadLocks(root, context.reader_store))
     try:
+        for dependency in context.dependencies:
+            for reference in dependency.files:
+                readers.hold(reference)
         if context.metric.metric_id not in context.stage.metric_ids:
             raise ValueError("metric is absent from the selected stage")
         if tuple(value.dependency for value in context.dependencies) != tuple(
@@ -160,8 +165,11 @@ def main(argv: list[str] | None = None) -> int:
             MetricWorkerResult(error=f"{type(exc).__name__}: {exc}"),
         )
         return 1
-    _write_result(context.result_path, MetricWorkerResult(receipt=receipt))
-    return 0
+    else:
+        _write_result(context.result_path, MetricWorkerResult(receipt=receipt))
+        return 0
+    finally:
+        readers.close()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,950 @@
+{
+  "validation_kind": "tomllib declaration parsing and Python AST definition lookup only",
+  "application_tests_executed_by_this_audit": false,
+  "formal_protocol_receipt": false,
+  "canonical_package_parser": "unavailable; no canonical digest asserted",
+  "requirement_claims_unchanged": true,
+  "acceptance_conditions_unchanged": true,
+  "pair_blocks_unchanged": true,
+  "requirements": 10,
+  "verifiers": 15,
+  "pair_blocks": 9,
+  "previous_missing_observers": 25,
+  "current_cases": 59,
+  "active_cases": 59,
+  "staged_cases": 0,
+  "all_observers_active": true,
+  "repository_bindings": {
+    "viper": "/Users/machina/Developer/ChatGPT/viper-cloud-offload",
+    "jep": "/Users/machina/Developer/ChatGPT/jep-native-offload"
+  },
+  "rules": [
+    {
+      "verifier": "CFO-VR-01",
+      "requirements": [
+        "CFO-REQ-01"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_offload.py",
+          "symbol": "test_offload_binding_preserves_original_snapshot_identity",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload.py",
+          "line": 52,
+          "source_sha256": "f20bc4b0f42f75f5166fff63e2145e81f80a84faea28151d12889526c054911d",
+          "assertions": 4,
+          "definition_lines": 14
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload.py",
+          "symbol": "test_offload_binding_rejects_changed_payload",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload.py",
+          "line": 69,
+          "source_sha256": "f20bc4b0f42f75f5166fff63e2145e81f80a84faea28151d12889526c054911d",
+          "assertions": 0,
+          "definition_lines": 12
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload.py",
+          "symbol": "test_offload_binding_rejects_changed_snapshot_membership",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload.py",
+          "line": 84,
+          "source_sha256": "f20bc4b0f42f75f5166fff63e2145e81f80a84faea28151d12889526c054911d",
+          "assertions": 0,
+          "definition_lines": 27
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_git_proof.py",
+          "symbol": "test_git_proof_rejects_unrelated_bytes_even_with_matching_declared_sha",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_git_proof.py",
+          "line": 71,
+          "source_sha256": "e7f7db3c43eec60511bbfdeecbfa23ba15bb8b0bca880207b2105e70eb7c778c",
+          "assertions": 1,
+          "definition_lines": 16
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_git_proof.py",
+          "symbol": "test_git_proof_rejects_changed_metadata",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_git_proof.py",
+          "line": 90,
+          "source_sha256": "e7f7db3c43eec60511bbfdeecbfa23ba15bb8b0bca880207b2105e70eb7c778c",
+          "assertions": 0,
+          "definition_lines": 12
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_git_proof.py",
+          "symbol": "test_git_proof_rejects_another_path",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_git_proof.py",
+          "line": 104,
+          "source_sha256": "e7f7db3c43eec60511bbfdeecbfa23ba15bb8b0bca880207b2105e70eb7c778c",
+          "assertions": 0,
+          "definition_lines": 9
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_workflow.py",
+          "symbol": "test_plan_rejects_cached_source_from_a_different_git_file",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_workflow.py",
+          "line": 556,
+          "source_sha256": "cab2187e15ab803846a75eae8bddd85287c451e2fb344bf3e5e313b7f8cb7910",
+          "assertions": 0,
+          "definition_lines": 46
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-02",
+      "requirements": [
+        "CFO-REQ-02"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_storage_registry.py",
+          "symbol": "test_inventory_survives_restart_and_payload_absence",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_storage_registry.py",
+          "line": 73,
+          "source_sha256": "693ae119b33f88f765e032a82f006111df7099d6daf6c15f834fdec72bcd5253",
+          "assertions": 5,
+          "definition_lines": 29
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_storage_registry.py",
+          "symbol": "test_registered_inventory_cannot_change",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_storage_registry.py",
+          "line": 126,
+          "source_sha256": "693ae119b33f88f765e032a82f006111df7099d6daf6c15f834fdec72bcd5253",
+          "assertions": 2,
+          "definition_lines": 23
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_storage_registry.py",
+          "symbol": "test_custody_conflict_rolls_back_new_snapshot",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_storage_registry.py",
+          "line": 151,
+          "source_sha256": "693ae119b33f88f765e032a82f006111df7099d6daf6c15f834fdec72bcd5253",
+          "assertions": 4,
+          "definition_lines": 29
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-03",
+      "requirements": [
+        "CFO-REQ-03"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_local_members_share_payload_without_changing_references",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_shared_storage.py",
+          "line": 82,
+          "source_sha256": "c09e91833e098a353628123ab53c43cab688f12ce6d6f1a999e7ea9b8b8f96c5",
+          "assertions": 6,
+          "definition_lines": 14
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_corrupt_registered_original_is_reported",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_shared_storage.py",
+          "line": 174,
+          "source_sha256": "c09e91833e098a353628123ab53c43cab688f12ce6d6f1a999e7ea9b8b8f96c5",
+          "assertions": 0,
+          "definition_lines": 33
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_failed_download_never_installs_a_shared_payload",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_shared_storage.py",
+          "line": 229,
+          "source_sha256": "c09e91833e098a353628123ab53c43cab688f12ce6d6f1a999e7ea9b8b8f96c5",
+          "assertions": 3,
+          "definition_lines": 12
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-04",
+      "requirements": [
+        "CFO-REQ-04"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_artifact_retention.py",
+          "symbol": "test_inherited_retention_uses_the_current_default",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_artifact_retention.py",
+          "line": 115,
+          "source_sha256": "1795e76540ed4086c595a21a99eb04efadb789c13962b6f5a55331a0489fb1ce",
+          "assertions": 4,
+          "definition_lines": 10
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_artifact_retention.py",
+          "symbol": "test_failed_keep_preserves_the_preference",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_artifact_retention.py",
+          "line": 321,
+          "source_sha256": "1795e76540ed4086c595a21a99eb04efadb789c13962b6f5a55331a0489fb1ce",
+          "assertions": 3,
+          "definition_lines": 22
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-05",
+      "requirements": [
+        "CFO-REQ-05"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_artifact_retention.py",
+          "symbol": "test_any_shared_artifact_keep_vetoes_offload",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_artifact_retention.py",
+          "line": 141,
+          "source_sha256": "1795e76540ed4086c595a21a99eb04efadb789c13962b6f5a55331a0489fb1ce",
+          "assertions": 4,
+          "definition_lines": 15
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_new_keep_defeats_a_previously_queued_cleanup",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 313,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 4,
+          "definition_lines": 13
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_a_replacement_with_identical_bytes_survives_stale_cleanup",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 411,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 2,
+          "definition_lines": 14
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-06",
+      "requirements": [
+        "CFO-REQ-06"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_future_input_materializes_verified_producer_snapshot",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_run_execution.py",
+          "line": 1508,
+          "source_sha256": "b243acf3e1867046b2dfa7beefcac63c4fe1597ce7b21320ff4cc781f493304e",
+          "assertions": 2,
+          "definition_lines": 63
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_artifact_retention.py",
+          "symbol": "test_changed_input_is_a_new_version_with_an_independent_override",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_artifact_retention.py",
+          "line": 245,
+          "source_sha256": "1795e76540ed4086c595a21a99eb04efadb789c13962b6f5a55331a0489fb1ce",
+          "assertions": 5,
+          "definition_lines": 14
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_cleanup_preserves_a_registered_external_copy",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 440,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 3,
+          "definition_lines": 21
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-07",
+      "requirements": [
+        "CFO-REQ-07"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_worker_restores_remote_snapshot_members_and_keeps_their_cleanup_selection",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 496,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 6,
+          "definition_lines": 42
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_captured_sources_are_checked_before_intent_or_provider_io",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 724,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 5,
+          "definition_lines": 43
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_remote_hash_mismatch_leaves_captured_intent_unpublished",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 769,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 5,
+          "definition_lines": 32
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-08",
+      "requirements": [
+        "CFO-REQ-08"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_worker_runs_cleanup_after_verified_publication",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 672,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 3,
+          "definition_lines": 12
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_failed_whole_workflow_preserves_even_verified_outputs",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 272,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 3,
+          "definition_lines": 9
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_every_target_needs_final_and_data_proof",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 283,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 4,
+          "definition_lines": 15
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_new_keep_defeats_a_previously_queued_cleanup",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 313,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 4,
+          "definition_lines": 13
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_a_replacement_with_identical_bytes_survives_stale_cleanup",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 411,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 2,
+          "definition_lines": 14
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_an_overlapping_reader_outlives_the_first_workflow",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 342,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 4,
+          "definition_lines": 19
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_ready_uploads_precede_deferred_cleanup",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 686,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 3,
+          "definition_lines": 32
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_worker_retries_after_last_reader_without_registry_changes",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 720,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 6,
+          "definition_lines": 16
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_worker_memoizes_mixed_keep_and_rechecks_changed_preference",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 738,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 10,
+          "definition_lines": 59
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-09",
+      "requirements": [
+        "CFO-REQ-09"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_offload_recovery.py",
+          "symbol": "test_workflow_publishes_git_proof_and_restores_after_source_eviction",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_recovery.py",
+          "line": 754,
+          "source_sha256": "1e89e2b984a56f2c97374fba8d6fa7a42a1cd2ffbdb5ab9d4a6fbd494d98ee93",
+          "assertions": 19,
+          "definition_lines": 109
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_recovery.py",
+          "symbol": "test_cloud_publication_outside_workflow_waits_for_completion",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_recovery.py",
+          "line": 428,
+          "source_sha256": "1e89e2b984a56f2c97374fba8d6fa7a42a1cd2ffbdb5ab9d4a6fbd494d98ee93",
+          "assertions": 4,
+          "definition_lines": 33
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_cleanup_releases_original_and_cache_without_reopening_cloud",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 236,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 6,
+          "definition_lines": 20
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_recovery.py",
+          "symbol": "test_git_fallback_rejects_shared_bytes_without_membership_proof",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_recovery.py",
+          "line": 271,
+          "source_sha256": "1e89e2b984a56f2c97374fba8d6fa7a42a1cd2ffbdb5ab9d4a6fbd494d98ee93",
+          "assertions": 3,
+          "definition_lines": 32
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_recovery.py",
+          "symbol": "test_available_git_is_checked_before_cloud_fallback",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_recovery.py",
+          "line": 305,
+          "source_sha256": "1e89e2b984a56f2c97374fba8d6fa7a42a1cd2ffbdb5ab9d4a6fbd494d98ee93",
+          "assertions": 0,
+          "definition_lines": 22
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-10",
+      "requirements": [
+        "CFO-REQ-10"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_run_fetcher_uses_shared_store_across_executions",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_shared_storage.py",
+          "line": 209,
+          "source_sha256": "c09e91833e098a353628123ab53c43cab688f12ce6d6f1a999e7ea9b8b8f96c5",
+          "assertions": 5,
+          "definition_lines": 18
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_new_keep_defeats_a_previously_queued_cleanup",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 313,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 4,
+          "definition_lines": 13
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_an_overlapping_reader_outlives_the_first_workflow",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_cleanup.py",
+          "line": 342,
+          "source_sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8",
+          "assertions": 4,
+          "definition_lines": 19
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_retention.py",
+          "symbol": "test_rejects_changed_local_artifact_before_removing_any_file",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_retention.py",
+          "line": 202,
+          "source_sha256": "9a4063460cee9c4fb1fb2020047c2ab787f7862aad3728e14ee6e4ef67c1eadd",
+          "assertions": 3,
+          "definition_lines": 20
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-11",
+      "requirements": [
+        "CFO-REQ-07"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_snapshot_copies_complete_while_the_workflow_remains_open",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 177,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 14,
+          "definition_lines": 30
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_worker_starter_detaches_and_keeps_launch_failure_recoverable",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 305,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 5,
+          "definition_lines": 21
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_detached_worker_finishes_after_the_producer_process_exits",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 328,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 3,
+          "definition_lines": 79
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_a_failed_snapshot_does_not_block_ready_uploads_and_can_be_retried",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 209,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 7,
+          "definition_lines": 42
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_failed_durable_admission_does_not_accept_or_pin_the_snapshot",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 803,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 6,
+          "definition_lines": 32
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-12",
+      "requirements": [
+        "CFO-REQ-05"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_storage_readers.py",
+          "symbol": "test_overlapping_workflows_keep_independent_reader_holds",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_storage_readers.py",
+          "line": 44,
+          "source_sha256": "8fcb9ce5a7da98bf1e6ada70b8b4e1465ffe2f80b43a0e053f9f69c0215031ae",
+          "assertions": 2,
+          "definition_lines": 16
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_storage_readers.py",
+          "symbol": "test_closed_workflow_rejects_new_readers",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_storage_readers.py",
+          "line": 102,
+          "source_sha256": "8fcb9ce5a7da98bf1e6ada70b8b4e1465ffe2f80b43a0e053f9f69c0215031ae",
+          "assertions": 0,
+          "definition_lines": 6
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-13",
+      "requirements": [
+        "CFO-REQ-10"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "jep",
+          "path": "tests/test_viper_storage_adapter.py",
+          "symbol": "test_generation_ack_follows_verified_native_copies",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/jep-native-offload/tests/test_viper_storage_adapter.py",
+          "line": 184,
+          "source_sha256": "a758058aefa726a6e34116d75156157fffd1bf2658d96c983f5b24d67336ddb0",
+          "assertions": 7,
+          "definition_lines": 16
+        },
+        {
+          "role": "rejection",
+          "repository_id": "jep",
+          "path": "tests/test_viper_storage_adapter.py",
+          "symbol": "test_failed_copy_keeps_control_sources_without_ack",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/jep-native-offload/tests/test_viper_storage_adapter.py",
+          "line": 202,
+          "source_sha256": "a758058aefa726a6e34116d75156157fffd1bf2658d96c983f5b24d67336ddb0",
+          "assertions": 3,
+          "definition_lines": 12
+        },
+        {
+          "role": "rejection",
+          "repository_id": "jep",
+          "path": "tests/test_viper_storage_adapter.py",
+          "symbol": "test_attached_target_keeps_private_namespace_and_rejects_rebinding",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/jep-native-offload/tests/test_viper_storage_adapter.py",
+          "line": 70,
+          "source_sha256": "a758058aefa726a6e34116d75156157fffd1bf2658d96c983f5b24d67336ddb0",
+          "assertions": 2,
+          "definition_lines": 7
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-14",
+      "requirements": [
+        "CFO-REQ-03"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_fresh_fetcher_reuses_registered_original_without_cloud_client",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_shared_storage.py",
+          "line": 324,
+          "source_sha256": "c09e91833e098a353628123ab53c43cab688f12ce6d6f1a999e7ea9b8b8f96c5",
+          "assertions": 6,
+          "definition_lines": 25
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_fetcher_propagates_invalid_active_registry_before_legacy_fallback",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_shared_storage.py",
+          "line": 377,
+          "source_sha256": "c09e91833e098a353628123ab53c43cab688f12ce6d6f1a999e7ea9b8b8f96c5",
+          "assertions": 1,
+          "definition_lines": 18
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_managed_huggingface_restore_streams_into_shared_store",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_shared_storage.py",
+          "line": 447,
+          "source_sha256": "c09e91833e098a353628123ab53c43cab688f12ce6d6f1a999e7ea9b8b8f96c5",
+          "assertions": 4,
+          "definition_lines": 14
+        }
+      ]
+    },
+    {
+      "verifier": "CFO-VR-15",
+      "requirements": [
+        "CFO-REQ-06"
+      ],
+      "cases": [
+        {
+          "role": "success",
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_nested_scopes_retain_readers_until_the_outer_workflow_finishes",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_background_publication.py",
+          "line": 157,
+          "source_sha256": "19e4c1295841d34344b8045bf38b331a3a3add478ec2390366bd8d1eae1ee07e",
+          "assertions": 5,
+          "definition_lines": 18
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_workflow.py",
+          "symbol": "test_child_completion_does_not_close_parent_workflow",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_workflow.py",
+          "line": 121,
+          "source_sha256": "cab2187e15ab803846a75eae8bddd85287c451e2fb344bf3e5e313b7f8cb7910",
+          "assertions": 5,
+          "definition_lines": 22
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_workflow.py",
+          "symbol": "test_failed_batch_does_not_authorize_cleanup",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_workflow.py",
+          "line": 145,
+          "source_sha256": "cab2187e15ab803846a75eae8bddd85287c451e2fb344bf3e5e313b7f8cb7910",
+          "assertions": 4,
+          "definition_lines": 21
+        },
+        {
+          "role": "rejection",
+          "repository_id": "viper",
+          "path": "tests/test_offload_workflow.py",
+          "symbol": "test_queued_input_is_held_before_its_consumer_starts",
+          "state": "active",
+          "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_workflow.py",
+          "line": 168,
+          "source_sha256": "cab2187e15ab803846a75eae8bddd85287c451e2fb344bf3e5e313b7f8cb7910",
+          "assertions": 6,
+          "definition_lines": 45
+        }
+      ]
+    }
+  ],
+  "supplemental_observers": [
+    {
+      "repository_id": "viper",
+      "path": "tests/test_benchmark_execution.py",
+      "symbol": "test_benchmark_public_verifier_remains_independent",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_benchmark_execution.py",
+      "line": 327,
+      "source_sha256": "fb3560bf7a35e9c7fe4301cd760f4ae5f7f1a8fc0c40620af500b787610c7de3",
+      "assertions": 2,
+      "definition_lines": 23
+    },
+    {
+      "repository_id": "viper",
+      "path": "tests/test_managed_file_access.py",
+      "symbol": "test_stage_child_holds_inputs_before_validation_and_releases_on_failure",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_managed_file_access.py",
+      "line": 133,
+      "source_sha256": "512bf71f6eec668426a6c49516e212a25efe65b9e4008e802b5fd0dc4aa2413f",
+      "assertions": 4,
+      "definition_lines": 54
+    },
+    {
+      "repository_id": "viper",
+      "path": "tests/test_managed_file_access.py",
+      "symbol": "test_metric_child_holds_dependency_files_before_validation",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_managed_file_access.py",
+      "line": 189,
+      "source_sha256": "512bf71f6eec668426a6c49516e212a25efe65b9e4008e802b5fd0dc4aa2413f",
+      "assertions": 4,
+      "definition_lines": 48
+    },
+    {
+      "repository_id": "jep",
+      "path": "tests/test_viper_storage_adapter.py",
+      "symbol": "test_restore_verifies_proofs_with_current_attached_target_before_read",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/jep-native-offload/tests/test_viper_storage_adapter.py",
+      "line": 216,
+      "source_sha256": "a758058aefa726a6e34116d75156157fffd1bf2658d96c983f5b24d67336ddb0",
+      "assertions": 6,
+      "definition_lines": 28
+    },
+    {
+      "repository_id": "viper",
+      "path": "tests/test_run_execution.py",
+      "symbol": "test_fresh_workspace_verifies_producer_without_original_git",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_run_execution.py",
+      "line": 3907,
+      "source_sha256": "b243acf3e1867046b2dfa7beefcac63c4fe1597ce7b21320ff4cc781f493304e",
+      "assertions": 6,
+      "definition_lines": 79
+    },
+    {
+      "repository_id": "viper",
+      "path": "tests/test_offload_recovery.py",
+      "symbol": "test_import_restores_unchanged_references_once",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_offload_recovery.py",
+      "line": 163,
+      "source_sha256": "1e89e2b984a56f2c97374fba8d6fa7a42a1cd2ffbdb5ab9d4a6fbd494d98ee93",
+      "assertions": 7,
+      "definition_lines": 24
+    },
+    {
+      "repository_id": "viper",
+      "path": "tests/test_git_proof.py",
+      "symbol": "test_git_proof_verifies_offline_after_json_roundtrip",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_git_proof.py",
+      "line": 61,
+      "source_sha256": "e7f7db3c43eec60511bbfdeecbfa23ba15bb8b0bca880207b2105e70eb7c778c",
+      "assertions": 1,
+      "definition_lines": 8
+    },
+    {
+      "repository_id": "viper",
+      "path": "tests/test_git_proof.py",
+      "symbol": "test_explicit_owner_close_admits_sources_and_restores_current_workflow",
+      "state": "active",
+      "checked_file": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/tests/test_git_proof.py",
+      "line": 115,
+      "source_sha256": "e7f7db3c43eec60511bbfdeecbfa23ba15bb8b0bca880207b2105e70eb7c778c",
+      "assertions": 5,
+      "definition_lines": 38
+    }
+  ],
+  "acceptance_open": {
+    "CFO-REQ-10": "Maintained source/test net reduction unmet; functional checks do not establish that condition."
+  },
+  "source_membership_runtime_commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "coverage_notes": [
+    "Git membership rejection and ordinary proof transport observers supplement unchanged identity/recovery conditions.",
+    "Active PB07 worker-dispatch, ready-upload priority, reader retry and mixed-policy observers are bound; final command evidence remains separate.",
+    "Existing independent benchmark test supplements the nested workflow lifetime observer."
+  ]
+}

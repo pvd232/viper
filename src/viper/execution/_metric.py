@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import viper._subprocess as subprocess
 
-from .._schema import ArtifactName
+from .._schema import ArtifactName, RepoRelPath
 from ..artifacts import ResolvedArtifact, ResolvedSingleFileArtifact
 from ..experiments import ExperimentSpec
 from ..ids import InputName, StageId
@@ -43,9 +43,8 @@ from ..references import (
 )
 from ..runs import RunSpec
 from ..runtime import process_environment, select_cuda_device
-from ..serialization import serialize_document
+from ..serialization import serialize_document, write_synchronized
 from ..stages import BaseSpec, InternalSpec, ResolvedBaseSpec, ResolvedInternalSpec
-from ._publication import write_synchronized
 from .errors import RunError
 
 
@@ -70,6 +69,7 @@ class MetricWorkerContext(BaseModel):
     artifact_paths: dict[ArtifactName, Path]
     dependencies: tuple[ResolvedMetricDependency, ...]
     result_path: Path
+    reader_store: RepoRelPath = ".viper/store"
 
 
 class MetricWorkerResult(BaseModel):
@@ -103,6 +103,7 @@ def execute_metric_process(
     artifact_paths: dict[ArtifactName, Path],
     dependencies: tuple[ResolvedMetricDependency, ...],
     timeout_seconds: float | None = None,
+    reader_store: RepoRelPath = ".viper/store",
 ) -> MetricProcessResult:
     """Apply startup controls and execute one frozen metric callable."""
     root = repository_root.resolve()
@@ -158,6 +159,7 @@ def execute_metric_process(
         artifact_paths=artifact_paths,
         dependencies=dependencies,
         result_path=result_path,
+        reader_store=reader_store,
     )
     context_path.write_text(context.model_dump_json(), encoding="utf-8")
     env["VIPER_METRIC_CONTEXT_PATH"] = str(context_path)
@@ -269,9 +271,15 @@ def run_after_stage_metrics(
     metric_verification_paths: list[Path],
     timeout_seconds: float | None,
     attempt_id: int,
+    *,
+    artifact_paths: Mapping[str, Path] | None = None,
+    reader_store: RepoRelPath = ".viper/store",
 ) -> None:
     """Invoke selected recomputed metrics with existing immutable references."""
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    available_artifacts = (
+        _artifact_paths(root, stage) if artifact_paths is None else artifact_paths
+    )
     for metric_id in stage.metric_ids:
         metric = metrics[metric_id]
         if not is_recomputed_metric(metric):
@@ -284,7 +292,6 @@ def run_after_stage_metrics(
             metric,
             stored_inputs,
         )
-        available_artifacts = _artifact_paths(root, stage)
         metric_inputs = {
             dependency.name: input_paths[dependency.name]
             for dependency in metric.dependencies
@@ -308,6 +315,7 @@ def run_after_stage_metrics(
                 artifact_paths=metric_artifacts,
                 dependencies=dependencies,
                 timeout_seconds=timeout_seconds,
+                reader_store=reader_store,
             )
         except MetricExecutionError as exc:
             raise RunError(f"metric {metric_id!r} invocation failed") from exc
@@ -338,6 +346,7 @@ def run_after_stage_metrics(
                 artifact_paths=metric_artifacts,
                 dependencies=dependencies,
                 timeout_seconds=timeout_seconds,
+                reader_store=reader_store,
             )
         except MetricExecutionError as exc:
             raise RunError(f"metric {metric_id!r} verification failed") from exc

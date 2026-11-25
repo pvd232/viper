@@ -3,11 +3,14 @@
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 
+from .._graph import enroll_plan_inputs
+from .._offload import PublicationSession
 from ..authoring import RunPlanDraft, freeze_run_plan
 from ..evidence import VerificationError
 from ..references import ResolvedRunSpecRef
 from ..runs import RunSpec
 from ..serialization import parse_yaml_bytes
+from ..storage import workflow
 from ._run import run as execute_run
 from ._stage import StageExecutionError
 from .errors import RunError
@@ -58,88 +61,107 @@ def run_many(
     max_concurrency: int = 1,
     timeout_seconds: float | None = None,
     stop_on_failure: bool = False,
+    _session: PublicationSession | None = None,
 ) -> ExperimentExecutionResult:
     """Execute frozen plans with bounded concurrency and stable result order."""
     root = repository_root.resolve()
-    if not run_spec_paths:
-        raise ValueError("run_spec_paths must not be empty")
-    if isinstance(max_concurrency, bool) or max_concurrency < 1:
-        raise ValueError("max_concurrency must be at least one")
-    if timeout_seconds is not None and timeout_seconds <= 0:
-        raise ValueError("timeout_seconds must be positive")
+    with workflow(root, session=_session) as publication:
+        if not run_spec_paths:
+            raise ValueError("run_spec_paths must not be empty")
+        if isinstance(max_concurrency, bool) or max_concurrency < 1:
+            raise ValueError("max_concurrency must be at least one")
+        if timeout_seconds is not None and timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
 
-    # Preserve the immutable store reference when freezing a draft. A path-only
-    # request instead identifies a plan committed to Git.
-    inputs: list[tuple[Path, RunSpec, ResolvedRunSpecRef | None]] = []
-    for item in run_spec_paths:
-        if isinstance(item, RunPlanDraft):
-            frozen = freeze_run_plan(root, item)
-            inputs.append(
-                (root / frozen.reference.stored_at.path, frozen.run, frozen.reference)
-            )
-        else:
-            path, spec = _load_run_spec(root, item)
-            inputs.append((path, spec, None))
-    outcomes: list[ExperimentRunResult | None] = [None] * len(inputs)
-    next_index = 0
-    stop = False
-
-    with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
-        pending: dict[Future[RunResult], int] = {}
-        while pending or (next_index < len(inputs) and not stop):
-            while (
-                not stop and len(pending) < max_concurrency and next_index < len(inputs)
-            ):
-                path, _, plan = inputs[next_index]
-                pending[
-                    executor.submit(
-                        execute_run,
-                        root,
-                        path,
-                        plan=plan,
-                        timeout_seconds=timeout_seconds,
+        # Preserve the immutable store reference when freezing a draft. A path-only
+        # request instead identifies a plan committed to Git.
+        inputs: list[tuple[Path, RunSpec, ResolvedRunSpecRef | None]] = []
+        for item in run_spec_paths:
+            if isinstance(item, RunPlanDraft):
+                frozen = freeze_run_plan(root, item)
+                inputs.append(
+                    (
+                        root / frozen.reference.stored_at.path,
+                        frozen.run,
+                        frozen.reference,
                     )
-                ] = next_index
-                next_index += 1
+                )
+            else:
+                path, spec = _load_run_spec(root, item)
+                inputs.append((path, spec, None))
+        for _, spec, _ in inputs:
+            enroll_plan_inputs(root, spec)
+        outcomes: list[ExperimentRunResult | None] = [None] * len(inputs)
+        next_index = 0
+        stop = False
 
-            completed, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
-            for future in sorted(completed, key=pending.__getitem__):
-                index = pending.pop(future)
+        with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
+            pending: dict[Future[RunResult], int] = {}
+            while pending or (next_index < len(inputs) and not stop):
+                while (
+                    not stop
+                    and len(pending) < max_concurrency
+                    and next_index < len(inputs)
+                ):
+                    path, _, plan = inputs[next_index]
+                    pending[
+                        executor.submit(
+                            execute_run,
+                            root,
+                            path,
+                            plan=plan,
+                            _session=publication,
+                            timeout_seconds=timeout_seconds,
+                        )
+                    ] = next_index
+                    next_index += 1
+
+                completed, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
+                for future in sorted(completed, key=pending.__getitem__):
+                    index = pending.pop(future)
+                    path, spec, _ = inputs[index]
+                    try:
+                        result = future.result()
+                    except (
+                        OSError,
+                        ValueError,
+                        RunError,
+                        StageExecutionError,
+                        VerificationError,
+                    ) as error:
+                        outcomes[index] = _failed_run(path, spec, error)
+                        stop = stop_on_failure
+                    else:
+                        outcomes[index] = ExperimentRunResult(
+                            variant_id=spec.variant_id,
+                            replicate_id=spec.replicate_id,
+                            run_id=spec.run_id,
+                            run_spec_path=path,
+                            status="succeeded",
+                            result=result,
+                        )
+
+        if stop:
+            for index in range(next_index, len(inputs)):
                 path, spec, _ = inputs[index]
-                try:
-                    result = future.result()
-                except (
-                    OSError,
-                    ValueError,
-                    RunError,
-                    StageExecutionError,
-                    VerificationError,
-                ) as error:
-                    outcomes[index] = _failed_run(path, spec, error)
-                    stop = stop_on_failure
-                else:
-                    outcomes[index] = ExperimentRunResult(
-                        variant_id=spec.variant_id,
-                        replicate_id=spec.replicate_id,
-                        run_id=spec.run_id,
-                        run_spec_path=path,
-                        status="succeeded",
-                        result=result,
-                    )
-
-    if stop:
-        for index in range(next_index, len(inputs)):
-            path, spec, _ = inputs[index]
-            outcomes[index] = ExperimentRunResult(
-                variant_id=spec.variant_id,
-                replicate_id=spec.replicate_id,
-                run_id=spec.run_id,
-                run_spec_path=path,
-                status="skipped",
-                skip_reason="stopped after an earlier run failed",
+                outcomes[index] = ExperimentRunResult(
+                    variant_id=spec.variant_id,
+                    replicate_id=spec.replicate_id,
+                    run_id=spec.run_id,
+                    run_spec_path=path,
+                    status="skipped",
+                    skip_reason="stopped after an earlier run failed",
+                )
+        if any(outcome is None for outcome in outcomes):
+            raise RuntimeError("batch execution omitted an input")
+        publication.note_result(
+            all(
+                outcome.status == "succeeded"
+                for outcome in outcomes
+                if outcome is not None
             )
-    if any(outcome is None for outcome in outcomes):
-        raise RuntimeError("batch execution omitted an input")
-    return ExperimentExecutionResult(
-        runs=tuple(outcome for outcome in outcomes if outcome is not None)
-    )
+        )
+        return ExperimentExecutionResult(
+            publication_path=publication.operation_path,
+            runs=tuple(outcome for outcome in outcomes if outcome is not None),
+        )

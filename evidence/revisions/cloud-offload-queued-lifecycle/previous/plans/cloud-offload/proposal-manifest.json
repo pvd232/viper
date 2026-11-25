@@ -1,0 +1,505 @@
+{
+  "status": "authored_not_applied_gates_not_run",
+  "package_sha256": "90147c68f5cb022e85322ddd1b0cb42f52319130f2e957290888306e1526c669",
+  "baseline_commit": "f659faf7e7d0b721af736520c1b2b201d778c891",
+  "blocks": [
+    {
+      "pair_block_id": "CFO-PB-01",
+      "requirements": [
+        "CFO-REQ-01"
+      ],
+      "depends_on": [],
+      "status": "authored_not_applied_gates_not_run",
+      "files": [
+        {
+          "target_path": "src/viper/_cloud.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/_cloud.py",
+          "expected_before_sha256": "ebd3ba2ee800ce1d380e0c2124060ea6566b78cc695b7619b624e85acc9ccb3b",
+          "proposed_sha256": "9b551e6fed86a1ad3f7703a8563d6e0a851aace87bb38eaed3a17e4c1c740f51",
+          "lines": 366
+        },
+        {
+          "target_path": "src/viper/storage.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "expected_before_sha256": "3d8777b3b7fc0616c11d3d0de40e1c0259ddacdcc382d6c06d2a1f3789cb62ad",
+          "proposed_sha256": "7c6ac655811fa8de7298555e9599f939986344fcb659dbc8c90e45f7ce0300a1",
+          "lines": 548
+        },
+        {
+          "target_path": "src/viper/_verification/storage.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/_verification/storage.py",
+          "expected_before_sha256": "06329933b3710710c4a5f0f6d20df62982069a72e4736ac9ce8e0abcc2d6ec75",
+          "proposed_sha256": "dc3987f1192ef581dcc3e4406dd1a36aef2beea4d56a443347a633ba89ff9f47",
+          "lines": 736
+        },
+        {
+          "target_path": "src/viper/execution/_promotion_journal.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/execution/_promotion_journal.py",
+          "expected_before_sha256": "4aeee504e9a4e436d1cebf6d63e586232c9dbbe1ce6afc8c10aa8bcd5d80c41c",
+          "proposed_sha256": "00608d99c23c5f1e86df230451e638e975775868ad9f5376170adae21290959a",
+          "lines": 264
+        },
+        {
+          "target_path": "tests/test_offload.py",
+          "operation": "add",
+          "source_path": "add/tests/test_offload.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "95346ddacf89ac860d5db5ad30d0c1ba1ce9d09019fda9d663eed023a4504f2a",
+          "lines": 103
+        },
+        {
+          "target_path": "tests/conftest.py",
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "expected_before_sha256": "5b54a97bafd8b27283816cb127a95c91c2a6df8bac1e41e2dba98c8cef86e5b9",
+          "proposed_sha256": "63dcb29c6f916be3120adca7109a80a0672cd8b7d2f2a22da1caebd0d4984c1d",
+          "lines": 156
+        }
+      ],
+      "focused_test_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_offload.py"
+      ],
+      "actions": [
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/_cloud.py",
+          "target_path": "src/viper/_cloud.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "target_path": "src/viper/storage.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/_verification/storage.py",
+          "target_path": "src/viper/_verification/storage.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/execution/_promotion_journal.py",
+          "target_path": "src/viper/execution/_promotion_journal.py"
+        },
+        {
+          "operation": "add",
+          "source_path": "add/tests/test_offload.py",
+          "target_path": "tests/test_offload.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "target_path": "tests/conftest.py"
+        }
+      ],
+      "limitation": "Retains your existing typed draft storage setting; it does not mark retention, background publication or cleanup complete."
+    },
+    {
+      "pair_block_id": "CFO-PB-02",
+      "requirements": [
+        "CFO-REQ-02"
+      ],
+      "depends_on": [
+        "CFO-PB-01"
+      ],
+      "status": "authored_not_applied_gates_not_run",
+      "files": [
+        {
+          "target_path": "src/viper/_storage_registry.py",
+          "operation": "add",
+          "source_path": "add/src/viper/_storage_registry.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "d9653c8655045ecadc7d92ab5b990fdd8abdddfededaad567717e9c6faaa8ee2",
+          "lines": 333
+        },
+        {
+          "target_path": "src/viper/_cloud.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/_cloud.py",
+          "expected_before_sha256": "9b551e6fed86a1ad3f7703a8563d6e0a851aace87bb38eaed3a17e4c1c740f51",
+          "proposed_sha256": "c697bcd86e0f76f47826bf62a4a2036b143fa48d7a858ed2b609522019843bf1",
+          "lines": 362
+        },
+        {
+          "target_path": "src/viper/storage.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "expected_before_sha256": "7c6ac655811fa8de7298555e9599f939986344fcb659dbc8c90e45f7ce0300a1",
+          "proposed_sha256": "ebb0510cbf9c9575403077a0efd5ac82d26abf8fcb1ef95e560626931a4b0836",
+          "lines": 606
+        },
+        {
+          "target_path": "tests/test_storage_registry.py",
+          "operation": "add",
+          "source_path": "add/tests/test_storage_registry.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "8a20a143feabf8a8ac41b0af7b5add0a2c837e15068b369db0fec3740ea4fac6",
+          "lines": 316
+        },
+        {
+          "target_path": "tests/test_storage_inventory.py",
+          "operation": "add",
+          "source_path": "add/tests/test_storage_inventory.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "41d4cc8bcfc7f025f5b54eea187c9ba7113a1f0dd422cab59e88f0aa2496b034",
+          "lines": 74
+        },
+        {
+          "target_path": "tests/conftest.py",
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "expected_before_sha256": "63dcb29c6f916be3120adca7109a80a0672cd8b7d2f2a22da1caebd0d4984c1d",
+          "proposed_sha256": "e7eabd16dca31eef1d3e99319514c617a218276714f634fd77178c4f926e75e9",
+          "lines": 160
+        }
+      ],
+      "focused_test_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_storage_registry.py",
+        "tests/test_storage_inventory.py"
+      ],
+      "actions": [
+        {
+          "operation": "add",
+          "source_path": "add/src/viper/_storage_registry.py",
+          "target_path": "src/viper/_storage_registry.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/_cloud.py",
+          "target_path": "src/viper/_cloud.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "target_path": "src/viper/storage.py"
+        },
+        {
+          "operation": "add",
+          "source_path": "add/tests/test_storage_registry.py",
+          "target_path": "tests/test_storage_registry.py"
+        },
+        {
+          "operation": "add",
+          "source_path": "add/tests/test_storage_inventory.py",
+          "target_path": "tests/test_storage_inventory.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "target_path": "tests/conftest.py"
+        }
+      ],
+      "limitation": "Metadata registration and binding retirement do not publish or delete payloads. External binding retirement is not deletion permission."
+    },
+    {
+      "pair_block_id": "CFO-PB-03",
+      "requirements": [
+        "CFO-REQ-03",
+        "CFO-REQ-05"
+      ],
+      "depends_on": [
+        "CFO-PB-02"
+      ],
+      "status": "authored_not_applied_gates_not_run",
+      "files": [
+        {
+          "target_path": "src/viper/storage.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "expected_before_sha256": "ebb0510cbf9c9575403077a0efd5ac82d26abf8fcb1ef95e560626931a4b0836",
+          "proposed_sha256": "5434f666b6c3f904ee253127486cd2743e153c57bb8e6055123bd6b425df23ea",
+          "lines": 742
+        },
+        {
+          "target_path": "src/viper/_source.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/_source.py",
+          "expected_before_sha256": "630b0e5f84b303568994406078964e4f7174a624bdaaac9c057410d18128c0c1",
+          "proposed_sha256": "3726b7028574a1f87d9385d5726495e34dae96b74cdb444754a8e6daf34a6976",
+          "lines": 264
+        },
+        {
+          "target_path": "src/viper/_verified_cache.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/_verified_cache.py",
+          "expected_before_sha256": "33d6c09f3682a96951582f936ec090bdb392510d4c516bfccf289a042510e6df",
+          "proposed_sha256": "2ae6225819f556bac346bf3d0cbba19921bcddbfed39d2f7ad5313708aeb1b43",
+          "lines": 115
+        },
+        {
+          "target_path": "src/viper/_storage_locks.py",
+          "operation": "add",
+          "source_path": "add/src/viper/_storage_locks.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "7d3ffaaf44e5879b5bdc94805c22ab3787e3627a75a4d20d95ff2b282cf8cdf4",
+          "lines": 105
+        },
+        {
+          "target_path": "tests/test_shared_storage.py",
+          "operation": "add",
+          "source_path": "add/tests/test_shared_storage.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "65c3809590520d0523e309a3b1245b80e9c1d7c8a2525a0a5233961fe0dbc62c",
+          "lines": 263
+        },
+        {
+          "target_path": "tests/test_storage_readers.py",
+          "operation": "add",
+          "source_path": "add/tests/test_storage_readers.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "14b143ba37841a0d003f8fab2f4b1ff818955d36619122c4db2cd549e0685509",
+          "lines": 103
+        },
+        {
+          "target_path": "tests/conftest.py",
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "expected_before_sha256": "e7eabd16dca31eef1d3e99319514c617a218276714f634fd77178c4f926e75e9",
+          "proposed_sha256": "2d52c8062840846af6ce850b4ab578976713dbb1ff24f91a1069fa3dcb48869b",
+          "lines": 164
+        }
+      ],
+      "focused_test_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_shared_storage.py",
+        "tests/test_storage_readers.py",
+        "tests/test_storage_inventory.py"
+      ],
+      "actions": [
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "target_path": "src/viper/storage.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/_source.py",
+          "target_path": "src/viper/_source.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/_verified_cache.py",
+          "target_path": "src/viper/_verified_cache.py"
+        },
+        {
+          "operation": "add",
+          "source_path": "add/src/viper/_storage_locks.py",
+          "target_path": "src/viper/_storage_locks.py"
+        },
+        {
+          "operation": "add",
+          "source_path": "add/tests/test_shared_storage.py",
+          "target_path": "tests/test_shared_storage.py"
+        },
+        {
+          "operation": "add",
+          "source_path": "add/tests/test_storage_readers.py",
+          "target_path": "tests/test_storage_readers.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "target_path": "tests/conftest.py"
+        }
+      ],
+      "limitation": "Registered local refs with no resident bytes still fail until PB06 adds genuine verified-backing lookup. Workflow locks are prepared here; native runner ownership connects in PB06. No automatic removal is enabled."
+    },
+    {
+      "pair_block_id": "CFO-PB-04",
+      "requirements": [
+        "CFO-REQ-04",
+        "CFO-REQ-05"
+      ],
+      "depends_on": [
+        "CFO-PB-03"
+      ],
+      "status": "authored_not_applied_gates_not_run",
+      "files": [
+        {
+          "target_path": "src/viper/_storage_registry.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/_storage_registry.py",
+          "expected_before_sha256": "d9653c8655045ecadc7d92ab5b990fdd8abdddfededaad567717e9c6faaa8ee2",
+          "proposed_sha256": "b57227e273fb56012423566c28ab71837936dcf6dc8c933486b887214c79b2c4",
+          "lines": 556
+        },
+        {
+          "target_path": "src/viper/retention.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/retention.py",
+          "expected_before_sha256": "9e918627628254790c485b333728702eea231268ce3f7fd6c44a487bcd7904f3",
+          "proposed_sha256": "a384c81dea8eff0f0d4727ad193ab3f82077f107465afc26997d8b8c42a4ab00",
+          "lines": 261
+        },
+        {
+          "target_path": "tests/test_artifact_retention.py",
+          "operation": "add",
+          "source_path": "add/tests/test_artifact_retention.py",
+          "expected_before_sha256": null,
+          "proposed_sha256": "0703b78b1e6d15a24482dffc65f42c2754dd441fdcf1b042621604207c07b984",
+          "lines": 362
+        },
+        {
+          "target_path": "src/viper/storage.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "expected_before_sha256": "5434f666b6c3f904ee253127486cd2743e153c57bb8e6055123bd6b425df23ea",
+          "proposed_sha256": "ea669f2cf6e6cf2855264b2f811e2a32fe14a509d94714f6cb495be939ad54af",
+          "lines": 739
+        },
+        {
+          "target_path": "tests/conftest.py",
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "expected_before_sha256": "2d52c8062840846af6ce850b4ab578976713dbb1ff24f91a1069fa3dcb48869b",
+          "proposed_sha256": "ecf23173b9b7e0b6529c1d0f53d4bd00ab41a407a816e9dec4268ef065a7502b",
+          "lines": 166
+        }
+      ],
+      "focused_test_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_artifact_retention.py",
+        "tests/test_storage_registry.py",
+        "tests/test_shared_storage.py"
+      ],
+      "actions": [
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/_storage_registry.py",
+          "target_path": "src/viper/_storage_registry.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/retention.py",
+          "target_path": "src/viper/retention.py"
+        },
+        {
+          "operation": "add",
+          "source_path": "add/tests/test_artifact_retention.py",
+          "target_path": "tests/test_artifact_retention.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/storage.py",
+          "target_path": "src/viper/storage.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "target_path": "tests/conftest.py"
+        }
+      ],
+      "limitation": "The source/member selector handles already registered immutable input versions. PB06 still owns raw input enrollment. Legacy eviction is not yet routed through the new decision; do not treat automatic cleanup or whole-lifecycle keep as complete before PB07."
+    },
+    {
+      "pair_block_id": "CFO-PB-05",
+      "requirements": [
+        "CFO-REQ-07",
+        "CFO-REQ-09"
+      ],
+      "depends_on": [
+        "CFO-PB-04"
+      ],
+      "status": "authored_not_applied_gates_not_run",
+      "files": [
+        {
+          "target_path": "src/viper/execution/_promotion_journal.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/execution/_promotion_journal.py",
+          "expected_before_sha256": "00608d99c23c5f1e86df230451e638e975775868ad9f5376170adae21290959a",
+          "proposed_sha256": "149129197dd09a482187a08970a335b56e0de1a54a577cd6d35dba7e80b851bc",
+          "lines": 327
+        },
+        {
+          "target_path": "src/viper/huggingface.py",
+          "operation": "replace",
+          "source_path": "replace/src/viper/huggingface.py",
+          "expected_before_sha256": "acff039bd0e9ae8dd586ed748db7445a4a00911bf08f90624b6f6624ed574c32",
+          "proposed_sha256": "1c243480c88b6790b323d25fafffc33eb3f539f6c3c6edd949a6b1b23ee96f08",
+          "lines": 310
+        },
+        {
+          "target_path": "tests/test_cloud_service.py",
+          "operation": "replace",
+          "source_path": "replace/tests/test_cloud_service.py",
+          "expected_before_sha256": "b820823c2460687afa5d019e6729c71af1c040b0ce386fa81e6947f4d8d9b0b2",
+          "proposed_sha256": "2ab9e70a55a5ee67fc135aef814024a61691f32c63d45e6d5e8aecc6690cd55c",
+          "lines": 1178
+        },
+        {
+          "target_path": "tests/conftest.py",
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "expected_before_sha256": "ecf23173b9b7e0b6529c1d0f53d4bd00ab41a407a816e9dec4268ef065a7502b",
+          "proposed_sha256": "ecf23173b9b7e0b6529c1d0f53d4bd00ab41a407a816e9dec4268ef065a7502b",
+          "lines": 166
+        }
+      ],
+      "focused_test_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_cloud_service.py::test_direct_publication_preserves_original_bundle_and_verifies_before_return",
+        "tests/test_cloud_service.py::test_direct_publication_rejects_changed_inventory_before_saving_intent",
+        "tests/test_cloud_service.py::test_direct_gcs_publication_resumes_interrupted_seal_after_restart",
+        "tests/test_cloud_service.py::test_direct_hub_publication_reconciles_before_retrying",
+        "tests/test_cloud_service.py::test_direct_hub_publication_does_not_retry_uncertain_history",
+        "tests/test_cloud_service.py::test_committed_direct_copy_reuses_proof_after_originals_are_evicted",
+        "tests/test_cloud_service.py::test_direct_publication_does_not_acknowledge_failed_cloud_hash_check",
+        "tests/test_cloud_service.py::test_pending_direct_publication_accepts_new_physical_source_locations",
+        "tests/test_cloud_service.py::test_direct_hub_first_publication_initializes_repository_after_exact_guard"
+      ],
+      "actions": [
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/execution/_promotion_journal.py",
+          "target_path": "src/viper/execution/_promotion_journal.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/src/viper/huggingface.py",
+          "target_path": "src/viper/huggingface.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/tests/test_cloud_service.py",
+          "target_path": "tests/test_cloud_service.py"
+        },
+        {
+          "operation": "replace",
+          "source_path": "replace/tests/conftest.py",
+          "target_path": "tests/conftest.py"
+        }
+      ],
+      "limitation": "Synchronous provider work belongs inside the later background worker. This block is not durable queue admission, whole-workflow completion or eviction authorization."
+    }
+  ]
+}

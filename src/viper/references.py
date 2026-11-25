@@ -86,7 +86,11 @@ class HuggingFaceFileRef(ProtocolModel):
 
 
 class LocalFileRef(ProtocolModel):
-    """Reference to the file at ``workspace / store / commit / path``."""
+    """Identify one file within a local snapshot.
+
+    workspace, store and commit keep the original snapshot address.
+    path selects a file; Viper finds its current local location.
+    """
 
     kind: Literal["local"] = "local"
     workspace: AbsolutePath = Field(
@@ -98,10 +102,10 @@ class LocalFileRef(ProtocolModel):
 
 
 class LocalStageResultSnapshotRef(ProtocolModel):
-    """Reference to a saved file collection at ``workspace / store / commit``.
+    """Identify a fixed collection of files in a local Viper store.
 
-    ``commit`` names the directory derived from file paths, sizes, and hashes.
-    A ``LocalFileRef`` adds ``path`` to select one file within that directory.
+    commit is derived from the files' paths, sizes and hashes.
+    The registry keeps their complete file list and known local locations.
     """
 
     kind: Literal["local"] = Field(
@@ -114,7 +118,7 @@ class LocalStageResultSnapshotRef(ProtocolModel):
         default=".viper/store", description="Store directory relative to workspace."
     )
     commit: SHA256 = Field(
-        description="Revision directory derived from file paths, sizes, and hashes."
+        description="Snapshot ID derived from file paths, sizes and hashes."
     )
 
 
@@ -233,7 +237,7 @@ class FileIdentity(ProtocolModel):
 
 
 class ResolvedFileRef(FileIdentity):
-    """Identify one hashed file and its immutable storage location."""
+    """Identify exact file bytes and the reference used to retrieve them."""
 
     stored_at: StorageRef
 
@@ -245,9 +249,7 @@ class SnapshotFileRef(FileIdentity):
     The snapshot supplies the storage address; ``path`` selects its member.
     """
 
-    path: RepoRelPath = Field(
-        description="Member path appended to the containing snapshot's root address."
-    )
+    path: RepoRelPath = Field(description="File path within the snapshot.")
 
 
 class ResolvedGitFileRef(ResolvedFileRef):
@@ -346,12 +348,18 @@ def storage_file(location: StorageModel, path: RepoRelPath) -> StorageModel:
 
 
 def resolve_snapshot_file_ref(
-    snapshot: StageResultSnapshotRef,
+    snapshot: StageResultSnapshotRef | GitSource,
     file: SnapshotFileRef,
 ) -> ResolvedFileRef:
     """Address one snapshot member without reading or republishing its bytes."""
     stored_at: StorageModel
-    if isinstance(snapshot, LocalStageResultSnapshotRef):
+    if isinstance(snapshot, GitSource):
+        stored_at = GitFileRef(
+            repository=snapshot.repository,
+            commit=snapshot.commit,
+            path=file.path,
+        )
+    elif isinstance(snapshot, LocalStageResultSnapshotRef):
         stored_at = LocalFileRef(
             workspace=snapshot.workspace,
             store=snapshot.store,

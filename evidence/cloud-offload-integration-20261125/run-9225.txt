@@ -1,0 +1,85 @@
+[Reading last 82 lines (total: 82 lines)]
+
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0 -- /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/machina/Developer/ChatGPT/viper-cloud-offload
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 62 items
+
+tests/test_resume.py::ResumeTests::test_main_process_rng_round_trip PASSED [  1%]
+tests/test_resume.py::ResumeTests::test_numpy_sampling_counters_round_trip 
+tests/test_resume.py::ResumeTests::test_numpy_sampling_counters_round_trip PASSED [  3%]
+tests/test_resume.py::ResumeTests::test_object_arrays_remain_rejected PASSED [  4%]
+tests/test_resume.py::ResumeTests::test_resumed_training_matches_uninterrupted_terminal_state 
+tests/test_resume.py::ResumeTests::test_resumed_training_matches_uninterrupted_terminal_state PASSED [  6%]
+tests/test_resume.py::ResumeTests::test_training_resume_restores_next_batch 
+tests/test_resume.py::ResumeTests::test_training_resume_restores_next_batch PASSED [  8%]
+tests/test_verification_acceptance.py::test_download_verification_binds_receipt_to_artifact PASSED [  9%]
+tests/test_verification_acceptance.py::test_download_source_closure_follows_future_input_to_download_receipt PASSED [ 11%]
+tests/test_verification_acceptance.py::test_terminal_verification_rebuilds_download_source_closure PASSED [ 12%]
+tests/test_verification_acceptance.py::test_terminal_verification_rejects_forged_download_source_closure PASSED [ 14%]
+tests/test_verification_acceptance.py::test_download_roots_keep_distinct_stage_receipts_with_shared_ids PASSED [ 16%]
+tests/test_verification_acceptance.py::test_download_source_closure_rejects_external_input PASSED [ 17%]
+tests/test_verification_acceptance.py::test_download_source_closure_follows_stored_input_to_producer_download PASSED [ 19%]
+tests/test_verification_acceptance.py::test_download_source_closure_follows_failed_run_completed_stage PASSED [ 20%]
+tests/test_verification_acceptance.py::test_download_source_closure_rejects_future_cycle PASSED [ 22%]
+tests/test_verification_acceptance.py::test_download_source_closure_visits_shared_ancestry_once PASSED [ 24%]
+tests/test_verification_acceptance.py::test_download_source_closure_rejects_cross_run_stored_cycle PASSED [ 25%]
+tests/test_verification_acceptance.py::test_external_input_identity_survives_execution PASSED [ 27%]
+tests/test_verification_acceptance.py::test_external_input_identity_rejects_tampering PASSED [ 29%]
+tests/test_verification_acceptance.py::test_worker_startup_derives_attempt_owned_external_input_path PASSED [ 30%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_benchmark_result_follows_selected_run_completion PASSED [ 32%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_benchmarked_estimator_requires_benchmark_result PASSED [ 33%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_bundle_rejects_a_missing_recorded_member PASSED [ 35%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_bundle_rejects_an_unrecorded_published_member PASSED [ 37%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_dummy_run_passes_full_verification PASSED [ 38%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_verifier_rejects_tampered_referenced_file PASSED [ 40%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_confirmation_separates_stage_results_from_attempt_files PASSED [ 41%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_measurement_cannot_follow_its_attempt PASSED [ 43%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_promoted_artifact_verifies_producer_input_lineage PASSED [ 45%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_run_rejects_attempt_file_snapshot_reused_by_a_retry PASSED [ 46%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_run_rejects_stage_snapshot_reused_by_a_retry PASSED [ 48%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_run_separates_stage_results_from_attempt_files PASSED [ 50%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_stored_input_role_must_match_the_selected_artifact PASSED [ 51%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_stored_inputs_verify_one_shared_producer_run_once PASSED [ 53%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_passes_two_execution_verification PASSED [ 54%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_records_a_threshold_failure PASSED [ 56%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_rejects_a_metric_receipt_mismatch PASSED [ 58%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_rejects_a_plan_mismatch PASSED [ 59%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_rejects_a_prediction_receipt_mismatch PASSED [ 61%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_rejects_an_artifact_receipt_mismatch PASSED [ 62%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_rejects_reused_attempt_file_snapshot PASSED [ 64%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_rejects_reused_stage_snapshots PASSED [ 66%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_verifies_confirmation_input_lineage PASSED [ 67%]
+tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_strict_benchmark_verifies_confirmation_stored_inputs PASSED [ 69%]
+tests/test_verification_acceptance.py::test_stage_reuse_rejects_each_severed_relationship PASSED [ 70%]
+tests/test_verification_acceptance.py::test_knowledge_records_preserve_immutable_evidence PASSED [ 72%]
+tests/test_verification_acceptance.py::test_policy_rejects_saved_stage_reading PASSED [ 74%]
+tests/test_verification_acceptance.py::test_policy_rejects_saved_metric_reading[production] PASSED [ 75%]
+tests/test_verification_acceptance.py::test_policy_rejects_saved_metric_reading[recomputation] PASSED [ 77%]
+tests/test_verification_acceptance.py::test_policy_rejects_reused_producer_reading PASSED [ 79%]
+tests/test_verification_acceptance.py::test_benchmark_accepts_reused_evaluation_without_new_measurement PASSED [ 80%]
+tests/test_verification_acceptance.py::test_download_source_closure_decodes_shared_producer_records_once PASSED [ 82%]
+tests/test_verification_acceptance.py::test_download_source_records_are_shared_across_one_audit PASSED [ 83%]
+tests/test_worker.py::test_workspace_enforces_exclusive_run_ownership PASSED [ 85%]
+tests/test_worker.py::test_workspace_rejects_path_escape PASSED          [ 87%]
+tests/test_worker.py::test_attempt_allocator_uses_durable_workspace_history PASSED [ 88%]
+tests/test_worker.py::test_stored_input_path_preserves_name_inside_attempt_namespace PASSED [ 90%]
+tests/test_worker.py::test_run_lock_coordinates_distinct_workspace_objects PASSED [ 91%]
+tests/test_worker.py::test_journal_persists_ordered_attempt_transitions PASSED [ 93%]
+tests/test_worker.py::test_journal_rejects_invalid_attempt_transition PASSED [ 95%]
+tests/test_worker.py::test_journal_rejects_invalid_persisted_history PASSED [ 96%]
+tests/test_worker.py::test_trusted_local_worker_receives_context_path PASSED [ 98%]
+tests/test_worker.py::test_trusted_local_worker_enforces_timeout PASSED  [100%]
+
+=============================== warnings summary ===============================
+tests/test_resume.py::ResumeTests::test_resumed_training_matches_uninterrupted_terminal_state
+tests/test_resume.py::ResumeTests::test_training_resume_restores_next_batch
+  /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torchdata/stateful_dataloader/stateful_dataloader.py:379: UserWarning: 'set_vital' is deprecated, please do not call
+    torch.set_vital("Dataloader", "enabled", "True")  # type: ignore[attr-defined]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======== 62 passed, 2 warnings, 8 subtests passed in 459.05s (0:07:39) =========
+✅ Process completed with exit code 0 (runtime: 474.22s)

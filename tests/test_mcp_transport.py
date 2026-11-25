@@ -19,7 +19,9 @@ from mcp.shared.exceptions import MCPError
 
 from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
+from viper.artifacts import StageArtifactRef
 from viper.catalog import catalog
+from viper.execution import artifact_path
 from viper.journal import DurableJournal
 from viper.journals import JournalSettings, encode_journal, parse_journal
 from viper.knowledge import (
@@ -33,13 +35,14 @@ from viper.knowledge import (
     PrimitiveSpec,
 )
 from viper.mcp import call_tool, get_prompt, prompt_registry, tool_registry
-from viper.references import LocalFileRef, ResolvedFileRef
+from viper.references import LocalFileRef, ResolvedFileRef, ResolvedRunRef
 from viper.reuse import StageReuseCandidate
 from viper.serialization import document_digest, parse_yaml_bytes
 from viper.storage import (
     LocalStorageDestination,
     local_artifact_store,
     publish_resolved_files,
+    workflow,
 )
 
 
@@ -419,7 +422,11 @@ print(json.dumps({"path": frozen.reference.stored_at.path, "run_id": draft.run_i
             assert not result.is_error, result.structured_content
             assert result.structured_content["run_id"] == prepared["run_id"]
             resolved = Path(result.structured_content["resolved_run"])
-            model = resolved.parent / "artifacts/train/model/model.json"
+            model = artifact_path(
+                root,
+                ResolvedRunRef.model_validate(result.structured_content["reference"]),
+                StageArtifactRef(stage_id="train", artifact_name="model"),
+            )
             assert json.loads(model.read_text())["weight"] == pytest.approx(2, abs=1e-5)
             if journal:
                 model_before_publication = model.read_bytes()
@@ -634,4 +641,5 @@ print(json.dumps({"path": frozen.reference.stored_at.path, "run_id": draft.run_i
                 assert failed.is_error
                 assert index.path.read_bytes() == before_failure
 
-    anyio.run(execute)
+    with workflow(root):
+        anyio.run(execute)

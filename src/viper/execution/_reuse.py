@@ -8,7 +8,10 @@ from typing import cast
 
 import yaml
 
+from .._cloud import PublicationSource, source_file
+from .._offload import current_session
 from .._schema import ArtifactName, RepoRelPath
+from .._source import RunFetcher
 from .._verification.storage import read_snapshot_file
 from ..artifacts import (
     ResolvedArtifact,
@@ -27,6 +30,7 @@ from ..references import (
     SnapshotFileRef,
     StageResultSnapshotRef,
     StorageModel,
+    resolve_snapshot_file_ref,
 )
 from ..reuse import (
     ExecutedStageCompletion,
@@ -55,7 +59,6 @@ from ..storage import (
     SnapshotPublisher,
     StorageDestination,
     publish_resolved_files,
-    snapshot_file,
 )
 from ..verification import verify_run_result
 
@@ -287,22 +290,28 @@ def reuse_stage(
                 attempt.metric_verification_files,
                 fetcher,
             )
-        source_bytes = {
-            target_path: read_snapshot_file(
-                candidate.source_stage.snapshot,
-                source_file,
-                fetcher=fetcher,
-            )
-            for target_path, source_file in publication_files.items()
-        }
+        source_bytes: dict[RepoRelPath, PublicationSource] = {}
+        managed = current_session() is not None and isinstance(fetcher, RunFetcher)
+        for target_path, member in publication_files.items():
+            if managed and isinstance(fetcher, RunFetcher):
+                reference = resolve_snapshot_file_ref(
+                    candidate.source_stage.snapshot, member
+                )
+                source_bytes[target_path] = fetcher.store.adopt_verified_reference(
+                    reference, fetcher.path(reference)
+                )
+            else:
+                source_bytes[target_path] = read_snapshot_file(
+                    candidate.source_stage.snapshot, member, fetcher=fetcher
+                )
         for input_name, captured in captured_inputs.items():
             if captured.path in publication_files:
                 raise ValueError("captured input conflicts with a reused artifact")
-            raw = input_paths[input_name].read_bytes()
-            if snapshot_file(captured.path, raw) != captured:
+            path = input_paths[input_name]
+            if source_file(root, captured.path, path) != captured:
                 raise ValueError("captured input changed before reuse publication")
             publication_files[captured.path] = captured
-            source_bytes[captured.path] = raw
+            source_bytes[captured.path] = path if managed else path.read_bytes()
     except (
         KeyError,
         OSError,

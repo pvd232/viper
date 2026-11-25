@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-25T16:16:28.478963+00:00",
+  "evidence_kind": "live_native_MAO_followup_receipt",
+  "delivery_confirmed": true,
+  "target_thread_url": "https://chatgpt.com/c/6b06a683-4848-83ea-9042-f41b1cdc4720",
+  "native_thread_id": "6b06a683-4848-83ea-9042-f41b1cdc4720",
+  "request_id": "viper-cloud-offload-20261125-published-handoff-retry-2",
+  "queue_job_id": "4c5b72829765400d85facc7069f2157f",
+  "native_status_at_observation": "running",
+  "native_handle": "8f7fb823-afd1-4c0c-a2ea-fc469515196f",
+  "native_worker_handle": "42d8b952-d32e-4351-a705-127fe4e67db5",
+  "rejected_before_dispatch": false,
+  "termination_confirmed": false,
+  "native_error": null,
+  "identity_event_count": 3,
+  "private_receipt_snapshot_sha256": "87489d6d5e6ef6de382230b297750ee14d84528cc4c74db8c2441bf5807f03b8",
+  "handoff_prompt_sha256": "deb36473dd6fff802dbd8a15216b27a19f6c3bc2ebf1d0f4c2cd8597d55ce433",
+  "source_pins": {
+    "viper_runtime": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+    "viper_published_evidence_head": "33d9321a420fda4599ecd06cf83dc1c0bfeb022f",
+    "jep": "d44073e296a638944a83684e9635d9b7fffc104f"
+  },
+  "prior_attempts": [
+    {
+      "request_id": "viper-cloud-offload-20261125-published-handoff",
+      "queue_job_id": "989849024bbd4f9b831ef6a9dc0c5568",
+      "native_status": "failed",
+      "rejected_before_dispatch": true,
+      "native_error": "Too many requests",
+      "recovery": "Retained the rejection receipt and observed the documented 30-minute cooldown before retrying."
+    },
+    {
+      "request_id": "viper-cloud-offload-20261125-published-handoff-retry-1",
+      "queue_job_id": "95ae45f7dc864724a5f99b72e7793ea9",
+      "native_status": "unknown",
+      "native_error": "Unknown worker handle",
+      "recovery": "Verified worker_host.mjs rejects the missing handle before invoking native followup; retained the unknown receipt and reattached the same idle native conversation."
+    }
+  ],
+  "reattachment": {
+    "request_id": "viper-cloud-offload-20261125-handoff-attach-after-restart",
+    "queue_job_id": "8d1299d3836e49148699ad6f39c1c394",
+    "native_status": "succeeded",
+    "same_target_thread_verified": true
+  },
+  "completion_boundary": "This proves acceptance of the handoff in the requested conversation. It does not prove completion of agent supervision, live-cloud acceptance or annotation-campaign execution."
+}

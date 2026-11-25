@@ -1,0 +1,31 @@
+{
+  "pid": 94358,
+  "group": "native",
+  "passed": [
+    "tests/test_run_execution.py::test_reuse_identity_preserves_the_consumer_filename[original.npz]",
+    "tests/test_run_execution.py::test_reuse_identity_preserves_the_consumer_filename[bank.npz]",
+    "tests/test_run_execution.py::test_reuse_identity_preserves_the_consumer_filename[bank]",
+    "tests/test_run_execution.py::test_bundle_resolution_sorts_serialized_member_paths",
+    "tests/test_run_execution.py::test_trusted_source_repositories_reach_run_execution",
+    "tests/test_run_execution.py::test_trusted_source_repositories_reach_retry_execution",
+    "tests/test_run_execution.py::test_trusted_source_repositories_extend_only_the_current_source",
+    "tests/test_run_execution.py::test_failed_attempt_replaces_provisional_document",
+    "tests/test_run_execution.py::test_local_fetcher_dispatches_hugging_face_inputs",
+    "tests/test_run_execution.py::test_train_stage_captures_local_external_input",
+    "tests/test_run_execution.py::test_local_input_is_captured_by_attempt",
+    "tests/test_run_execution.py::test_stored_input_reuses_verified_local_payload",
+    "tests/test_run_execution.py::test_future_input_materializes_verified_producer_snapshot",
+    "tests/test_run_execution.py::test_local_input_rejects_symlink_escape",
+    "tests/test_run_execution.py::test_local_input_mutation_fails_attempt",
+    "tests/test_run_execution.py::test_attempt_rechecks_and_publishes_captured_local_inputs",
+    "tests/test_run_execution.py::test_download_source_closure_runs_before_reuse_or_stage_process"
+  ],
+  "failed": [
+    "tests/test_run_execution.py::test_run_many_retains_one_result_per_plan"
+  ],
+  "expected": 17,
+  "summary": "Observed tool result: 17 native nodes passed; stopped at missing workspace marker in scheduling-only test fixture. Later run 95487 passed the repaired node.",
+  "evidence_kind": "conversation_tool_result_transcription",
+  "raw_buffer_retained": false,
+  "derivation": "Passed node IDs use the exact deterministic pytest -x selected prefix and the observed pass count. The original completed terminal session buffer expired; this file is not raw stdout."
+}

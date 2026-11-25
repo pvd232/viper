@@ -5,16 +5,23 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
+from google.auth.compute_engine import Credentials
+from google.cloud import storage as gcs_storage
+from pydantic import Field, model_validator
+
 from ._cloud import (
     GcsRepository,
     HuggingFaceRepository,
     PublicationSource,
+    SnapshotCopy,
+    SnapshotInventory,
     ViperCloudDestination,
     ViperCloudError,
     ViperCloudProvider,
     ViperCloudRepository,
+    validate_snapshot_copy,
 )
-from ._schema import RepoRelPath
+from ._schema import ProtocolModel, RepoRelPath
 from .gcs import GcsProgressSink, GcsProvider
 from .huggingface import HuggingFaceProvider
 from .references import (
@@ -28,9 +35,84 @@ from .references import (
     SnapshotFileRef,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
+    resolve_snapshot_file_ref,
 )
 
 CloudReference = CloudFileRef | CloudStageResultSnapshotRef
+
+
+class PublicationTarget(ProtocolModel):
+    """Select a cloud destination and any required attached GCP identity."""
+
+    repository: ViperCloudRepository = Field(
+        description="Cloud repository to publish to."
+    )
+    destination: ViperCloudDestination = Field(
+        description="Logical publication workspace."
+    )
+    google_project_id: str | None = Field(
+        default=None, description="Google Cloud quota identifier."
+    )
+    gcp_service_account: str | None = Field(
+        default=None, description="Required attached GCP service-account email."
+    )
+
+    @model_validator(mode="after")
+    def require_attached_identity_configuration(self) -> PublicationTarget:
+        """Require the GCP configuration needed by attached credentials."""
+        if self.gcp_service_account is not None and (
+            not self.google_project_id or not isinstance(self.repository, GcsRepository)
+        ):
+            raise ValueError(
+                "attached GCP identity requires a GCS repository and project_id"
+            )
+        return self
+
+
+class PublicationReceipt(ProtocolModel):
+    """Keep the verified copies needed to restore unchanged artifact references."""
+
+    operation_id: str = Field(description="Identifier of the publication operation.")
+    targets: tuple[PublicationTarget, ...] = Field(description="Required destinations.")
+    science_succeeded: bool = Field(description="Whether the whole workflow succeeded.")
+    used: tuple[ResolvedFileRef, ...] = Field(
+        description="Original references used or produced."
+    )
+    copies: tuple[SnapshotCopy, ...] = Field(
+        description="Verified copies of original snapshots."
+    )
+
+    file_copies: tuple[ResolvedFileRef, ...] = Field(
+        default=(),
+        description="Cloud files verified individually while restoring shared bytes.",
+    )
+    inventories: tuple[SnapshotInventory, ...] = Field(
+        default=(),
+        description="Original inventories whose shared bytes use another copy's proof.",
+    )
+
+    @model_validator(mode="after")
+    def require_verified_copies(self) -> PublicationReceipt:
+        """Validate copy identities without claiming fresh remote verification."""
+        inventories = {inventory.source: inventory for inventory in self.inventories}
+        for copy in self.copies:
+            validate_snapshot_copy(copy)
+            if copy.published is None:
+                raise ValueError("publication receipt contains an unfinished copy")
+            inventory = SnapshotInventory(
+                source=copy.source, source_files=copy.source_files
+            )
+            previous = inventories.setdefault(copy.source, inventory)
+            if previous != inventory:
+                raise ValueError("publication receipt contains conflicting inventories")
+        if any(
+            not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef))
+            for reference in self.file_copies
+        ):
+            raise ValueError(
+                "verified file copies need self-describing cloud addresses"
+            )
+        return self
 
 
 class ViperCloud:
@@ -101,6 +183,23 @@ class ViperCloud:
                 "provider-neutral references require the workspace repository"
             )
         raise TypeError("reference is not cloud-backed")
+
+    @classmethod
+    def for_target(cls, root: Path, target: PublicationTarget) -> ViperCloud:
+        """Use an explicitly attached GCP identity when the target requires it."""
+        repository = target.repository
+        if target.gcp_service_account is not None:
+            if not isinstance(repository, GcsRepository):
+                raise ViperCloudError("attached credentials require GCS")
+            credentials = Credentials(service_account_email=target.gcp_service_account)
+            client = gcs_storage.Client(
+                project=target.google_project_id, credentials=credentials
+            )
+            provider = GcsProvider(
+                root, repository.bucket, prefix=repository.prefix, client=client
+            )
+            return cls(root, repository, provider=provider)
+        return cls(root, repository)
 
     @classmethod
     def for_reference(cls, root: Path, reference: CloudFileRef) -> ViperCloud:
@@ -268,6 +367,23 @@ class ViperCloud:
             ),
         )
 
+    def verify_copy(self, value: object) -> SnapshotCopy:
+        """Validate an exact snapshot copy and independently verify its cloud bytes."""
+        copy = validate_snapshot_copy(SnapshotCopy.model_validate(value))
+        if copy.published is None:
+            raise ViperCloudError("snapshot copy is not published")
+        snapshot = self._snapshot_location(copy.published)
+        if self._repository_for(snapshot) != self.repository:
+            raise ViperCloudError("snapshot copy belongs to another repository")
+        if isinstance(self.provider, HuggingFaceProvider):
+            if self.provider.read_manifest(snapshot) != copy.expected:
+                raise ViperCloudError("snapshot copy manifest differs")
+        elif self.list_files(snapshot) != copy.expected.files:
+            raise ViperCloudError("snapshot copy file inventory differs")
+        for member in copy.expected.files:
+            self.verify_file(resolve_snapshot_file_ref(snapshot, member))
+        return copy
+
     def _service_for(self, reference: CloudReference) -> ViperCloud:
         """Reuse this service or construct the service named by a reference."""
         if isinstance(
@@ -284,4 +400,4 @@ class ViperCloud:
         )
 
 
-__all__ = ["ViperCloud"]
+__all__ = ["PublicationReceipt", "PublicationTarget", "ViperCloud"]

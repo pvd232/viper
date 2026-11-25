@@ -1,0 +1,19 @@
+{
+  "source": "GitHub connector workflow-run job observation",
+  "observed_at": "2026-11-25T15:26:05.401873+00:00",
+  "repository": "pvd232/viper",
+  "commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "run_id": 45639076582,
+  "url": "https://github.com/pvd232/viper/actions/runs/45639076582",
+  "jobs": {
+    "fast": "success",
+    "integration": "success",
+    "compatibility (3.11)": "success",
+    "compatibility (3.13)": "success",
+    "release-candidate": "success",
+    "compatibility (3.12)": "success",
+    "minimum-pydantic": "success"
+  },
+  "package_published": false,
+  "all_jobs_succeeded": true
+}

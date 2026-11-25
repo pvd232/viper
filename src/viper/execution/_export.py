@@ -17,7 +17,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from .._schema import SHA256, RepoRelPath
 from .._source import RunFetcher
-from .._verification.storage import verify_resolved_file_bytes
+from .._verified_cache import verify_resolved_file_bytes
 from ..config import Config, ConfigTypeRef
 from ..evidence import VerificationError, VerificationPolicy
 from ..http import ExternalExecutableSpec, ResolvedExternalExecutable
@@ -109,6 +109,12 @@ class _RecordingFetcher:
         raw = self.delegate(location)
         self.payloads[key] = (source, raw)
         return raw
+
+    def read(self, reference: ResolvedFileRef) -> bytes:
+        """Resolve and retain the exact referenced bytes for portable export."""
+        return self._retain_local(
+            reference.stored_at.model_dump(mode="json"), self.delegate.read(reference)
+        )
 
     def _retain_local(self, source: dict[str, Any], raw: bytes) -> bytes:
         """Retain one verified host payload under its stable logical identity."""

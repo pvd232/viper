@@ -1,0 +1,232 @@
+{
+  "authority": "User requested documentation updates and code corrections after hand-applying PB03.",
+  "reviewers": [
+    "patch_storage_review",
+    "patch_fetcher_review",
+    "patch_registry_locks_review",
+    "patch_docs_review",
+    "patch_integration_review"
+  ],
+  "docstrings_updated": 133,
+  "syntax_parse_passed": true,
+  "application_tests_run": false,
+  "typecheck_or_gate_run": false,
+  "files": [
+    {
+      "path": "docs/explanation/guarantees.md",
+      "before_sha256": "7483e9dc370aa351dd9a27f5d522c4fc2b7a773974edc52bec9f93a6cbabe89f",
+      "after_sha256": "c0a621fda47e01b11e75c7e23f3887a9ffd18b2d088c1e3f65fb4d8ba0d4b6a2"
+    },
+    {
+      "path": "docs/how-to/inputs.md",
+      "before_sha256": "67a60b88b263b372733a9d7dfe9bcf09dd723a42456f9d43b4b8d41f40bae891",
+      "after_sha256": "5ec3dd3e411f71094610af1712afd82c8c875b31076a063f2ab333106a739ead"
+    },
+    {
+      "path": "docs/how-to/troubleshooting.md",
+      "before_sha256": "ea258003d8b933338bad088368981a1e1b9836cda0acbbd7e10c185b0cba3060",
+      "after_sha256": "c20104e0b47600567ba3b794f235a0514d1c2b05f73022cd0ddff470056cd4a3"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-01/README.md",
+      "before_sha256": "0ea037be6d6e56f40df9115e79b7ea4427d59c520228dce61413edc0fc658473",
+      "after_sha256": "c18562a64171a5bbe0e61a4104e20218f0d89f950039ac5589abe1dcdf6a6471"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-01/diff/src/viper/_cloud.py.diff",
+      "before_sha256": "8b0ba2821a6a4ad3eabbce75fca5ba776a7fd887418a01b281f28585b7a03fba",
+      "after_sha256": "529730e05555bfe6ed52dde433dbcc52b493026b6e44c99cdb32b1a68b68950c"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-01/diff/src/viper/execution/_promotion_compare.py.diff",
+      "before_sha256": null,
+      "after_sha256": "82757a3742067866b0a30e0a8e45ab8150ab68e8749f604a7e75790c80bc1ee1"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-01/plan.toml",
+      "before_sha256": "b40efd9a52191a6a31ac9bd418ca97cf2a634a691f52354452b9779e6b0a9e21",
+      "after_sha256": "a3dd31ccabd52f4b6a7ad8bb1e1e2f448e2c7ed5c87589d771c2c9616458cf5e"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-01/proposal.json",
+      "before_sha256": "be47f2e6d706628a6b07c5bca3463eb86ff9f1cd79a1d405d4d7cbfde38dec88",
+      "after_sha256": "dd7b37d277a09398f15c008ed080231e13862cd5c9e8518a22377bb56c484e3b"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-01/replace/src/viper/_cloud.py",
+      "before_sha256": "9b551e6fed86a1ad3f7703a8563d6e0a851aace87bb38eaed3a17e4c1c740f51",
+      "after_sha256": "c188277b34bc4c7bcf026147d8667c3ad43ca0933a3eceb9c0529273e05d5c14"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-01/replace/src/viper/execution/_promotion_compare.py",
+      "before_sha256": null,
+      "after_sha256": "fc5fba6c17c5c1d3342fe685c43bd57e61313d685c05c6dbd8b27691032b5b82"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-02/README.md",
+      "before_sha256": "539abc88e7474be83bb737452699f52514b848f77973a016731ca3c0ea50254c",
+      "after_sha256": "724c00e655214adefb3e01a525c39cdfb6af630cc6746bc2d902c30048b0dc3a"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-02/diff/src/viper/_cloud.py.diff",
+      "before_sha256": "99f643d5dfac57eab89eee3ba1bbcde889bd9b0d6bf9149d906fc3d26ac47330",
+      "after_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-02/diff/src/viper/_verification/storage.py.diff",
+      "before_sha256": null,
+      "after_sha256": "0f8dafe8f305eadd0f11c02dc41c848687f44bbd6918b517a6062d592ea610c9"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-02/proposal.json",
+      "before_sha256": "3a86fc33a0d9f9c84972b7c508679e80d46d05f81bce6e591b91838e17169697",
+      "after_sha256": "6f65283dee4ff4e729bebfb8067fa5cd30d1a798d46e00070aef12bd3ebbebc9"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-02/replace/src/viper/_cloud.py",
+      "before_sha256": "6a577ff4f4c9a3eb88860a164d4ea326a42e31aa1a7a3034cce9d39a32e9bf67",
+      "after_sha256": "c188277b34bc4c7bcf026147d8667c3ad43ca0933a3eceb9c0529273e05d5c14"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-02/replace/src/viper/_verification/storage.py",
+      "before_sha256": null,
+      "after_sha256": "44a70b953dd67a4533580394f99d690d2667410c0a090afa051576c18c613cd9"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/README.md",
+      "before_sha256": "5dea504208e35fdfb75072604e491dcafa48e6430d6569ea9350b5d1aeaf254f",
+      "after_sha256": "17685660241c1d4decd5031f4235c6f76c924759240f624daea28ab62726b6a4"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/diff/docs/explanation/guarantees.md.diff",
+      "before_sha256": null,
+      "after_sha256": "c1edecf844e4c91ebf51bd80258ff1cd581edab676d99c3edb0a8c0a09df48c7"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/diff/docs/how-to/inputs.md.diff",
+      "before_sha256": null,
+      "after_sha256": "fce863bfe422ab8fe8c1ecd770c4f656c97bdda191d910a48aea292f1fe9c8b5"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/diff/docs/how-to/troubleshooting.md.diff",
+      "before_sha256": null,
+      "after_sha256": "2bb63dd21dacc679a237a9ada8c10e0d28107030d18301a2d0475b19ad175523"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/diff/src/viper/_source.py.diff",
+      "before_sha256": "e026d9a78c46c858c538cf7ea24a0c97afd6f614018fa5316a4401356435def0",
+      "after_sha256": "59c826bd437575d0a6b43b2351659c10fce7f635cb466f3825ebd1aed79b8990"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/diff/src/viper/references.py.diff",
+      "before_sha256": "4cd9f736c2cc1fe5d1cac03362f7065971d77994605e34fb5e35a2ce13894db2",
+      "after_sha256": "6eb7ca1e4532a70a8c713f75045b5a358c7588560a474fbf7130c31479db442a"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/diff/src/viper/storage.py.diff",
+      "before_sha256": "b9a9396369a826cdc3615b320ac977c27e841f13d43b47e8f119fbcdc80f8aeb",
+      "after_sha256": "be1198db61819fe91acad27b10a48a5dac7a0284c7b260983666ba4c52abdaea"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/proposal.json",
+      "before_sha256": "e16f3d593ca72a6d6f694ef19888e157ef918f63be2f013174a78b9655bde204",
+      "after_sha256": "8fdcf9e216a1d98cedf9c4bb325ee750435330a05f96ba57717346eb46b0fcb8"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/replace/docs/explanation/guarantees.md",
+      "before_sha256": null,
+      "after_sha256": "c0a621fda47e01b11e75c7e23f3887a9ffd18b2d088c1e3f65fb4d8ba0d4b6a2"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/replace/docs/how-to/inputs.md",
+      "before_sha256": null,
+      "after_sha256": "5ec3dd3e411f71094610af1712afd82c8c875b31076a063f2ab333106a739ead"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/replace/docs/how-to/troubleshooting.md",
+      "before_sha256": null,
+      "after_sha256": "c20104e0b47600567ba3b794f235a0514d1c2b05f73022cd0ddff470056cd4a3"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/replace/src/viper/_source.py",
+      "before_sha256": "cff0e7b84ea5667d893f189a02d7360acbf757ef6f9280e7d7e5ed7ac582ba1a",
+      "after_sha256": "39db3ca6a635bb1682e6d68319d203e5db6d35e816e61d09a5bf55ba6dc05af7"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/replace/src/viper/references.py",
+      "before_sha256": "4206a488006c2d00c82a56014a12f34c72b372dd7f26bec01a2d7e630a0f90c0",
+      "after_sha256": "aaef1cd0d0001bf70f4133391bb13d138960c746d9ecfc2bf9081707981db086"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-03/replace/src/viper/storage.py",
+      "before_sha256": "792aaa83b919c6daf311196644d0d25cbc3c6db7f517901dc731073e9c483421",
+      "after_sha256": "a9405e9707f587ee94de0b14697d78316e35212a02592cbcda6710761dfad4ee"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-04/proposal.json",
+      "before_sha256": "5b406ac5e2ff2e799d357f315887140283f4f1e26f2ffe61996ca5b5479c6445",
+      "after_sha256": "a2d6d91e4f2b7e0ba8ac639c95e9270e1542da1ebad99183a12245a944782678"
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-04/replace/src/viper/storage.py",
+      "before_sha256": "c6e03416a02e3ce00c65081e71e663d0e966f09fe2ccbbd4e660617850dbaaa9",
+      "after_sha256": "8d99f2534ddd19964c63aeb265b46a93bc163562ffca1fcd97574feb84f6681f"
+    },
+    {
+      "path": "plans/cloud-offload/QUEUE.md",
+      "before_sha256": "a9c8a2552756e8f511895a87f0359481de06dde976d6c72174dc86686171fe43",
+      "after_sha256": "9740a90f1efb33772fdb820412c0c5cc24c005d00b093394cacfd5b8394a527c"
+    },
+    {
+      "path": "plans/cloud-offload/proposal-manifest.json",
+      "before_sha256": "3677d681a9b82f8fe1259a777ebb6003c69828246c1c3fa8ae7aba036bcc993a",
+      "after_sha256": "43b6ce9d1d554c6e29e53d07cda0a417dc6222f3865f26faee69e82931e3e056"
+    },
+    {
+      "path": "src/viper/_cloud.py",
+      "before_sha256": "6a577ff4f4c9a3eb88860a164d4ea326a42e31aa1a7a3034cce9d39a32e9bf67",
+      "after_sha256": "c188277b34bc4c7bcf026147d8667c3ad43ca0933a3eceb9c0529273e05d5c14"
+    },
+    {
+      "path": "src/viper/_source.py",
+      "before_sha256": "e658d500ec8c2f9bf609792070df9352ec36d1a2e43facb5e9dd9e904ada56f6",
+      "after_sha256": "8e6e333a4873cee8e6aad1dd23cf07177059a9d44fd493a530bb089aabd274fa"
+    },
+    {
+      "path": "src/viper/_storage_locks.py",
+      "before_sha256": "0e35ca01709eb7c4804aaf7bcbf6377c2f8207b53544a4e8864386ff68bea474",
+      "after_sha256": "eb21e2560a49d33ab603685da1fb80abbf104a3ce2916423fd542360cd5b4339"
+    },
+    {
+      "path": "src/viper/_storage_registry.py",
+      "before_sha256": "8c03f767451bbac8b2d622d0de2bafbcb97a680f406353d59772a24e81cf3ab1",
+      "after_sha256": "c8201f9805ab80e020f4480dea5de23fec9437c6c0720fd587c54658e330bb76"
+    },
+    {
+      "path": "src/viper/_verification/storage.py",
+      "before_sha256": "dc3987f1192ef581dcc3e4406dd1a36aef2beea4d56a443347a633ba89ff9f47",
+      "after_sha256": "44a70b953dd67a4533580394f99d690d2667410c0a090afa051576c18c613cd9"
+    },
+    {
+      "path": "src/viper/_verified_cache.py",
+      "before_sha256": "cf31f8880fc91279e3f097d015d722ccc07bda3bd01e6c39fff2d49ec79bfbaf",
+      "after_sha256": "7c8dbc8e32d05a3c882a3b229a5907c36970eef1e89f7e1f6cd31e85fbdc7bfc"
+    },
+    {
+      "path": "src/viper/execution/_promotion_compare.py",
+      "before_sha256": "6bf4fd764748f4ffcd418cc4d1dc7c436f0c647722e3f2fe2a5d47d214e0af53",
+      "after_sha256": "fc5fba6c17c5c1d3342fe685c43bd57e61313d685c05c6dbd8b27691032b5b82"
+    },
+    {
+      "path": "src/viper/references.py",
+      "before_sha256": "4f8f33a91cc5304cc3059aa316a2c542e843169766ee19a27cc76d7d48bac3d2",
+      "after_sha256": "b228d6d4db8c988f65c05e41c22298347ccd78f2705b54f369d6fa886b439754"
+    },
+    {
+      "path": "src/viper/storage.py",
+      "before_sha256": "48309f7bd4e08eb6622425f87b7d7266c811fcb172a4594da251534c94c6481e",
+      "after_sha256": "c2e6733cd77a6ab7e3e82868454f62d04fd3a67810dc20be1fd11a1913d07e02"
+    }
+  ],
+  "post_correction_review": "Five source reviewers rechecked their scopes; final prose corrections included."
+}

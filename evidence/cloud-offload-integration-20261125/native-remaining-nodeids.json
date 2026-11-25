@@ -1,0 +1,23 @@
+[
+  "tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references",
+  "tests/test_run_execution.py::test_republication_obeys_resource_limits[False]",
+  "tests/test_run_execution.py::test_republication_obeys_resource_limits[True]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[valid]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[metadata]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[ancestor]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[missing]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-changed-default]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-missing-default]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-extra]",
+  "tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-config]",
+  "tests/test_run_execution.py::test_republication_reads_manifest_once[none]",
+  "tests/test_run_execution.py::test_republication_reads_manifest_once[owner]",
+  "tests/test_run_execution.py::test_republication_reads_manifest_once[workspace]",
+  "tests/test_run_execution.py::test_republication_reads_manifest_once[revision]",
+  "tests/test_run_execution.py::test_republication_reads_manifest_once[files]",
+  "tests/test_run_execution.py::test_copy_worker_preserves_failure_diagnostics[invalid_request]",
+  "tests/test_run_execution.py::test_copy_worker_preserves_failure_diagnostics[missing_source]",
+  "tests/test_run_execution.py::test_copy_worker_preserves_failure_diagnostics[signal]",
+  "tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model"
+]

@@ -1,0 +1,38 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0 -- /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/machina/Developer/ChatGPT/viper-cloud-offload
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 27 items
+
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py] PASSED [  3%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py] FAILED [  7%]
+
+=================================== FAILURES ===================================
+_______ test_extended_examples_execute_complete_workflows[evaluation.py] _______
+tests/test_readme_workflow.py:146: in test_extended_examples_execute_complete_workflows
+    completed = subprocess.run(
+src/viper/_subprocess.py:143: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1221: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:2154: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1268: in _check_timeout
+    raise TimeoutExpired(
+E   subprocess.TimeoutExpired: Command '('/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python', '-m', 'examples.evaluation')' timed out after 240 seconds
+-------------- generated xml file: /tmp/viper-readme-workflow.xml --------------
+============================= slowest 10 durations =============================
+242.16s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py]
+210.84s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]
+0.18s teardown tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py]
+0.17s teardown tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]
+0.11s setup    tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]
+0.02s setup    tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py]
+=========================== short test summary info ============================
+FAILED tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py] - subprocess.TimeoutExpired: Command '('/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python', '-m', 'examples.evaluation')' timed out after 240 seconds
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+=================== 1 failed, 1 passed in 459.24s (0:07:39) ====================

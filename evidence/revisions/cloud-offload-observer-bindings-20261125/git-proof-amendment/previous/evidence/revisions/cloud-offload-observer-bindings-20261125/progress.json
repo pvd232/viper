@@ -1,0 +1,160 @@
+{
+  "kind": "engineering-progress-evidence",
+  "formal_protocol_receipt": false,
+  "guided_checkpoints": [
+    "7e7d981",
+    "1345473"
+  ],
+  "later_work_authorization": "Autonomous completion requested by the user.",
+  "candidate_commits_pending": false,
+  "native_implementation": "Active; final broad validation and independent repair rechecks pending.",
+  "cleanup_implementation": "Active; worker dispatch, upload ordering, reader retry and mixed-policy observers exist.",
+  "review_status": {
+    "initial_reviews_reported_complete_by_integration_owner": 10,
+    "final_repair_rechecks": "in_progress"
+  },
+  "viper_final_gate": "pending; no successful final broad gate claimed in this record",
+  "jep": {
+    "baseline_commit": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
+    "checkout": "/Users/machina/Developer/ChatGPT/jep-native-offload",
+    "candidate_status": "implemented_in_isolated_worktree_not_committed",
+    "counts": {
+      "baseline_commit": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
+      "working_tree_head": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
+      "before": {
+        "runtime": 36917,
+        "tests": 11130
+      },
+      "after": {
+        "runtime": 36827,
+        "tests": 11271
+      },
+      "delta": {
+        "runtime": -90,
+        "tests": 141
+      },
+      "source_and_tests_sha256": "a28b3dd4f544c476b3429342eec384c8c87ba4b7592f01fc77882679736520f0"
+    },
+    "validation_logs": [
+      {
+        "path": "plans/cloud-offload/CFO-PB-09/jep/validation/cpu-tests.txt",
+        "sha256": "9ae8cacbe50b1aca55326209efbc35dfdccf5ab0e50f9fc7be81ecf60aabe50d",
+        "tail": "............................................                         [100%]\n44 passed, 4 subtests passed in 2.99s\n"
+      },
+      {
+        "path": "plans/cloud-offload/CFO-PB-09/jep/validation/pyrefly.txt",
+        "sha256": "64e400101e07c73a5a3f473d9fce883157009f14cfb5a970e6aacec170d2870b",
+        "tail": " INFO Checking project configured at `/tmp/viper-pb09-pyrefly.toml`\n INFO 0 errors\n"
+      },
+      {
+        "path": "plans/cloud-offload/CFO-PB-09/jep/validation/report-pyrefly.txt",
+        "sha256": "7f5e59adbab3afa8c93f23d4297e1c003ec37056a7862a8dc0354c5fe6f42634",
+        "tail": " INFO 0 errors\n"
+      },
+      {
+        "path": "plans/cloud-offload/CFO-PB-09/jep/validation/focused-source-lint.txt",
+        "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+        "tail": "All checks passed!\n"
+      }
+    ],
+    "historical_pb09_counts": {
+      "runtime": {
+        "before": 36917,
+        "after": 36768,
+        "net": -149,
+        "files_before": 122,
+        "files_after": 122
+      },
+      "tests": {
+        "before": 11130,
+        "after": 11016,
+        "net": -114,
+        "files_before": 58,
+        "files_after": 58
+      }
+    }
+  },
+  "reduction_acceptance": {
+    "requirement": "CFO-REQ-10",
+    "state": "OPEN",
+    "claim_unchanged": true,
+    "net_reduction_met": false,
+    "viper_and_combined_final_report": "evidence/cloud-offload-implementation-20261125/review-10/counts.json",
+    "planning_mirror_retirement_counts_toward_runtime_test_reduction": false,
+    "report_raw_sha256": "ef216147732e17fdbebad35a84abdf433ea781dab918b4509f6979c953b4a9be",
+    "counts": {
+      "jep": {
+        "baseline_commit": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
+        "working_tree_head": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
+        "before": {
+          "runtime": 36917,
+          "tests": 11130
+        },
+        "after": {
+          "runtime": 36827,
+          "tests": 11271
+        },
+        "delta": {
+          "runtime": -90,
+          "tests": 141
+        },
+        "source_and_tests_sha256": "a28b3dd4f544c476b3429342eec384c8c87ba4b7592f01fc77882679736520f0"
+      },
+      "viper": {
+        "baseline_commit": "f659faf7e7d0b721af736520c1b2b201d778c891",
+        "working_tree_head": "95a242035e4ae51ed6f900350821d13f1354275d",
+        "before": {
+          "runtime": 35607,
+          "tests": 32790
+        },
+        "after": {
+          "runtime": 40299,
+          "tests": 37984
+        },
+        "delta": {
+          "runtime": 4692,
+          "tests": 5194
+        },
+        "source_and_tests_sha256": "7ca23d537ef0befb9c053042b9bcb08c4054f0b44c9562f7b83b38a3b5958b25"
+      },
+      "combined": {
+        "runtime": {
+          "after": 77126,
+          "before": 72524,
+          "delta": 4602
+        },
+        "tests": {
+          "after": 49255,
+          "before": 43920,
+          "delta": 5335
+        }
+      }
+    },
+    "combined_runtime_and_tests_delta": 9937,
+    "counted_candidate_note": "Frozen Python source/test working-tree snapshot; dependency manifests and planning retirement excluded. JEP HEAD remains its baseline with migrated working-tree changes included."
+  },
+  "pb06_checkpoint": "1b8ed60",
+  "later_repair_commit": "c869ea6",
+  "prior_pb06_validation": {
+    "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/validation/prior-pb06-tests.txt",
+    "raw_sha256": "fddac29b62ed6b632a7a12ea08a9e507deaaa4a6a1c88c44991acc305728e7c4",
+    "result": "752 passed, 4 skipped, 238 deselected, 11 subtests passed in 401.42s",
+    "scope": "Prior PB06 gate; superseded by subsequent repair source, not final candidate acceptance."
+  },
+  "fresh_workspace_observer": {
+    "path": "evidence/cloud-offload-integration-20261125/fresh-producer-10333.txt",
+    "raw_sha256": "186f07a8ebca8cdf5a7abb55ac22a196bd7850e3a58472a8b0e6f47b3471e3fe",
+    "command": "python -m pytest -x -vv tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git",
+    "environment": "Project .venv activated",
+    "result": "1 passed in 200.24s",
+    "cloud": "Controlled in-memory provider; no live cloud claim.",
+    "candidate_note": "The native integration owner confirms the retained execution against the repaired PB06 runtime (c869ea6); PB07 source is committed at 95a2420. Final broad and integration gates remain pending."
+  },
+  "planning_mirror_retirement": {
+    "inventory": "retired-mirrors.json",
+    "removed_files": 102,
+    "removed_lines": 41761,
+    "counts_toward_maintained_source_test_reduction": false
+  },
+  "cleanup_commit": "95a2420"
+}

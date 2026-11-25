@@ -1,0 +1,26 @@
+{
+  "scope": "PB04 live source and PB05 proposed publication code",
+  "reviewers": [
+    "patch_registry_locks_review",
+    "patch_fetcher_review",
+    "patch_storage_review",
+    "patch_docs_review",
+    "patch_integration_review"
+  ],
+  "findings": [
+    "Synchronize the clearer single-file error with its prepared assertion",
+    "Keep publication and recovery docstrings accurate"
+  ],
+  "application_tests_run": false,
+  "gate_run": false,
+  "active_source_edited": false,
+  "next": "PB05 journal publication and provider repository setup",
+  "status": "historical_preparation_mirrors_retired",
+  "current_executable_plan": false,
+  "retirement": {
+    "inventory": "evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json",
+    "tracked_history_boundary": "1b8ed60",
+    "source_of_truth": "Applied source/tests in the active Git worktree; later candidate commits are recorded by the integration owner.",
+    "historical_fields": "Original package, source-path and expected-before hashes below describe preparation history only."
+  }
+}

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -10,8 +11,20 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .._schema import SHA256, RepoRelPath
 from ..benchmark import BenchmarkResult
 from ..ids import ReplicateId, RunId, StageId, VariantId
-from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
+from ..references import (
+    ResolvedBenchmarkResultRef,
+    ResolvedRunRef,
+    StageResultSnapshotRef,
+)
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
+
+
+@dataclass(frozen=True)
+class EnrolledRun:
+    """Identify a publication operation and the snapshots admitted for one run."""
+
+    operation_path: Path
+    sources: tuple[StageResultSnapshotRef, ...]
 
 
 class RunResult(BaseModel):
@@ -29,6 +42,11 @@ class RunResult(BaseModel):
     journal_path: Path = Field(description="Local journal for the completed attempt.")
     latest_attempt: RunAttempt = Field(
         description="Latest attempt recorded by this terminal run."
+    )
+
+    publication_path: Path | None = Field(
+        default=None,
+        description="Durable publication operation, when cloud storage is configured.",
     )
 
     @property
@@ -162,6 +180,11 @@ class BenchmarkExecutionResult(BaseModel):
     )
     path: Path = Field(description="Local path of the benchmark record.")
 
+    publication_path: Path | None = Field(
+        default=None,
+        description="Durable publication operation, when cloud storage is configured.",
+    )
+
     @property
     def status(self) -> Literal["verified", "passed", "failed"]:
         """Return the comparison and criteria outcome recorded by the benchmark."""
@@ -238,6 +261,11 @@ class ExperimentExecutionResult(BaseModel):
 
     runs: tuple[ExperimentRunResult, ...] = Field(
         min_length=1, description="Per-run outcomes in the original input order."
+    )
+
+    publication_path: Path | None = Field(
+        default=None,
+        description="Durable publication operation, when cloud storage is configured.",
     )
 
 

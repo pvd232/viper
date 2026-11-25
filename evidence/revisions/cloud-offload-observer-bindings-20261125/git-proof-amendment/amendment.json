@@ -1,0 +1,83 @@
+{
+  "kind": "git-source-membership-observer-amendment",
+  "formal_protocol_receipt": false,
+  "runtime_commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "before_raw_contract_sha256": "6f1801f6989795404e4ff1d53e84a44e80aabd442a113e31a434a9d0e1adc0d9",
+  "after_raw_contract_sha256": "151ec17015d8ad0b2226c7ab82bfa9eeb3e0752ea421cfbb1c8ccfd3486b7363",
+  "canonical_package_sha256": null,
+  "canonical_parser_status": "Unavailable; TOML and AST audit only.",
+  "requirements_unchanged": true,
+  "acceptance_conditions_unchanged": true,
+  "pair_blocks_unchanged": true,
+  "current_binding_count": 59,
+  "current_bindings_all_active": true,
+  "after_documents": [
+    {
+      "path": "contracts/cloud-offload.toml",
+      "sha256": "151ec17015d8ad0b2226c7ab82bfa9eeb3e0752ea421cfbb1c8ccfd3486b7363",
+      "bytes": 29859
+    },
+    {
+      "path": "contracts/cloud-offload.md",
+      "sha256": "5c6229916ee56ce94e8eb48245af9a03f8d261a2d612459109631555099d23df",
+      "bytes": 15408
+    },
+    {
+      "path": "checklists/cloud-offload.md",
+      "sha256": "af195824e1b8547bee74cb3b972057232cae0c9dbbd950268a7ceee4fb885d2e",
+      "bytes": 3820
+    },
+    {
+      "path": "plans/cloud-offload/README.md",
+      "sha256": "41761ad2e1cd5ae56691a62e6cc7197f65129567305090908a960fbb61f0b969",
+      "bytes": 1606
+    },
+    {
+      "path": "plans/cloud-offload/QUEUE.md",
+      "sha256": "0c6b8b78136468c586a22cd5fd085379f39ad76a65c3432353c96681b6e11e4e",
+      "bytes": 5934
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-06/README.md",
+      "sha256": "b5d274b002de06cd3f4de0891e017fd8ea5a2d3cb4c35a7dd14c0a1f3a3a5beb",
+      "bytes": 2708
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-07/README.md",
+      "sha256": "cb46ec10ea0a6b79341bec80f6e57993a5c786854b2aa6c5208a0f1ed55472be",
+      "bytes": 1597
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-08/README.md",
+      "sha256": "c51df1f0f759ec3c4120cba97cd511c71677d5bfe1f6ce482943713961eb98f1",
+      "bytes": 2390
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-09/README.md",
+      "sha256": "0a3804cb7d7fe1cc2bf8996c703f8b3a119beedebeddb179f56c52b6b1a756c0",
+      "bytes": 2768
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/README.md",
+      "sha256": "0cee6c97ba15d8acd0d49e5dd7512605640168170c2617dacc6e4e4e46005a6e",
+      "bytes": 3991
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/binding-amendment.json",
+      "sha256": "3cf7130b0e13e4cba774927db18a3949bb733e2b3b3698ad4de91500b4ef27b4",
+      "bytes": 18151
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/binding-audit.json",
+      "sha256": "dc4c5e73da632ae580dec94cee33d889425f3880d0690ab26899357ea2fcda99",
+      "bytes": 38720
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/progress.json",
+      "sha256": "6712a380e8c5187bab4aeaeb5d7da0e0e192a736cfd2270f799123cee9fffed9",
+      "bytes": 13622
+    }
+  ],
+  "counts_report_sha256": "951cf9f93eb6abbe0eec0b7011754815abb118c1074cb1c0dcace6f84ebbe35c",
+  "validation_refresh": "Final fast gate, JEP bounded suite and all 227 selected integration cases pass; hosted CI still running. CFO-REQ-10 OPEN and no formal acceptance."
+}

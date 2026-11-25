@@ -1,0 +1,214 @@
+{
+  "selection_file": "selected-nodeids.json",
+  "selection_command": "python -m pytest tests --collect-only -q -m 'integration and not live_cuda'",
+  "reported_commits": {
+    "pb06": "1b8ed60",
+    "pb06_repair": "c869ea6",
+    "pb07": "95a2420",
+    "final_runtime": "df10a3e2258a28d7eb276d5a35a5621c0384a694"
+  },
+  "notes": [
+    "Coverage is a union across repair runs, not one final monolithic integration invocation.",
+    "Expired completed terminal buffers are explicitly transcribed from observed conversation tool results and deterministic pytest -x order. They are not retained raw stdout.",
+    "Historical failures remain unresolved until a later successful observation of the same exact node ID.",
+    "Release and live CUDA are excluded by the configured selection. Formal contract acceptance is a separate decision.",
+    "Final README coverage is the union of variants (1), direct documentation/source checks (11), and the remaining execution nodes (15). No claim is made that all 27 ran in one invocation.",
+    "The final README run had one comment-only correction. Its recorded before/after hashes and equal executable AST are documented in readme-startup/successful-nodes.json.",
+    "The separate final make check gate passed 805 cases, skipped 4, deselected 239 and passed 11 subtests in 499.66 seconds; it is not added to the integration node union."
+  ],
+  "runs": [
+    {
+      "pid": 94358,
+      "command": "python -m pytest -x -vv tests/test_run_execution.py -k 'not test_two_stage_local_run_writes_and_verifies_terminal_result'",
+      "kind": "conversation_transcription",
+      "file": "observed-94358.json"
+    },
+    {
+      "pid": 94290,
+      "command": "python -m pytest -x -vv tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result",
+      "kind": "conversation_transcription",
+      "file": "observed-94290.json"
+    },
+    {
+      "pid": 95487,
+      "command": "pytest.main(['-x','-vv',*(f'tests/test_run_execution.py::{name}' for name in top_level_test_functions[starting_at_test_run_many_retains_one_result_per_plan:])])",
+      "kind": "conversation_transcription",
+      "file": "observed-95487.json"
+    },
+    {
+      "pid": 93122,
+      "command": "python -m pytest -x -vv tests -m 'integration and not live_cuda' --ignore=tests/test_run_execution.py",
+      "kind": "conversation_transcription",
+      "file": "observed-93122.json"
+    },
+    {
+      "pid": 96232,
+      "command": "pytest.main(['-x','-vv','-m','not live_cuda',*integration_modules_at_or_after_test_execution_signals_excluding_test_run_execution])",
+      "kind": "conversation_transcription",
+      "file": "observed-96232.json"
+    },
+    {
+      "pid": 96836,
+      "command": "pytest.main(['-x','-vv','-m','not live_cuda',*integration_modules_at_or_after_test_execution_signals_excluding_test_run_execution])",
+      "kind": "conversation_transcription",
+      "file": "observed-96836.json"
+    },
+    {
+      "pid": 2338,
+      "command": "pytest.main(['-x','-vv','-m','not live_cuda','tests/test_mcp_transport.py::test_stdio_executes_a_saved_training_plan',*integration_modules_after_test_mcp_transport_excluding_test_run_execution])",
+      "kind": "conversation_transcription",
+      "file": "observed-2338.json"
+    },
+    {
+      "pid": 6977,
+      "command": "python -m pytest -x -vv tests/test_offload_workflow.py tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git tests/test_verification.py",
+      "kind": "conversation_transcription",
+      "file": "observed-6977.json"
+    },
+    {
+      "pid": 3161,
+      "command": "pytest.main(['-x','-vv',*(f'tests/test_run_execution.py::{name}' for name in top_level_test_functions[starting_at_test_cloud_promotion_rebinds_reuse_key_for_stored_pointer:])])",
+      "kind": "terminal_output",
+      "file": "run-3161.txt"
+    },
+    {
+      "pid": 9225,
+      "command": "python -m pytest -x -vv tests/test_resume.py tests/test_verification_acceptance.py tests/test_worker.py",
+      "kind": "terminal_output",
+      "file": "run-9225.txt"
+    },
+    {
+      "pid": 10333,
+      "command": "python -m pytest -x -vv tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git",
+      "kind": "terminal_output",
+      "file": "run-10333.txt"
+    },
+    {
+      "pid": 29673,
+      "command": "python -m pytest tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git -vv --tb=short --durations=5",
+      "kind": "terminal_output",
+      "file": "git-fresh-producer.log"
+    },
+    {
+      "pid": 33798,
+      "command_file": "native-remaining-command.json",
+      "command": "python /tmp/viper-native-remaining.py (exact21nodes in command_file)",
+      "kind": "terminal_output",
+      "file": "native-remaining.log"
+    },
+    {
+      "pid": 31588,
+      "command": "python -m pytest tests/test_readme_workflow.py -vv -x (variants480,other original limits)",
+      "kind": "junit_xml",
+      "file": "readme-workflow-first.xml",
+      "raw_file": "readme-workflow-first.log"
+    },
+    {
+      "pid": "readme-doc-checks",
+      "command": "python -m pytest tests/test_readme_workflow.py -q -k 'not extended_examples and not cpu_quickstart and not policy_example' --basetemp=/tmp/viper-readme-doc-checks-20261125 --junitxml=/tmp/viper-readme-doc-checks.xml",
+      "kind": "junit_xml",
+      "file": "readme-doc-checks.xml",
+      "raw_file": "readme-doc-checks.log"
+    },
+    {
+      "pid": 36066,
+      "command": "python -m pytest tests/test_run_execution.py::test_republication_reads_manifest_once tests/test_run_execution.py::test_copy_worker_preserves_failure_diagnostics -x -vv --tb=short --junitxml=evidence/cloud-offload-integration-20261125/native-final-cheap.xml",
+      "kind": "terminal_output",
+      "file": "native-final-cheap.log",
+      "junit_file": "native-final-cheap.xml"
+    },
+    {
+      "pid": 37112,
+      "command": "python -m pytest 'tests/test_run_execution.py::test_copy_worker_preserves_failure_diagnostics[missing_source]' 'tests/test_run_execution.py::test_copy_worker_preserves_failure_diagnostics[signal]' -vv --tb=short --junitxml=evidence/cloud-offload-integration-20261125/native-errors-final.xml",
+      "kind": "terminal_output",
+      "file": "native-errors-final.log",
+      "junit_file": "native-errors-final.xml"
+    },
+    {
+      "pid": 38078,
+      "command": "python -m pytest tests/test_run_execution.py::test_copy_worker_resumes_and_restores_a_model -vv --tb=short --durations=10 --junitxml=evidence/cloud-offload-integration-20261125/native-model-final.xml",
+      "kind": "terminal_output",
+      "file": "native-model-final.log",
+      "junit_file": "native-model-final.xml"
+    },
+    {
+      "pid": 37530,
+      "command": [
+        "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[inspect_results.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[stages.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[download_training.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[recovery.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[reuse.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[knowledge_search.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[export_run.py]",
+        "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[journal_search.py]",
+        "tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[None]",
+        "tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[README.md]",
+        "tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[docs/tutorials/getting-started.md]",
+        "tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[reproducible]",
+        "tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[relaxed]",
+        "tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[custom]",
+        "-vv",
+        "-x",
+        "--tb=short",
+        "--durations=20",
+        "--basetemp=/tmp/viper-readme-pending-20261125",
+        "--junitxml=/tmp/viper-readme-pending.xml"
+      ],
+      "command_file": "readme-startup/remaining-execution-command.json",
+      "kind": "junit_xml",
+      "file": "readme-final15.xml",
+      "raw_file": "readme-final15.log",
+      "exit_code": 0,
+      "summary": "15 passed in 2191.20s"
+    }
+  ],
+  "separate_regressions": [
+    {
+      "pid": 8768,
+      "command": "python -m pytest -x -q tests/test_verification.py tests/test_http_retrieval.py tests/test_offload_workflow.py",
+      "passed": 80,
+      "subtests_passed": 4,
+      "evidence_file": "run-8768.txt",
+      "integration_union": false
+    },
+    {
+      "pid": 27788,
+      "command": "python -m pytest tests/test_verification.py tests/test_offload_workflow.py tests/test_offload_recovery.py tests/test_validation_architecture.py tests/test_git_proof.py -m 'not integration' -q -x --tb=short",
+      "passed": 101,
+      "subtests_passed": 4,
+      "evidence_file": "git-verifier-regression.log",
+      "integration_union": false
+    },
+    {
+      "pid": 29130,
+      "command": "python -m pytest tests/test_offload_recovery.py -q -k workflow_publishes_git_proof --tb=short",
+      "passed": 2,
+      "evidence_file": "git-workflow-transport.log",
+      "integration_union": false
+    },
+    {
+      "pid": 30490,
+      "command": "python -m pytest tests/test_storage.py -q -k 'external_git_file or same_commit or proven_git_bytes or checks_download' --tb=short",
+      "passed": 13,
+      "evidence_file": "git-source-final.log",
+      "integration_union": false
+    },
+    {
+      "pid": "parent-final-make-check",
+      "command": "make check",
+      "passed": 805,
+      "skipped": 4,
+      "deselected": 239,
+      "subtests_passed": 11,
+      "seconds": 499.66,
+      "evidence_file": "../cloud-offload-implementation-20261125/validation/make-check.log",
+      "source_revision": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+      "integration_union": false
+    }
+  ]
+}

@@ -13,10 +13,7 @@ from typing import cast
 import yaml
 from pydantic import TypeAdapter
 
-from .._config.validation import (
-    ConfigValidationError,
-    verify_config_type_bytes,
-)
+from .._config.validation import ConfigValidationError, verify_config_type_bytes
 from .._schema import RepoRelPath, repo_file_paths_overlap
 from ..artifacts import ResolvedSingleFileArtifact
 from ..evidence import (
@@ -522,7 +519,6 @@ def verify_download_retrieval(
     fetcher: StorageFetcher | None,
 ) -> None:
     """Verify one selected HTTP retrieval and its exact artifact body."""
-    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     retrieval = resolved.retrievals[input_name]
     try:
         validate_request_policy(retrieval.request, resolved.spec.policy)
@@ -585,6 +581,7 @@ def verify_download_retrieval(
 
     http = retrieval.http
     if isinstance(http.spec, WorkspaceHttpImplementationSpec):
+        retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
         implementation = http.spec.implementation
         implementation_raw = retrieve(
             GitFileRef(

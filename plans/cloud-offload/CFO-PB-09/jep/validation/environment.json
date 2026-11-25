@@ -1,0 +1,10 @@
+{
+  "python": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python",
+  "storage_owner": "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/storage.py",
+  "viper_runtime_commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "jep_commit": "d44073e296a638944a83684e9635d9b7fffc104f",
+  "checks": "47 tests and 4 subtests; Pyrefly 0 errors; focused Ruff passed",
+  "live_cloud_roundtrip": false,
+  "campaign_executed": false,
+  "pull_request": "https://github.com/pvd232/JEP/pull/26"
+}

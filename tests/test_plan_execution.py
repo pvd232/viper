@@ -21,6 +21,10 @@ def test_run_compiles_plan_before_first_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Publish the plan before handing its exact reference to the runner."""
+    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    monkeypatch.setattr(
+        "viper._offload.start_publication_worker", lambda *args, **kwargs: None
+    )
     draft = RunPlanDraft.model_construct()
     reference = SimpleNamespace(stored_at=SimpleNamespace(path="run.yaml"))
     frozen = SimpleNamespace(reference=reference)
@@ -30,6 +34,8 @@ def test_run_compiles_plan_before_first_attempt(
     def freeze(
         root: Path,
         selected: RunPlanDraft,
+        *,
+        trusted_source_repositories: frozenset[str] = frozenset(),
     ):
         calls.append("freeze")
         assert root == tmp_path

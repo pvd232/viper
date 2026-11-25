@@ -1,9 +1,8 @@
-"""Retrieve bytes and verify immutable file and artifact identities."""
+"""Read stored files and check their sizes and hashes."""
 
 from __future__ import annotations
 
 import fcntl
-import hashlib
 import os
 import shutil
 import tempfile
@@ -16,6 +15,8 @@ import yaml
 import viper._subprocess as subprocess
 
 from .._schema import ArtifactName, DataRole, RepoRelPath
+from .._storage_registry import StorageRegistryError
+from .._verified_cache import verify_resolved_file_bytes
 from ..artifact_loaders import (
     ArtifactLoaderError,
     ArtifactValidationResult,
@@ -251,17 +252,23 @@ def list_huggingface_snapshot_files(
 def list_local_snapshot_files(
     snapshot: LocalStageResultSnapshotRef,
 ) -> tuple[RepoRelPath, ...]:
-    """List every regular file in one repository-local snapshot."""
-    revision_root = (Path.cwd() / snapshot.store / snapshot.commit).resolve()
-    if not revision_root.is_dir():
-        raise VerificationError("artifact.bundle: local snapshot is missing")
-    paths: list[RepoRelPath] = []
-    for path in sorted(revision_root.rglob("*")):
-        if path.is_symlink():
-            raise VerificationError("artifact.bundle: snapshot contains a symlink")
-        if path.is_file():
-            paths.append(path.relative_to(revision_root).as_posix())
-    return tuple(paths)
+    """Read the complete snapshot file list through its local store."""
+    try:
+        return local_artifact_store(snapshot).list_snapshot_files(snapshot)
+    except (LocalStoreError, StorageRegistryError) as error:
+        messages = {
+            "local snapshot revision is missing": (
+                "artifact.bundle: local snapshot is missing"
+            ),
+            "local snapshot contains a symlink": (
+                "artifact.bundle: snapshot contains a symlink"
+            ),
+        }
+        message = messages.get(
+            str(error),
+            "artifact.bundle: local snapshot listing failed",
+        )
+        raise VerificationError(message) from error
 
 
 def list_snapshot_files(
@@ -303,28 +310,6 @@ def list_snapshot_files(
     raise VerificationError("artifact.bundle: unsupported snapshot")
 
 
-def verify_resolved_file_bytes(
-    reference: ResolvedFileRef,
-    raw: bytes,
-) -> bytes:
-    """Verify retrieved bytes against a resolved file reference."""
-    if not isinstance(raw, bytes):
-        raise TypeError("retrieved file content must be bytes")
-
-    if len(raw) != reference.bytes:
-        raise VerificationError(
-            f"byte-count mismatch: expected {reference.bytes}, received {len(raw)}"
-        )
-
-    actual_sha256 = hashlib.sha256(raw).hexdigest()
-    if actual_sha256 != reference.sha256:
-        raise VerificationError(
-            f"SHA-256 mismatch: expected {reference.sha256}, received {actual_sha256}"
-        )
-
-    return raw
-
-
 def read_resolved_file(
     reference: ResolvedFileRef,
     *,
@@ -345,7 +330,7 @@ def read_attempt_reference(
     fetcher: StorageFetcher | None = None,
 ) -> RunAttempt:
     """Retrieve one canonical attempt document and verify its path identity."""
-    path = str(reference.stored_at.path)
+    path = reference.stored_at.path
     prefix = f"{run_root(run)}/attempts/"
     suffix = "/resolved.yaml"
     if not path.startswith(prefix) or not path.endswith(suffix):
@@ -555,21 +540,20 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
     return None
 
 
-def verify_snapshot_artifact(
+def snapshot_artifact_files(
     stage: ResolvedStageRef,
     artifact: ResolvedArtifact,
     *,
-    data_role: DataRole,
     fetcher: StorageFetcher | None = None,
-) -> VerifiedArtifact:
-    """Verify every file representing one artifact in a stage snapshot."""
+) -> tuple[SnapshotFileRef, ...]:
+    """Check the artifact's file list without reading its payloads."""
     if isinstance(artifact, ResolvedSingleFileArtifact):
         references = (artifact.file,)
     elif isinstance(artifact, ResolvedBundleArtifact):
         roots: set[str] = set()
         for member in artifact.members:
-            full_path = str(member.file.path)
-            relative_path = str(member.relative_path)
+            full_path = member.file.path
+            relative_path = member.relative_path
             suffix = f"/{relative_path}"
             if not full_path.endswith(suffix):
                 raise VerificationError(
@@ -585,7 +569,7 @@ def verify_snapshot_artifact(
         published_paths = tuple(
             path
             for path in list_snapshot_files(stage.snapshot, fetcher=fetcher)
-            if str(path).startswith(f"{bundle_root}/")
+            if path.startswith(f"{bundle_root}/")
         )
         if published_paths != declared_paths:
             raise VerificationError(
@@ -594,6 +578,19 @@ def verify_snapshot_artifact(
         references = tuple(member.file for member in artifact.members)
     else:
         raise TypeError(f"unsupported resolved artifact: {type(artifact).__name__}")
+
+    return references
+
+
+def verify_snapshot_artifact(
+    stage: ResolvedStageRef,
+    artifact: ResolvedArtifact,
+    *,
+    data_role: DataRole,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedArtifact:
+    """Verify every file representing one artifact in a stage snapshot."""
+    references = snapshot_artifact_files(stage, artifact, fetcher=fetcher)
 
     resolved_references = tuple(
         resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references
@@ -671,7 +668,7 @@ def load_verified_artifact(
         f"{artifact_name}:{target_path}",
         tuple(
             (
-                str(verified_file.reference.path),
+                verified_file.reference.path,
                 verified_file.reference.sha256,
                 verified_file.reference.bytes,
             )

@@ -1,0 +1,279 @@
+{
+  "kind": "planning_traceability_inspection",
+  "exact_authored_observing_targets_found": [
+    {
+      "verifier": "CFO-VR-01",
+      "repository_id": "viper",
+      "path": "tests/test_offload.py",
+      "symbol": "test_offload_binding_preserves_original_snapshot_identity"
+    },
+    {
+      "verifier": "CFO-VR-01",
+      "repository_id": "viper",
+      "path": "tests/test_offload.py",
+      "symbol": "test_offload_binding_rejects_changed_payload"
+    },
+    {
+      "verifier": "CFO-VR-01",
+      "repository_id": "viper",
+      "path": "tests/test_offload.py",
+      "symbol": "test_offload_binding_rejects_changed_snapshot_membership"
+    },
+    {
+      "verifier": "CFO-VR-02",
+      "repository_id": "viper",
+      "path": "tests/test_storage_registry.py",
+      "symbol": "test_inventory_survives_restart_and_payload_absence"
+    },
+    {
+      "verifier": "CFO-VR-02",
+      "repository_id": "viper",
+      "path": "tests/test_storage_registry.py",
+      "symbol": "test_registered_inventory_cannot_change"
+    },
+    {
+      "verifier": "CFO-VR-02",
+      "repository_id": "viper",
+      "path": "tests/test_storage_registry.py",
+      "symbol": "test_custody_conflict_rolls_back_new_snapshot"
+    },
+    {
+      "verifier": "CFO-VR-03",
+      "repository_id": "viper",
+      "path": "tests/test_shared_storage.py",
+      "symbol": "test_local_members_share_payload_without_changing_references"
+    },
+    {
+      "verifier": "CFO-VR-03",
+      "repository_id": "viper",
+      "path": "tests/test_shared_storage.py",
+      "symbol": "test_corrupt_registered_original_is_reported"
+    },
+    {
+      "verifier": "CFO-VR-03",
+      "repository_id": "viper",
+      "path": "tests/test_shared_storage.py",
+      "symbol": "test_failed_download_never_installs_a_shared_payload"
+    },
+    {
+      "verifier": "CFO-VR-04",
+      "repository_id": "viper",
+      "path": "tests/test_artifact_retention.py",
+      "symbol": "test_inherited_retention_uses_the_current_default"
+    },
+    {
+      "verifier": "CFO-VR-04",
+      "repository_id": "viper",
+      "path": "tests/test_artifact_retention.py",
+      "symbol": "test_failed_keep_preserves_the_preference"
+    },
+    {
+      "verifier": "CFO-VR-05",
+      "repository_id": "viper",
+      "path": "tests/test_artifact_retention.py",
+      "symbol": "test_any_shared_artifact_keep_vetoes_offload"
+    },
+    {
+      "verifier": "CFO-VR-07",
+      "repository_id": "viper",
+      "path": "tests/test_cloud_service.py",
+      "symbol": "test_direct_publication_preserves_original_bundle_and_verifies_before_return"
+    },
+    {
+      "verifier": "CFO-VR-07",
+      "repository_id": "viper",
+      "path": "tests/test_cloud_service.py",
+      "symbol": "test_direct_publication_rejects_changed_inventory_before_saving_intent"
+    },
+    {
+      "verifier": "CFO-VR-07",
+      "repository_id": "viper",
+      "path": "tests/test_cloud_service.py",
+      "symbol": "test_direct_publication_does_not_acknowledge_failed_cloud_hash_check"
+    },
+    {
+      "verifier": "CFO-VR-12",
+      "repository_id": "viper",
+      "path": "tests/test_storage_readers.py",
+      "symbol": "test_overlapping_workflows_keep_independent_reader_holds"
+    },
+    {
+      "verifier": "CFO-VR-12",
+      "repository_id": "viper",
+      "path": "tests/test_storage_readers.py",
+      "symbol": "test_closed_workflow_rejects_new_readers"
+    },
+    {
+      "verifier": "CFO-VR-14",
+      "repository_id": "viper",
+      "path": "tests/test_shared_storage.py",
+      "symbol": "test_fresh_fetcher_reuses_registered_original_without_cloud_client"
+    },
+    {
+      "verifier": "CFO-VR-14",
+      "repository_id": "viper",
+      "path": "tests/test_shared_storage.py",
+      "symbol": "test_fetcher_propagates_invalid_active_registry_before_legacy_fallback"
+    },
+    {
+      "verifier": "CFO-VR-14",
+      "repository_id": "viper",
+      "path": "tests/test_shared_storage.py",
+      "symbol": "test_managed_huggingface_restore_streams_into_shared_store"
+    }
+  ],
+  "future_native_and_jep_targets_still_planned": [
+    {
+      "verifier": "CFO-VR-05",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_stale_cleanup_preserves_replacement_and_new_keep"
+    },
+    {
+      "verifier": "CFO-VR-06",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_managed_dataset_resolves_after_offload"
+    },
+    {
+      "verifier": "CFO-VR-06",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_external_path_replacement_is_not_old_artifact"
+    },
+    {
+      "verifier": "CFO-VR-06",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_user_owned_export_is_not_removed"
+    },
+    {
+      "verifier": "CFO-VR-08",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_successful_workflow_offloads_after_all_consumers"
+    },
+    {
+      "verifier": "CFO-VR-08",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_failed_workflow_keeps_sources"
+    },
+    {
+      "verifier": "CFO-VR-08",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_pending_target_blocks_cleanup"
+    },
+    {
+      "verifier": "CFO-VR-08",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_stale_cleanup_preserves_replacement_and_new_keep"
+    },
+    {
+      "verifier": "CFO-VR-08",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_cleanup_wait_does_not_block_runner_or_ready_publication"
+    },
+    {
+      "verifier": "CFO-VR-09",
+      "repository_id": "viper",
+      "path": "tests/test_offload_recovery.py",
+      "symbol": "test_restart_restores_evicted_artifact_with_unchanged_reference"
+    },
+    {
+      "verifier": "CFO-VR-09",
+      "repository_id": "viper",
+      "path": "tests/test_offload_recovery.py",
+      "symbol": "test_unverified_cloud_reference_is_not_returned"
+    },
+    {
+      "verifier": "CFO-VR-09",
+      "repository_id": "viper",
+      "path": "tests/test_offload_recovery.py",
+      "symbol": "test_cleanup_does_not_restart_completed_upload"
+    },
+    {
+      "verifier": "CFO-VR-10",
+      "repository_id": "viper",
+      "path": "tests/test_storage_lifecycle.py",
+      "symbol": "test_storage_lifecycle_uses_single_resolver_and_retention_authority"
+    },
+    {
+      "verifier": "CFO-VR-10",
+      "repository_id": "viper",
+      "path": "tests/test_storage_lifecycle.py",
+      "symbol": "test_legacy_eviction_cannot_bypass_retention"
+    },
+    {
+      "verifier": "CFO-VR-11",
+      "repository_id": "viper",
+      "path": "tests/test_background_publication.py",
+      "symbol": "test_durable_queue_uploads_while_computation_continues"
+    },
+    {
+      "verifier": "CFO-VR-11",
+      "repository_id": "viper",
+      "path": "tests/test_background_publication.py",
+      "symbol": "test_failed_spawn_keeps_durable_request"
+    },
+    {
+      "verifier": "CFO-VR-11",
+      "repository_id": "viper",
+      "path": "tests/test_background_publication.py",
+      "symbol": "test_interrupted_upload_retries_without_computation"
+    },
+    {
+      "verifier": "CFO-VR-11",
+      "repository_id": "viper",
+      "path": "tests/test_background_publication.py",
+      "symbol": "test_admission_commit_failure_is_not_reported_as_queued"
+    },
+    {
+      "verifier": "CFO-VR-11",
+      "repository_id": "viper",
+      "path": "tests/test_background_publication.py",
+      "symbol": "test_publication_failure_keeps_scientific_success_and_sources"
+    },
+    {
+      "verifier": "CFO-VR-13",
+      "repository_id": "jep",
+      "path": "tests/test_viper_storage_adapter.py",
+      "symbol": "test_jep_adapter_uses_native_viper_lifecycle"
+    },
+    {
+      "verifier": "CFO-VR-13",
+      "repository_id": "jep",
+      "path": "tests/test_viper_storage_adapter.py",
+      "symbol": "test_jep_adapter_failure_does_not_rerun_computation"
+    },
+    {
+      "verifier": "CFO-VR-15",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_admitted_sequence_retains_payload_through_benchmark"
+    },
+    {
+      "verifier": "CFO-VR-15",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_child_completion_does_not_close_parent_workflow"
+    },
+    {
+      "verifier": "CFO-VR-15",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_failed_batch_does_not_authorize_cleanup"
+    },
+    {
+      "verifier": "CFO-VR-15",
+      "repository_id": "viper",
+      "path": "tests/test_offload_workflow.py",
+      "symbol": "test_queued_input_is_held_before_its_consumer_starts"
+    }
+  ],
+  "all_declared_payload_hashes_and_actions_match": true,
+  "application_checks_run": false
+}

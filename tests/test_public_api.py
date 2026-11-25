@@ -173,7 +173,10 @@ def test_every_public_module_imports() -> None:
 def test_execution_namespace_owns_only_operations() -> None:
     """Keep execution records and errors in their defining modules."""
     assert tuple(execution.__all__) == (
+        "artifact_path",
+        "artifact_reference",
         "benchmark",
+        "enroll",
         "export_run",
         "promote_run_to_cloud",
         "resolve_run_reference",

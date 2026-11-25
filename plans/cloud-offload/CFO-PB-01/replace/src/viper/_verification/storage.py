@@ -1,0 +1,736 @@
+"""Read stored files and check their byte counts and hashes."""
+
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import os
+import shutil
+import tempfile
+from collections.abc import Callable
+from pathlib import Path
+from typing import Protocol, cast, runtime_checkable
+
+import yaml
+
+import viper._subprocess as subprocess
+
+from .._schema import ArtifactName, DataRole, RepoRelPath
+from ..artifact_loaders import (
+    ArtifactLoaderError,
+    ArtifactValidationResult,
+    execute_artifact_loader,
+    materialized_loader_context,
+    verify_artifact_loader_bytes,
+)
+from ..artifacts import (
+    ResolvedArtifact,
+    ResolvedBundleArtifact,
+    ResolvedSingleFileArtifact,
+)
+from ..cloud import ViperCloud
+from ..evidence import (
+    StorageFetcher,
+    VerificationError,
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedSnapshotFile,
+)
+from ..outputs import OutputSpec
+from ..references import (
+    GcsFileRef,
+    GcsStageResultSnapshotRef,
+    GitFileRef,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    StageResultSnapshotRef,
+    StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+    resolve_snapshot_file_ref,
+)
+from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
+from ..serialization import document_digest, parse_yaml_bytes
+from ..storage import LocalStoreError, local_artifact_store, viper_cloud
+from .paths import run_root
+
+_ARTIFACT_VALIDATION_CACHE: dict[
+    tuple[str, str, str, tuple[tuple[str, str, int], ...]],
+    ArtifactValidationResult,
+] = {}
+
+
+@runtime_checkable
+class _FileReader(Protocol):
+    """Retrieve a resolved file through a content-validating cache."""
+
+    def read(self, reference: ResolvedFileRef) -> bytes:
+        """Return bytes matching the complete resolved reference."""
+        ...
+
+
+@runtime_checkable
+class _FilePathReader(Protocol):
+    """Materialize a resolved file through a path-backed verified cache."""
+
+    def path(self, reference: ResolvedFileRef) -> Path:
+        """Return a local file matching the complete resolved reference."""
+        ...
+
+
+def fetch_git_file_bytes(
+    location: GitFileRef,
+    *,
+    timeout_seconds: float = 60,
+    checkout: Path | None = None,
+) -> bytes:
+    """Read one file from the exact commit recorded by a Git reference."""
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive")
+
+    git_environment = os.environ.copy()
+    git_environment["GIT_TERMINAL_PROMPT"] = "0"
+
+    def run_git(*arguments: str) -> subprocess.CompletedProcess[bytes]:
+        try:
+            return subprocess.run(
+                ("git", *arguments),
+                check=True,
+                capture_output=True,
+                env=git_environment,
+                timeout=timeout_seconds,
+            )
+        except FileNotFoundError as exc:
+            raise VerificationError("Git is required to retrieve Git files") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise VerificationError("Git file retrieval timed out") from exc
+        except subprocess.CalledProcessError as exc:
+            raise VerificationError(
+                "Git could not retrieve the referenced file"
+            ) from exc
+
+    def read_from_checkout(checkout_path: Path) -> bytes:
+        """Initialize or reuse one locked checkout bound to the referenced commit."""
+        checkout_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = checkout_path.with_name(f"{checkout_path.name}.lock")
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            return read_from_locked_checkout(checkout_path)
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+
+    def read_from_locked_checkout(checkout_path: Path) -> bytes:
+        """Read after repairing an absent or interrupted cached checkout."""
+        if not (checkout_path / ".git").is_dir():
+            init_arguments = ["init", "--quiet"]
+            if len(location.commit) == 64:
+                init_arguments.append("--object-format=sha256")
+            init_arguments.append(str(checkout_path))
+            run_git(*init_arguments)
+        try:
+            origin = (
+                run_git("-C", str(checkout_path), "remote", "get-url", "origin")
+                .stdout.decode()
+                .strip()
+            )
+        except VerificationError:
+            run_git(
+                "-C",
+                str(checkout_path),
+                "remote",
+                "add",
+                "origin",
+                str(location.repository),
+            )
+            origin = str(location.repository)
+        if origin != str(location.repository):
+            raise VerificationError("Git checkout repository differs from reference")
+        try:
+            fetched_commit = (
+                run_git("-C", str(checkout_path), "rev-parse", "FETCH_HEAD^{commit}")
+                .stdout.decode("ascii")
+                .strip()
+            )
+        except VerificationError:
+            fetched_commit = None
+        if fetched_commit != location.commit:
+            run_git(
+                "-C",
+                str(checkout_path),
+                "fetch",
+                "--quiet",
+                "--depth=1",
+                "origin",
+                location.commit,
+            )
+            fetched_commit = (
+                run_git("-C", str(checkout_path), "rev-parse", "FETCH_HEAD^{commit}")
+                .stdout.decode("ascii")
+                .strip()
+            )
+        if fetched_commit != location.commit:
+            raise VerificationError("Git returned a different commit than requested")
+
+        return run_git(
+            "-C",
+            str(checkout_path),
+            "show",
+            f"FETCH_HEAD:{location.path}",
+        ).stdout
+
+    if checkout is not None:
+        return read_from_checkout(checkout)
+    with tempfile.TemporaryDirectory(prefix="viper-provenance-git-") as directory:
+        return read_from_checkout(Path(directory))
+
+
+def fetch_huggingface_file_bytes(location: HuggingFaceFileRef) -> bytes:
+    """Read one file through the provider-neutral cloud service."""
+    try:
+        return ViperCloud.for_reference(Path.cwd(), location).fetch(location)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise VerificationError(
+            "Hugging Face could not retrieve the referenced file"
+        ) from exc
+
+
+def fetch_local_file_bytes(location: LocalFileRef) -> bytes:
+    """Read one file from a repository-local immutable store revision."""
+    try:
+        return local_artifact_store(location).fetch(location)
+    except (OSError, LocalStoreError) as error:
+        raise VerificationError(
+            "local immutable file could not be retrieved"
+        ) from error
+
+
+def fetch_storage_bytes(location: StorageModel) -> bytes:
+    """Dispatch an immutable storage reference to its retrieval backend."""
+    if isinstance(location, GitFileRef):
+        return fetch_git_file_bytes(location)
+    if isinstance(
+        location,
+        (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
+    ):
+        try:
+            cloud = (
+                viper_cloud(Path.cwd())
+                if isinstance(location, ViperCloudFileRef)
+                else ViperCloud.for_reference(Path.cwd(), location)
+            )
+            return cloud.fetch(location)
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise VerificationError("cloud file could not be retrieved") from exc
+    if isinstance(location, LocalFileRef):
+        return fetch_local_file_bytes(location)
+    raise TypeError(f"unsupported storage reference: {type(location).__name__}")
+
+
+def list_huggingface_snapshot_files(
+    snapshot: HuggingFaceStageResultSnapshotRef,
+) -> tuple[RepoRelPath, ...]:
+    """List one Hugging Face snapshot through the cloud service."""
+    try:
+        return tuple(
+            file.path
+            for file in ViperCloud.for_snapshot(Path.cwd(), snapshot).list_files(
+                snapshot
+            )
+        )
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise VerificationError("artifact.bundle: snapshot listing failed") from exc
+
+
+def list_local_snapshot_files(
+    snapshot: LocalStageResultSnapshotRef,
+) -> tuple[RepoRelPath, ...]:
+    """List the snapshot through its owning local store."""
+    try:
+        return local_artifact_store(snapshot).list_snapshot_files(snapshot)
+    except LocalStoreError as error:
+        messages = {
+            "local snapshot revision is missing": (
+                "artifact.bundle: local snapshot is missing"
+            ),
+            "local snapshot contains a symlink": (
+                "artifact.bundle: snapshot contains a symlink"
+            ),
+        }
+        message = messages.get(
+            str(error),
+            "artifact.bundle: local snapshot listing failed",
+        )
+        raise VerificationError(message) from error
+
+
+def list_snapshot_files(
+    snapshot: StageResultSnapshotRef,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> tuple[RepoRelPath, ...]:
+    """List one snapshot through its custom or installed storage backend."""
+    owner = None if fetcher is None else getattr(fetcher, "__self__", fetcher)
+    custom = None if owner is None else getattr(owner, "list_snapshot_files", None)
+    if callable(custom):
+        try:
+            custom_listing = cast(
+                Callable[[StageResultSnapshotRef], tuple[RepoRelPath, ...]],
+                custom,
+            )
+            return tuple(custom_listing(snapshot))
+        except Exception as exc:
+            raise VerificationError(
+                "artifact.bundle: custom snapshot listing failed"
+            ) from exc
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+        return list_huggingface_snapshot_files(snapshot)
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        return list_local_snapshot_files(snapshot)
+    if isinstance(
+        snapshot,
+        (GcsStageResultSnapshotRef, ViperCloudStageResultSnapshotRef),
+    ):
+        try:
+            cloud = (
+                viper_cloud(Path.cwd())
+                if isinstance(snapshot, ViperCloudStageResultSnapshotRef)
+                else ViperCloud.for_snapshot(Path.cwd(), snapshot)
+            )
+            return tuple(file.path for file in cloud.list_files(snapshot))
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise VerificationError("artifact.bundle: snapshot listing failed") from exc
+    raise VerificationError("artifact.bundle: unsupported snapshot")
+
+
+def verify_resolved_file_bytes(
+    reference: ResolvedFileRef,
+    raw: bytes,
+) -> bytes:
+    """Verify retrieved bytes against a resolved file reference."""
+    if not isinstance(raw, bytes):
+        raise TypeError("retrieved file content must be bytes")
+
+    if len(raw) != reference.bytes:
+        raise VerificationError(
+            f"byte-count mismatch: expected {reference.bytes}, received {len(raw)}"
+        )
+
+    actual_sha256 = hashlib.sha256(raw).hexdigest()
+    if actual_sha256 != reference.sha256:
+        raise VerificationError(
+            f"SHA-256 mismatch: expected {reference.sha256}, received {actual_sha256}"
+        )
+
+    return raw
+
+
+def read_resolved_file(
+    reference: ResolvedFileRef,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> bytes:
+    """Retrieve a resolved file and verify its byte count and SHA-256."""
+    if isinstance(fetcher, _FileReader):
+        return fetcher.read(reference)
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    raw = retrieve(reference.stored_at)
+    return verify_resolved_file_bytes(reference, raw)
+
+
+def read_attempt_reference(
+    reference: ResolvedAttemptRef,
+    run: RunSpec,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> RunAttempt:
+    """Retrieve one canonical attempt document and verify its path identity."""
+    path = reference.stored_at.path
+    prefix = f"{run_root(run)}/attempts/"
+    suffix = "/resolved.yaml"
+    if not path.startswith(prefix) or not path.endswith(suffix):
+        raise VerificationError("attempt.identity: attempt path is not canonical")
+    attempt_text = path[len(prefix) : -len(suffix)]
+    if not attempt_text.isdecimal() or str(int(attempt_text)) != attempt_text:
+        raise VerificationError("attempt.identity: attempt path has an invalid ID")
+    try:
+        attempt = RunAttempt.model_validate(
+            parse_yaml_bytes(read_resolved_file(reference, fetcher=fetcher))
+        )
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            "attempt.identity: attempt document is invalid"
+        ) from exc
+    if attempt.attempt_id != int(attempt_text):
+        raise VerificationError(
+            "attempt.identity: attempt document ID differs from its path"
+        )
+    return attempt
+
+
+def verify_run_attempt_references(
+    resolved_run: ResolvedRun,
+    run: RunSpec,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> tuple[RunAttempt, ...]:
+    """Resolve attempt references and enforce terminal history invariants."""
+    locations = tuple(reference.stored_at for reference in resolved_run.attempts)
+    if len(set(locations)) != len(locations):
+        raise VerificationError("attempt.identity: attempt references are duplicated")
+    attempts = tuple(
+        read_attempt_reference(reference, run, fetcher=fetcher)
+        for reference in resolved_run.attempts
+    )
+    successful: list[RunAttempt] = []
+    previous: RunAttempt | None = None
+    for index, attempt in enumerate(attempts):
+        if attempt.purpose != "run":
+            raise VerificationError(
+                "attempt.purpose: resolved run contains confirmation"
+            )
+        if previous is not None and attempt.attempt_id <= previous.attempt_id:
+            raise VerificationError("attempt.order: attempt IDs do not increase")
+        if previous is not None and attempt.started_at < previous.completed_at:
+            raise VerificationError("attempt.order: attempt execution times overlap")
+        if attempt.status == "succeeded":
+            successful.append(attempt)
+            if index != len(attempts) - 1:
+                raise VerificationError("attempt.order: attempt follows a success")
+        previous = attempt
+
+    if any(resolved_run.completed_at < attempt.completed_at for attempt in attempts):
+        raise VerificationError("attempt.terminal: run predates an attempt completion")
+    if resolved_run.status == "succeeded":
+        if len(successful) != 1:
+            raise VerificationError("attempt.terminal: succeeded run lacks one success")
+        if resolved_run.successful_attempt_id != successful[0].attempt_id:
+            raise VerificationError(
+                "attempt.terminal: successful attempt selector differs"
+            )
+    else:
+        if successful:
+            raise VerificationError(
+                "attempt.terminal: terminal failure contains success"
+            )
+        if resolved_run.status == "cancelled" and attempts[-1].status != "cancelled":
+            raise VerificationError(
+                "attempt.terminal: cancelled run lacks a cancelled final attempt"
+            )
+        if resolved_run.status == "failed" and attempts[-1].status not in {
+            "failed",
+            "preempted",
+        }:
+            raise VerificationError(
+                "attempt.terminal: failed run has another final attempt status"
+            )
+    return attempts
+
+
+def read_snapshot_file(
+    snapshot: StageResultSnapshotRef,
+    reference: SnapshotFileRef,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> bytes:
+    """Retrieve and verify one file from a stage-result snapshot."""
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+        location: StorageModel = HuggingFaceFileRef(
+            repository=snapshot.repository,
+            commit=snapshot.commit,
+            path=reference.path,
+            repo_type=snapshot.repo_type,
+        )
+    elif isinstance(snapshot, LocalStageResultSnapshotRef):
+        location = LocalFileRef(
+            workspace=snapshot.workspace,
+            store=snapshot.store,
+            commit=snapshot.commit,
+            path=reference.path,
+        )
+    elif isinstance(snapshot, GcsStageResultSnapshotRef):
+        location = GcsFileRef(
+            bucket=snapshot.bucket,
+            prefix=snapshot.prefix,
+            owner=snapshot.owner,
+            workspace=snapshot.workspace,
+            revision=snapshot.revision,
+            path=reference.path,
+        )
+    else:
+        location = ViperCloudFileRef(
+            owner=snapshot.owner,
+            workspace=snapshot.workspace,
+            revision=snapshot.revision,
+            path=reference.path,
+        )
+    snapshot_observer = getattr(fetcher, "observe_snapshot", None)
+    if snapshot_observer is not None:
+        snapshot_observer(snapshot, reference)
+    resolved_reference = ResolvedFileRef(
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+        stored_at=location,
+    )
+    try:
+        if isinstance(fetcher, _FileReader):
+            return fetcher.read(resolved_reference)
+        raw = retrieve(location)
+    except Exception as exc:
+        raise VerificationError(
+            f"artifact.representation: snapshot file is unavailable: {reference.path}"
+        ) from exc
+
+    return verify_resolved_file_bytes(resolved_reference, raw)
+
+
+def snapshot_identity(
+    snapshot: StageResultSnapshotRef,
+) -> tuple[str, ...]:
+    """Return a backend-qualified identity for one immutable stage snapshot."""
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+        return (
+            snapshot.kind,
+            snapshot.repository,
+            snapshot.commit,
+            snapshot.repo_type,
+        )
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        return (
+            snapshot.kind,
+            snapshot.workspace.as_posix(),
+            snapshot.store,
+            snapshot.commit,
+        )
+    if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+        return (
+            snapshot.kind,
+            snapshot.owner,
+            snapshot.workspace,
+            snapshot.revision,
+        )
+    return (
+        snapshot.kind,
+        snapshot.bucket,
+        snapshot.prefix,
+        snapshot.owner,
+        snapshot.workspace,
+        snapshot.revision,
+    )
+
+
+def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None:
+    """Return the immutable output revision containing one stored file."""
+    if isinstance(location, HuggingFaceFileRef):
+        return (
+            location.kind,
+            location.repository,
+            location.commit,
+            location.repo_type,
+        )
+    if isinstance(location, LocalFileRef):
+        return (
+            location.kind,
+            location.workspace.as_posix(),
+            location.store,
+            location.commit,
+        )
+    if isinstance(location, GcsFileRef):
+        return (
+            location.kind,
+            location.bucket,
+            location.prefix,
+            location.owner,
+            location.workspace,
+            location.revision,
+        )
+    if isinstance(location, ViperCloudFileRef):
+        return (
+            location.kind,
+            location.owner,
+            location.workspace,
+            location.revision,
+        )
+    return None
+
+
+def verify_snapshot_artifact(
+    stage: ResolvedStageRef,
+    artifact: ResolvedArtifact,
+    *,
+    data_role: DataRole,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedArtifact:
+    """Verify every file representing one artifact in a stage snapshot."""
+    if isinstance(artifact, ResolvedSingleFileArtifact):
+        references = (artifact.file,)
+    elif isinstance(artifact, ResolvedBundleArtifact):
+        roots: set[str] = set()
+        for member in artifact.members:
+            full_path = member.file.path
+            relative_path = member.relative_path
+            suffix = f"/{relative_path}"
+            if not full_path.endswith(suffix):
+                raise VerificationError(
+                    "artifact.bundle: member path differs from its relative path"
+                )
+            roots.add(full_path[: -len(suffix)])
+        if len(roots) != 1:
+            raise VerificationError(
+                "artifact.bundle: members do not share one bundle root"
+            )
+        bundle_root = next(iter(roots))
+        declared_paths = tuple(member.file.path for member in artifact.members)
+        published_paths = tuple(
+            path
+            for path in list_snapshot_files(stage.snapshot, fetcher=fetcher)
+            if path.startswith(f"{bundle_root}/")
+        )
+        if published_paths != declared_paths:
+            raise VerificationError(
+                "artifact.bundle: published members differ from the resolved list"
+            )
+        references = tuple(member.file for member in artifact.members)
+    else:
+        raise TypeError(f"unsupported resolved artifact: {type(artifact).__name__}")
+
+    resolved_references = tuple(
+        resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references
+    )
+    if isinstance(fetcher, _FilePathReader):
+        observer = getattr(fetcher, "observe_snapshot", None)
+        files = []
+        for reference, resolved_reference in zip(
+            references, resolved_references, strict=True
+        ):
+            if observer is not None:
+                observer(stage.snapshot, reference)
+            files.append(
+                VerifiedSnapshotFile(
+                    reference=reference,
+                    local_path=fetcher.path(resolved_reference),
+                )
+            )
+        verified_files = tuple(files)
+    else:
+        verified_files = tuple(
+            VerifiedSnapshotFile(
+                reference=reference,
+                content=read_snapshot_file(
+                    stage.snapshot,
+                    reference,
+                    fetcher=fetcher,
+                ),
+            )
+            for reference in references
+        )
+    return VerifiedArtifact(
+        artifact=artifact,
+        files=verified_files,
+        data_role=data_role,
+        references=resolved_references,
+    )
+
+
+def load_verified_artifact(
+    run: RunSpec,
+    declaration: OutputSpec,
+    artifact_name: ArtifactName,
+    artifact: VerifiedArtifact,
+    *,
+    policy: VerificationPolicy,
+    materialization_path: RepoRelPath | None = None,
+    fetcher: StorageFetcher | None = None,
+) -> ArtifactValidationResult:
+    """Materialize verified files and establish the artifact guarantee level."""
+    if not policy.permits_source(run.source.repository):
+        raise VerificationError(
+            "artifact-loader execution requires an explicitly trusted source repository"
+        )
+
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    loader_reference = declaration.loader
+    loader_location = GitFileRef(
+        repository=run.source.repository,
+        commit=run.source.commit,
+        path=loader_reference.path,
+    )
+    loader_raw = retrieve(loader_location)
+    try:
+        verify_artifact_loader_bytes(loader_reference, loader_raw)
+    except ArtifactLoaderError as exc:
+        raise VerificationError(str(exc)) from exc
+
+    target_path = (
+        declaration.path if materialization_path is None else materialization_path
+    )
+    cache_key = (
+        document_digest(run),
+        document_digest(loader_reference),
+        f"{artifact_name}:{target_path}",
+        tuple(
+            (
+                verified_file.reference.path,
+                verified_file.reference.sha256,
+                verified_file.reference.bytes,
+            )
+            for verified_file in artifact.files
+        ),
+    )
+    cached = _ARTIFACT_VALIDATION_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with tempfile.TemporaryDirectory(prefix="viper-artifact-") as directory:
+        root = Path(directory)
+        if isinstance(artifact.artifact, ResolvedSingleFileArtifact):
+            materialized_files = ((target_path, artifact.files[0]),)
+        elif isinstance(artifact.artifact, ResolvedBundleArtifact):
+            materialized_files = tuple(
+                (f"{target_path}/{member.relative_path}", verified_file)
+                for member, verified_file in zip(
+                    artifact.artifact.members,
+                    artifact.files,
+                    strict=True,
+                )
+            )
+        else:
+            raise TypeError(
+                f"unsupported resolved artifact: {type(artifact.artifact).__name__}"
+            )
+
+        for path, verified_file in materialized_files:
+            materialized = root / path
+            materialized.parent.mkdir(parents=True, exist_ok=True)
+            if verified_file.content is not None:
+                materialized.write_bytes(verified_file.content)
+            else:
+                assert verified_file.local_path is not None
+                shutil.copyfile(verified_file.local_path, materialized)
+
+        materialized_loader = root / loader_reference.path
+        materialized_loader.parent.mkdir(parents=True, exist_ok=True)
+        materialized_loader.write_bytes(loader_raw)
+        artifact_path = root / target_path
+        try:
+            result = execute_artifact_loader(
+                root,
+                materialized_loader_context(
+                    root,
+                    loader_reference,
+                    artifact_name,
+                    artifact_path,
+                    run,
+                ),
+            )
+        except ArtifactLoaderError as exc:
+            raise VerificationError(str(exc)) from exc
+        _ARTIFACT_VALIDATION_CACHE[cache_key] = result
+        return result

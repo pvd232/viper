@@ -11,15 +11,29 @@ from typing import overload
 
 import viper._subprocess as subprocess
 
-from .._schema import SHA256
+from .._graph import enroll_run
+from .._schema import SHA256, RepoRelPath
+from ..artifacts import StageArtifactRef
 from ..authoring import RunPlanDraft, freeze_run_plan
-from ..references import ResolvedFileRef, ResolvedRunRef, ResolvedStageRef
+from ..references import (
+    ResolvedBenchmarkResultRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+    ResolvedStageRef,
+)
 from ..repository import resolve_root
-from ..storage import RunPromotionPolicy, TransferLimits, ViperCloudDestination
+from ..storage import (
+    RunPromotionPolicy,
+    TransferLimits,
+    ViperCloudDestination,
+    workflow,
+)
 from ._batch import run_many as _run_many
 from ._benchmark import benchmark as _benchmark
 from ._export import export_run as _export_run
 from ._export import verify_run_bundle as _verify_run_bundle
+from ._materialization import artifact_path as _artifact_path
+from ._materialization import artifact_reference as _artifact_reference
 from ._promotion import promote_run_to_cloud as _promote_run_to_cloud
 from ._restore import resolve_run_reference, restore
 from ._run import retry as _retry
@@ -27,6 +41,7 @@ from ._run import run as _run
 from .errors import RunPromotionError
 from .results import (
     BenchmarkExecutionResult,
+    EnrolledRun,
     ExperimentExecutionResult,
     RunExportResult,
     RunResult,
@@ -184,6 +199,61 @@ def verify_run_bundle(
     )
 
 
+def enroll(
+    reference: ResolvedRunRef,
+    *,
+    repository_root: Path | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
+) -> EnrolledRun:
+    """Enroll a saved run and return its publication operation and source snapshots."""
+    root = resolve_root(repository_root)
+    with workflow(root) as publication:
+        sources = enroll_run(
+            root, reference, trusted_source_repositories=trusted_source_repositories
+        )
+        return EnrolledRun(publication.operation_path, sources)
+
+
+def artifact_reference(
+    repository_root: Path | None,
+    reference: ResolvedRunRef,
+    selection: StageArtifactRef,
+    *,
+    member: RepoRelPath | None = None,
+    benchmark_result: ResolvedBenchmarkResultRef | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
+) -> ResolvedFileRef:
+    """Select an expected immutable file reference without materializing its payload."""
+    return _artifact_reference(
+        repository_root,
+        reference,
+        selection,
+        member=member,
+        benchmark_result=benchmark_result,
+        trusted_source_repositories=trusted_source_repositories,
+    )
+
+
+def artifact_path(
+    repository_root: Path | None,
+    reference: ResolvedRunRef,
+    selection: StageArtifactRef,
+    *,
+    member: RepoRelPath | None = None,
+    benchmark_result: ResolvedBenchmarkResultRef | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
+) -> Path:
+    """Find a verified artifact or exact bundle member through Viper storage."""
+    return _artifact_path(
+        repository_root,
+        reference,
+        selection,
+        member=member,
+        benchmark_result=benchmark_result,
+        trusted_source_repositories=trusted_source_repositories,
+    )
+
+
 def run(
     plan: RunPlanDraft | Path,
     *,
@@ -202,25 +272,29 @@ def run(
     loaders must run while verifying prior-run inputs.
     """
     repository_root = resolve_root(repository_root)
-    if isinstance(plan, Path):
-        return _run(
+    with workflow(repository_root) as publication:
+        if isinstance(plan, Path):
+            return _run(
+                repository_root,
+                plan,
+                _session=publication,
+                timeout_seconds=timeout_seconds,
+                trusted_source_repositories=trusted_source_repositories,
+            )
+        frozen = freeze_run_plan(
             repository_root,
             plan,
+            trusted_source_repositories=trusted_source_repositories,
+        )
+        run_path = repository_root.resolve() / frozen.reference.stored_at.path
+        return _run(
+            repository_root,
+            run_path,
+            plan=frozen.reference,
+            _session=publication,
             timeout_seconds=timeout_seconds,
             trusted_source_repositories=trusted_source_repositories,
         )
-    frozen = freeze_run_plan(
-        repository_root,
-        plan,
-    )
-    run_path = repository_root.resolve() / frozen.reference.stored_at.path
-    return _run(
-        repository_root,
-        run_path,
-        plan=frozen.reference,
-        timeout_seconds=timeout_seconds,
-        trusted_source_repositories=trusted_source_repositories,
-    )
 
 
 def retry(
@@ -293,7 +367,10 @@ def run_many(
 
 
 __all__ = [
+    "artifact_path",
+    "artifact_reference",
     "benchmark",
+    "enroll",
     "export_run",
     "promote_run_to_cloud",
     "resolve_run_reference",

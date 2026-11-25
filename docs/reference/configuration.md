@@ -129,11 +129,15 @@ The default setting in `viper.toml` is:
 ```toml
 [storage]
 destination = "local"
+offload = false
 ```
 
-VIPER saves immutable files beneath `.viper/store`. The destination is recorded for each
-run and remains fixed during retries. Restore uses the saved file references to retrieve
-the original bytes. The supported destination types and configuration parser are in
+Viper keeps immutable inventories and shared payload storage beneath `.viper/store`.
+Completed native outputs can remain at their original managed paths while uploading.
+`offload` controls automatic local retention; it is independent of the publication
+destination. Exact artifact overrides follow the current default or select keep/offload.
+The destination is recorded for each run and remains fixed during retries. A completed
+publication receipt supplies verified cloud locations without rewriting original refs. The supported destination types and configuration parser are in
 [`viper.storage`](../../src/viper/storage.py).
 
 ## Inspect a schema

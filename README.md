@@ -23,6 +23,12 @@ verified run evidence
       +-- query through the CLI or MCP
 ```
 
+## Install VIPER
+
+```bash
+python -m pip install 'viper-provenance==0.3.0'
+```
+
 ## Run the CPU quickstart
 
 VIPER requires Python 3.11 or newer. Clone the repository, create an isolated
@@ -251,6 +257,21 @@ VIPER checks saved files against their recorded hashes when verifying or
 restoring a run. See [How VIPER works](docs/explanation/how-viper-works.md) for
 how the plan, execution, and result fit together.
 
+## Keep artifacts in the cloud
+
+Choose a cloud destination in your workspace configuration. Native experiment
+calls queue publication while later computation continues. Set
+`storage.offload = true` to permit automatic removal of managed local payloads
+after successful workflow completion and verified cloud publication. The default
+`false` retains local files while still publishing to the configured destination.
+
+Artifact references stay the same. VIPER serves available local bytes first and
+restores missing bytes from verified cloud backing when needed. Per-artifact
+preferences let you keep frequently reused data local. An outer workflow scope
+protects files across related training, inference, evaluation and diagnostics
+calls. See [the cloud storage guide](docs/how-to/cloud-storage.md) for the complete
+configuration, status and recovery workflow.
+
 ## Start your own workspace
 
 Generate a separate workspace with example stages and tests. From the installed
@@ -300,7 +321,7 @@ Continue from a saved plan or run result:
 | Publish and search measured knowledge | `knowledge()` and `catalog().knowledge` | [Measured vector search](docs/tutorials/knowledge-search.md) |
 | Capture structured journals and learned vectors | Default-on `JOURNAL.md` capture; `api.publish_run_journal()` for later edits | [Complete journal workflow](docs/how-to/journals.md) |
 | Export a portable evidence graph | `execution.export_run()` and `execution.verify_run_bundle()` | [Export example](examples/export_run.py) |
-| Publish, promote, restore, and retain cloud runs | `execution.promote_run_to_cloud()` and `retention.evict_cloud_backed_run_files()` | [Cloud storage](docs/how-to/cloud-storage.md) |
+| Publish, restore, and retain artifacts | `storage.workflow()` and `storage.offload` configuration | [Cloud storage](docs/how-to/cloud-storage.md) |
 | Give an agent typed access | `viper mcp --root .` | [Agent interface](docs/reference/agents.md) |
 
 Place `--json` before a CLI command when another program needs one typed result

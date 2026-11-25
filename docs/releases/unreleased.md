@@ -1,8 +1,12 @@
-# Changes released in 0.2.0
+# Unreleased
+
+The current release is [0.3.0](0.3.0.md).
+
+## Historical 0.2.0 reference changes
 
 See the [0.2.0 release notes](0.2.0.md) for the complete release scope.
 
-## Snapshot reference imports
+### Snapshot reference imports
 
 Import `StageResultSnapshotRef` from
 [`viper.references`](../../src/viper/references.py) in place of
@@ -12,7 +16,7 @@ and ViperCloud snapshot references. The two old Python aliases are removed.
 
 The alias rename preserves saved JSON/YAML fields and storage behavior.
 
-## Local references use content revisions
+### Local references use content revisions
 
 `LocalFileRef` and `LocalStageResultSnapshotRef` remove `store_id`.
 Local snapshot references identify `workspace / store / commit`; file references

@@ -45,9 +45,19 @@ number = 8
 title = "Publish and recover the selected models"
 requirement_ids = ["RGP-REQ-10"]
 
+[[phases]]
+number = 9
+title = "Remove repeated publication work"
+requirement_ids = ["RGP-REQ-11", "RGP-REQ-12", "RGP-REQ-13"]
+
+[[phases]]
+number = 10
+title = "Reuse bounded verification work"
+requirement_ids = ["RGP-REQ-14", "RGP-REQ-15", "RGP-REQ-16"]
+
 [[repository_bindings]]
 repository_id = "viper"
-checkout = "/Users/machina/Developer/ChatGPT/viper-publication-final-20261017"
+checkout = "/Users/machina/Developer/ChatGPT/viper-cloud-offload"
 
 [[repository_bindings.executables]]
 command = "python3"
@@ -75,30 +85,20 @@ path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/pyrefly"
 
 [[repository_bindings]]
 repository_id = "rico"
-checkout = "/Users/machina/Developer/ChatGPT/rico-publication-20261017"
+checkout = "/Users/machina/Developer/ChatGPT/RICO"
 
 [[repository_bindings.executables]]
 command = "python3"
-path = "/Users/machina/Developer/ChatGPT/rico-publication-20261017/.venv/bin/python3"
+path = "/Users/machina/Developer/ChatGPT/RICO/.venv/bin/python3"
 
 [[repository_bindings.executables]]
 command = "pyrefly"
-path = "/Users/machina/Developer/ChatGPT/rico-publication-20261017/.venv/bin/pyrefly"
+path = "/Users/machina/Developer/ChatGPT/viper/.venv/bin/pyrefly"
 
 [[repository_bindings.executables]]
 command = "ruff"
-path = "/Users/machina/Developer/ChatGPT/rico-publication-20261017/.venv/bin/ruff"
+path = "/Users/machina/Developer/ChatGPT/RICO/.venv/bin/ruff"
 
 [[repository_bindings.executables]]
 command = "git"
 path = "/usr/bin/git"
-
-[[phases]]
-number = 9
-title = "Remove repeated publication work"
-requirement_ids = ["RGP-REQ-11", "RGP-REQ-12", "RGP-REQ-13"]
-
-[[phases]]
-number = 10
-title = "Reuse bounded verification work"
-requirement_ids = ["RGP-REQ-14", "RGP-REQ-15", "RGP-REQ-16"]

@@ -1,0 +1,173 @@
+{
+  ".viper/workspaces/01M89J4NPQMYGWNRJ9KBM01CZ8/attempt-1/control/journal.jsonl": [
+    {
+      "sequence": 1,
+      "state": "allocated",
+      "recorded_at": "2026-11-25T14:35:49.543201Z",
+      "event": "attempt allocated",
+      "details": {}
+    },
+    {
+      "sequence": 2,
+      "state": "preflighting",
+      "recorded_at": "2026-11-25T14:36:07.855537Z",
+      "event": "preflight completed and immutable plan located",
+      "details": {
+        "plan_commit": "44911d140544ab3785535776b65ba1641acd0c0c5ee50950c0392648b48ccb12",
+        "report": "control/preflight.json"
+      }
+    },
+    {
+      "sequence": 3,
+      "state": "running_stage",
+      "recorded_at": "2026-11-25T14:36:07.861242Z",
+      "event": "stage execution started",
+      "details": {
+        "stage_id": "train"
+      }
+    },
+    {
+      "sequence": 4,
+      "state": "publishing_stage",
+      "recorded_at": "2026-11-25T14:36:29.606906Z",
+      "event": "stage snapshot publication started",
+      "details": {
+        "stage_id": "train"
+      }
+    },
+    {
+      "sequence": 5,
+      "state": "running_stage",
+      "recorded_at": "2026-11-25T14:36:29.717178Z",
+      "event": "stage execution started",
+      "details": {
+        "stage_id": "build"
+      }
+    },
+    {
+      "sequence": 6,
+      "state": "publishing_stage",
+      "recorded_at": "2026-11-25T14:36:50.285358Z",
+      "event": "stage snapshot publication started",
+      "details": {
+        "stage_id": "build"
+      }
+    },
+    {
+      "sequence": 7,
+      "state": "closing_attempt",
+      "recorded_at": "2026-11-25T14:36:50.396311Z",
+      "event": "all planned stages completed",
+      "details": {}
+    },
+    {
+      "sequence": 8,
+      "state": "publishing_attempt_files",
+      "recorded_at": "2026-11-25T14:36:50.397851Z",
+      "event": "attempt evidence publication started",
+      "details": {}
+    },
+    {
+      "sequence": 9,
+      "state": "terminal",
+      "recorded_at": "2026-11-25T14:36:50.398372Z",
+      "event": "attempt succeeded",
+      "details": {}
+    }
+  ],
+  ".viper/workspaces/01M89J7J4XRSG5R61N1YCNDT7N/attempt-2/control/journal.jsonl": [
+    {
+      "sequence": 1,
+      "state": "allocated",
+      "recorded_at": "2026-11-25T14:39:22.621698Z",
+      "event": "attempt allocated",
+      "details": {}
+    },
+    {
+      "sequence": 2,
+      "state": "terminal",
+      "recorded_at": "2026-11-25T14:39:38.728351Z",
+      "event": "attempt preempted",
+      "details": {
+        "stage_id": null,
+        "exception": "StageProcessInterrupted"
+      }
+    }
+  ],
+  ".viper/workspaces/01M89J7J4XRSG5R61N1YCNDT7N/attempt-1/control/journal.jsonl": [
+    {
+      "sequence": 1,
+      "state": "allocated",
+      "recorded_at": "2026-11-25T14:37:26.292437Z",
+      "event": "attempt allocated",
+      "details": {}
+    },
+    {
+      "sequence": 2,
+      "state": "preflighting",
+      "recorded_at": "2026-11-25T14:37:42.494006Z",
+      "event": "preflight completed and immutable plan located",
+      "details": {
+        "plan_commit": "29f2043150c40157752ec8b8546cb03b49cb00d45dcbc50cf5c0a72086b9953c",
+        "report": "control/preflight.json"
+      }
+    },
+    {
+      "sequence": 3,
+      "state": "running_stage",
+      "recorded_at": "2026-11-25T14:37:42.498274Z",
+      "event": "stage execution started",
+      "details": {
+        "stage_id": "train"
+      }
+    },
+    {
+      "sequence": 4,
+      "state": "publishing_stage",
+      "recorded_at": "2026-11-25T14:37:43.009783Z",
+      "event": "verified stage reuse published",
+      "details": {
+        "stage_id": "train"
+      }
+    },
+    {
+      "sequence": 5,
+      "state": "running_stage",
+      "recorded_at": "2026-11-25T14:37:43.040085Z",
+      "event": "stage execution started",
+      "details": {
+        "stage_id": "eval"
+      }
+    },
+    {
+      "sequence": 6,
+      "state": "publishing_stage",
+      "recorded_at": "2026-11-25T14:38:04.231380Z",
+      "event": "stage snapshot publication started",
+      "details": {
+        "stage_id": "eval"
+      }
+    },
+    {
+      "sequence": 7,
+      "state": "closing_attempt",
+      "recorded_at": "2026-11-25T14:38:32.878996Z",
+      "event": "all planned stages completed",
+      "details": {}
+    },
+    {
+      "sequence": 8,
+      "state": "publishing_attempt_files",
+      "recorded_at": "2026-11-25T14:38:32.880980Z",
+      "event": "attempt evidence publication started",
+      "details": {}
+    },
+    {
+      "sequence": 9,
+      "state": "terminal",
+      "recorded_at": "2026-11-25T14:38:32.881629Z",
+      "event": "attempt succeeded",
+      "details": {}
+    }
+  ]
+}

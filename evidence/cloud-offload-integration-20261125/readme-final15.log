@@ -1,0 +1,47 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0 -- /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/machina/Developer/ChatGPT/viper-cloud-offload
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 15 items
+
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py] PASSED [  6%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[inspect_results.py] PASSED [ 13%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[stages.py] PASSED [ 20%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[download_training.py] PASSED [ 26%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[recovery.py] PASSED [ 33%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[reuse.py] PASSED [ 40%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[knowledge_search.py] PASSED [ 46%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[export_run.py] PASSED [ 53%]
+tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[journal_search.py] PASSED [ 60%]
+tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[None] PASSED [ 66%]
+tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[README.md] PASSED [ 73%]
+tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[docs/tutorials/getting-started.md] PASSED [ 80%]
+tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[reproducible] PASSED [ 86%]
+tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[relaxed] PASSED [ 93%]
+tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[custom] PASSED [100%]
+
+-------------- generated xml file: /tmp/viper-readme-pending.xml ---------------
+============================= slowest 20 durations =============================
+328.31s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py]
+241.87s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[stages.py]
+234.48s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[inspect_results.py]
+201.06s call     tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[reproducible]
+181.36s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[reuse.py]
+151.94s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[recovery.py]
+127.13s call     tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[docs/tutorials/getting-started.md]
+119.71s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[download_training.py]
+117.84s call     tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[README.md]
+97.42s call     tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[relaxed]
+97.38s call     tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[custom]
+96.90s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[journal_search.py]
+81.50s call     tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[None]
+61.80s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[knowledge_search.py]
+43.65s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[export_run.py]
+1.64s setup    tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[relaxed]
+1.62s setup    tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[reproducible]
+1.50s setup    tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[custom]
+0.48s teardown tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[knowledge_search.py]
+0.47s teardown tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[journal_search.py]
+======================= 15 passed in 2191.20s (0:36:31) ========================

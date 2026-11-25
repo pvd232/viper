@@ -1,0 +1,160 @@
+{
+  "recorded_utc": "2026-11-25T15:18:40.515009+00:00",
+  "unique_successful_nodes": 27,
+  "strategy": "Union of one previously passing variants node, eleven direct documentation/source checks, and the remaining fifteen execution nodes; not one full-module invocation.",
+  "groups": {
+    "variants": 1,
+    "direct_docs": 11,
+    "remaining_execution": 15
+  },
+  "remaining_execution_exit_code": 0,
+  "remaining_execution_summary": "15 passed in 2191.20s",
+  "retained_workspace": "/tmp/viper-readme-pending-20261125",
+  "tested_file_sha256_at_start": "934a25ae066b283c697b674a7e5327b9d957127ad3c3dca3b36524375cdcb749",
+  "current_file_sha256": "8c99fdb3bed4cd6475c9bf5aac0b6c0b4b5cd691d18f009ee30f78f6e7bd6df6",
+  "test_file_unchanged_during_final_run": false,
+  "nodes": {
+    "tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[None]": {
+      "group": "remaining_execution",
+      "seconds": 81.513,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[README.md]": {
+      "group": "remaining_execution",
+      "seconds": 117.849,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_cpu_quickstart_executes_and_verifies_one_run[docs/tutorials/getting-started.md]": {
+      "group": "remaining_execution",
+      "seconds": 127.139,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_checkpoint_round_trip": {
+      "group": "direct_docs",
+      "seconds": 4.675,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_config_stage_writes_the_selected_rows": {
+      "group": "direct_docs",
+      "seconds": 0.023,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_evaluation_writes_predictions_and_computes_rmse": {
+      "group": "direct_docs",
+      "seconds": 0.057,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_http_request_identifies_the_example_file": {
+      "group": "direct_docs",
+      "seconds": 0.021,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_metrics_compute_and_persist_values": {
+      "group": "direct_docs",
+      "seconds": 0.023,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_stage_declarations_define_their_own_dependencies[0-prepared]": {
+      "group": "direct_docs",
+      "seconds": 0.006,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_stage_declarations_define_their_own_dependencies[1-embedded]": {
+      "group": "direct_docs",
+      "seconds": 0.046,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_documented_stage_declarations_define_their_own_dependencies[3-report]": {
+      "group": "direct_docs",
+      "seconds": 0.007,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[download_training.py]": {
+      "group": "remaining_execution",
+      "seconds": 120.08,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py]": {
+      "group": "remaining_execution",
+      "seconds": 328.379,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[export_run.py]": {
+      "group": "remaining_execution",
+      "seconds": 44.008,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[inspect_results.py]": {
+      "group": "remaining_execution",
+      "seconds": 234.742,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[journal_search.py]": {
+      "group": "remaining_execution",
+      "seconds": 97.378,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[knowledge_search.py]": {
+      "group": "remaining_execution",
+      "seconds": 62.296,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[recovery.py]": {
+      "group": "remaining_execution",
+      "seconds": 152.195,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[reuse.py]": {
+      "group": "remaining_execution",
+      "seconds": 181.722,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[stages.py]": {
+      "group": "remaining_execution",
+      "seconds": 242.142,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]": {
+      "group": "variants",
+      "seconds": 211.121,
+      "evidence": "readme-startup/rerun-variants-pass-evaluation-timeout.xml"
+    },
+    "tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[custom]": {
+      "group": "remaining_execution",
+      "seconds": 98.882,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[relaxed]": {
+      "group": "remaining_execution",
+      "seconds": 99.063,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_policy_example_verifies_after_exit[reproducible]": {
+      "group": "remaining_execution",
+      "seconds": 202.681,
+      "evidence": "readme-final15.xml"
+    },
+    "tests/test_readme_workflow.py::test_read_source_discovers_from_nested_directory": {
+      "group": "direct_docs",
+      "seconds": 3.051,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_read_source_identifies_commit_and_selected_remote": {
+      "group": "direct_docs",
+      "seconds": 3.871,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    },
+    "tests/test_readme_workflow.py::test_read_source_rejects_missing_remote": {
+      "group": "direct_docs",
+      "seconds": 2.328,
+      "evidence": "readme-startup/direct-doc-checks.xml"
+    }
+  },
+  "executable_ast_unchanged_during_final_run": true,
+  "comment_only_change": {
+    "before": "# Corrupt the stored artifact, rather than the mutable workspace copy.",
+    "after": "# Corrupt the managed payload returned by the resolver.",
+    "reconstructed_before_sha256_matches_start_record": true,
+    "ast_equal_ignoring_source_positions": true
+  }
+}

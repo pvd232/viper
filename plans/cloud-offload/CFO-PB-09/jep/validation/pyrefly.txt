@@ -1,0 +1,2 @@
+ INFO Checking project configured at `/tmp/viper-pb09-pyrefly.toml`
+ INFO 0 errors

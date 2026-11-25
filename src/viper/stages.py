@@ -128,7 +128,7 @@ class StageContextBinding(ProtocolModel):
 
 
 class StageFileAccessReceipt(ProtocolModel):
-    """Record workspace paths opened by one governed stage."""
+    """Record checked file opens using the stage's declared paths."""
 
     schema_version: Literal[1] = Field(
         default=1,
@@ -136,14 +136,12 @@ class StageFileAccessReceipt(ProtocolModel):
     )
     reads: tuple[RepoRelPath, ...] = Field(
         description=(
-            "Repository-relative paths successfully opened for reading during "
-            "the stage."
+            "Declared paths of files successfully opened for reading during the stage."
         )
     )
     writes: tuple[RepoRelPath, ...] = Field(
         description=(
-            "Repository-relative paths successfully opened for writing during "
-            "the stage."
+            "Declared paths of files successfully opened for writing during the stage."
         )
     )
 

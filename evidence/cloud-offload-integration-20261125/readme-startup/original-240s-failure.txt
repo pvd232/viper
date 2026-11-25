@@ -1,0 +1,27 @@
+F
+=================================== FAILURES ===================================
+________ test_extended_examples_execute_complete_workflows[variants.py] ________
+tests/test_readme_workflow.py:140: in test_extended_examples_execute_complete_workflows
+    completed = subprocess.run(
+src/viper/_subprocess.py:143: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1221: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:2154: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py:1268: in _check_timeout
+    raise TimeoutExpired(
+E   subprocess.TimeoutExpired: Command '('/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python', '-m', 'examples.variants')' timed out after 240 seconds
+============================= slowest 10 durations =============================
+241.46s call     tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]
+0.23s teardown tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]
+0.04s setup    tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]
+0.03s setup    tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[evaluation.py]
+=========================== short test summary info ============================
+FAILED tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py:398: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+1 failed in 313.78s (0:05:13)
