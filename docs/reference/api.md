@@ -291,13 +291,18 @@ For Hugging Face, set `provider = "huggingface"`, `repository = "owner/repo"`, a
 `ViperCloudProvider` contract. Consumers receive provider-specific immutable refs,
 while `ViperCloud` owns publication, materialization, listing, and verification.
 
-Every cloud run writes `resolved.ref.yaml` beside its local `resolved.yaml`. The
-sidecar preserves the durable `ResolvedRunRef`; selecting the local terminal path
-therefore resolves back to GCS or Hugging Face after a restart. Use
-`execution.promote_run_to_cloud()` to rewrite and publish a verified local-only run
-graph while keeping the stage-execution count at zero. The caller must pass an explicit
-`ViperCloudDestination` to that operation; ordinary runs continue
-publishing to `.viper/store`.
+Native cloud runs durably queue original snapshots and return locally verified,
+unchanged references. `publication_path` in freeze/run/retry/benchmark results locates
+pending, complete or failed publication. `storage.workflow(root)` owns related actions;
+native children borrow it. `storage.offload` controls automatic local retention and
+defaults to false, independently of publication destinations. The shared resolver uses
+resident originals or cache before restoring missing bytes from verified backing.
+
+Older synchronous cloud publications may retain `resolved.ref.yaml` beside their
+terminal record. `execution.promote_run_to_cloud()` still rewrites and verifies older
+local run graphs and returns completed cloud references. It performs no training.
+The caller supplies an explicit `ViperCloudDestination`; new native cloud-managed
+runs use direct queued publication instead of that migration path.
 
 `execution.promote_run_to_cloud()` also accepts `policy=RunPromotionPolicy(...)`
 and `limits=TransferLimits(...)`. Both types are defined in `viper.storage`.
@@ -314,9 +319,10 @@ and default settings remain unchanged. See the
 `probe_gcs_storage()` remains the GCS launch probe. It publishes one immutable object,
 restores it, compares the digest, and writes a local receipt. See
 [Workspace and cloud paths](protocol.md#workspace-and-cloud-paths) for the object-key
-contract. After accepting a result, call
-`viper.retention.evict_cloud_backed_run_files()` with the completed `RunResult` or its
-retained `ResolvedRunRef`. VIPER resolves the configured provider itself.
+contract. Native cleanup is queued after successful whole-workflow completion and
+verified publication. The worker rechecks current retention, readers and exact ownership.
+`retention.evict_cloud_backed_run_files()` remains the explicit compatibility API for
+older cloud-terminal runs. It uses the same live deletion predicate.
 
 The [cloud guide](../how-to/cloud-storage.md) shows provider setup, ordinary
 publication, promotion, restoration, and explicitly requested local eviction.

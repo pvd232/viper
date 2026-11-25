@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .._offload import PublicationSession
 from ..references import ResolvedRunSpecRef
 from ._attempt import execute_attempt
 from .results import ConfirmationRunResult, RunResult
@@ -17,12 +18,14 @@ def run(
     timeout_seconds: float | None = None,
     retry: bool = False,
     trusted_source_repositories: frozenset[str] = frozenset(),
+    _session: PublicationSession | None = None,
 ) -> RunResult:
     """Execute one plan with the caller's explicit prior-run source trust."""
     result = execute_attempt(
         repository_root,
         run_spec_path,
         plan=plan,
+        _session=_session,
         timeout_seconds=timeout_seconds,
         retry=retry,
         purpose="run",
@@ -39,12 +42,14 @@ def retry(
     plan: ResolvedRunSpecRef | None = None,
     timeout_seconds: float | None = None,
     trusted_source_repositories: frozenset[str] = frozenset(),
+    _session: PublicationSession | None = None,
 ) -> RunResult:
     """Retry one plan with the caller's explicit prior-run source trust."""
     return run(
         repository_root,
         run_spec_path,
         plan=plan,
+        _session=_session,
         timeout_seconds=timeout_seconds,
         retry=True,
         trusted_source_repositories=trusted_source_repositories,
@@ -57,12 +62,14 @@ def execute_benchmark_confirmation(
     *,
     plan: ResolvedRunSpecRef | None = None,
     timeout_seconds: float | None = None,
+    _session: PublicationSession | None = None,
 ) -> ConfirmationRunResult:
     """Execute one independent confirmation of a successful frozen run."""
     result = execute_attempt(
         repository_root,
         run_spec_path,
         plan=plan,
+        _session=_session,
         timeout_seconds=timeout_seconds,
         purpose="benchmark_confirmation",
     )

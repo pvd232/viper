@@ -562,14 +562,13 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
     return None
 
 
-def verify_snapshot_artifact(
+def snapshot_artifact_files(
     stage: ResolvedStageRef,
     artifact: ResolvedArtifact,
     *,
-    data_role: DataRole,
     fetcher: StorageFetcher | None = None,
-) -> VerifiedArtifact:
-    """Verify every file representing one artifact in a stage snapshot."""
+) -> tuple[SnapshotFileRef, ...]:
+    """Check the artifact's file list without reading its payloads."""
     if isinstance(artifact, ResolvedSingleFileArtifact):
         references = (artifact.file,)
     elif isinstance(artifact, ResolvedBundleArtifact):
@@ -601,6 +600,19 @@ def verify_snapshot_artifact(
         references = tuple(member.file for member in artifact.members)
     else:
         raise TypeError(f"unsupported resolved artifact: {type(artifact).__name__}")
+
+    return references
+
+
+def verify_snapshot_artifact(
+    stage: ResolvedStageRef,
+    artifact: ResolvedArtifact,
+    *,
+    data_role: DataRole,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedArtifact:
+    """Verify every file representing one artifact in a stage snapshot."""
+    references = snapshot_artifact_files(stage, artifact, fetcher=fetcher)
 
     resolved_references = tuple(
         resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references

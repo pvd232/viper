@@ -21,6 +21,7 @@ from .._cloud import (
     canonical_json_bytes,
     manifest_revision,
     source_file,
+    validate_snapshot_copy,
 )
 from .._schema import SHA256, ProtocolModel
 from ..cloud import ViperCloud
@@ -33,29 +34,20 @@ from ..references import (
     StageResultSnapshotRef,
     resolve_snapshot_file_ref,
 )
-from ..serialization import document_digest, parse_yaml_bytes
+from ..serialization import document_digest, parse_yaml_bytes, replace_synchronized
 from ..storage import ViperCloudDestination
 from ._promotion_transfer import TransferSpace
-from ._publication import replace_synchronized
 from .errors import RunPromotionError
 
 
 def validate_exact_snapshot_copy(copy: SnapshotCopy) -> SnapshotCopy:
     """Require a destination to preserve a validated original inventory."""
     try:
-        original = SnapshotInventory(
-            source=copy.source,
-            source_files=tuple(sorted(copy.source_files, key=lambda file: file.path)),
-        )
+        return validate_snapshot_copy(copy)
     except ValueError as error:
-        raise RunPromotionError("original snapshot inventory differs") from error
-
-    if copy.expected.files != original.source_files:
         raise RunPromotionError(
-            "destination inventory differs from the original snapshot"
-        )
-
-    return copy
+            "cloud copy inventory differs from the original snapshot"
+        ) from error
 
 
 class _Progress(ProtocolModel):
@@ -139,11 +131,7 @@ class PublicationJournal:
         if self._lock is None:
             raise RunPromotionError("publication journal is not locked")
         replace_synchronized(self.path, canonical_json_bytes(self.progress))
-        descriptor = os.open(self.path.parent, os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+
     def publish(
         self,
         source: StageResultSnapshotRef | GitSource,
@@ -230,6 +218,7 @@ class PublicationJournal:
         self.progress.copies[key] = saved.model_copy(update={"published": published})
         self._save()
         return published, files
+
     def _recover(self, saved: SnapshotCopy) -> CloudStageResultSnapshotRef:
         """Find an earlier successful copy using its exact manifest."""
         provider = self.cloud.provider
@@ -295,6 +284,7 @@ class PublicationJournal:
                 if self.space is not None:
                     self.space.check()
                 target.unlink()
+
 
 def publish_captured_snapshot(
     journal: PublicationJournal,

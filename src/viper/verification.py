@@ -39,6 +39,7 @@ from ._verification.storage import (
 )
 from .artifacts import (
     ArtifactPointer,
+    ResolvedArtifact,
     ResolvedBundleArtifact,
     ResolvedSingleFileArtifact,
     StageArtifactRef,
@@ -74,6 +75,7 @@ from .metrics import (
     Measurement,
     is_recomputed_metric,
 )
+from .outputs import OutputSpec
 from .references import (
     FileIdentity,
     GcsFileRef,
@@ -1306,16 +1308,16 @@ def _verify_benchmark_plan_pointers(
         )
 
 
-def verify_artifact_in_run(
+def select_artifact_in_run(
     pointer: ArtifactPointer,
     *,
     verified_run: VerifiedRunResult | VerifiedProducerRun,
     policy: VerificationPolicy,
-    expected_data_role: DataRole | None,
-    materialization_path: RepoRelPath | None,
     fetcher: StorageFetcher | None,
-) -> VerifiedArtifact:
-    """Verify one pointer selection against its already verified producer run."""
+) -> tuple[
+    RunAttempt, ResolvedStageRef, ResolvedBaseSpec, OutputSpec, ResolvedArtifact
+]:
+    """Check the producer and benchmark selection without reading artifact payloads."""
     expected_run_path = f"{run_root(verified_run.plan.run)}/resolved.yaml"
     if pointer.run.stored_at.path != expected_run_path:
         raise VerificationError(
@@ -1397,6 +1399,24 @@ def verify_artifact_in_run(
         stage
         for stage in producer_attempt.resolved_stages
         if stage.stage_id == pointer.artifact.stage_id
+    )
+    return producer_attempt, producer_stage, producer_spec, declaration, artifact
+
+
+def verify_artifact_in_run(
+    pointer: ArtifactPointer,
+    *,
+    verified_run: VerifiedRunResult | VerifiedProducerRun,
+    policy: VerificationPolicy,
+    expected_data_role: DataRole | None,
+    materialization_path: RepoRelPath | None,
+    fetcher: StorageFetcher | None,
+) -> VerifiedArtifact:
+    """Verify one pointer selection against its already verified producer run."""
+    producer_attempt, producer_stage, producer_spec, declaration, artifact = (
+        select_artifact_in_run(
+            pointer, verified_run=verified_run, policy=policy, fetcher=fetcher
+        )
     )
     verified_artifact = verify_snapshot_artifact(
         producer_stage,

@@ -13,7 +13,11 @@ from viper import execution
 from viper._cloud import GcsRepository, ViperCloudProvider, manifest_revision
 from viper._schema import SHA256, RepoRelPath
 from viper._source import RunFetcher
-from viper._verification.storage import read_resolved_file, read_snapshot_file
+from viper._verification.storage import (
+    read_resolved_file,
+    read_snapshot_file,
+    verify_resolved_file_bytes,
+)
 from viper.artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
 from viper.cloud import ViperCloud
 from viper.evidence import VerificationError, VerificationPolicy
@@ -84,26 +88,44 @@ def _install_remote_bytes(
     monkeypatch: pytest.MonkeyPatch,
     payload: bytes,
     fetches: list[HuggingFaceFileRef],
+    reference: ResolvedFileRef,
 ) -> None:
-    """Route one Hugging Face reference through an inspectable fake service."""
+    """Route one complete immutable HF inventory through a fake cloud facade."""
+    identity = SnapshotFileRef(
+        path=reference.stored_at.path,
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+    )
 
     class _Remote:
+        """Implement the inventory and verified-path facade used by storage."""
+
+        provider = object()
+
         def fetch(self, location: HuggingFaceFileRef) -> bytes:
+            """Return the selected payload and record its transport request."""
             fetches.append(location)
             return payload
 
-        def fetch_to_path(self, reference: ResolvedFileRef, destination: Path) -> Path:
-            assert isinstance(reference.stored_at, HuggingFaceFileRef)
-            fetches.append(reference.stored_at)
+        def list_files(
+            self, snapshot: CloudStageResultSnapshotRef
+        ) -> tuple[SnapshotFileRef, ...]:
+            """Expose the complete identity expected by the selected reference."""
+            return (identity,)
+
+        def fetch_to_path(self, selected: ResolvedFileRef, destination: Path) -> Path:
+            """Verify bytes before satisfying the cloud path-transfer contract."""
+            assert isinstance(selected.stored_at, HuggingFaceFileRef)
+            raw = verify_resolved_file_bytes(selected, self.fetch(selected.stored_at))
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(payload)
+            destination.write_bytes(raw)
             return destination
 
     remote = _Remote()
     monkeypatch.setattr(
         ViperCloud,
         "for_reference",
-        classmethod(lambda cls, root, reference: remote),
+        classmethod(lambda cls, root, selected: remote),
     )
 
 
@@ -330,7 +352,7 @@ def test_run_fetcher_reuses_verified_bytes_across_executions(
     )
     fetches: list[HuggingFaceFileRef] = []
 
-    _install_remote_bytes(monkeypatch, payload, fetches)
+    _install_remote_bytes(monkeypatch, payload, fetches, reference)
     store = LocalArtifactStore(tmp_path)
 
     assert (
@@ -357,19 +379,49 @@ def test_run_fetcher_retains_cloud_service_across_files_and_snapshots(
     """Share manifest caches within a backend while separating buckets and prefixes."""
     created: list[tuple[str, str]] = []
 
+    payload = b"verified file"
+
     class Remote:
-        def fetch(self, location):
-            return b"verified file"
+        """Serve complete one-file revisions through a pooled cloud facade."""
 
-        def list_files(self, snapshot):
-            return (SnapshotFileRef(path="data.bin", sha256="a" * 64, bytes=13),)
+        provider = object()
 
-    def service(root, reference):
+        def fetch(self, location: GcsFileRef) -> bytes:
+            """Return the same verified bytes from the fixture's revisions."""
+            return payload
+
+        def list_files(
+            self, snapshot: GcsStageResultSnapshotRef
+        ) -> tuple[SnapshotFileRef, ...]:
+            """Keep each immutable revision's declared member list truthful."""
+            path = "other.bin" if snapshot.revision == "b" * 64 else "data.bin"
+            return (
+                SnapshotFileRef(
+                    path=path,
+                    sha256=hashlib.sha256(payload).hexdigest(),
+                    bytes=len(payload),
+                ),
+            )
+
+        def fetch_to_path(self, selected: ResolvedFileRef, destination: Path) -> Path:
+            """Return a streamed path only after exact-file verification."""
+            assert isinstance(selected.stored_at, GcsFileRef)
+            raw = verify_resolved_file_bytes(selected, self.fetch(selected.stored_at))
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            return destination
+
+    def service(
+        cls: type[ViperCloud],
+        root: Path,
+        reference: GcsFileRef | GcsStageResultSnapshotRef,
+    ) -> Remote:
+        """Count real facade construction independently of the selected revision."""
         created.append((reference.bucket, reference.prefix))
         return Remote()
 
-    monkeypatch.setattr("viper._source.ViperCloud.for_reference", service)
-    monkeypatch.setattr("viper._source.ViperCloud.for_snapshot", service)
+    monkeypatch.setattr("viper._source.ViperCloud.for_reference", classmethod(service))
+    monkeypatch.setattr("viper._source.ViperCloud.for_snapshot", classmethod(service))
     fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
     location = GcsFileRef(
         bucket="first-bucket",
@@ -381,7 +433,8 @@ def test_run_fetcher_retains_cloud_service_across_files_and_snapshots(
     )
     assert fetcher(location) == b"verified file"
     assert (
-        fetcher(location.model_copy(update={"path": "other.bin"})) == b"verified file"
+        fetcher(location.model_copy(update={"path": "other.bin", "revision": "b" * 64}))
+        == b"verified file"
     )
     snapshot = GcsStageResultSnapshotRef(
         bucket=location.bucket,
@@ -422,10 +475,7 @@ def test_run_fetcher_checks_download_once_before_caching(
     )
     fetcher = RunFetcher(tmp_path, LocalArtifactStore(tmp_path), CONSUMER_REPOSITORY)
     cache_path = (
-        tmp_path
-        / ".viper/cache/verified-objects"
-        / reference.sha256[:2]
-        / reference.sha256
+        tmp_path / ".viper/store/objects" / reference.sha256[:2] / reference.sha256
     )
     sha256 = hashlib.sha256
     hashed: list[bytes] = []
@@ -489,7 +539,8 @@ def test_run_fetcher_shares_first_content_check_between_read_and_path(
 
     def count_bytes(raw: bytes = b"", *, usedforsecurity: bool = True):
         """Count checks of byte content."""
-        checks.append("bytes")
+        if raw == payload:
+            checks.append("bytes")
         return sha256(raw, usedforsecurity=usedforsecurity)
 
     def count_file(stream: BufferedReader, digest: str):
@@ -509,7 +560,7 @@ def test_run_fetcher_shares_first_content_check_between_read_and_path(
     assert fetcher.read(reference) == payload
     assert checks == ["path" if path_first else "bytes"]
     conflicting = reference.model_copy(update={"sha256": "0" * 64})
-    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
+    with pytest.raises(VerificationError, match="snapshot inventory"):
         fetcher.path(conflicting)
 
 
@@ -525,7 +576,7 @@ def test_local_publication_reuses_hashes_and_preserves_revision(
 
     def count_bytes(raw: bytes = b"", *, usedforsecurity: bool = True):
         """Count hashes of publication payloads separately from the revision hash."""
-        if raw:
+        if raw in payloads.values():
             hashed.append(raw)
         return sha256(raw, usedforsecurity=usedforsecurity)
 
@@ -559,15 +610,12 @@ def test_run_fetcher_repairs_corrupt_verified_cache_entry(
     )
     fetches: list[HuggingFaceFileRef] = []
 
-    _install_remote_bytes(monkeypatch, payload, fetches)
+    _install_remote_bytes(monkeypatch, payload, fetches, reference)
     store = LocalArtifactStore(tmp_path)
     fetcher = RunFetcher(tmp_path, store, CONSUMER_REPOSITORY)
     fetcher.read(reference)
     cache_path = (
-        tmp_path
-        / ".viper/cache/verified-objects"
-        / reference.sha256[:2]
-        / reference.sha256
+        tmp_path / ".viper/store/objects" / reference.sha256[:2] / reference.sha256
     )
     cache_path.write_bytes(b"corrupt")
 
@@ -599,12 +647,29 @@ def test_snapshot_reads_reuse_verified_cache_across_executions(
     fetches: list[GcsFileRef] = []
 
     class Remote:
-        """Count the cloud requests made for the fixture's stage snapshot."""
+        """Count verified transfers from a complete simulated cloud snapshot."""
+
+        provider = object()
 
         def fetch(self, location: GcsFileRef) -> bytes:
             """Return the original metadata from the simulated cloud store."""
             fetches.append(location)
             return payload
+
+        def list_files(
+            self, selected: CloudStageResultSnapshotRef
+        ) -> tuple[SnapshotFileRef, ...]:
+            """Expose the complete sealed inventory needed by shared storage."""
+            assert selected == snapshot
+            return (reference,)
+
+        def fetch_to_path(self, selected: ResolvedFileRef, destination: Path) -> Path:
+            """Honor exact-file verification before returning a downloaded path."""
+            assert isinstance(selected.stored_at, GcsFileRef)
+            raw = verify_resolved_file_bytes(selected, self.fetch(selected.stored_at))
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            return destination
 
     remote = Remote()
     monkeypatch.setattr(
@@ -621,12 +686,7 @@ def test_snapshot_reads_reuse_verified_cache_across_executions(
         )
         == payload
     )
-    cache = (
-        tmp_path
-        / ".viper/cache/verified-objects"
-        / reference.sha256[:2]
-        / reference.sha256
-    )
+    cache = tmp_path / ".viper/store/objects" / reference.sha256[:2] / reference.sha256
     if corrupt_cache:
         cache.write_bytes(b"changed metadata")
     assert (
@@ -667,7 +727,9 @@ def test_local_references_survive_an_identical_store_rebuild(tmp_path: Path) -> 
     assert rebuilt.resolved_files(files)[0] == reference
     assert rebuilt.snapshot(files) == snapshot
     assert rebuilt.list_snapshot_files(snapshot) == ("model.bin",)
-    assert set(path.name for path in rebuilt.store_root.iterdir()) == {snapshot.commit}
+    assert {
+        path for path in (rebuilt.store_root / "objects").rglob("*") if path.is_file()
+    } == {rebuilt.path(reference.stored_at)}
     assert RunFetcher(tmp_path, rebuilt, "").read(reference) == b"model bytes"
 
     rebuilt.path(reference.stored_at).write_bytes(b"wrong bytes")
@@ -1029,7 +1091,13 @@ def test_cloud_fetcher_retrieves_the_selected_sealed_file(
         owner=location.owner,
         workspace=location.workspace,
         revision=location.revision,
-        files=(),
+        files=(
+            SnapshotFileRef(
+                path=location.path,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            ),
+        ),
     )
     fetcher = RunFetcher(
         tmp_path,

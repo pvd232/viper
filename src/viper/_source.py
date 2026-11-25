@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import ExitStack
 from pathlib import Path
+from threading import RLock
+from types import TracebackType
+from typing import Self
+from weakref import finalize
 
 import viper._subprocess as subprocess
 
+from ._offload import current_session
 from ._schema import RepoRelPath
+from ._storage_locks import PayloadLocks, WorkflowReaders
 from ._verification.storage import fetch_git_file_bytes, verify_resolved_file_bytes
 from ._verified_cache import VerifiedObjectCache
 from .cloud import CloudReference, ViperCloud
 from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
 from .huggingface import HuggingFaceProvider
 from .references import (
-    CloudStageResultSnapshotRef,
     GcsFileRef,
     GcsStageResultSnapshotRef,
     GitFileRef,
@@ -31,7 +37,13 @@ from .references import (
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
-from .storage import LocalArtifactStore, local_artifact_store, viper_cloud
+from .serialization import document_digest
+from .storage import (
+    LocalArtifactStore,
+    LocalStoreError,
+    local_artifact_store,
+    viper_cloud,
+)
 
 _MAX_EXTERNAL_GIT_CACHE_BYTES = 64 * 1024**2
 
@@ -81,13 +93,61 @@ class RunFetcher:
                 store.repository_root,
                 store.store,
                 cache_root=self.cache_root / "verified-objects",
+                targets=store.targets,
             )
         self._verified_paths: dict[ResolvedFileRef, Path] = {}
         self._verified_producers: dict[
             tuple[ResolvedRunRef, VerificationPolicy],
             VerifiedProducerRun,
         ] = {}
-        self._cloud_services: dict[tuple[str, str, str], ViperCloud] = {}
+        self._cloud_services: dict[tuple[str, ...], ViperCloud] = {}
+        self._reader_stack = ExitStack()
+        self._reader_holds: dict[tuple[Path, RepoRelPath], WorkflowReaders] = {}
+        self._reader_mutex = RLock()
+        self._reader_closed = False
+        self._reader_finalizer = finalize(self, self._reader_stack.close)
+
+    def close(self) -> None:
+        """Release standalone reader protection when this fetcher is no longer used."""
+        with self._reader_mutex:
+            self._reader_closed = True
+            self._reader_finalizer()
+            self._reader_holds.clear()
+
+    def __enter__(self) -> Self:
+        """Use this fetcher until the surrounding verification finishes."""
+        if self._reader_closed:
+            raise RuntimeError("run fetcher is already closed")
+        return self
+
+    def __exit__(
+        self,
+        kind: type[BaseException] | None,
+        error: BaseException | None,
+        trace: TracebackType | None,
+    ) -> None:
+        """Release this fetcher's standalone reader holds."""
+        self.close()
+
+    def _reader_hold(
+        self, reference: ResolvedFileRef, root: Path, store: RepoRelPath
+    ) -> None:
+        """Protect the file until its workflow or standalone fetcher closes."""
+        with self._reader_mutex:
+            if self._reader_closed:
+                raise RuntimeError("run fetcher is already closed")
+            session = current_session()
+            if session is not None:
+                session.hold(reference, repository_root=root, store=store)
+                return
+            key = (root, store)
+            readers = self._reader_holds.get(key)
+            if readers is None:
+                readers = self._reader_stack.enter_context(
+                    WorkflowReaders(PayloadLocks(root, store))
+                )
+                self._reader_holds[key] = readers
+            readers.hold(reference)
 
     @property
     def _verified_objects(self) -> VerifiedObjectCache:
@@ -95,19 +155,42 @@ class RunFetcher:
         return self.store.downloads
 
     def _cloud_service(self, reference: CloudReference) -> ViperCloud:
-        """Reuse a cloud service and its checked file lists during this execution."""
+        """Reuse a cloud client while honoring any explicitly attached identity."""
         if isinstance(reference, (GcsFileRef, GcsStageResultSnapshotRef)):
-            key = ("gcs", reference.bucket, reference.prefix)
+            key: tuple[str, ...] = ("gcs", reference.bucket, reference.prefix)
         elif isinstance(
             reference, (HuggingFaceFileRef, HuggingFaceStageResultSnapshotRef)
         ):
             key = ("hf", reference.repository, reference.repo_type)
         else:
             key = ("configured", "", "")
+        target = None
+        session = current_session()
+        targets = self.store.targets or (() if session is None else session.targets)
+        if targets and not isinstance(
+            reference, (ViperCloudFileRef, ViperCloudStageResultSnapshotRef)
+        ):
+            repository = ViperCloud._repository_for(reference)
+            target = next(
+                (selected for selected in targets if selected.repository == repository),
+                None,
+            )
+            if target is not None:
+                key = (*key, document_digest(target))
+        if (
+            target is None
+            and isinstance(reference, (GcsFileRef, GcsStageResultSnapshotRef))
+            and any(selected.gcp_service_account is not None for selected in targets)
+        ):
+            raise ValueError("cloud source has no matching attached target")
         remembered = self._cloud_services.get(key)
         if remembered is not None:
             return remembered
-        if isinstance(reference, (ViperCloudFileRef, ViperCloudStageResultSnapshotRef)):
+        if target is not None:
+            cloud = ViperCloud.for_target(self.repository_root, target)
+        elif isinstance(
+            reference, (ViperCloudFileRef, ViperCloudStageResultSnapshotRef)
+        ):
             cloud = viper_cloud(self.repository_root)
         elif isinstance(reference, (GcsFileRef, HuggingFaceFileRef)):
             cloud = ViperCloud.for_reference(self.repository_root, reference)
@@ -136,7 +219,30 @@ class RunFetcher:
         )
         if self.store.registry.snapshot(source) is not None:
             return self.store
-        return local_artifact_store(location=location)
+        return local_artifact_store(location=location, targets=self.store.targets)
+
+    def _hold(self, reference: ResolvedFileRef) -> None:
+        """Protect a file before returning a remembered or newly resolved path."""
+        self._reader_hold(reference, self.store.repository_root, self.store.store)
+        location = reference.stored_at
+        if (
+            isinstance(location, LocalFileRef)
+            and (
+                location.workspace != self.store.repository_root
+                or location.store != self.store.store
+            )
+            and location.workspace.is_dir()
+        ):
+            self._reader_hold(reference, location.workspace, location.store)
+
+    def _record_path(self, reference: ResolvedFileRef, path: Path) -> None:
+        """Record the checked physical file in its owning store."""
+        if current_session() is None:
+            return
+        if path.is_relative_to(self.store.repository_root):
+            self.store.record_path(reference, path)
+        elif isinstance(reference.stored_at, LocalFileRef):
+            local_artifact_store(reference.stored_at).record_path(reference, path)
 
     def __call__(self, location: StorageModel) -> bytes:
         """Read a file from the location recorded in its reference."""
@@ -162,30 +268,41 @@ class RunFetcher:
                 "show",
                 f"{location.commit}:{location.path}",
             )
-        if isinstance(
-            location,
-            (GcsFileRef, HuggingFaceFileRef, ViperCloudFileRef),
-        ):
-            return self.store.fetch(
-                location, cloud=lambda: self._cloud_service(location)
-            )
-
-        if isinstance(location, LocalFileRef):
-            return self._local_store(location).fetch(location)
-        return self.store.fetch(location)
+        store = (
+            self._local_store(location)
+            if isinstance(location, LocalFileRef)
+            else self.store
+        )
+        cloud = (
+            None
+            if isinstance(location, LocalFileRef)
+            else lambda: self._cloud_service(location)
+        )
+        return self.read(store.reference(location, cloud=cloud))
 
     def read(self, reference: ResolvedFileRef) -> bytes:
         """Read the file and check its byte count and SHA-256 on first use."""
+        self._hold(reference)
         remembered = self._verified_paths.get(reference)
         if remembered is not None:
-            return remembered.read_bytes()
+            raw = remembered.read_bytes()
+            self._record_path(reference, remembered)
+            return raw
         if isinstance(reference.stored_at, GitFileRef):
             cached = self.store.cached_read(reference)
             if cached is not None:
                 raw, path = cached
             else:
-                raw = verify_resolved_file_bytes(reference, self(reference.stored_at))
-                path = self.store.cache_verified_bytes(reference, raw)
+                try:
+                    original = self(reference.stored_at)
+                except VerificationError as source_error:
+                    try:
+                        raw, path = self.store.read_resolved(reference)
+                    except LocalStoreError as missing:
+                        raise source_error from missing
+                else:
+                    raw = verify_resolved_file_bytes(reference, original)
+                    path = self.store.cache_verified_bytes(reference, raw)
         else:
             store = (
                 self._local_store(reference.stored_at)
@@ -198,25 +315,27 @@ class RunFetcher:
                 else lambda: self._cloud_service(reference.stored_at)
             )
             raw, path = store.read_resolved(reference, cloud=cloud)
+        self._record_path(reference, path)
         self._verified_paths[reference] = path
         return raw
 
     def path(self, reference: ResolvedFileRef) -> Path:
         """Return a local path after checking the file on first use."""
+        self._hold(reference)
         remembered = self._verified_paths.get(reference)
         if remembered is not None:
+            self._record_path(reference, remembered)
             return remembered
-
         if isinstance(reference.stored_at, GitFileRef):
             self.read(reference)
             return self._verified_paths[reference]
-
         if isinstance(reference.stored_at, LocalFileRef):
             path = self._local_store(reference.stored_at).resolve(reference)
         else:
             path = self.store.resolve(
                 reference, cloud=lambda: self._cloud_service(reference.stored_at)
             )
+        self._record_path(reference, path)
         self._verified_paths[reference] = path
         return path
 
@@ -226,11 +345,13 @@ class RunFetcher:
         The caller must pass the published file or its unchanged upload source.
         Its bytes must still match the reference.
         """
+        self._hold(reference)
         if path.stat().st_size != reference.bytes:
             raise VerificationError(
                 f"byte-count mismatch: expected {reference.bytes}, "
                 f"received {path.stat().st_size}"
             )
+        self._record_path(reference, path)
         self._verified_paths[reference] = path
 
     def read_verified_producer(
@@ -239,6 +360,7 @@ class RunFetcher:
         policy: VerificationPolicy,
     ) -> VerifiedProducerRun | None:
         """Return a producer run already verified during this execution."""
+        self._hold(reference)
         return self._verified_producers.get((reference, policy))
 
     def remember_verified_producer(
@@ -248,12 +370,15 @@ class RunFetcher:
         producer: VerifiedProducerRun,
     ) -> None:
         """Remember a verified producer run for later reads in this execution."""
+        self._hold(reference)
         self._verified_producers[(reference, policy)] = producer
 
     def snapshot_files(
-        self, snapshot: CloudStageResultSnapshotRef
+        self, snapshot: StageResultSnapshotRef
     ) -> tuple[SnapshotFileRef, ...]:
-        """List every file in a cloud snapshot with its byte count and SHA-256."""
+        """List every snapshot file with its byte count and SHA-256."""
+        if isinstance(snapshot, LocalStageResultSnapshotRef):
+            return self._local_store(snapshot).snapshot_files(snapshot)
         return self.store.snapshot_files(
             snapshot, cloud=lambda: self._cloud_service(snapshot)
         )

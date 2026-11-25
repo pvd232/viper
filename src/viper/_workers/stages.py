@@ -15,6 +15,7 @@ from typing import cast
 import viper._subprocess as subprocess
 
 from .._config.validation import config_type_path, instantiate_config
+from .._storage_locks import PayloadLocks, WorkflowReaders
 from ..config import MetricConfig
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
@@ -278,7 +279,10 @@ def main(argv: list[str] | None = None) -> int:
     file_access = None
     if not isinstance(stage, ParameterizedSpec):
         raise ValueError("stage worker requires a parameterized stage")
+    readers = WorkflowReaders(PayloadLocks(root, worker_context.reader_store))
     try:
+        for reference in worker_context.reader_files:
+            readers.hold(reference)
         planned_stage, expected_inputs = _planned_stage_context(
             root,
             run,
@@ -352,7 +356,19 @@ def main(argv: list[str] | None = None) -> int:
             if worker_context.physical_inputs is not None
             else _workspace_paths(root, binding.inputs)
         )
-        output_paths = _workspace_paths(root, binding.outputs)
+        output_locations = worker_context.physical_outputs
+        if output_locations is None:
+            output_locations = binding.outputs
+        else:
+            expected_physical_outputs = {}
+            for name, output in stage.outputs.items():
+                expected_physical_outputs[name] = (
+                    f".viper/workspaces/{run.run_id}/attempt-{binding.attempt_id}/"
+                    f"stages/{binding.stage_id}/{name}/{output.relative_path}"
+                )
+            if output_locations != expected_physical_outputs:
+                raise ValueError("startup.plan: physical output paths differ")
+        output_paths = _workspace_paths(root, output_locations)
         for output_path in output_paths.values():
             output_path.parent.mkdir(parents=True, exist_ok=True)
         context = StageContext(
@@ -395,6 +411,8 @@ def main(argv: list[str] | None = None) -> int:
                     measurement_paths,
                     _frozen_python_sources(root, run.source.commit),
                     (runtime_temp_path,),
+                    logical_inputs=binding.inputs,
+                    logical_outputs=binding.outputs,
                 )
                 try:
                     with observer:
@@ -426,30 +444,33 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    completed_at = datetime.now(UTC)
-    invocation = StageInvocationReceipt(
-        implementation=stage.implementation,
-        context=binding,
-        context_digest=semantic_document_digest(binding),
-        started_at=started_at,
-        completed_at=completed_at,
-        outcome="succeeded",
-        file_access=file_access,
-    )
-    assert initialization is not None
-    assert startup is not None
-    assert execution_context is not None
-    assert python_env is not None
-    _write_result(
-        worker_context.result_path,
-        StageWorkerResult(
-            execution_context=execution_context,
-            python_env=python_env,
-            startup=startup,
-            invocation=invocation,
-        ),
-    )
-    return 0
+    else:
+        completed_at = datetime.now(UTC)
+        invocation = StageInvocationReceipt(
+            implementation=stage.implementation,
+            context=binding,
+            context_digest=semantic_document_digest(binding),
+            started_at=started_at,
+            completed_at=completed_at,
+            outcome="succeeded",
+            file_access=file_access,
+        )
+        assert initialization is not None
+        assert startup is not None
+        assert execution_context is not None
+        assert python_env is not None
+        _write_result(
+            worker_context.result_path,
+            StageWorkerResult(
+                execution_context=execution_context,
+                python_env=python_env,
+                startup=startup,
+                invocation=invocation,
+            ),
+        )
+        return 0
+    finally:
+        readers.close()
 
 
 if __name__ == "__main__":

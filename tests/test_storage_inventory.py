@@ -1,0 +1,74 @@
+"""Observe immutable local inventory independently of resident payload files."""
+
+from pathlib import Path
+
+import pytest
+
+from viper.references import LocalStageResultSnapshotRef
+from viper.storage import LocalArtifactStore, LocalStoreError, content_revision
+
+
+def test_new_snapshot_listing_survives_missing_payload_and_restart(
+    tmp_path: Path,
+) -> None:
+    """Removing a resident member cannot shrink the declared snapshot inventory."""
+    store = LocalArtifactStore(tmp_path)
+    files = {"bundle/a.bin": b"first", "bundle/b.bin": b"second"}
+    source = store.snapshot(files)
+    reference = store.resolved_files(files)[0]
+    store.path(reference.stored_at).unlink()
+
+    assert LocalArtifactStore(tmp_path).list_snapshot_files(source) == tuple(files)
+
+
+def test_legacy_adoption_rejects_incomplete_original_membership(
+    tmp_path: Path,
+) -> None:
+    """A partial legacy directory cannot be admitted as a complete snapshot."""
+    files = {"bundle/a.bin": b"first", "bundle/b.bin": b"second"}
+    source = LocalStageResultSnapshotRef(
+        workspace=tmp_path, commit=content_revision(files)
+    )
+    present = tmp_path / ".viper/store" / source.commit / "bundle/a.bin"
+    present.parent.mkdir(parents=True)
+    present.write_bytes(files["bundle/a.bin"])
+    store = LocalArtifactStore(tmp_path)
+
+    with pytest.raises(LocalStoreError, match="inventory differs"):
+        store.list_snapshot_files(source)
+    assert store.registry.snapshot(source) is None
+
+
+def test_complete_legacy_inventory_is_persisted_before_eviction(tmp_path: Path) -> None:
+    """Adopt a valid old snapshot once and preserve its full listing afterward."""
+    files = {"bundle/a.bin": b"first", "bundle/b.bin": b"second"}
+    source = LocalStageResultSnapshotRef(
+        workspace=tmp_path, commit=content_revision(files)
+    )
+    directory = tmp_path / ".viper/store" / source.commit
+    for name, raw in files.items():
+        path = directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    store = LocalArtifactStore(tmp_path)
+
+    assert store.list_snapshot_files(source) == tuple(files)
+    (directory / "bundle/a.bin").unlink()
+    assert LocalArtifactStore(tmp_path).list_snapshot_files(source) == tuple(files)
+
+
+def test_legacy_adoption_uses_canonical_posix_member_order(tmp_path: Path) -> None:
+    """Directory traversal order cannot change an otherwise valid snapshot seal."""
+    files = {"checkpoint.json": b"{}", "checkpoint/weights.pt": b"weights"}
+    source = LocalStageResultSnapshotRef(
+        workspace=tmp_path, commit=content_revision(files)
+    )
+    directory = tmp_path / ".viper/store" / source.commit
+    for name, raw in files.items():
+        path = directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+
+    assert LocalArtifactStore(tmp_path).list_snapshot_files(source) == tuple(
+        sorted(files)
+    )

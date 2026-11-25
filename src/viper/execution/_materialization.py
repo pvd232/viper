@@ -7,16 +7,24 @@ import os
 import shutil
 import tempfile
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pydantic import TypeAdapter
+
+from .._offload import current_session
+from .._schema import RepoRelPath
 from .._source import RunFetcher
+from .._verification.storage import snapshot_artifact_files
 from ..artifacts import (
     ArtifactPointer,
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
+    StageArtifactRef,
 )
 from ..evidence import (
+    VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
     VerifiedProducerRun,
@@ -42,21 +50,26 @@ from ..inputs import (
 )
 from ..references import (
     ResolvedArtifactPointerRef,
+    ResolvedBenchmarkResultRef,
     ResolvedFileRef,
     ResolvedRunRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    StageResultSnapshotRef,
+    resolve_snapshot_file_ref,
 )
+from ..repository import read_source, resolve_root
 from ..reuse import ReuseFileIdentity, ReuseInputIdentity, artifact_input_identity
-from ..serialization import parse_yaml_bytes
+from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
     BaseSpec,
     DownloadSpec,
     InternalSpec,
     ResolvedBaseSpec,
 )
-from ..storage import snapshot_file
+from ..storage import LocalArtifactStore, snapshot_file, workflow
 from ..verification import (
+    select_artifact_in_run,
     verify_artifact_in_run,
     verify_pointer_producer,
     verify_snapshot_artifact,
@@ -104,25 +117,77 @@ def _write_materialized_file(
         os.chmod(target, mode & ~0o222)
 
 
-def _materialize_verified_artifact(
+def materialize_verified_artifact(
     root: Path,
     target_path: str,
     artifact: VerifiedArtifact,
-) -> None:
-    """Write every verified artifact file at its selected input path."""
+) -> Path:
+    """Use an existing local artifact or assemble its required bundle layout."""
+    store = LocalArtifactStore(root)
+    session = current_session()
+    if artifact.references:
+        local_files = []
+        for file, reference in zip(artifact.files, artifact.references, strict=True):
+            if file.local_path is None:
+                local_files.append(file)
+            else:
+                local = store.adopt_verified_reference(reference, file.local_path)
+                local_files.append(replace(file, local_path=local))
+        artifact = replace(artifact, files=tuple(local_files))
+
+    direct: Path | None = None
+    if artifact.artifact.kind == "file":
+        direct = artifact.files[0].local_path
+    elif artifact.files and all(file.local_path is not None for file in artifact.files):
+        first = artifact.files[0].local_path
+        assert first is not None
+        relative = Path(artifact.artifact.members[0].relative_path)
+        candidate = first.parents[len(relative.parts) - 1]
+        if all(
+            file.local_path == candidate / member.relative_path
+            for member, file in zip(
+                artifact.artifact.members, artifact.files, strict=True
+            )
+        ):
+            direct = candidate
+    if direct is not None and direct.is_relative_to(root):
+        if session is not None:
+            for file, reference in zip(
+                artifact.files, artifact.references, strict=True
+            ):
+                assert file.local_path is not None
+                session.hold(reference, store=store.store)
+                session.record_path(reference, file.local_path, store=store.store)
+        return direct
+
     if artifact.artifact.kind == "file":
         _write_materialized_file(root, target_path, artifact.files[0])
-        return
-    for member, verified_file in zip(
-        artifact.artifact.members,
-        artifact.files,
-        strict=True,
-    ):
-        _write_materialized_file(
-            root,
-            f"{target_path}/{member.relative_path}",
-            verified_file,
+        paths = (root / target_path,)
+    else:
+        paths = tuple(
+            root / target_path / member.relative_path
+            for member in artifact.artifact.members
         )
+        for path, file in zip(paths, artifact.files, strict=True):
+            _write_materialized_file(root, path.relative_to(root).as_posix(), file)
+    if session is not None:
+        for path, reference in zip(paths, artifact.references, strict=True):
+            source = TypeAdapter(StageResultSnapshotRef).validate_python(
+                reference.stored_at.model_dump(exclude={"path"})
+            )
+            store.registry.record_materialization(
+                source,
+                SnapshotFileRef(
+                    path=reference.stored_at.path,
+                    sha256=reference.sha256,
+                    bytes=reference.bytes,
+                ),
+                path,
+                custody="cache",
+            )
+            session.hold(reference, store=store.store)
+            session.record_path(reference, path, store=store.store)
+    return root / target_path
 
 
 def _http_helper(
@@ -195,8 +260,9 @@ def resolve_inputs(
                 fetcher=fetcher,
             )
             materialized_path = output_spec.path
-            _materialize_verified_artifact(root, materialized_path, verified)
-            paths[name] = root / materialized_path
+            paths[name] = materialize_verified_artifact(
+                root, materialized_path, verified
+            )
             identities.append(
                 artifact_input_identity(
                     name,
@@ -267,9 +333,10 @@ def resolve_inputs(
                 declared_path=input_ref.path,
                 materialization=input_ref.materialization,
             )
-            _materialize_verified_artifact(root, materialized_path, verified)
+            paths[name] = materialize_verified_artifact(
+                root, materialized_path, verified
+            )
             resolved[name] = ResolvedStoredInputRef(pointer=resolved_pointer)
-            paths[name] = root / materialized_path
             stored[name] = verified.references
             identities.append(
                 artifact_input_identity(
@@ -351,6 +418,7 @@ def retrieve_download_inputs(
             destination=declaration.path,
             expected_sha256=request.expected_body_sha256,
             expected_bytes=request.expected_body_bytes,
+            physical_destination=result.body,
         )
         retrievals[input_name] = ResolvedHttpRetrieval(
             input_name=input_name,
@@ -365,7 +433,7 @@ def retrieve_download_inputs(
             relative_path=declaration.relative_path,
             file=body,
         )
-        paths[input_name] = root / body.path
+        paths[input_name] = result.body
     return retrievals, artifacts, paths
 
 
@@ -432,3 +500,112 @@ def capture_external_input(
         ),
         target,
     )
+
+
+def _artifact_producer(
+    root: Path,
+    reference: ResolvedRunRef,
+    selection: StageArtifactRef,
+    benchmark_result: ResolvedBenchmarkResultRef | None,
+    trusted_source_repositories: frozenset[str],
+) -> tuple[RunFetcher, VerificationPolicy, ArtifactPointer, VerifiedProducerRun]:
+    """Verify the shared producer records and preserve the caller's source trust."""
+    repository = str(read_source(root).repository)
+    fetcher = RunFetcher(root, LocalArtifactStore(root), repository)
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({repository})
+        | trusted_source_repositories
+    )
+    pointer = ArtifactPointer(
+        run=reference, artifact=selection, benchmark_result=benchmark_result
+    )
+    producer = verify_pointer_producer(pointer, policy=policy, fetcher=fetcher)
+    return fetcher, policy, pointer, producer
+
+
+def artifact_reference(
+    repository_root: Path | None,
+    reference: ResolvedRunRef,
+    selection: StageArtifactRef,
+    *,
+    member: RepoRelPath | None = None,
+    benchmark_result: ResolvedBenchmarkResultRef | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
+) -> ResolvedFileRef:
+    """Return an expected file reference from verified producer records.
+
+    The resolver checks payload availability and bytes when the file is read.
+    Bundle selections require an exact relative member path.
+    """
+    owner = current_session()
+    root = (
+        owner.root
+        if repository_root is None and owner is not None
+        else resolve_root()
+        if repository_root is None
+        else repository_root.resolve(strict=True)
+    )
+    with workflow(root):
+        fetcher, policy, pointer, producer = _artifact_producer(
+            root, reference, selection, benchmark_result, trusted_source_repositories
+        )
+        _, stage, _, _, artifact = select_artifact_in_run(
+            pointer, verified_run=producer, policy=policy, fetcher=fetcher
+        )
+        files = snapshot_artifact_files(stage, artifact, fetcher=fetcher)
+        inventory = fetcher.snapshot_files(stage.snapshot)
+        if not set(files).issubset(inventory):
+            raise VerificationError("artifact files differ from the snapshot inventory")
+        if artifact.kind == "file":
+            return resolve_snapshot_file_ref(stage.snapshot, artifact.file)
+        if member is None:
+            raise ValueError("select an exact artifact bundle member")
+        for selected in artifact.members:
+            if selected.relative_path == member:
+                return resolve_snapshot_file_ref(stage.snapshot, selected.file)
+        raise ValueError("artifact bundle does not contain the selected member")
+
+
+def artifact_path(
+    repository_root: Path | None,
+    reference: ResolvedRunRef,
+    selection: StageArtifactRef,
+    *,
+    member: RepoRelPath | None = None,
+    benchmark_result: ResolvedBenchmarkResultRef | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
+) -> Path:
+    """Return the verified local path of a selected artifact or bundle member.
+
+    A single-file artifact always selects its declared file. For a bundle,
+    member selects an exact relative path; omit it to obtain the whole bundle.
+    """
+    owner = current_session()
+    if owner is None:
+        raise ValueError("artifact_path requires an active storage.workflow")
+    root = (
+        owner.root if repository_root is None else repository_root.resolve(strict=True)
+    )
+    if owner.root != root:
+        raise ValueError("artifact path belongs to another workflow root")
+    fetcher, policy, pointer, producer = _artifact_producer(
+        root, reference, selection, benchmark_result, trusted_source_repositories
+    )
+    store = fetcher.store
+    verified = verify_artifact_in_run(
+        pointer,
+        verified_run=producer,
+        policy=policy,
+        expected_data_role=None,
+        materialization_path=None,
+        fetcher=fetcher,
+    )
+    if verified.artifact.kind == "bundle" and member is not None:
+        for selected, file in zip(
+            verified.artifact.members, verified.references, strict=True
+        ):
+            if selected.relative_path == member:
+                return store.adopt_verified_reference(file, fetcher.path(file))
+        raise ValueError("artifact bundle does not contain the selected member")
+    target = f"{store.store}/bundles/{document_digest(pointer)}"
+    return materialize_verified_artifact(root, target, verified)

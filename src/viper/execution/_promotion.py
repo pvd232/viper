@@ -9,20 +9,16 @@ import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, Field, SerializeAsAny, TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
-from .._cloud import GcsRepository, PublicationSource, manifest_revision
-from .._schema import ProtocolModel
+from .._cloud import PublicationSource, manifest_revision
+from .._graph import RunGraphReader
 from .._source import RunFetcher
-from ..artifacts import ArtifactPointer
-from ..benchmark import BenchmarkResult, BenchmarkSpec
 from ..cloud import ViperCloud
 from ..evidence import VerificationPolicy
-from ..experiments import ExperimentSpec, VariantSpec
 from ..inputs import DownloadSourceClosureReceipt
-from ..metrics import MetricVerificationReceipt
 from ..references import (
     ArtifactPointerRef,
     CloudStageResultSnapshotRef,
@@ -35,21 +31,16 @@ from ..references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
-    ResolvedBenchmarkResultRef,
-    ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
     ResolvedRunRef,
-    ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
     StageResultSnapshotRef,
     StorageModel,
-    ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
-    resolve_snapshot_file_ref,
 )
 from ..reuse import ResolvedStageReuseRef, StageReuseReceipt, stage_spec_sha256
-from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
+from ..runs import ResolvedRun, RunSpec
 from ..serialization import parse_yaml_bytes, serialize_document
 from ..stages import InternalSpec, ResolvedSpec, Spec
 from ..storage import (
@@ -71,27 +62,7 @@ _SourceSnapshotRef = StageResultSnapshotRef | GitSource
 _SNAPSHOT_ADAPTER = TypeAdapter(_SourceSnapshotRef)
 
 
-class PromotionInventory(ProtocolModel):
-    """Name the runs and files that an additional publication must contain."""
-
-    schema_version: Literal[1] = Field(
-        default=1, description="Inventory format version."
-    )
-    roots: tuple[ResolvedRunRef, ...] = Field(
-        min_length=1, description="Runs to publish."
-    )
-    supporting_roots: tuple[
-        SerializeAsAny[ResolvedStageRef | ResolvedFileRef | ResolvedRunRef], ...
-    ] = Field(
-        default=(),
-        description="Additional saved runs, stages, and source files.",
-    )
-    required_files: dict[str, ResolvedFileRef] = Field(
-        description="Expected files, keyed by their role in the application."
-    )
-
-
-class RunGraphPromoter:
+class RunGraphPromoter(RunGraphReader):
     """Rewrite one verified local reference DAG from its leaves upward."""
 
     def __init__(
@@ -104,358 +75,23 @@ class RunGraphPromoter:
         journal: PublicationJournal | None = None,
         space: TransferSpace | None = None,
     ) -> None:
-        """Use the supplied fetcher for source documents."""
-        self.root = root
+        """Use the shared graph reader and the supplied publication destination."""
+        super().__init__(root, fetcher=fetcher, error_type=RunPromotionError)
         self.cloud = cloud
         self.destination = destination
-        self.fetcher = fetcher
         self.journal = journal
         self.space = space
+        self._read_budget = space
         if space is not None:
             if journal is None:
                 raise RunPromotionError("bounded copies require a publication journal")
             journal.space = space
             space.configure_cloud(cloud)
         self.files: dict[StorageModel, ResolvedFileRef] = {}
-        self.snapshots: dict[
-            _SourceSnapshotRef,
-            CloudStageResultSnapshotRef,
-        ] = {}
-        self.snapshot_files: dict[
-            _SourceSnapshotRef,
-            tuple[SnapshotFileRef, ...],
-        ] = {}
-        self.documents: dict[
-            _SourceSnapshotRef,
-            dict[str, BaseModel],
-        ] = {}
+        self.snapshots: dict[_SourceSnapshotRef, CloudStageResultSnapshotRef] = {}
+        self.snapshot_files: dict[_SourceSnapshotRef, tuple[SnapshotFileRef, ...]] = {}
         self.promoting: set[_SourceSnapshotRef] = set()
         self.receipt_hashes: dict[str, str] = {}
-        self.inventory: PromotionInventory | None = None
-        self.source_files: dict[StorageModel, tuple[int, str | None]] = {}
-        self.source_members: dict[_SourceSnapshotRef, tuple[StorageModel, ...]] = {}
-        self.dependencies: dict[_SourceSnapshotRef, set[_SourceSnapshotRef]] = {}
-        self._reading: list[StorageModel] = []
-
-    @staticmethod
-    def snapshot_for(location: StorageModel) -> _SourceSnapshotRef:
-        """Return the snapshot containing a file."""
-        return _SNAPSHOT_ADAPTER.validate_python(location.model_dump(exclude={"path"}))
-
-    @staticmethod
-    def file_in_snapshot(
-        snapshot: _SourceSnapshotRef, file: SnapshotFileRef
-    ) -> ResolvedFileRef:
-        """Combine a file's size and hash with its snapshot address."""
-        if isinstance(snapshot, GitSource):
-            location = GitFileRef(**snapshot.model_dump(), path=file.path)
-            return ResolvedFileRef(
-                stored_at=location, sha256=file.sha256, bytes=file.bytes
-            )
-        return resolve_snapshot_file_ref(snapshot, file)
-
-    def _record_file(
-        self, location: StorageModel, size: int, digest: str | None
-    ) -> None:
-        """Record a file once and reject conflicting sizes or hashes."""
-        previous = self.source_files.get(location)
-        if previous is not None:
-            if previous[0] != size or (
-                previous[1] and digest and previous[1] != digest
-            ):
-                raise RunPromotionError("conflicting source identity")
-            digest = digest or previous[1]
-        self.source_files[location] = (size, digest)
-
-    def discover_snapshot(self, snapshot: _SourceSnapshotRef) -> None:
-        """List a snapshot's files before reading any artifact bodies."""
-        if snapshot in self.source_members or isinstance(snapshot, GitSource):
-            return
-        if isinstance(snapshot, LocalStageResultSnapshotRef):
-            store = local_artifact_store(snapshot)
-            locations = []
-            for path in store.list_snapshot_files(snapshot):
-                location = LocalFileRef(
-                    **snapshot.model_dump(exclude={"kind"}), path=path
-                )
-                self._record_file(location, store.path(location).stat().st_size, None)
-                locations.append(location)
-        else:
-            locations = []
-            for member in self.fetcher.snapshot_files(snapshot):
-                reference = resolve_snapshot_file_ref(snapshot, member)
-                self._record_file(reference.stored_at, member.bytes, member.sha256)
-                locations.append(reference.stored_at)
-        self.source_members[snapshot] = tuple(locations)
-
-    def discover_inventory(
-        self, inventory: PromotionInventory
-    ) -> tuple[_SourceSnapshotRef, ...]:
-        """List the required files and return snapshots in dependency order."""
-        self.inventory = inventory
-        for reference in inventory.roots:
-            self.discover_reference(reference, ResolvedRun.model_validate)
-        for reference in inventory.supporting_roots:
-            self.discover_typed(reference)
-        for role, reference in inventory.required_files.items():
-            actual = self.source_files.get(reference.stored_at)
-            if actual is None:
-                raise RunPromotionError(f"inventory item is unreachable: {role}")
-            self._record_file(reference.stored_at, reference.bytes, reference.sha256)
-        ordered: list[_SourceSnapshotRef] = []
-        active: set[_SourceSnapshotRef] = set()
-        complete: set[_SourceSnapshotRef] = set()
-
-        def visit(snapshot: _SourceSnapshotRef) -> None:
-            """Place each dependency before the snapshot that uses it."""
-            if snapshot in active:
-                raise RunPromotionError("storage cycle")
-            if snapshot in complete:
-                return
-            active.add(snapshot)
-            for child in sorted(
-                self.dependencies.get(snapshot, ()), key=lambda x: x.model_dump_json()
-            ):
-                visit(child)
-            active.remove(snapshot)
-            complete.add(snapshot)
-            ordered.append(snapshot)
-
-        for snapshot in self.source_members:
-            visit(snapshot)
-        if self.space is not None:
-            self.space.prepare_reader(self.fetcher)
-            for locations in self.source_members.values():
-                sizes = [self.source_files[file][0] for file in locations]
-                self.space.check(sum(sizes), max(sizes, default=0))
-        return tuple(ordered)
-
-    def read_document(self, reference: ResolvedFileRef) -> bytes:
-        """Read a run document through the supplied fetcher."""
-        try:
-            if self.space is not None:
-                self.space.check(reference.bytes, reference.bytes)
-            return self.fetcher.read(reference)
-        except Exception as err:
-            raise RunPromotionError("source run graph is unavailable") from err
-
-    @staticmethod
-    def source_identity(path: str, source: PublicationSource) -> SnapshotFileRef:
-        """Identify one publication source without retaining its payload."""
-        if isinstance(source, bytes):
-            return SnapshotFileRef(
-                path=path,
-                sha256=hashlib.sha256(source).hexdigest(),
-                bytes=len(source),
-            )
-        digest = hashlib.sha256()
-        size = 0
-        with source.open("rb") as stream:
-            while chunk := stream.read(1024 * 1024):
-                digest.update(chunk)
-                size += len(chunk)
-        return SnapshotFileRef(path=path, sha256=digest.hexdigest(), bytes=size)
-
-    @staticmethod
-    def document_decoder(reference: ResolvedFileRef) -> _DocumentDecoder | None:
-        """Select a document schema from the reference's protocol role."""
-        if isinstance(reference, ResolvedRunRef):
-            return ResolvedRun.model_validate
-        if isinstance(reference, ResolvedRunSpecRef):
-            return RunSpec.model_validate
-        if isinstance(reference, ResolvedAttemptRef):
-            return RunAttempt.model_validate
-        if isinstance(reference, ResolvedArtifactPointerRef):
-            return ArtifactPointer.model_validate
-        if isinstance(reference, ResolvedStageReuseRef):
-            return StageReuseReceipt.model_validate
-        if isinstance(reference, ResolvedBenchmarkSpecRef):
-            return BenchmarkSpec.model_validate
-        if isinstance(reference, ResolvedBenchmarkResultRef):
-            return BenchmarkResult.model_validate
-        return None
-
-    def discover_reference(
-        self,
-        reference: ResolvedFileRef,
-        decoder: _DocumentDecoder | None = None,
-    ) -> None:
-        """Record a file and follow the links in its saved document."""
-        location = reference.stored_at
-        if self.inventory is None and not isinstance(location, LocalFileRef):
-            return
-        if isinstance(location, ViperCloudFileRef):
-            if not isinstance(
-                load_storage_settings(self.root).repository, GcsRepository
-            ):
-                raise RunPromotionError("legacy source binding is required")
-        self._record_file(location, reference.bytes, reference.sha256)
-        snapshot = self.snapshot_for(location)
-        if self.inventory is not None:
-            self.discover_snapshot(snapshot)
-            if self._reading:
-                parent = self.snapshot_for(self._reading[-1])
-                if parent != snapshot:
-                    self.dependencies.setdefault(parent, set()).add(snapshot)
-        selected_decoder = decoder or self.document_decoder(reference)
-        if selected_decoder is None:
-            return
-        if location in self._reading:
-            raise RunPromotionError("storage cycle")
-        documents = self.documents.setdefault(snapshot, {})
-        if location.path in documents:
-            return
-        self._reading.append(location)
-        try:
-            document = selected_decoder(parse_yaml_bytes(self.read_document(reference)))
-            documents[location.path] = document
-            if isinstance(document, RunSpec):
-                self.discover_plan_members(snapshot, document)
-            if isinstance(document, RunAttempt):
-                for metric in document.metric_verification_files:
-                    self.discover_reference(
-                        metric, MetricVerificationReceipt.model_validate
-                    )
-            if isinstance(document, BenchmarkResult):
-                for metric in document.metrics:
-                    self.discover_reference(
-                        metric.candidate_verification,
-                        MetricVerificationReceipt.model_validate,
-                    )
-                    self.discover_reference(
-                        metric.confirmation_verification,
-                        MetricVerificationReceipt.model_validate,
-                    )
-            if isinstance(document, StageReuseReceipt):
-                for metric in document.metrics:
-                    if metric.verification is not None:
-                        self.discover_reference(
-                            metric.verification,
-                            MetricVerificationReceipt.model_validate,
-                        )
-            self.discover_typed(document)
-        except RunPromotionError:
-            raise
-        except Exception as error:
-            raise RunPromotionError("source run graph is unavailable") from error
-        finally:
-            self._reading.pop()
-
-    def discover_snapshot_document(
-        self,
-        snapshot: _SourceSnapshotRef,
-        identity: SnapshotFileRef,
-        decoder: _DocumentDecoder,
-    ) -> None:
-        """Follow a document using its snapshot, path, size, and hash."""
-        self.discover_reference(self.file_in_snapshot(snapshot, identity), decoder)
-
-    def discover_plan_document(
-        self,
-        snapshot: _SourceSnapshotRef,
-        path: str,
-        decoder: _DocumentDecoder,
-    ) -> None:
-        """Read a saved plan file and follow its references."""
-        if isinstance(snapshot, (LocalStageResultSnapshotRef, GitSource)):
-            placeholder = SnapshotFileRef(path=path, bytes=0, sha256="0" * 64)
-            location = self.file_in_snapshot(snapshot, placeholder).stored_at
-            raw = self.fetcher(location)
-            identity = SnapshotFileRef(
-                path=path, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest()
-            )
-        else:
-            identity = next(
-                (
-                    file
-                    for file in self.fetcher.snapshot_files(snapshot)
-                    if file.path == path
-                ),
-                None,
-            )
-            if identity is None:
-                raise RunPromotionError("plan document is missing from snapshot")
-        self.discover_snapshot_document(snapshot, identity, decoder)
-
-    def discover_plan_members(
-        self,
-        snapshot: _SourceSnapshotRef,
-        run: RunSpec,
-    ) -> None:
-        """Register every typed document selected by one frozen run plan."""
-        if self.inventory is not None:
-            self.discover_plan_document(
-                snapshot,
-                f"experiments/{run.experiment_id}/spec.yaml",
-                ExperimentSpec.model_validate,
-            )
-            self.discover_plan_document(
-                snapshot,
-                f"experiments/{run.experiment_id}/variants/{run.variant_id}.spec.yaml",
-                VariantSpec.model_validate,
-            )
-        for stage in run.stages:
-            self.discover_snapshot_document(
-                snapshot,
-                SnapshotFileRef(
-                    path=stage.spec,
-                    sha256=stage.sha256,
-                    bytes=stage.bytes,
-                ),
-                _SPEC_ADAPTER.validate_python,
-            )
-        if run.benchmark_id is not None:
-            self.discover_plan_document(
-                snapshot,
-                f"benchmarks/{run.benchmark_id}.spec.yaml",
-                BenchmarkSpec.model_validate,
-            )
-
-    def discover_stage_reference(self, reference: ResolvedStageRef) -> None:
-        """Register the resolved stage document selected by a stage reference."""
-        if self.inventory is not None or isinstance(
-            reference.snapshot, LocalStageResultSnapshotRef
-        ):
-            self.discover_snapshot_document(
-                reference.snapshot,
-                reference.resolved_spec,
-                _RESOLVED_SPEC_ADAPTER.validate_python,
-            )
-
-    def discover_typed(self, value: Any) -> None:
-        """Walk typed objects and register every referenced protocol document."""
-        if isinstance(value, ArtifactPointerRef) and self.inventory is not None:
-            raw = self.fetcher(value)
-            reference = ResolvedArtifactPointerRef(
-                stored_at=value, sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw)
-            )
-            self.discover_reference(reference)
-            return
-        if isinstance(value, SnapshotFileRef) and self._reading:
-            snapshot = self.snapshot_for(self._reading[-1])
-            reference = self.file_in_snapshot(snapshot, value)
-            if reference.stored_at in self.source_files:
-                self._record_file(reference.stored_at, value.bytes, value.sha256)
-            return
-        if isinstance(value, ResolvedStageRef):
-            self.discover_stage_reference(value)
-            return
-        if isinstance(value, ResolvedFileRef):
-            self.discover_reference(value)
-            return
-        if isinstance(value, BaseModel):
-            for item in value.__dict__.values():
-                self.discover_typed(item)
-            for item in (value.model_extra or {}).values():
-                self.discover_typed(item)
-            return
-        if isinstance(value, dict):
-            for item in value.values():
-                self.discover_typed(item)
-            return
-        if isinstance(value, (list, tuple)):
-            for item in value:
-                self.discover_typed(item)
 
     def promote_reference(self, reference: ResolvedFileRef) -> ResolvedFileRef:
         """Publish a file after updating the documents it depends on."""

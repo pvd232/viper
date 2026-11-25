@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 import stat
@@ -15,9 +16,11 @@ from yaml import YAMLError
 
 from ._cloud import (
     LocalSource,
+    SnapshotCopy,
     SnapshotInventory,
     SnapshotSources,
     canonical_json_bytes,
+    validate_snapshot_copy,
 )
 from ._schema import SHA256, ProtocolModel, RepoRelPath
 from .artifacts import (
@@ -27,14 +30,21 @@ from .artifacts import (
 )
 from .references import (
     FileIdentity,
+    GcsFileRef,
     GitSource,
+    HuggingFaceFileRef,
     ResolvedFileRef,
     SnapshotFileRef,
     StageResultSnapshotRef,
     resolve_snapshot_file_ref,
 )
 from .repository import resolve_path
-from .serialization import document_digest, parse_yaml_bytes
+from .serialization import (
+    document_digest,
+    ensure_directory_synchronized,
+    parse_yaml_bytes,
+    write_synchronized,
+)
 
 _SCHEMA = (
     """CREATE TABLE payloads (
@@ -100,6 +110,30 @@ _RETENTION_SCHEMA = (
     "ON artifact_members(snapshot_key, path)",
 )
 
+_PUBLICATION_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS cloud_backings (
+        snapshot_key TEXT NOT NULL REFERENCES snapshots(key),
+        copy_key TEXT NOT NULL,
+        proof_path TEXT NOT NULL,
+        proof_sha256 TEXT NOT NULL,
+        PRIMARY KEY (snapshot_key, copy_key)
+    )""",
+    """CREATE TABLE IF NOT EXISTS verified_files (
+        key TEXT PRIMARY KEY,
+        sha256 TEXT NOT NULL,
+        bytes INTEGER NOT NULL,
+        proof_path TEXT NOT NULL,
+        proof_sha256 TEXT NOT NULL,
+        FOREIGN KEY (sha256, bytes) REFERENCES payloads(sha256, bytes)
+    )""",
+    "CREATE INDEX IF NOT EXISTS verified_files_by_payload "
+    "ON verified_files(sha256, bytes)",
+    """CREATE TABLE IF NOT EXISTS publication_sources (
+        key TEXT PRIMARY KEY,
+        snapshot_key TEXT NOT NULL REFERENCES snapshots(key)
+    )""",
+)
+
 RetentionPreference = Literal["inherit", "keep", "offload"]
 
 _ArtifactSelection = StageArtifactRef | RepoRelPath
@@ -107,7 +141,7 @@ _RETENTION_ADAPTER = TypeAdapter(RetentionPreference)
 
 
 class _ArtifactVersion(ProtocolModel):
-    """Identify an artifact by its snapshot and selected output or input ."""
+    """Identify an artifact by its snapshot and selected output or input."""
 
     source: StageResultSnapshotRef = Field(
         description="Snapshot containing the artifact"
@@ -138,6 +172,7 @@ class StorageRegistry:
         """Choose the database path without creating the database or files."""
         self.repository_root = repository_root.resolve(strict=True)
         self.store = store
+        self._synchronized_directories: set[Path] = set()
         self.store_root = resolve_path(self.repository_root, store, operation="write")
         self.path = resolve_path(
             self.repository_root,
@@ -188,7 +223,7 @@ class StorageRegistry:
                 raise StorageRegistryError("unsupported storage registry version")
 
             if write:
-                for stmt in _RETENTION_SCHEMA:
+                for stmt in (*_RETENTION_SCHEMA, *_PUBLICATION_SCHEMA):
                     cnx.execute(stmt)
             yield cnx
             cnx.commit()
@@ -264,16 +299,19 @@ class StorageRegistry:
             if inventory is None:
                 return None
 
-            locations = {}
-            for member in inventory.source_files:
-                rows = cnx.execute(
-                    "SELECT * FROM local_bindings WHERE sha256 = ? AND bytes = ? "
-                    "ORDER BY path",
-                    (member.sha256, member.bytes),
-                ).fetchall()
-                if rows:
-                    locations[member.path] = tuple(self._location(row) for row in rows)
-            return SnapshotSources(inventory=inventory, locations=locations)
+            rows = cnx.execute(
+                "SELECT b.*, m.path AS member_path FROM snapshot_members AS m "
+                "JOIN local_bindings AS b ON b.sha256 = m.sha256 AND b.bytes = m.bytes "
+                "WHERE m.snapshot_key = ? ORDER BY m.path, b.path",
+                (document_digest(source),),
+            ).fetchall()
+            locations: dict[RepoRelPath, list[LocalSource]] = {}
+            for row in rows:
+                locations.setdefault(row["member_path"], []).append(self._location(row))
+            return SnapshotSources(
+                inventory=inventory,
+                locations={name: tuple(copies) for name, copies in locations.items()},
+            )
 
     def _prepare(
         self,
@@ -286,6 +324,12 @@ class StorageRegistry:
 
         try:
             path = resolve_path(self.repository_root, location.path, operation="read")
+            if (
+                location.custody != "external"
+                and path.parent not in self._synchronized_directories
+            ):
+                ensure_directory_synchronized(path.parent)
+                self._synchronized_directories.add(path.parent)
             descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
             try:
                 if location.custody != "external":
@@ -588,3 +632,229 @@ class StorageRegistry:
             or (row["preference"] == "inherit" and default_offload)
             for row in rows
         )
+
+    def register_backing(self, copy: SnapshotCopy, proof_path: RepoRelPath) -> None:
+        """Index an immutable proof of a verified, unchanged cloud copy.
+
+        The publisher or verified receipt importer must establish cloud verification
+        before calling this method. The registry keeps only the proof's address and
+        hash, so it cannot become a second authority for publication status.
+        """
+        validate_snapshot_copy(copy)
+        if copy.published is None:
+            raise StorageRegistryError("cloud copy has not been verified")
+        path = resolve_path(self.repository_root, proof_path, operation="read")
+        raw = path.read_bytes()
+        if SnapshotCopy.model_validate(parse_yaml_bytes(raw)) != copy:
+            raise StorageRegistryError("cloud proof differs from the registered copy")
+        self.register_snapshot(
+            SnapshotSources(
+                inventory=SnapshotInventory(
+                    source=copy.source, source_files=copy.source_files
+                )
+            )
+        )
+        with self._transaction(write=True) as cnx:
+            cnx.execute(
+                "INSERT OR REPLACE INTO cloud_backings VALUES (?, ?, ?, ?)",
+                (
+                    document_digest(copy.source),
+                    document_digest(copy),
+                    proof_path,
+                    hashlib.sha256(raw).hexdigest(),
+                ),
+            )
+
+    def backings(
+        self,
+        source: StageResultSnapshotRef | GitSource,
+        identity: FileIdentity | None = None,
+    ) -> tuple[SnapshotCopy, ...]:
+        """Read verified proofs for a snapshot or for identical shared bytes."""
+        if not self.path.exists():
+            return ()
+        with self._transaction() as cnx:
+            if (
+                cnx.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name = 'cloud_backings'"
+                ).fetchone()
+                is None
+            ):
+                return ()
+            if identity is None:
+                rows = cnx.execute(
+                    "SELECT proof_path, proof_sha256 FROM cloud_backings "
+                    "WHERE snapshot_key = ? ORDER BY copy_key",
+                    (document_digest(source),),
+                ).fetchall()
+            else:
+                rows = cnx.execute(
+                    "SELECT DISTINCT b.proof_path, b.proof_sha256 "
+                    "FROM cloud_backings AS b JOIN snapshot_members AS m "
+                    "ON m.snapshot_key = b.snapshot_key "
+                    "WHERE m.sha256 = ? AND m.bytes = ? ORDER BY b.proof_path",
+                    (identity.sha256, identity.bytes),
+                ).fetchall()
+        copies = []
+        for row in rows:
+            path = resolve_path(
+                self.repository_root, row["proof_path"], operation="read"
+            )
+            raw = path.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != row["proof_sha256"]:
+                raise StorageRegistryError("saved cloud proof changed")
+            copy = validate_snapshot_copy(
+                SnapshotCopy.model_validate(parse_yaml_bytes(raw))
+            )
+            if copy.published is None:
+                raise StorageRegistryError("saved cloud copy is incomplete")
+            if identity is None:
+                if copy.source != source:
+                    raise StorageRegistryError("saved cloud proof has another source")
+            elif not any(
+                file.sha256 == identity.sha256 and file.bytes == identity.bytes
+                for file in copy.source_files
+            ):
+                raise StorageRegistryError("saved cloud proof has different bytes")
+            copies.append(copy)
+        return tuple(copies)
+
+    def pin_source(self, source: StageResultSnapshotRef | GitSource, key: str) -> None:
+        """Preserve this snapshot's local bytes while publication is pending."""
+        source_key = document_digest(source)
+        with self._transaction(write=True) as cnx:
+            if self._inventory(cnx, source) is None:
+                raise StorageRegistryError("pending source snapshot is not registered")
+            saved = cnx.execute(
+                "SELECT snapshot_key FROM publication_sources WHERE key = ?", (key,)
+            ).fetchone()
+            if saved is not None and saved["snapshot_key"] != source_key:
+                raise StorageRegistryError("pending publication source changed")
+            cnx.execute(
+                "INSERT OR IGNORE INTO publication_sources VALUES (?, ?)",
+                (key, source_key),
+            )
+
+    def unpin_source(self, key: str) -> None:
+        """Release a source after all of its requested copies have verified."""
+        with self._transaction(write=True) as cnx:
+            cnx.execute("DELETE FROM publication_sources WHERE key = ?", (key,))
+
+    @staticmethod
+    def source_is_pending(
+        identity: FileIdentity, connection: sqlite3.Connection
+    ) -> bool:
+        """Check pending publication of any snapshot sharing these bytes."""
+        if (
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE name = 'publication_sources'"
+            ).fetchone()
+            is None
+        ):
+            return False
+        return (
+            connection.execute(
+                "SELECT 1 FROM publication_sources AS p JOIN snapshot_members AS m "
+                "ON m.snapshot_key = p.snapshot_key "
+                "WHERE m.sha256 = ? AND m.bytes = ? LIMIT 1",
+                (identity.sha256, identity.bytes),
+            ).fetchone()
+            is not None
+        )
+
+    def binding(self, identity: FileIdentity, path: RepoRelPath) -> LocalSource | None:
+        """Read the current record for this exact local copy."""
+        if not self.path.exists():
+            return None
+        with self._transaction() as cnx:
+            row = cnx.execute(
+                "SELECT * FROM local_bindings WHERE path = ? "
+                "AND sha256 = ? AND bytes = ? AND retired = 0",
+                (path, identity.sha256, identity.bytes),
+            ).fetchone()
+            return None if row is None else self._location(row)
+
+    def register_verified_file(self, reference: ResolvedFileRef) -> None:
+        """Remember a cloud file after its downloaded bytes pass verification.
+
+        This proves availability of this file only. It does not claim that any
+        other member of the cloud snapshot was downloaded or verified.
+        """
+        if not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef)):
+            raise StorageRegistryError(
+                "verified file needs a self-describing cloud address"
+            )
+        base = ResolvedFileRef(
+            stored_at=reference.stored_at,
+            sha256=reference.sha256,
+            bytes=reference.bytes,
+        )
+        key = document_digest(base)
+        relative = f"{self.store}/proofs/files/{key}.json"
+        proof = resolve_path(self.repository_root, relative, operation="write")
+        raw = canonical_json_bytes(base)
+        write_synchronized(proof, raw)
+        with self._transaction(write=True) as cnx:
+            cnx.execute(
+                "INSERT OR IGNORE INTO payloads VALUES (?, ?)",
+                (base.sha256, base.bytes),
+            )
+            cnx.execute(
+                "INSERT OR IGNORE INTO verified_files VALUES (?, ?, ?, ?, ?)",
+                (
+                    key,
+                    base.sha256,
+                    base.bytes,
+                    relative,
+                    hashlib.sha256(raw).hexdigest(),
+                ),
+            )
+
+    def file_backings(self, identity: FileIdentity) -> tuple[ResolvedFileRef, ...]:
+        """Read unchanged proofs of individually verified cloud files."""
+        if not self.path.exists():
+            return ()
+        with self._transaction() as cnx:
+            if (
+                cnx.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name = 'verified_files'"
+                ).fetchone()
+                is None
+            ):
+                return ()
+            rows = cnx.execute(
+                "SELECT proof_path, proof_sha256 FROM verified_files "
+                "WHERE sha256 = ? AND bytes = ? ORDER BY key",
+                (identity.sha256, identity.bytes),
+            ).fetchall()
+        result = []
+        for row in rows:
+            proof = resolve_path(
+                self.repository_root, row["proof_path"], operation="read"
+            )
+            raw = proof.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != row["proof_sha256"]:
+                raise StorageRegistryError("saved cloud file proof changed")
+            reference = ResolvedFileRef.model_validate(parse_yaml_bytes(raw))
+            if (
+                reference.sha256 != identity.sha256
+                or reference.bytes != identity.bytes
+                or not isinstance(reference.stored_at, (GcsFileRef, HuggingFaceFileRef))
+            ):
+                raise StorageRegistryError(
+                    "saved cloud file proof has another identity"
+                )
+            result.append(reference)
+        return tuple(result)
+
+    def locations(self, identity: FileIdentity) -> tuple[LocalSource, ...]:
+        """List registered local copies of these exact bytes."""
+        if not self.path.exists():
+            return ()
+        with self._transaction() as cnx:
+            rows = cnx.execute(
+                "SELECT * FROM local_bindings WHERE sha256 = ? AND bytes = ? "
+                "AND retired = 0 ORDER BY path",
+                (identity.sha256, identity.bytes),
+            ).fetchall()
+            return tuple(self._location(row) for row in rows)

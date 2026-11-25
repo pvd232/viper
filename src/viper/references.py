@@ -249,9 +249,7 @@ class SnapshotFileRef(FileIdentity):
     The snapshot supplies the storage address; ``path`` selects its member.
     """
 
-    path: RepoRelPath = Field(
-        description="File path within the snapshot."
-    )
+    path: RepoRelPath = Field(description="File path within the snapshot.")
 
 
 class ResolvedGitFileRef(ResolvedFileRef):
@@ -350,12 +348,18 @@ def storage_file(location: StorageModel, path: RepoRelPath) -> StorageModel:
 
 
 def resolve_snapshot_file_ref(
-    snapshot: StageResultSnapshotRef,
+    snapshot: StageResultSnapshotRef | GitSource,
     file: SnapshotFileRef,
 ) -> ResolvedFileRef:
     """Address one snapshot member without reading or republishing its bytes."""
     stored_at: StorageModel
-    if isinstance(snapshot, LocalStageResultSnapshotRef):
+    if isinstance(snapshot, GitSource):
+        stored_at = GitFileRef(
+            repository=snapshot.repository,
+            commit=snapshot.commit,
+            path=file.path,
+        )
+    elif isinstance(snapshot, LocalStageResultSnapshotRef):
         stored_at = LocalFileRef(
             workspace=snapshot.workspace,
             store=snapshot.store,

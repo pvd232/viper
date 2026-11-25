@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +89,61 @@ def load_stage_document(value: object) -> Spec:
             "schema version 1 stage documents must be regenerated with VIPER 0.1.0a3"
         )
     return _SPEC_ADAPTER.validate_python(value)
+
+
+def _synchronize_directory(path: Path) -> None:
+    """Synchronize a directory's saved entries."""
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def ensure_directory_synchronized(path: Path) -> None:
+    """Create a directory and synchronize its entries through the parent chain."""
+    path.mkdir(parents=True, exist_ok=True)
+    directory = path.resolve()
+    while True:
+        _synchronize_directory(directory)
+        if directory.parent == directory:
+            return
+        directory = directory.parent
+
+
+def write_synchronized(
+    path: Path, raw: bytes, *, replace_existing: bool = False
+) -> None:
+    """Save and synchronize bytes, refusing different existing bytes by default."""
+    if not path.parent.is_dir():
+        ensure_directory_synchronized(path.parent)
+    descriptor, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if replace_existing:
+            os.replace(temporary, path)
+        else:
+            try:
+                os.link(temporary, path)
+            except FileExistsError:
+                with path.open("rb") as current:
+                    if current.read() != raw:
+                        raise FileExistsError(
+                            f"refusing to replace different bytes at {path}"
+                        ) from None
+                    os.fsync(current.fileno())
+    finally:
+        temporary.unlink(missing_ok=True)
+    _synchronize_directory(path.parent)
+
+
+def replace_synchronized(path: Path, raw: bytes) -> None:
+    """Atomically replace a file and synchronize its bytes and directory entry."""
+    write_synchronized(path, raw, replace_existing=True)
 
 
 def serialize_document(document: BaseModel) -> bytes:

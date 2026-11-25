@@ -331,6 +331,10 @@ class FreezeRunSuccess(SuccessModel):
     run_id: RunId
     files: tuple[Path, ...]
 
+    publication_path: Path | None = Field(
+        default=None, description="Durable background publication operation."
+    )
+
 
 class PreflightRequest(APIModel):
     """Select one local frozen plan for complete pre-execution inspection."""
@@ -367,6 +371,11 @@ class ExecuteStageSuccess(SuccessModel):
     stdout: bytes
     stderr: bytes
 
+    output_paths: dict[str, Path] = Field(
+        default_factory=dict,
+        description="Actual local output paths for this invocation.",
+    )
+
 
 class RunRequest(APIModel):
     """Select one frozen plan for complete execution on the active host."""
@@ -387,6 +396,10 @@ class RunSuccess(SuccessModel):
     journal: Path
     reference: ResolvedRunRef
 
+    publication_path: Path | None = Field(
+        default=None, description="Background publication operation, when present."
+    )
+
 
 class RetryRequest(RunRequest):
     """Select a failed frozen run for one new attempt."""
@@ -401,6 +414,10 @@ class RetrySuccess(SuccessModel):
     resolved_run: Path
     journal: Path
     reference: ResolvedRunRef
+
+    publication_path: Path | None = Field(
+        default=None, description="Background publication operation, when present."
+    )
 
 
 class ExecuteBenchmarkRequest(APIModel):
@@ -418,6 +435,10 @@ class ExecuteBenchmarkSuccess(SuccessModel):
     operation: Literal["execute_benchmark"] = "execute_benchmark"  # pyright: ignore[reportIncompatibleVariableOverride]
     result: BenchmarkResult
     result_path: Path
+
+    publication_path: Path | None = Field(
+        default=None, description="Background publication operation, when present."
+    )
 
 
 class ExportRunRequest(APIModel):
@@ -1064,7 +1085,11 @@ def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
         frozen = freeze_run_plan(repository_root, draft)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise _document_error("freeze_run", request.draft, exc) from exc
-    return FreezeRunSuccess(run_id=frozen.run.run_id, files=frozen.files)
+    return FreezeRunSuccess(
+        run_id=frozen.run.run_id,
+        files=frozen.files,
+        publication_path=frozen.publication_path,
+    )
 
 
 def preflight(request: PreflightRequest) -> PreflightSuccess:
@@ -1116,6 +1141,7 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
         stage_id=request.stage_id,
         command=result.command,
         artifacts=result.artifacts,
+        output_paths=result.output_paths or {},
         stdout=result.stdout,
         stderr=result.stderr,
     )
@@ -1162,6 +1188,7 @@ def run_request(request: RunRequest) -> RunSuccess:
         resolved_run=result.path,
         journal=result.journal_path,
         reference=result.reference,
+        publication_path=result.publication_path,
     )
 
 
@@ -1204,6 +1231,7 @@ def retry_request(request: RetryRequest) -> RetrySuccess:
         resolved_run=result.path,
         journal=result.journal_path,
         reference=result.reference,
+        publication_path=result.publication_path,
     )
 
 
@@ -1251,6 +1279,7 @@ def execute_benchmark(
     return ExecuteBenchmarkSuccess(
         result=execution.record,
         result_path=execution.path,
+        publication_path=execution.publication_path,
     )
 
 

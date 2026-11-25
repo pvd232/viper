@@ -300,7 +300,7 @@ Continue from a saved plan or run result:
 | Publish and search measured knowledge | `knowledge()` and `catalog().knowledge` | [Measured vector search](docs/tutorials/knowledge-search.md) |
 | Capture structured journals and learned vectors | Default-on `JOURNAL.md` capture; `api.publish_run_journal()` for later edits | [Complete journal workflow](docs/how-to/journals.md) |
 | Export a portable evidence graph | `execution.export_run()` and `execution.verify_run_bundle()` | [Export example](examples/export_run.py) |
-| Publish, promote, restore, and retain cloud runs | `execution.promote_run_to_cloud()` and `retention.evict_cloud_backed_run_files()` | [Cloud storage](docs/how-to/cloud-storage.md) |
+| Publish, restore, and retain artifacts | `storage.workflow()` and `storage.offload` configuration | [Cloud storage](docs/how-to/cloud-storage.md) |
 | Give an agent typed access | `viper mcp --root .` | [Agent interface](docs/reference/agents.md) |
 
 Place `--json` before a CLI command when another program needs one typed result

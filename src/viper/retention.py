@@ -229,6 +229,7 @@ def evict_cloud_backed_run_files(
         attempt_workspace_bytes_released=attempt_workspace_bytes,
     )
 
+
 def set_artifact_retention(
     repository_root: Path,
     source: StageResultSnapshotRef,
@@ -248,6 +249,7 @@ def set_artifact_retention(
     if preference == "keep":
         for reference in storage.registry.artifact_files(source, selection):
             storage.resolve(reference)
+
 
 __all__ = [
     "RunFileEvictionError",

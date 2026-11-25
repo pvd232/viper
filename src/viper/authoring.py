@@ -20,6 +20,8 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
 
 from . import keys
+from ._graph import enroll_run
+from ._offload import current_session
 from ._schema import DataRole, RepoRelPath, RNGSeed
 from ._source_closure import workspace_dependency_refs
 from .artifacts import (
@@ -134,7 +136,6 @@ from .stages import (
     stage_definition,
 )
 from .storage import (
-    LocalArtifactStore,
     LocalStorageDestination,
     LocalStoreError,
     StorageDestination,
@@ -143,6 +144,7 @@ from .storage import (
     load_storage_settings,
     local_artifact_store,
     publish_resolved_files,
+    workflow,
 )
 
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
@@ -823,6 +825,9 @@ class FrozenPlanFiles(BaseModel):
     files: tuple[Path, ...] = Field(
         description="Local files materialized for the plan."
     )
+    publication_path: Path | None = Field(
+        default=None, description="Durable publication operation for the saved plan."
+    )
 
 
 class _CompiledPlan(BaseModel):
@@ -972,6 +977,7 @@ def _freeze_input(
     cache: dict[int, InputRef] | None = None,
     *,
     destination: StorageDestination | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> InputRef:
     """Compile one input draft into its frozen reference."""
     selected_destination = destination or LocalStorageDestination()
@@ -992,12 +998,20 @@ def _freeze_input(
             producer_stage_id=owners[0],
             name=draft.output_name,
         )
-    if isinstance(selected_destination, ViperCloudDestination) and isinstance(
-        draft.run.stored_at,
-        LocalFileRef,
+    if (
+        isinstance(selected_destination, ViperCloudDestination)
+        and isinstance(
+            draft.run.stored_at,
+            LocalFileRef,
+        )
+        and current_session() is None
     ):
         raise ValueError("storage_graph_unreachable")
-    if isinstance(draft.run.stored_at, LocalFileRef):
+    if current_session() is not None:
+        enroll_run(
+            root, draft.run, trusted_source_repositories=trusted_source_repositories
+        )
+    elif isinstance(draft.run.stored_at, LocalFileRef):
         try:
             producer_run = local_artifact_store(draft.run.stored_at).fetch(
                 draft.run.stored_at
@@ -1102,6 +1116,7 @@ def _freeze_stage(
     input_cache: dict[int, InputRef] | None = None,
     *,
     destination: StorageDestination | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> Spec:
     """Freeze one Python stage draft into its protocol declaration."""
     outputs = _freeze_declared_outputs(root, run_root, stage_id, draft.outputs)
@@ -1164,6 +1179,7 @@ def _freeze_stage(
                 value,
                 input_cache,
                 destination=destination,
+                trusted_source_repositories=trusted_source_repositories,
             )
             for name, value in draft.inputs.items()
         },
@@ -1528,6 +1544,7 @@ def _compile_plan(
     draft: RunPlanDraft,
     *,
     destination: StorageDestination | None = None,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> _CompiledPlan:
     """Compile one immutable draft into a complete in-memory protocol graph."""
     repository_root = resolve_root(root)
@@ -1580,6 +1597,7 @@ def _compile_plan(
             stage_draft.spec,
             input_cache,
             destination=destination,
+            trusted_source_repositories=trusted_source_repositories,
         )
         stage_specs[stage_id] = stage_spec
         raw = serialize_document(stage_spec)
@@ -1612,6 +1630,7 @@ def _compile_plan(
             benchmark_draft.test,
             input_cache,
             destination=destination,
+            trusted_source_repositories=trusted_source_repositories,
         )
         splits = {
             name: _freeze_input(
@@ -1620,6 +1639,7 @@ def _compile_plan(
                 split,
                 input_cache,
                 destination=destination,
+                trusted_source_repositories=trusted_source_repositories,
             )
             for name, split in benchmark_draft.splits.items()
         }
@@ -1706,53 +1726,43 @@ def _compile_plan(
 def freeze_run_plan(
     root: Path,
     draft: RunPlanDraft,
+    *,
+    trusted_source_repositories: frozenset[str] = frozenset(),
 ) -> FrozenPlanFiles:
-    """Compile a draft, publish its immutable files, and write local copies.
+    """Save the frozen plan and queue publication when cloud storage is configured.
 
-    Return the RunSpec, its immutable reference, and the paths written.
-    Existing matching files are reused; conflicting bytes raise FileExistsError.
-    Stage execution starts when the saved plan is passed to execution.run().
+    Matching workspace files are reused. Conflicting bytes raise FileExistsError.
+    The returned reference identifies locally verified bytes; publication_path
+    identifies the durable background operation.
     """
     repository_root = resolve_root(root)
-    destination = bind_run_destination(
-        repository_root,
-        draft.run_id,
-        load_storage_settings(repository_root).destination,
-    )
-    compiled = _compile_plan(
-        repository_root,
-        draft,
-        destination=destination,
-    )
-    store = LocalArtifactStore(repository_root)
-    commit = store.publish(compiled.files)
-    paths = tuple(_target_path(repository_root, path) for path in compiled.files)
-    for path, raw in zip(paths, compiled.files.values(), strict=True):
-        _write_exact_file(path, raw)
-    run_raw = compiled.files[compiled.run_path]
-    if isinstance(destination, ViperCloudDestination):
-        published = publish_resolved_files(
+    with workflow(repository_root) as publication:
+        destination = bind_run_destination(
             repository_root,
-            destination,
-            compiled.files,
+            draft.run_id,
+            load_storage_settings(repository_root).destination,
         )
-        published_run = published[compiled.run_path]
-        reference = ResolvedRunSpecRef(
-            sha256=published_run.sha256,
-            bytes=published_run.bytes,
-            stored_at=published_run.stored_at,
+        compiled = _compile_plan(
+            repository_root,
+            draft,
+            destination=destination,
+            trusted_source_repositories=trusted_source_repositories,
         )
-    else:
-        reference = ResolvedRunSpecRef(
-            sha256=hashlib.sha256(run_raw).hexdigest(),
-            bytes=len(run_raw),
-            stored_at=LocalFileRef(
-                workspace=store.repository_root,
-                commit=commit,
-                path=compiled.run_path,
+        paths = tuple(_target_path(repository_root, path) for path in compiled.files)
+        for path, raw in zip(paths, compiled.files.values(), strict=True):
+            _write_exact_file(path, raw)
+        published = publish_resolved_files(repository_root, destination, compiled.files)
+        run_reference = published[compiled.run_path]
+        return FrozenPlanFiles(
+            run=compiled.run,
+            reference=ResolvedRunSpecRef(
+                sha256=run_reference.sha256,
+                bytes=run_reference.bytes,
+                stored_at=run_reference.stored_at,
             ),
+            files=paths,
+            publication_path=publication.operation_path,
         )
-    return FrozenPlanFiles(run=compiled.run, reference=reference, files=paths)
 
 
 def expand(

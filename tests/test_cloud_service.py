@@ -788,7 +788,12 @@ def test_republication_retains_bounded_destination_cache(
     monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
     destination = ViperCloudDestination(owner="owner", workspace="models")
     source_reader = RunFetcher(tmp_path, store, "", cache_root=space.cache / "source")
-    reader = RunFetcher(tmp_path, store, "", cache_root=space.cache / "destination")
+    # The comparison keeps its source readable, while this destination namespace
+    # has no resident originals that could bypass the remote-only cache exercise.
+    destination_store = LocalArtifactStore(tmp_path, store=".viper/destination-store")
+    reader = RunFetcher(
+        tmp_path, destination_store, "", cache_root=space.cache / "destination"
+    )
     with (
         client,
         PublicationJournal(
@@ -815,7 +820,9 @@ def test_republication_retains_bounded_destination_cache(
         assert space.peak_cache_bytes <= budget
         cached = reader.path(refs[0])
         cached.write_bytes(b"changed")
-        fresh = RunFetcher(tmp_path, store, "", cache_root=reader.cache_root)
+        fresh = RunFetcher(
+            tmp_path, destination_store, "", cache_root=reader.cache_root
+        )
         assert fresh.path(refs[0]).read_bytes() == b"weights"
         assert sum(path.endswith(".bin") for path in calls) == downloads + 1
         space.release(reader)

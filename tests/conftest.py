@@ -1,10 +1,23 @@
 """Classify every test module by validation cost and owned domain."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from viper import _offload
+
 TIER_BY_MODULE = {
+    "test_background_publication": "contract",
+    "test_offload_workflow": "contract",
+    "test_offload_recovery": "contract",
+    "test_managed_file_access": "contract",
+    "test_artifact_retention": "contract",
+    "test_shared_storage": "contract",
+    "test_storage_readers": "contract",
+    "test_storage_registry": "contract",
+    "test_storage_inventory": "contract",
+    "test_offload": "contract",
     "test_autocast_weight_updates": "unit",
     "test_journals": "contract",
     "test_mcp_transport": "integration",
@@ -65,10 +78,19 @@ TIER_BY_MODULE = {
     "test_verification_acceptance": "integration",
     "test_worker": "integration",
     "test_workflow_documentation": "contract",
-    "test_offload": "contract",
 }
 
 DOMAIN_BY_MODULE = {
+    "test_background_publication": "domain_storage",
+    "test_offload_workflow": "domain_execution",
+    "test_offload_recovery": "domain_storage",
+    "test_managed_file_access": "domain_execution",
+    "test_artifact_retention": "domain_storage",
+    "test_shared_storage": "domain_storage",
+    "test_storage_readers": "domain_storage",
+    "test_storage_registry": "domain_storage",
+    "test_storage_inventory": "domain_storage",
+    "test_offload": "domain_storage",
     "test_autocast_weight_updates": "domain_execution",
     "test_journals": "domain_verification",
     "test_mcp_transport": "domain_application",
@@ -129,7 +151,6 @@ DOMAIN_BY_MODULE = {
     "test_verification_acceptance": "domain_verification",
     "test_worker": "domain_execution",
     "test_workflow_documentation": "domain_release",
-    "test_offload": "domain_storage",
 }
 
 if TIER_BY_MODULE.keys() != DOMAIN_BY_MODULE.keys():
@@ -154,3 +175,17 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
         item.add_marker(getattr(pytest.mark, tier))
         item.add_marker(getattr(pytest.mark, domain))
+
+
+@pytest.fixture(autouse=True)
+def publication_worker_start(monkeypatch: pytest.MonkeyPatch) -> Callable[..., None]:
+    """Keep CPU tests from launching unconfigured real cloud transfers.
+
+    Tests that exercise detached launching receive the real starter explicitly;
+    queue behavior tests drain the worker with their own verified fake provider.
+    """
+    original = _offload.start_publication_worker
+    monkeypatch.setattr(
+        _offload, "start_publication_worker", lambda *args, **kwargs: None
+    )
+    return original

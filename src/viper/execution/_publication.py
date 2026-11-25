@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -16,50 +14,14 @@ from ..references import (
     ResolvedStageInvocationRef,
 )
 from ..runs import AttemptJournalRef, ResolvedAttemptRef, RunAttempt
-from ..serialization import serialize_document
+from ..serialization import (
+    replace_synchronized,
+    serialize_document,
+    write_synchronized,
+)
 from ..stages import StageInvocationReceipt
 from ..storage import StorageDestination, publish_resolved_files
 from .errors import RunError
-
-
-def write_synchronized(path: Path, raw: bytes) -> None:
-    """Atomically write and synchronize one local control or terminal file."""
-    if path.exists():
-        if path.read_bytes() == raw:
-            return
-        raise RunError(f"refusing to replace different bytes at {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        dir=path.parent,
-        prefix=f".{path.name}.",
-    )
-    try:
-        with os.fdopen(descriptor, "wb") as temporary_file:
-            temporary_file.write(raw)
-            temporary_file.flush()
-            os.fsync(temporary_file.fileno())
-        os.replace(temporary_name, path)
-    finally:
-        temporary_path = Path(temporary_name)
-        if temporary_path.exists():
-            temporary_path.unlink()
-
-
-def replace_synchronized(path: Path, raw: bytes) -> None:
-    """Atomically replace one mutable local head document and synchronize it."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        dir=path.parent,
-        prefix=f".{path.name}.",
-    )
-    try:
-        with os.fdopen(descriptor, "wb") as temporary_file:
-            temporary_file.write(raw)
-            temporary_file.flush()
-            os.fsync(temporary_file.fileno())
-        os.replace(temporary_name, path)
-    finally:
-        Path(temporary_name).unlink(missing_ok=True)
 
 
 def persist_terminal_reference(

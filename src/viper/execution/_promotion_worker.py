@@ -10,13 +10,14 @@ from typing import Literal
 
 from pydantic import Field
 
+from .._graph import PromotionInventory
 from .._schema import AbsolutePath, ProtocolModel
 from .._source import RunFetcher
 from ..cloud import ViperCloud
 from ..evidence import VerificationPolicy
 from ..references import ResolvedRunRef
 from ..runs import ResolvedRun, RunSpec
-from ..serialization import document_digest, parse_yaml_bytes
+from ..serialization import document_digest, parse_yaml_bytes, replace_synchronized
 from ..storage import (
     LocalArtifactStore,
     RunPromotionPolicy,
@@ -24,11 +25,10 @@ from ..storage import (
     ViperCloudDestination,
 )
 from ..verification import verify_run_result
-from ._promotion import PromotionInventory, RunGraphPromoter
+from ._promotion import RunGraphPromoter
 from ._promotion_compare import GraphComparison
 from ._promotion_journal import PublicationJournal
 from ._promotion_transfer import TransferSpace
-from ._publication import replace_synchronized
 from .errors import RunPromotionError
 
 

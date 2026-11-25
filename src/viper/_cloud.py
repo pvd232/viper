@@ -16,6 +16,7 @@ from .ids import HumanId
 from .references import (
     CloudFileRef,
     CloudStageResultSnapshotRef,
+    GcsStageResultSnapshotRef,
     GitSource,
     LocalStageResultSnapshotRef,
     SnapshotFileRef,
@@ -189,6 +190,20 @@ class SnapshotCopy(ProtocolModel):
     published: CloudStageResultSnapshotRef | None = Field(
         default=None, description="Verified destination snapshot, once available."
     )
+
+
+def validate_snapshot_copy(copy: SnapshotCopy) -> SnapshotCopy:
+    """Check that a cloud copy preserves the complete original snapshot."""
+    original = SnapshotInventory(source=copy.source, source_files=copy.source_files)
+    if copy.expected.files != original.source_files:
+        raise ValueError("cloud copy contains different files")
+    if isinstance(copy.published, GcsStageResultSnapshotRef) and (
+        copy.published.owner != copy.expected.owner
+        or copy.published.workspace != copy.expected.workspace
+        or copy.published.revision != copy.expected.revision
+    ):
+        raise ValueError("cloud copy address differs from its manifest")
+    return copy
 
 
 def canonical_json_bytes(record: ProtocolModel) -> bytes:
