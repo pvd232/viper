@@ -1,0 +1,29 @@
+--- a/src/viper/_verification/storage.py
++++ b/src/viper/_verification/storage.py
+@@ -1,4 +1,4 @@
+-"""Read stored files and check their byte counts and hashes."""
++"""Read stored files and check their sizes and hashes."""
+ 
+ from __future__ import annotations
+ 
+@@ -16,6 +16,7 @@
+ import viper._subprocess as subprocess
+ 
+ from .._schema import ArtifactName, DataRole, RepoRelPath
++from .._storage_registry import StorageRegistryError
+ from ..artifact_loaders import (
+     ArtifactLoaderError,
+     ArtifactValidationResult,
+@@ -251,10 +252,10 @@
+ def list_local_snapshot_files(
+     snapshot: LocalStageResultSnapshotRef,
+ ) -> tuple[RepoRelPath, ...]:
+-    """List the snapshot through its owning local store."""
++    """Read the complete snapshot file list through its local store."""
+     try:
+         return local_artifact_store(snapshot).list_snapshot_files(snapshot)
+-    except LocalStoreError as error:
++    except (LocalStoreError, StorageRegistryError) as error:
+         messages = {
+             "local snapshot revision is missing": (
+                 "artifact.bundle: local snapshot is missing"

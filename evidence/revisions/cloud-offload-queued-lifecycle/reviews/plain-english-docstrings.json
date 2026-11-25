@@ -1,0 +1,21 @@
+{
+  "change": "plain-English docstrings",
+  "changed_proposed_files": {
+    "plans/cloud-offload/CFO-PB-02/replace/src/viper/storage.py": 42,
+    "plans/cloud-offload/CFO-PB-04/replace/src/viper/_storage_registry.py": 20,
+    "plans/cloud-offload/CFO-PB-01/replace/src/viper/storage.py": 40,
+    "plans/cloud-offload/CFO-PB-03/replace/src/viper/_source.py": 16,
+    "plans/cloud-offload/CFO-PB-01/replace/src/viper/_verification/storage.py": 1,
+    "plans/cloud-offload/CFO-PB-04/replace/src/viper/retention.py": 9,
+    "plans/cloud-offload/CFO-PB-03/add/src/viper/_storage_locks.py": 12,
+    "plans/cloud-offload/CFO-PB-02/add/src/viper/_storage_registry.py": 13,
+    "plans/cloud-offload/CFO-PB-04/replace/src/viper/storage.py": 53,
+    "plans/cloud-offload/CFO-PB-03/replace/src/viper/_verified_cache.py": 11,
+    "plans/cloud-offload/CFO-PB-03/replace/src/viper/storage.py": 53,
+    "plans/cloud-offload/CFO-PB-03/replace/src/viper/references.py": 2
+  },
+  "docstrings_rewritten": 272,
+  "executable_AST_unchanged": true,
+  "active_application_files_edited": false,
+  "application_tests_run": false
+}

@@ -1,0 +1,14 @@
+{
+  "kind": "planning_metadata_validation",
+  "protocol_source_commit": "dc337cc403041d4b2cec1c69b08cfa8e59a0bbdd",
+  "package_sha256": "90147c68f5cb022e85322ddd1b0cb42f52319130f2e957290888306e1526c669",
+  "pair_block_id": "CFO-PB-01",
+  "baseline_commit": "f659faf7e7d0b721af736520c1b2b201d778c891",
+  "action_count": 6,
+  "gate_step_count": 6,
+  "plan_raw_sha256": "1701661d6142a0e32ff12ef7358fa15a99dfe50b62c2429637a3f0b783fb8935",
+  "validation": "actual production package, workspace and current plan loaders passed",
+  "implementation_gate_run": false,
+  "application_source_modified": false,
+  "completion_or_approval_receipt_created": false
+}

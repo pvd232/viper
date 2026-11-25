@@ -1,0 +1,384 @@
+--- a/tests/test_cloud_service.py
++++ b/tests/test_cloud_service.py
+@@ -22,15 +22,21 @@
+ from viper._cloud import (
+     GcsRepository,
+     HuggingFaceRepository,
++    PublicationSource,
++    SnapshotInventory,
+     ViperCloudDestination,
+     ViperCloudError,
++    manifest_revision,
+     source_file,
+ )
+ from viper._source import RunFetcher
+ from viper.authoring import freeze_run_plan
+ from viper.cloud import ViperCloud
+ from viper.execution._promotion_compare import GraphComparison
+-from viper.execution._promotion_journal import PublicationJournal
++from viper.execution._promotion_journal import (
++    PublicationJournal,
++    publish_captured_snapshot,
++)
+ from viper.execution._promotion_transfer import (
+     TransferSpace,
+     directory_bytes,
+@@ -42,6 +48,7 @@
+     GcsFileRef,
+     HuggingFaceFileRef,
+     HuggingFaceStageResultSnapshotRef,
++    LocalStageResultSnapshotRef,
+     ResolvedFileRef,
+     ResolvedRunRef,
+     SnapshotFileRef,
+@@ -822,3 +829,350 @@
+         assert all(
+             source_reader.path(ref).is_file() for ref in store.resolved_files(payloads)
+         )
++
++
++def _native_publication_sources(
++    root: Path,
++) -> tuple[SnapshotInventory, dict[str, PublicationSource]]:
++    """Seal a complete bundle directly from producer-owned original paths."""
++    sources: dict[str, PublicationSource] = {}
++    for name, raw in {
++        "artifacts/weights.bin": b"weights",
++        "artifacts/tokenizer.json": b'{"v": 1}\n',
++    }.items():
++        path = root / "originals" / name
++        path.parent.mkdir(parents=True, exist_ok=True)
++        path.write_bytes(raw)
++        sources[name] = path
++    files = tuple(
++        source_file(root, name, source)
++        for name, source in sorted(sources.items())
++    )
++    inventory = SnapshotInventory(
++        source=LocalStageResultSnapshotRef(
++            workspace=root,
++            commit=manifest_revision(files),
++        ),
++        source_files=files,
++    )
++    return inventory, sources
++
++
++def _native_gcs_cloud(
++    root: Path,
++    *,
++    rejected_seals: int = 0,
++) -> tuple[ViperCloud, InMemoryViperCloudProvider]:
++    """Reuse the existing in-memory adapter for journal contract checks."""
++    provider = InMemoryViperCloudProvider(root, rejected_seals=rejected_seals)
++    cloud = ViperCloud(
++        root,
++        GcsRepository(bucket=provider.bucket, prefix=provider.prefix),
++        provider=provider,
++    )
++    return cloud, provider
++
++
++def _native_hub_cloud(
++    root: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> tuple[ViperCloud, MemoryHub]:
++    """Use real Hub publication and verification against the existing fake API."""
++    api = MemoryHub(root / "hub")
++    provider = HuggingFaceProvider(
++        root, "owner/copies", "dataset", api=cast(Any, api)
++    )
++    monkeypatch.setattr(provider, "_download", api.download)
++    cloud = ViperCloud(
++        root,
++        HuggingFaceRepository(repository="owner/copies", repo_type="dataset"),
++        provider=provider,
++    )
++    return cloud, api
++
++
++def test_direct_publication_preserves_original_bundle_and_verifies_before_return(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Upload original files unchanged and acknowledge only after all checks."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, provider = _native_gcs_cloud(tmp_path)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    publish = Mock(wraps=provider.publish_revision)
++    fetch = provider.fetch_to_path
++    verified = []
++
++    def verify_before_ack(*args: Any, **kwargs: Any) -> Path:
++        """Require the persisted intent to remain pending during byte checks."""
++        saved = json.loads(progress.read_bytes())
++        assert all(copy["published"] is None for copy in saved["copies"].values())
++        result = fetch(*args, **kwargs)
++        verified.append(args[1])
++        return result
++
++    monkeypatch.setattr(provider, "publish_revision", publish)
++    monkeypatch.setattr(provider, "fetch_to_path", verify_before_ack)
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        copy = publish_captured_snapshot(journal, inventory, sources)
++
++    assert copy.source == inventory.source
++    assert copy.source_files == inventory.source_files
++    assert copy.expected.files == inventory.source_files
++    assert copy.published is not None
++    assert len(verified) == len(inventory.source_files)
++    assert publish.call_args.kwargs["sources"] == sources
++    assert not (tmp_path / ".viper/store").exists()
++    for member in inventory.source_files:
++        assert source_file(tmp_path, member.path, sources[member.path]) == member
++
++
++@pytest.mark.parametrize("change", ("bytes", "missing", "extra"))
++def test_direct_publication_rejects_changed_inventory_before_saving_intent(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    change: str,
++) -> None:
++    """Reject changed bytes or bundle membership before any provider write."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, provider = _native_gcs_cloud(tmp_path)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    if change == "bytes":
++        selected = sources["artifacts/weights.bin"]
++        assert isinstance(selected, Path)
++        selected.write_bytes(b"WEIGHTS")
++    elif change == "missing":
++        del sources["artifacts/weights.bin"]
++    else:
++        extra = tmp_path / "originals/extra.bin"
++        extra.write_bytes(b"extra")
++        sources["artifacts/extra.bin"] = extra
++    publish = Mock(side_effect=AssertionError("upload started before validation"))
++    monkeypatch.setattr(provider, "publish_revision", publish)
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        with pytest.raises(RunPromotionError, match="destination inventory differs"):
++            publish_captured_snapshot(journal, inventory, sources)
++        assert not journal.progress.copies
++    publish.assert_not_called()
++    assert not progress.exists()
++
++
++def test_direct_gcs_publication_resumes_interrupted_seal_after_restart(
++    tmp_path: Path,
++) -> None:
++    """Retry the saved immutable publication without rerunning its producer."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, provider = _native_gcs_cloud(tmp_path, rejected_seals=1)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        with pytest.raises(RunPromotionError, match="outcome is unresolved"):
++            publish_captured_snapshot(journal, inventory, sources)
++        assert all(copy.published is None for copy in journal.progress.copies.values())
++    for source in sources.values():
++        assert isinstance(source, Path)
++        assert source.is_file()
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        copy = publish_captured_snapshot(journal, inventory, sources)
++    assert copy.published is not None
++    assert copy.expected.files == inventory.source_files
++    assert provider.seal_calls == 2
++    assert len(provider.uploads) == len(inventory.source_files)
++
++
++@pytest.mark.parametrize("failure", ("before_commit", "lost_response"))
++def test_direct_hub_publication_reconciles_before_retrying(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    failure: str,
++) -> None:
++    """Retry a missing commit and recover a completed commit without duplication."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, api = _native_hub_cloud(tmp_path, monkeypatch)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    create_commit = api.create_commit
++    calls = []
++    api.fail_after_commit = failure == "lost_response"
++
++    def interrupted_commit(**kwargs: Any) -> Any:
++        """Lose either the request or its response on the first attempt."""
++        calls.append(kwargs)
++        if len(calls) == 1 and failure == "before_commit":
++            raise ConnectionError("request never committed")
++        return create_commit(**kwargs)
++
++    monkeypatch.setattr(api, "create_commit", interrupted_commit)
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        with pytest.raises(RunPromotionError, match="outcome is unresolved"):
++            publish_captured_snapshot(journal, inventory, sources)
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        copy = publish_captured_snapshot(journal, inventory, sources)
++    assert copy.published is not None
++    assert len(api.commits) == 2
++    assert len(calls) == (1 if failure == "lost_response" else 2)
++
++
++def test_direct_hub_publication_does_not_retry_uncertain_history(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Retain unresolved intent when reconciliation cannot establish an outcome."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, api = _native_hub_cloud(tmp_path, monkeypatch)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    api.fail_after_commit = True
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        with pytest.raises(RunPromotionError, match="outcome is unresolved"):
++            publish_captured_snapshot(journal, inventory, sources)
++    saved = progress.read_bytes()
++    assert isinstance(cloud.provider, HuggingFaceProvider)
++    unresolved = Mock(side_effect=ViperCloudError("outcome is unresolved"))
++    forbidden = Mock(side_effect=AssertionError("duplicated an uncertain commit"))
++    monkeypatch.setattr(cloud.provider, "find_publication", unresolved)
++    monkeypatch.setattr(cloud.provider, "publish_revision", forbidden)
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        with pytest.raises(ViperCloudError, match="outcome is unresolved"):
++            publish_captured_snapshot(journal, inventory, sources)
++    forbidden.assert_not_called()
++    assert progress.read_bytes() == saved
++
++
++def test_committed_direct_copy_reuses_proof_after_originals_are_evicted(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Reuse committed proof without source reads or another payload download."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, provider = _native_gcs_cloud(tmp_path)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        original = publish_captured_snapshot(journal, inventory, sources)
++    for source in sources.values():
++        assert isinstance(source, Path)
++        source.unlink()
++    saved = progress.read_bytes()
++    forbidden = Mock(side_effect=AssertionError("reopened an evicted payload"))
++    monkeypatch.setattr("viper.execution._promotion_journal.source_file", forbidden)
++    monkeypatch.setattr(provider, "publish_revision", forbidden)
++    monkeypatch.setattr(provider, "fetch_to_path", forbidden)
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        observed = publish_captured_snapshot(journal, inventory, {})
++    assert observed == original
++    assert progress.read_bytes() == saved
++    forbidden.assert_not_called()
++
++
++def test_direct_publication_does_not_acknowledge_failed_cloud_hash_check(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Keep source files and pending intent when cloud bytes fail verification."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, api = _native_hub_cloud(tmp_path, monkeypatch)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    create_commit = api.create_commit
++    member = inventory.source_files[0]
++
++    def corrupt_commit(**kwargs: Any) -> Any:
++        """Return a successful commit whose payload was not stored correctly."""
++        result = create_commit(**kwargs)
++        api.commits[api.head][member.path] = b"X" * member.bytes
++        return result
++
++    monkeypatch.setattr(api, "create_commit", corrupt_commit)
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        with pytest.raises(ViperCloudError, match="file identity changed"):
++            publish_captured_snapshot(journal, inventory, sources)
++        assert all(copy.published is None for copy in journal.progress.copies.values())
++    for original in sources.values():
++        assert isinstance(original, Path)
++        assert original.is_file()
++
++
++def test_pending_direct_publication_accepts_new_physical_source_locations(
++    tmp_path: Path,
++) -> None:
++    """Resume the same intent after registry-owned source locations change."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, _ = _native_gcs_cloud(tmp_path, rejected_seals=1)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        with pytest.raises(RunPromotionError, match="outcome is unresolved"):
++            publish_captured_snapshot(journal, inventory, sources)
++    before = json.loads(progress.read_bytes())
++    relocated: dict[str, PublicationSource] = {}
++    for member, original in sources.items():
++        assert isinstance(original, Path)
++        target = tmp_path / "relocated" / member
++        target.parent.mkdir(parents=True, exist_ok=True)
++        original.rename(target)
++        relocated[member] = target
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        copy = publish_captured_snapshot(journal, inventory, relocated)
++    after = json.loads(progress.read_bytes())
++    assert before["operation_sha256"] == after["operation_sha256"]
++    assert before["copies"].keys() == after["copies"].keys()
++    assert copy.source == inventory.source
++    assert copy.expected.files == inventory.source_files
++    assert copy.published is not None
++
++
++@pytest.mark.parametrize("changed_source", (False, True))
++def test_direct_hub_first_publication_initializes_repository_after_exact_guard(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    changed_source: bool,
++) -> None:
++    """Create a missing repository before its head lookup after local validation."""
++    inventory, sources = _native_publication_sources(tmp_path)
++    cloud, api = _native_hub_cloud(tmp_path, monkeypatch)
++    destination = ViperCloudDestination(owner="owner", workspace="models")
++    progress = tmp_path / "progress.json"
++    created = False
++    events = []
++    create_repo = api.create_repo
++    repo_info = api.repo_info
++
++    def create_repository(**kwargs: Any) -> None:
++        """Model the missing repository becoming available idempotently."""
++        nonlocal created
++        assert kwargs == {
++            "repo_id": "owner/copies",
++            "repo_type": "dataset",
++            "exist_ok": True,
++        }
++        events.append("create")
++        create_repo(**kwargs)
++        created = True
++
++    def repository_info(*args: Any, **kwargs: Any) -> Any:
++        """Reject a head lookup while the repository does not exist."""
++        events.append("head")
++        if not created:
++            raise FileNotFoundError("repository has not been created")
++        return repo_info(*args, **kwargs)
++
++    monkeypatch.setattr(api, "create_repo", create_repository)
++    monkeypatch.setattr(api, "repo_info", repository_info)
++    if changed_source:
++        weights = sources["artifacts/weights.bin"]
++        assert isinstance(weights, Path)
++        weights.write_bytes(b"WEIGHTS")
++    with PublicationJournal(progress, "a" * 64, cloud, destination) as journal:
++        if changed_source:
++            with pytest.raises(RunPromotionError, match="destination inventory differs"):
++                publish_captured_snapshot(journal, inventory, sources)
++            assert not events
++            assert not journal.progress.copies
++        else:
++            copy = publish_captured_snapshot(journal, inventory, sources)
++            assert events[:2] == ["create", "head"]
++            assert copy.published is not None
++            assert len(api.commits) == 2

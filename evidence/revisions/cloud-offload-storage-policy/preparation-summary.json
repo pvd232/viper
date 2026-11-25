@@ -1,0 +1,26 @@
+{
+  "prepared_pair_blocks": [
+    "CFO-PB-01",
+    "CFO-PB-02",
+    "CFO-PB-03",
+    "CFO-PB-04",
+    "CFO-PB-05"
+  ],
+  "planned_pair_blocks": [
+    "CFO-PB-06",
+    "CFO-PB-07",
+    "CFO-PB-08",
+    "CFO-PB-09"
+  ],
+  "active_source_and_test_diff_sha256_before": "d69ebe1753189c3da35949676a49c1bde47d428f99fc3ac65cca888f8e058cc9",
+  "active_source_and_test_diff_sha256_after": "d69ebe1753189c3da35949676a49c1bde47d428f99fc3ac65cca888f8e058cc9",
+  "source_and_tests_unchanged": true,
+  "implementation_gate_run": false,
+  "approval_or_completion_receipt_created": false,
+  "metadata_checks": [
+    "ContractPackage",
+    "ChecklistWorkspaceSpec",
+    "DeclarationRevisionPlan",
+    "current PairBlockPlan"
+  ]
+}

@@ -16,9 +16,12 @@ from .ids import HumanId
 from .references import (
     CloudFileRef,
     CloudStageResultSnapshotRef,
+    GitSource,
+    LocalStageResultSnapshotRef,
     SnapshotFileRef,
+    StageResultSnapshotRef,
 )
-from .repository import PathError, resolve_path
+from .repository import resolve_path
 
 PublicationSource = bytes | Path
 
@@ -71,12 +74,8 @@ class RevisionManifest(ProtocolModel):
 
     @model_validator(mode="after")
     def require_revision_identity(self) -> RevisionManifest:
-        """Require unique sorted paths and the content-derived revision."""
-        paths = tuple(file.path for file in self.files)
-        if paths != tuple(sorted(paths)) or len(paths) != len(set(paths)):
-            raise ValueError("cloud manifest files must have unique sorted paths")
-        if manifest_revision(self.files) != self.revision:
-            raise ValueError("cloud manifest content does not match its revision")
+        """Validate manifest membership through the shared inventory check."""
+        validate_snapshot_inventory(self.files, revision=self.revision)
         return self
 
 
@@ -84,12 +83,112 @@ def manifest_revision(files: tuple[SnapshotFileRef, ...]) -> SHA256:
     """Derive one revision identity from sorted paths and file identities."""
     digest = hashlib.sha256()
     for file in sorted(files, key=lambda item: item.path):
-        encoded_path = str(file.path).encode("utf-8")
+        encoded_path = file.path.encode("utf-8")
         digest.update(len(encoded_path).to_bytes(8, "big"))
         digest.update(encoded_path)
         digest.update(file.bytes.to_bytes(8, "big"))
         digest.update(bytes.fromhex(file.sha256))
     return digest.hexdigest()
+
+
+def validate_snapshot_inventory(
+    files: tuple[SnapshotFileRef, ...],
+    *,
+    revision: SHA256 | None = None,
+) -> None:
+    """Require unique sorted file paths and check any supplied snapshot ID."""
+    paths = tuple(file.path for file in files)
+    if paths != tuple(sorted(paths)) or len(paths) != len(set(paths)):
+        raise ValueError("snapshot files must have unique sorted paths")
+
+    if revision is not None and manifest_revision(files) != revision:
+        raise ValueError("snapshot inventory does not match its revision")
+
+
+class SnapshotInventory(ProtocolModel):
+    """Record a snapshot and the complete list of its files, sizes and hashes."""
+
+    source: StageResultSnapshotRef | GitSource = Field(
+        description="Original snapshot reference preserved without rewriting."
+    )
+    source_files: tuple[SnapshotFileRef, ...] = Field(
+        min_length=1,
+        description="Complete original members in unique, sorted path order.",
+    )
+
+    @model_validator(mode="after")
+    def require_original_inventory(self) -> SnapshotInventory:
+        """Check the file list and, for a local snapshot, its snapshot ID."""
+        revision: SHA256 | None = None
+        if isinstance(self.source, LocalStageResultSnapshotRef):
+            revision = self.source.commit
+
+        validate_snapshot_inventory(self.source_files, revision=revision)
+        return self
+
+
+class LocalSource(ProtocolModel):
+    """Record a known local path and the file last observed there."""
+
+    path: RepoRelPath = Field(
+        description="Actual file path relative to the registered workspace root."
+    )
+    observed_stat: tuple[int, int, int, int] = Field(
+        description="Observed device, inode, modification time, and change time."
+    )
+    custody: Literal["output", "cache", "external"] = Field(
+        description="Whether this is an owned output, managed cache, or external file."
+    )
+    retired: bool = Field(
+        default=False,
+        description=(
+            "Whether Viper must stop using this saved location; "
+            "marking it retired does not authorize deleting the file."
+        ),
+    )
+
+
+class SnapshotSources(ProtocolModel):
+    """Pair the complete snapshot file list with known local copies."""
+
+    inventory: SnapshotInventory = Field(
+        description="Validated original snapshot and complete file identities."
+    )
+    locations: dict[RepoRelPath, tuple[LocalSource, ...]] = Field(
+        default_factory=dict,
+        description="Local locations grouped by original snapshot member path.",
+    )
+
+    @model_validator(mode="after")
+    def require_known_members(self) -> SnapshotSources:
+        """Require every recorded local copy to belong to the snapshot."""
+        members = {file.path for file in self.inventory.source_files}
+        if set(self.locations) - members:
+            raise ValueError("local locations contain an unknown snapshot member")
+        return self
+
+
+class SnapshotCopy(ProtocolModel):
+    """Record the original snapshot and the cloud copy required for publication."""
+
+    source: StageResultSnapshotRef | GitSource = Field(
+        description="Original snapshot address."
+    )
+    source_files: tuple[SnapshotFileRef, ...] = Field(
+        description="Original file paths, sizes, and hashes."
+    )
+    expected: RevisionManifest = Field(
+        description="Required destination files and their identities."
+    )
+    dependencies_sha256: SHA256 = Field(
+        description="Hash of the completed child mappings."
+    )
+    previous_head: str | None = Field(
+        description="Destination commit observed before copying."
+    )
+    published: CloudStageResultSnapshotRef | None = Field(
+        default=None, description="Verified destination snapshot, once available."
+    )
 
 
 def canonical_json_bytes(record: ProtocolModel) -> bytes:
@@ -113,7 +212,7 @@ def resolve_publication_source(root: Path, source: PublicationSource) -> bytes |
     try:
         relative = candidate.relative_to(repository_root).as_posix()
         return resolve_path(repository_root, relative, operation="read")
-    except (OSError, ValueError, PathError) as error:
+    except (OSError, ValueError) as error:
         raise ViperCloudError("cloud publication source is invalid") from error
 
 

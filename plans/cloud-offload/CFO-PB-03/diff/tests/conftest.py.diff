@@ -1,0 +1,20 @@
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -5,6 +5,8 @@
+ import pytest
+ 
+ TIER_BY_MODULE = {
++    "test_shared_storage": "contract",
++    "test_storage_readers": "contract",
+     "test_storage_registry": "contract",
+     "test_storage_inventory": "contract",
+     "test_offload": "contract",
+@@ -71,6 +73,8 @@
+ }
+ 
+ DOMAIN_BY_MODULE = {
++    "test_shared_storage": "domain_storage",
++    "test_storage_readers": "domain_storage",
+     "test_storage_registry": "domain_storage",
+     "test_storage_inventory": "domain_storage",
+     "test_offload": "domain_storage",

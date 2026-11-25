@@ -1,0 +1,92 @@
+{
+  "pair_block_id": "CFO-PB-04",
+  "requirements": [
+    "CFO-REQ-04",
+    "CFO-REQ-05"
+  ],
+  "depends_on": [
+    "CFO-PB-03"
+  ],
+  "status": "authored_not_applied_gates_not_run",
+  "files": [
+    {
+      "target_path": "src/viper/_storage_registry.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/_storage_registry.py",
+      "expected_before_sha256": "c8201f9805ab80e020f4480dea5de23fec9437c6c0720fd587c54658e330bb76",
+      "proposed_sha256": "69c9c43deea3867fa91cec228e7e2613348a29ddc655143e23a20dbc65549f00",
+      "lines": 560
+    },
+    {
+      "target_path": "src/viper/retention.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/retention.py",
+      "expected_before_sha256": "9e918627628254790c485b333728702eea231268ce3f7fd6c44a487bcd7904f3",
+      "proposed_sha256": "c42c730000e25517b00a7185cfc68d26eaec435d0d997eeea896d44c764e8f32",
+      "lines": 260
+    },
+    {
+      "target_path": "tests/test_artifact_retention.py",
+      "operation": "add",
+      "source_path": "add/tests/test_artifact_retention.py",
+      "expected_before_sha256": null,
+      "proposed_sha256": "844223c256966e996b09f247dd322431f749017013cf0f9a1f734b228f79e5ca",
+      "lines": 393
+    },
+    {
+      "target_path": "src/viper/storage.py",
+      "operation": "replace",
+      "source_path": "replace/src/viper/storage.py",
+      "expected_before_sha256": "a9405e9707f587ee94de0b14697d78316e35212a02592cbcda6710761dfad4ee",
+      "proposed_sha256": "8d99f2534ddd19964c63aeb265b46a93bc163562ffca1fcd97574feb84f6681f",
+      "lines": 770
+    },
+    {
+      "target_path": "tests/conftest.py",
+      "operation": "replace",
+      "source_path": "replace/tests/conftest.py",
+      "expected_before_sha256": "2d52c8062840846af6ce850b4ab578976713dbb1ff24f91a1069fa3dcb48869b",
+      "proposed_sha256": "ecf23173b9b7e0b6529c1d0f53d4bd00ab41a407a816e9dec4268ef065a7502b",
+      "lines": 166
+    }
+  ],
+  "focused_test_argv": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_artifact_retention.py",
+    "tests/test_storage_registry.py",
+    "tests/test_shared_storage.py"
+  ],
+  "actions": [
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/_storage_registry.py",
+      "target_path": "src/viper/_storage_registry.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/retention.py",
+      "target_path": "src/viper/retention.py"
+    },
+    {
+      "operation": "add",
+      "source_path": "add/tests/test_artifact_retention.py",
+      "target_path": "tests/test_artifact_retention.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/src/viper/storage.py",
+      "target_path": "src/viper/storage.py"
+    },
+    {
+      "operation": "replace",
+      "source_path": "replace/tests/conftest.py",
+      "target_path": "tests/conftest.py"
+    }
+  ],
+  "limitation": "Preferences and complete-bundle keep do not implement queued deletion. Legacy eviction is connected to one live worker decision in PB07."
+}

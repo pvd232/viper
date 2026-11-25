@@ -1,0 +1,28 @@
+{
+  "kind": "planning_metadata_validation",
+  "protocol_source_commit": "dc337cc403041d4b2cec1c69b08cfa8e59a0bbdd",
+  "before_package_sha256": "90147c68f5cb022e85322ddd1b0cb42f52319130f2e957290888306e1526c669",
+  "after_package_sha256": "6b65a7e92709df7131b2ffb3b9861df368ae5cef77c63f5b73f321e8ab27f847",
+  "affected_pair_block_ids": [
+    "CFO-PB-03",
+    "CFO-PB-04",
+    "CFO-PB-05",
+    "CFO-PB-06",
+    "CFO-PB-07",
+    "CFO-PB-08",
+    "CFO-PB-09"
+  ],
+  "preserved_PB01_fingerprint": "59fd79db95cdabc8c6e3648e5b8f044678606910d8ccc787316121e83041737c",
+  "loaders": [
+    "ContractPackage",
+    "ChecklistWorkspaceSpec",
+    "PairBlockPlan",
+    "DeclarationRevisionPlan"
+  ],
+  "canonical_live_workspace_and_plan_loaders_passed": true,
+  "current_plan_baseline": "f659faf7e7d0b721af736520c1b2b201d778c891",
+  "syntax_parsed_proposed_python_file_count": 30,
+  "implementation_gate_run": false,
+  "approval_or_completion_receipt_created": false,
+  "interpretation": "Actual production schema loaders and impact computation only. accepted_package is an exact authored before-image, not an assertion of accepted implementation; previous_receipt_ref is None because no prior lifecycle receipt exists."
+}

@@ -1,0 +1,207 @@
+--- a/src/viper/storage.py
++++ b/src/viper/storage.py
+@@ -19,14 +19,19 @@
+ )
+ 
+ from ._cloud import (
++    LocalSource,
+     PublicationSource,
++    SnapshotInventory,
++    SnapshotSources,
+     ViperCloudDestination,
+     ViperCloudError,
+     ViperCloudRepository,
+     manifest_revision,
+     resolve_publication_source,
++    source_file,
+ )
+ from ._schema import ProtocolModel, RepoRelPath
++from ._storage_registry import StorageRegistry
+ from .cloud import ViperCloud
+ from .gcs import GcsProgressSink, stderr_gcs_progress
+ from .ids import RunId
+@@ -175,30 +180,37 @@
+         except PathError as error:
+             raise LocalStoreError("local store escapes the workspace root") from error
+ 
++        self.registry = StorageRegistry(self.repository_root, self.store)
++
+     def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
+         """Save the files and return their snapshot ID."""
+         commit, _ = self._publish(files)
+         return commit
+ 
+     def _publish(
+-        self, files: Mapping[RepoRelPath, bytes]
++        self,
++        files: Mapping[RepoRelPath, bytes],
+     ) -> tuple[str, tuple[SnapshotFileRef, ...]]:
+         """Save the files and return their snapshot ID and file hashes."""
+         if not files:
+             raise LocalStoreError("an immutable revision requires at least one file")
++
+         identities = tuple(
+             snapshot_file(path, raw) for path, raw in sorted(files.items())
+         )
+         commit = content_revision(identities)
+         revision_root = self.store_root / commit
++
+         for relative_path, raw in sorted(files.items()):
+             target = (revision_root / relative_path).resolve()
+             if not target.is_relative_to(revision_root):
+                 raise LocalStoreError("published file escapes its immutable revision")
++
+             if target.exists():
+                 if not target.is_file() or target.read_bytes() != raw:
+                     raise LocalStoreError("immutable revision contains different bytes")
+                 continue
++
+             target.parent.mkdir(parents=True, exist_ok=True)
+             file_descriptor, temporary_name = tempfile.mkstemp(
+                 dir=target.parent,
+@@ -211,11 +223,50 @@
+                     os.fsync(temporary_file.fileno())
+                 os.replace(temporary_name, target)
+             finally:
+-                temporary_path = Path(temporary_name)
+-                if temporary_path.exists():
+-                    temporary_path.unlink()
++                Path(temporary_name).unlink(missing_ok=True)
++
++        snapshot = LocalStageResultSnapshotRef(
++            workspace=self.repository_root,
++            store=self.store,
++            commit=commit,
++        )
++        self.registry.register_snapshot(
++            SnapshotSources(
++                inventory=SnapshotInventory(
++                    source=snapshot,
++                    source_files=identities,
++                ),
++                locations={
++                    member.path: (
++                        self._observe(
++                            revision_root / member.path,
++                            custody="cache",
++                        ),
++                    )
++                    for member in identities
++                },
++            )
++        )
+         return commit, identities
+ 
++    def _observe(
++        self,
++        path: Path,
++        *,
++        custody: Literal["output", "cache", "external"],
++    ) -> LocalSource:
++        """Record the path and file-system details of a file already checked."""
++        status = path.stat()
++        return LocalSource(
++            path=path.relative_to(self.repository_root).as_posix(),
++            observed_stat=(
++                status.st_dev,
++                status.st_ino,
++                status.st_mtime_ns,
++                status.st_ctime_ns,
++            ),
++            custody=custody,
++        )
+     def snapshot(
+         self,
+         files: Mapping[RepoRelPath, bytes],
+@@ -265,25 +316,63 @@
+             raise LocalStoreError("local immutable file is missing")
+         return target
+ 
++    def _local_snapshot(
++        self,
++        source: LocalStageResultSnapshotRef,
++    ) -> SnapshotSources:
++        """Read the saved file list or register files from the older store layout."""
++        registered = self.registry.snapshot(source)
++        if registered is not None:
++            return registered
++
++        if source.workspace != self.repository_root or source.store != self.store:
++            raise LocalStoreError("local snapshot belongs to a different store")
++
++        directory = resolve_path(
++            self.repository_root,
++            f"{self.store}/{source.commit}",
++            operation="write",
++        )
++        if not directory.is_dir():
++            raise LocalStoreError("local snapshot revision is missing")
++
++        members = []
++        locations = {}
++        for path in sorted(directory.rglob("*")):
++            if path.is_symlink():
++                raise LocalStoreError("local snapshot contains a symlink")
++            if path.is_file():
++                member_path = path.relative_to(directory).as_posix()
++                member = source_file(self.repository_root, member_path, path)
++                members.append(member)
++                locations[member_path] = (self._observe(path, custody="cache"),)
++
++        try:
++            inventory = SnapshotInventory(
++                source=source,
++                source_files=tuple(sorted(members, key=lambda member: member.path)),
++            )
++        except ValueError as error:
++            raise LocalStoreError(
++                "local snapshot inventory differs from its revision"
++            ) from error
++
++        record = SnapshotSources(
++            inventory=inventory,
++            locations=locations,
++        )
++        self.registry.register_snapshot(record)
++        return record
++
+     def list_snapshot_files(
+         self,
+         snapshot: LocalStageResultSnapshotRef,
+     ) -> tuple[RepoRelPath, ...]:
+         """Return the complete recorded file list, including files absent locally."""
+-        if snapshot.workspace != self.repository_root or snapshot.store != self.store:
+-            raise LocalStoreError("local snapshot belongs to a different store")
+-
+-        revision_root = (self.store_root / snapshot.commit).resolve()
+-        if not revision_root.is_dir():
+-            raise LocalStoreError("local snapshot revision is missing")
+-
+-        paths: list[RepoRelPath] = []
+-        for path in sorted(revision_root.rglob("*")):
+-            if path.is_symlink():
+-                raise LocalStoreError("local snapshot contains a symlink")
+-            if path.is_file():
+-                paths.append(path.relative_to(revision_root).as_posix())
+-        return tuple(paths)
++        return tuple(
++            member.path
++            for member in self._local_snapshot(snapshot).inventory.source_files
++        )
+ 
+ 
+ def local_artifact_store(
+@@ -331,11 +420,11 @@
+     ) -> LocalStageResultSnapshotRef:
+         """Save a stage record with checked files from an earlier snapshot."""
+         payload: dict[RepoRelPath, bytes] = {resolved_stage_path: resolved_stage}
+-        for target_path, source_file in files.items():
++        for target_path, member in files.items():
+             if target_path == resolved_stage_path:
+                 raise StorageConfigurationError("reused file replaces resolved stage")
+             raw = source_bytes[target_path]
+-            _verify_reuse_source(source_file, raw)
++            _verify_reuse_source(member, raw)
+             payload[target_path] = raw
+         return self.store.snapshot(payload)
+ 

@@ -1,0 +1,311 @@
+schema_version = 1
+contract_id = "cloud-offload"
+title = "Cloud Offload"
+
+[[requirements]]
+id = "CFO-REQ-01"
+claim = "An accepted exact-byte offload binding preserves its original LocalStageResultSnapshotRef and complete SnapshotFileRef inventory. The original inventory must reproduce the local snapshot commit. The source and destination inventories must contain exactly the same unique paths, and corresponding declared members must have equal byte counts and SHA-256 values. Reject changed identities, missing members, extra members, or duplicate paths before accepting the binding for later cloud-backed read or eviction checks."
+depends_on = []
+verifier_ids = ["CFO-VR-01"]
+
+[[verifiers]]
+id = "CFO-VR-01"
+requirement_ids = ["CFO-REQ-01"]
+acceptance_conditions = [
+  "Matching declared inventories preserve the original snapshot reference, reproduce its commit, and establish a one-to-one correspondence of unique paths and file identities.",
+  "Changed declared payload identities, missing or extra members, duplicate paths, and source and destination inventories changed together under an unchanged original snapshot reference are rejected before later read or eviction checks.",
+]
+success_case = { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_preserves_original_snapshot_identity" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_rejects_changed_payload" },
+  { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_rejects_changed_snapshot_membership" },
+]
+
+[[pair_blocks]]
+id = "CFO-PB-01"
+requirement_ids = ["CFO-REQ-01"]
+depends_on = []
+repository_id = "viper"
+requirement_contribution = "Validate exact-byte snapshot bindings while preserving existing reference formats."
+completion_evidence = ["implementation_review"]
+
+
+
+[[requirements]]
+id = "CFO-REQ-02"
+claim = "Persist each original SnapshotInventory independently of resident payloads. One store-owned registry is authoritative for immutable inventory links, current physical bindings, artifact preferences and coordinated access; per-operation journals are not a second binding or retention authority. Reconstruct a fully resident legacy snapshot inventory once and validate it with the existing shared inventory validator before allowing partial residency. A missing registration is distinct from malformed or conflicting metadata. Retiring a binding invalidates its location without granting authority to delete an external file."
+depends_on = ["CFO-REQ-01"]
+verifier_ids = ["CFO-VR-02"]
+
+
+[[requirements]]
+id = "CFO-REQ-03"
+claim = "LocalArtifactStore owns ordinary verified file resolution and complete snapshot listing. Resolve through a registered original, a shared content-addressed payload beneath .viper/store, or existing verified cloud backing; verify size and SHA-256 before atomically installing a download. Preserve serialized references and complete inventory during partial residency. Retain usable bundle-relative filenames through the existing materialization mechanism. RunFetcher delegates ordinary persistent payload caching and may retain execution-scoped verification reuse; bounded task-owned transfer staging stays separate. Original outputs are not copied merely to populate a cache."
+depends_on = ["CFO-REQ-02"]
+verifier_ids = ["CFO-VR-03"]
+
+
+[[requirements]]
+id = "CFO-REQ-04"
+claim = "Keep storage.offload default false and independent of configured publication destinations. Each exact registered artifact version, including its full existing bundle membership, has one mutable override: inherit, keep or offload. Inherit uses the current global default; do not persist a second effective boolean. Explicit keep is recorded before resolution and succeeds only when every member has a verified local copy; failure retains the preference. A global keep default retains produced or accessed payloads without proactively restoring history. Retention changes do not alter reference bytes, publication identity or completed receipts."
+depends_on = ["CFO-REQ-03"]
+verifier_ids = ["CFO-VR-04"]
+
+
+[[requirements]]
+id = "CFO-REQ-05"
+claim = "Derive persistent subscribers from one registered artifact version and its existing member relationships, never from reads or workflow counts. A shared payload can lose its last usable local copy only when every subscriber currently permits offload. A keep preference preserves one verified local copy, not all redundant materializations. Native consumers acquire shared payload protection before resolution and retain it through tracked workflow completion; process-held locks release on process exit. Coordinate current preferences, reader acquisition and the final removal decision so a new keep or reader defeats stale cleanup. Do not add an unsupported raw-path hold/release API."
+depends_on = ["CFO-REQ-03","CFO-REQ-04"]
+verifier_ids = ["CFO-VR-05","CFO-VR-12"]
+
+
+[[requirements]]
+id = "CFO-REQ-06"
+claim = "Register and resolve managed copies consistently across datasets, new outputs, reused producer artifacts and restorations. Origin alone never authorizes or permanently prohibits removal. Integrate capture_external_input and subsequent reads with managed resolution before removing an enrolled original input path. An existing changed external dataset produces a new captured version rather than silently reading an older binding. User-owned exports remain outside automatic deletion until deliberately enrolled. Borrow one internal lifetime across native training, inference, evaluation, diagnostics, batches and benchmark confirmation, and close after all managed users and writers finish."
+depends_on = ["CFO-REQ-03","CFO-REQ-05"]
+verifier_ids = ["CFO-VR-06"]
+
+
+[[requirements]]
+id = "CFO-REQ-07"
+claim = "Publish completed original paths directly after writers finish and relinquish further writes, without mandatory payload copying or graph-rewriting promotion for new managed runs. Persist publication work before returning from admission and execute provider I/O independently of computation. Requests bind original inventory identities and pinned destinations; source paths are looked up in the shared registry and current retention is excluded from publication identity. Reuse existing provider verification and PublicationJournal recovery; adapt the actual JEP durable-admission pattern rather than claiming an existing native supervisor. Pending or failed work retains its sources; source bytes and their host remain available until verified publication or verified durable handoff."
+depends_on = ["CFO-REQ-02","CFO-REQ-03"]
+verifier_ids = ["CFO-VR-07","CFO-VR-11"]
+
+
+[[requirements]]
+id = "CFO-REQ-08"
+claim = "Automatically remove managed payloads only after successful whole-workflow completion, closed publication collection, verified coverage and final receipts at every requested destination, current unanimous offload permission, no active readers, recoverable backing and an exact match to the authorized owned materialization. Use the same decision for legacy eviction and ancestor-directory deletion containing managed payloads. Keep ordinary disposable scratch cleanup independent. Recheck current policy and physical identity immediately before removal, preserve replacements and user-owned names, and retain local sources after failed or unresolved publication or computation."
+depends_on = ["CFO-REQ-05","CFO-REQ-06","CFO-REQ-07"]
+verifier_ids = ["CFO-VR-08"]
+
+
+[[requirements]]
+id = "CFO-REQ-09"
+claim = "Keep immutable inventories, mutable bindings and preferences, and publication recovery evidence after payload eviction. Restart incomplete publication without rerunning computation, reuse committed verified backing without reopening publication or mutating its receipt, and restore evicted original local references through the ordinary resolver into the current host's store. A portable receipt does not require recreating the producing host's absolute paths. Scientific results and pending, complete or failed publication remain distinguishable. Existing APIs promising verified cloud references wait for verification and surface failure rather than report incomplete work as completed."
+depends_on = ["CFO-REQ-03","CFO-REQ-07"]
+verifier_ids = ["CFO-VR-09"]
+
+
+[[requirements]]
+id = "CFO-REQ-10"
+claim = "Retain one inventory validator, one ordinary resolver, one retention authority and one deletion-eligibility decision. Retire duplicate ordinary verified-object cache ownership and the pending per-operation source-binding registry as their successors land; retain bounded transfer staging and legacy explicit promotion behavior. Move JEP callers to the native mechanism before removing duplicated publication and retention machinery. Final acceptance includes an explicit before/after maintained source-and-test line report for Viper and JEP separately and combined; satisfy net reduction without dropping guarantees, meaningful checks or semantic documentation. Do not claim this requirement complete from planning or static proposals."
+depends_on = ["CFO-REQ-08","CFO-REQ-09"]
+verifier_ids = ["CFO-VR-10","CFO-VR-13"]
+
+[[verifiers]]
+id = "CFO-VR-02"
+requirement_ids = ["CFO-REQ-02"]
+acceptance_conditions = [
+  "After registration and payload removal, reloading the registry returns the exact original inventory and complete membership.",
+  "StorageRegistryError rejects changed inventory under an existing source key and conflicting current custody before replacing authoritative metadata. Missing registration returns None; corrupt registered metadata raises.",
+]
+success_case = { repository_id = "viper", path = "tests/test_storage_registry.py", symbol = "test_inventory_survives_restart_and_payload_absence" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_storage_registry.py", symbol = "test_registered_inventory_cannot_change" },
+  { repository_id = "viper", path = "tests/test_storage_registry.py", symbol = "test_custody_conflict_rolls_back_new_snapshot" },
+]
+
+[[verifiers]]
+id = "CFO-VR-03"
+requirement_ids = ["CFO-REQ-03"]
+acceptance_conditions = [
+  "Distinct immutable member addresses with equal verified content share an ordinary managed payload while retaining original references and bundle layout.",
+  "A selected changed original and a downloaded size or SHA-256 mismatch fail before a usable path is returned; failed downloads do not become installed payloads. Legacy inventory is complete before partial residency.",
+]
+success_case = { repository_id = "viper", path = "tests/test_shared_storage.py", symbol = "test_local_members_share_payload_without_changing_references" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_shared_storage.py", symbol = "test_corrupt_registered_original_is_reported" },
+  { repository_id = "viper", path = "tests/test_shared_storage.py", symbol = "test_failed_download_never_installs_a_shared_payload" },
+]
+
+[[verifiers]]
+id = "CFO-VR-04"
+requirement_ids = ["CFO-REQ-04"]
+acceptance_conditions = [
+  "Both override directions and inherit follow current configuration independently of publication destination. Global keep does not enumerate or download historical artifacts.",
+  "An explicit keep is persisted before a missing bundle member is fetched; retrieval failure is surfaced and the keep preference survives. Success requires all members verified locally.",
+]
+success_case = { repository_id = "viper", path = "tests/test_artifact_retention.py", symbol = "test_inherited_retention_uses_the_current_default" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_artifact_retention.py", symbol = "test_failed_keep_preserves_the_preference" },
+]
+
+[[verifiers]]
+id = "CFO-VR-05"
+requirement_ids = ["CFO-REQ-05"]
+acceptance_conditions = [
+  "One keep subscriber prevents losing the last local copy shared by otherwise offloadable artifacts. Repeated reads add no persistent subscriptions.",
+  "A queued cleanup cannot remove a payload after a newer keep decision; changing an unrelated artifact preference does not change original identity or upload records.",
+]
+success_case = { repository_id = "viper", path = "tests/test_artifact_retention.py", symbol = "test_any_shared_artifact_keep_vetoes_offload" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_artifact_retention.py", symbol = "test_keep_blocks_stale_cleanup" },
+]
+
+[[verifiers]]
+id = "CFO-VR-06"
+requirement_ids = ["CFO-REQ-06"]
+acceptance_conditions = [
+  "Training, inference, evaluation and diagnostics reuse stable references with enrolled input and restored copies through the shared resolver.",
+  "A changed existing dataset is captured as a new version; a user-owned export is neither deleted nor silently adopted. Root workflow ownership spans all nested users.",
+]
+success_case = { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_managed_dataset_resolves_after_offload" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_external_path_replacement_is_not_old_artifact" },
+  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_user_owned_export_is_not_removed" },
+]
+
+[[verifiers]]
+id = "CFO-VR-07"
+requirement_ids = ["CFO-REQ-07"]
+acceptance_conditions = [
+  "Captured original member paths upload through the existing provider and shared exact-inventory check; full cloud-byte verification precedes published acknowledgment.",
+  "Changed bytes, missing or extra members reject before publication intent/provider I/O; failed remote SHA-256 verification does not produce published proof.",
+]
+success_case = { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_direct_publication_preserves_original_bundle_and_verifies_before_return" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_direct_publication_rejects_changed_inventory_before_saving_intent" },
+  { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_direct_publication_does_not_acknowledge_failed_cloud_hash_check" },
+]
+
+[[verifiers]]
+id = "CFO-VR-08"
+requirement_ids = ["CFO-REQ-08"]
+acceptance_conditions = [
+  "One deletion decision authorizes only exact owned materializations after whole-workflow success, closed collection, all-target final proof, current permissions and completed readers.",
+  "Failure, any incomplete target, a newer keep, a new reader or a replaced physical file prevents removal. Recursive artifact cleanup cannot bypass this decision; disposable scratch remains independently cleanable.",
+]
+success_case = { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_successful_workflow_offloads_after_all_consumers" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_failed_workflow_keeps_sources" },
+  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_pending_target_blocks_cleanup" },
+  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_stale_cleanup_preserves_replacement_and_new_keep" },
+]
+
+[[verifiers]]
+id = "CFO-VR-09"
+requirement_ids = ["CFO-REQ-09"]
+acceptance_conditions = [
+  "Restart reuses immutable inventories and existing publication proof to restore original references into the current store, preserving preferences and complete listing.",
+  "An API promising a verified cloud reference never returns pending work as complete. Later cleanup neither invokes an old upload nor changes its completed receipt.",
+]
+success_case = { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_restart_restores_evicted_artifact_with_unchanged_reference" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_unverified_cloud_reference_is_not_returned" },
+  { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_cleanup_does_not_restart_completed_upload" },
+]
+
+[[verifiers]]
+id = "CFO-VR-10"
+requirement_ids = ["CFO-REQ-10"]
+acceptance_conditions = [
+  "Native and migrated JEP lifecycle callers use the same owners; ordinary duplicate cache and source-journal paths are retired with their successors.",
+  "Legacy eviction cannot bypass a keep/read hold. Retained before/after source-and-test reports show both repositories separately and net reduction combined without deleting required checks or documentation.",
+]
+success_case = { repository_id = "viper", path = "tests/test_storage_lifecycle.py", symbol = "test_storage_lifecycle_uses_single_resolver_and_retention_authority" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_storage_lifecycle.py", symbol = "test_legacy_eviction_cannot_bypass_retention" },
+]
+
+[[verifiers]]
+id = "CFO-VR-11"
+requirement_ids = ["CFO-REQ-07"]
+acceptance_conditions = [
+  "Admission commits metadata before returning; a background worker makes publication progress during later computation. Requests do not contain checkpoint bytes or mutable retention/location identity.",
+  "A failed spawn leaves recoverable work and original bytes; restarting after interruption resumes publication only, preserving the same request identity when source locations or retention change.",
+]
+success_case = { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_durable_queue_uploads_while_computation_continues" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_failed_spawn_keeps_durable_request" },
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_interrupted_upload_retries_without_computation" },
+]
+
+[[verifiers]]
+id = "CFO-VR-12"
+requirement_ids = ["CFO-REQ-05"]
+acceptance_conditions = [
+  "Managed readers protect the shared payload before resolution and across overlapping workflow lifetimes. Repeated reads share workflow protection; process exit releases ordinary locks.",
+  "Reads acquired through a closed workflow are rejected. Cleanup cannot acquire exclusive protection while any managed reader remains; no persisted reader counter can survive a crash.",
+]
+success_case = { repository_id = "viper", path = "tests/test_storage_readers.py", symbol = "test_overlapping_workflows_keep_independent_reader_holds" }
+rejection_cases = [
+  { repository_id = "viper", path = "tests/test_storage_readers.py", symbol = "test_closed_workflow_rejects_new_readers" },
+]
+
+[[pair_blocks]]
+id = "CFO-PB-02"
+requirement_ids = ["CFO-REQ-02"]
+depends_on = ["CFO-PB-01"]
+repository_id = "viper"
+requirement_contribution = "Persist immutable inventories and current bindings in one registry; connect publication and listing immediately, with validated resident-snapshot adoption."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "CFO-PB-03"
+requirement_ids = ["CFO-REQ-03","CFO-REQ-05"]
+depends_on = ["CFO-PB-02"]
+repository_id = "viper"
+requirement_contribution = "Consolidate ordinary verified resolution and content caching, preserve bundle materialization and add process-held reader protection without enabling deletion."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "CFO-PB-04"
+requirement_ids = ["CFO-REQ-04","CFO-REQ-05"]
+depends_on = ["CFO-PB-03"]
+repository_id = "viper"
+requirement_contribution = "Add exact artifact-version overrides, derived subscriber unanimity and complete-bundle keep through the shared resolver."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "CFO-PB-05"
+requirement_ids = ["CFO-REQ-07","CFO-REQ-09"]
+depends_on = ["CFO-PB-04"]
+repository_id = "viper"
+requirement_contribution = "Publish captured originals directly through the existing journal and providers, preserving exact references and interrupted-upload recovery."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "CFO-PB-06"
+requirement_ids = ["CFO-REQ-03","CFO-REQ-06","CFO-REQ-07","CFO-REQ-09"]
+depends_on = ["CFO-PB-04","CFO-PB-05"]
+repository_id = "viper"
+requirement_contribution = "Add durable publication admission and native workflow ownership, verified backing lookup for original local refs, and managed input integration without a second location registry."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "CFO-PB-07"
+requirement_ids = ["CFO-REQ-05","CFO-REQ-08","CFO-REQ-09"]
+depends_on = ["CFO-PB-06"]
+repository_id = "viper"
+requirement_contribution = "Connect one current deletion decision to successful workflow closure, verified final receipts and all legacy managed cleanup paths; preserve restart and API guarantees."
+completion_evidence = ["implementation_review"]
+
+[[pair_blocks]]
+id = "CFO-PB-08"
+requirement_ids = ["CFO-REQ-03","CFO-REQ-06","CFO-REQ-09","CFO-REQ-10"]
+depends_on = ["CFO-PB-07"]
+repository_id = "viper"
+requirement_contribution = "Validate the complete Viper lifecycle and retire displaced Viper storage and retention ownership. Supply the Viper half of the cross-repository reduction report; JEP source migration belongs to CFO-PB-09."
+completion_evidence = ["implementation_review"]
+
+[[verifiers]]
+id = "CFO-VR-13"
+requirement_ids = ["CFO-REQ-10"]
+acceptance_conditions = [
+  "JEP callers use the native Viper queue, resolver and retention interfaces while preserving existing private-cloud and workload-identity configuration.",
+  "JEP-owned duplicate publication and retention orchestration is removed only after the shared native lifecycle passes publication-only retry and interrupted-upload recovery; no second provenance system or GPU provisioning is introduced.",
+]
+success_case = { repository_id = "jep", path = "tests/test_viper_storage_adapter.py", symbol = "test_jep_adapter_uses_native_viper_lifecycle" }
+rejection_cases = [
+  { repository_id = "jep", path = "tests/test_viper_storage_adapter.py", symbol = "test_jep_adapter_failure_does_not_rerun_computation" },
+]
+
+[[pair_blocks]]
+id = "CFO-PB-09"
+requirement_ids = ["CFO-REQ-10"]
+depends_on = ["CFO-PB-08"]
+repository_id = "jep"
+requirement_contribution = "Migrate JEP publication callers to native Viper storage and workflow ownership, remove duplicated queue and cleanup orchestration, and complete the measured cross-repository reduction acceptance."
+completion_evidence = ["implementation_review"]
+

@@ -1,0 +1,128 @@
+--- a/src/viper/_verified_cache.py
++++ b/src/viper/_verified_cache.py
+@@ -1,4 +1,4 @@
+-"""Persist immutable bytes after validating their recorded content identity."""
++"""Check file bytes and save checked files in the local cache."""
+ 
+ from __future__ import annotations
+ 
+@@ -14,35 +14,57 @@
+ 
+ @dataclass(frozen=True)
+ class VerifiedObjectCache:
+-    """Store files by SHA-256 and revalidate every cache hit."""
++    """Store files by SHA-256 and check their bytes before reuse."""
+ 
+     root: Path
+ 
++    @staticmethod
++    def read_path(reference: ResolvedFileRef, path: Path) -> bytes:
++        """Read the file once and check its byte count and SHA-256."""
++        raw = path.read_bytes()
++        if len(raw) != reference.bytes:
++            raise VerificationError(
++                f"byte-count mismatch: expected {reference.bytes}, received {len(raw)}"
++            )
++        digest = hashlib.sha256(raw).hexdigest()
++        if digest != reference.sha256:
++            raise VerificationError(
++                f"SHA-256 mismatch: expected {reference.sha256}, received {digest}"
++            )
++        return raw
++
++    @staticmethod
++    def verify_path(reference: ResolvedFileRef, path: Path) -> Path:
++        """Read the file in chunks to check its byte count and SHA-256."""
++        size = path.stat().st_size
++        if size != reference.bytes:
++            raise VerificationError(
++                f"byte-count mismatch: expected {reference.bytes}, received {size}"
++            )
++        with path.open("rb") as stream:
++            digest = hashlib.file_digest(stream, "sha256").hexdigest()
++        if digest != reference.sha256:
++            raise VerificationError(
++                f"SHA-256 mismatch: expected {reference.sha256}, received {digest}"
++            )
++        return path
++
+     def read(self, reference: ResolvedFileRef) -> bytes | None:
+-        """Return cached bytes only when both recorded identity fields match."""
+-        path = self._path(reference.sha256)
++        """Return cached bytes if their byte count and SHA-256 match the reference."""
+         try:
+-            raw = path.read_bytes()
+-        except FileNotFoundError:
++            return self.read_path(reference, self._path(reference.sha256))
++        except (FileNotFoundError, VerificationError):
+             return None
+-        if self._matches(reference, raw):
+-            return raw
+-        return None
+ 
+     def verified_path(self, reference: ResolvedFileRef) -> Path | None:
+-        """Return a cached path only when its complete identity still matches."""
+-        path = self._path(reference.sha256)
++        """Return the cached path if its file matches the reference."""
+         try:
+-            if path.stat().st_size != reference.bytes:
+-                return None
+-            with path.open("rb") as stream:
+-                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+-        except OSError:
++            return self.verify_path(reference, self._path(reference.sha256))
++        except (OSError, VerificationError):
+             return None
+-        return path if digest == reference.sha256 else None
+ 
+     def adopt_verified_path(self, reference: ResolvedFileRef, source: Path) -> Path:
+-        """Atomically retain a path already verified by its storage client."""
++        """Move a downloaded file into the cache after the client has checked it."""
+         if source.stat().st_size != reference.bytes:
+             raise VerificationError(
+                 "retrieved file size differs from its resolved reference"
+@@ -53,7 +75,7 @@
+         return path
+ 
+     def temporary_path(self, reference: ResolvedFileRef) -> Path:
+-        """Allocate an absent same-filesystem path for one streamed restore."""
++        """Choose a temporary download path on the same filesystem as the cache."""
+         parent = self._path(reference.sha256).parent
+         parent.mkdir(parents=True, exist_ok=True)
+         descriptor, temporary_name = tempfile.mkstemp(dir=parent)
+@@ -63,15 +85,11 @@
+         return temporary
+ 
+     def path(self, reference: ResolvedFileRef) -> Path:
+-        """Return the content-addressed path for one resolved reference."""
++        """Build the cache path from the recorded SHA-256."""
+         return self._path(reference.sha256)
+ 
+     def write(self, reference: ResolvedFileRef, raw: bytes) -> None:
+-        """Atomically store bytes in the cache.
+-
+-        Callers must verify raw's byte count and SHA-256 against reference
+-        before calling write().
+-        """
++        """Save bytes the caller has checked, replacing the cache file in one rename."""
+         path = self._path(reference.sha256)
+         path.parent.mkdir(parents=True, exist_ok=True)
+         descriptor, temporary_name = tempfile.mkstemp(dir=path.parent)
+@@ -85,12 +103,8 @@
+             Path(temporary_name).unlink(missing_ok=True)
+ 
+     def _path(self, sha256: str) -> Path:
+-        """Shard one digest beneath the cache root."""
+-        return self.root / sha256[:2] / sha256
+-
+-    @staticmethod
+-    def _matches(reference: ResolvedFileRef, raw: bytes) -> bool:
+-        """Compare bytes with the complete recorded content identity."""
+-        return len(raw) == reference.bytes and (
+-            hashlib.sha256(raw).hexdigest() == reference.sha256
+-        )
++        """Build the cache filename from the SHA-256 hash."""
++        path = self.root / sha256[:2] / sha256
++        if any(part.is_symlink() for part in (self.root, path.parent, path)):
++            raise VerificationError("verified payload path contains a symlink")
++        return path

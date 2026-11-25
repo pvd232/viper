@@ -1,4 +1,4 @@
-"""Retrieve bytes and verify immutable file and artifact identities."""
+"""Read stored files and check their sizes and hashes."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import yaml
 import viper._subprocess as subprocess
 
 from .._schema import ArtifactName, DataRole, RepoRelPath
+from .._storage_registry import StorageRegistryError
 from ..artifact_loaders import (
     ArtifactLoaderError,
     ArtifactValidationResult,
@@ -251,17 +252,23 @@ def list_huggingface_snapshot_files(
 def list_local_snapshot_files(
     snapshot: LocalStageResultSnapshotRef,
 ) -> tuple[RepoRelPath, ...]:
-    """List every regular file in one repository-local snapshot."""
-    revision_root = (Path.cwd() / snapshot.store / snapshot.commit).resolve()
-    if not revision_root.is_dir():
-        raise VerificationError("artifact.bundle: local snapshot is missing")
-    paths: list[RepoRelPath] = []
-    for path in sorted(revision_root.rglob("*")):
-        if path.is_symlink():
-            raise VerificationError("artifact.bundle: snapshot contains a symlink")
-        if path.is_file():
-            paths.append(path.relative_to(revision_root).as_posix())
-    return tuple(paths)
+    """Read the complete snapshot file list through its local store."""
+    try:
+        return local_artifact_store(snapshot).list_snapshot_files(snapshot)
+    except (LocalStoreError, StorageRegistryError) as error:
+        messages = {
+            "local snapshot revision is missing": (
+                "artifact.bundle: local snapshot is missing"
+            ),
+            "local snapshot contains a symlink": (
+                "artifact.bundle: snapshot contains a symlink"
+            ),
+        }
+        message = messages.get(
+            str(error),
+            "artifact.bundle: local snapshot listing failed",
+        )
+        raise VerificationError(message) from error
 
 
 def list_snapshot_files(
@@ -345,7 +352,7 @@ def read_attempt_reference(
     fetcher: StorageFetcher | None = None,
 ) -> RunAttempt:
     """Retrieve one canonical attempt document and verify its path identity."""
-    path = str(reference.stored_at.path)
+    path = reference.stored_at.path
     prefix = f"{run_root(run)}/attempts/"
     suffix = "/resolved.yaml"
     if not path.startswith(prefix) or not path.endswith(suffix):
@@ -568,8 +575,8 @@ def verify_snapshot_artifact(
     elif isinstance(artifact, ResolvedBundleArtifact):
         roots: set[str] = set()
         for member in artifact.members:
-            full_path = str(member.file.path)
-            relative_path = str(member.relative_path)
+            full_path = member.file.path
+            relative_path = member.relative_path
             suffix = f"/{relative_path}"
             if not full_path.endswith(suffix):
                 raise VerificationError(
@@ -585,7 +592,7 @@ def verify_snapshot_artifact(
         published_paths = tuple(
             path
             for path in list_snapshot_files(stage.snapshot, fetcher=fetcher)
-            if str(path).startswith(f"{bundle_root}/")
+            if path.startswith(f"{bundle_root}/")
         )
         if published_paths != declared_paths:
             raise VerificationError(
@@ -671,7 +678,7 @@ def load_verified_artifact(
         f"{artifact_name}:{target_path}",
         tuple(
             (
-                str(verified_file.reference.path),
+                verified_file.reference.path,
                 verified_file.reference.sha256,
                 verified_file.reference.bytes,
             )

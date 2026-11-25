@@ -1,0 +1,31 @@
+{
+  "repository": "pvd232/agents",
+  "source_commit": "dc337cc403041d4b2cec1c69b08cfa8e59a0bbdd",
+  "files": [
+    {
+      "path": "contract_protocol/package.py",
+      "git_blob_sha": "375ba2fc5d36f8799958e7e04dca3b2ad16f1290"
+    },
+    {
+      "path": "contract_protocol/workspace.py",
+      "git_blob_sha": "712012bcc34d3c8b8738c5e7ca520ea10d5e0b13"
+    },
+    {
+      "path": "contract_protocol/plan.py",
+      "git_blob_sha": "11a57d4a10e04797dc755eefb2864c1a37efa7e2"
+    },
+    {
+      "path": "contract_protocol/document.py",
+      "git_blob_sha": "36fc8cb7a3ed7ed68ffed58d4fafb1383036e8bc"
+    },
+    {
+      "path": "contract_protocol/gate.py",
+      "git_blob_sha": "e167052e6b429437f1fde9c6174422bf5ef1e086"
+    },
+    {
+      "path": "contract_protocol/lifecycle.py",
+      "git_blob_sha": "9cfbc7f7454fddd588908c8de1fe08e34ad7360b"
+    }
+  ],
+  "purpose": "Unmodified production modules retained for metadata-only schema and declaration-impact validation; no project checks or lifecycle receipts."
+}

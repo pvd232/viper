@@ -65,6 +65,7 @@ TIER_BY_MODULE = {
     "test_verification_acceptance": "integration",
     "test_worker": "integration",
     "test_workflow_documentation": "contract",
+    "test_offload": "contract",
 }
 
 DOMAIN_BY_MODULE = {
@@ -128,6 +129,7 @@ DOMAIN_BY_MODULE = {
     "test_verification_acceptance": "domain_verification",
     "test_worker": "domain_execution",
     "test_workflow_documentation": "domain_release",
+    "test_offload": "domain_storage",
 }
 
 if TIER_BY_MODULE.keys() != DOMAIN_BY_MODULE.keys():

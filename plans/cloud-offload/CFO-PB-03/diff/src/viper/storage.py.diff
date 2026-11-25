@@ -1,0 +1,494 @@
+--- a/src/viper/storage.py
++++ b/src/viper/storage.py
+@@ -7,7 +7,7 @@
+ import os
+ import tempfile
+ import tomllib
+-from collections.abc import Mapping
++from collections.abc import Callable, Mapping
+ from pathlib import Path
+ from typing import Annotated, Literal, Protocol
+ 
+@@ -32,12 +32,18 @@
+ )
+ from ._schema import ProtocolModel, RepoRelPath
+ from ._storage_registry import StorageRegistry
++from ._verified_cache import VerifiedObjectCache
+ from .cloud import ViperCloud
++from .evidence import VerificationError
+ from .gcs import GcsProgressSink, stderr_gcs_progress
++from .huggingface import HuggingFaceProvider
+ from .ids import RunId
+ from .references import (
+     CloudStageResultSnapshotRef,
++    GcsFileRef,
+     GcsStageResultSnapshotRef,
++    GitFileRef,
++    HuggingFaceFileRef,
+     HuggingFaceStageResultSnapshotRef,
+     LocalFileRef,
+     LocalStageResultSnapshotRef,
+@@ -45,8 +51,13 @@
+     SnapshotFileRef,
+     StageResultSnapshotRef,
+     StorageModel,
++    ViperCloudFileRef,
++    ViperCloudStageResultSnapshotRef,
++    resolve_snapshot_file_ref,
+ )
+ from .repository import PathError, resolve_path
++
++_CloudSource = ViperCloud | Callable[[], ViperCloud]
+ 
+ 
+ class LocalStoreError(RuntimeError):
+@@ -167,10 +178,16 @@
+     return manifest_revision(files)
+ 
+ class LocalArtifactStore:
+-    """Save snapshot files and find their local paths."""
+-
+-    def __init__(self, repository_root: Path, store: RepoRelPath = ".viper/store"):
+-        """Choose the workspace and local store."""
++    """Save snapshot file lists and find the files in local or cloud storage."""
++
++    def __init__(
++        self,
++        repository_root: Path,
++        store: RepoRelPath = ".viper/store",
++        *,
++        cache_root: Path | None = None,
++    ) -> None:
++        """Choose the store and an optional separate cache for transfer work."""
+         self.repository_root = repository_root.resolve(strict=True)
+         self.store = store
+         try:
+@@ -179,8 +196,15 @@
+             )
+         except PathError as error:
+             raise LocalStoreError("local store escapes the workspace root") from error
+-
+         self.registry = StorageRegistry(self.repository_root, self.store)
++        self._objects = VerifiedObjectCache(self.store_root / "objects")
++        self.task_owned_cache = cache_root is not None
++        download_root = (
++            self._objects.root if cache_root is None else cache_root.resolve()
++        )
++        if not download_root.is_relative_to(self.repository_root):
++            raise LocalStoreError("file cache must be inside the workspace")
++        self.downloads = VerifiedObjectCache(download_root)
+ 
+     def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
+         """Save the files and return their snapshot ID."""
+@@ -188,154 +212,79 @@
+         return commit
+ 
+     def _publish(
+-        self,
+-        files: Mapping[RepoRelPath, bytes],
++        self, files: Mapping[RepoRelPath, bytes]
+     ) -> tuple[str, tuple[SnapshotFileRef, ...]]:
+-        """Save the files and return their snapshot ID and file hashes."""
++        """Store each distinct file by hash and save the complete snapshot file list."""
+         if not files:
+             raise LocalStoreError("an immutable revision requires at least one file")
+-
+         identities = tuple(
+             snapshot_file(path, raw) for path, raw in sorted(files.items())
+         )
+         commit = content_revision(identities)
+-        revision_root = self.store_root / commit
+-
+-        for relative_path, raw in sorted(files.items()):
+-            target = (revision_root / relative_path).resolve()
+-            if not target.is_relative_to(revision_root):
+-                raise LocalStoreError("published file escapes its immutable revision")
+-
+-            if target.exists():
+-                if not target.is_file() or target.read_bytes() != raw:
+-                    raise LocalStoreError("immutable revision contains different bytes")
+-                continue
+-
+-            target.parent.mkdir(parents=True, exist_ok=True)
+-            file_descriptor, temporary_name = tempfile.mkstemp(
+-                dir=target.parent,
+-                prefix=f".{target.name}.",
+-            )
+-            try:
+-                with os.fdopen(file_descriptor, "wb") as temporary_file:
+-                    temporary_file.write(raw)
+-                    temporary_file.flush()
+-                    os.fsync(temporary_file.fileno())
+-                os.replace(temporary_name, target)
+-            finally:
+-                Path(temporary_name).unlink(missing_ok=True)
+-
+         snapshot = LocalStageResultSnapshotRef(
+-            workspace=self.repository_root,
+-            store=self.store,
+-            commit=commit,
+-        )
++            workspace=self.repository_root, store=self.store, commit=commit
++        )
++        locations = {}
++        for member in identities:
++            reference = resolve_snapshot_file_ref(snapshot, member)
++            path = self._objects.verified_path(reference)
++            if path is None:
++                self._objects.write(reference, files[member.path])
++                path = self._objects.path(reference)
++            locations[member.path] = (self._observe(path, custody="cache"),)
+         self.registry.register_snapshot(
+             SnapshotSources(
+-                inventory=SnapshotInventory(
+-                    source=snapshot,
+-                    source_files=identities,
+-                ),
+-                locations={
+-                    member.path: (
+-                        self._observe(
+-                            revision_root / member.path,
+-                            custody="cache",
+-                        ),
+-                    )
+-                    for member in identities
+-                },
++                inventory=SnapshotInventory(source=snapshot, source_files=identities),
++                locations=locations,
+             )
+         )
+         return commit, identities
+ 
+     def _observe(
+-        self,
+-        path: Path,
+-        *,
+-        custody: Literal["output", "cache", "external"],
++        self, path: Path, *, custody: Literal["output", "cache", "external"]
+     ) -> LocalSource:
+         """Record the path and file-system details of a file already checked."""
+         status = path.stat()
+         return LocalSource(
+             path=path.relative_to(self.repository_root).as_posix(),
+             observed_stat=(
+-                status.st_dev,
+-                status.st_ino,
+-                status.st_mtime_ns,
+-                status.st_ctime_ns,
++                status.st_dev, status.st_ino, status.st_mtime_ns, status.st_ctime_ns
+             ),
+             custody=custody,
+         )
++
+     def snapshot(
+-        self,
+-        files: Mapping[RepoRelPath, bytes],
++        self, files: Mapping[RepoRelPath, bytes]
+     ) -> LocalStageResultSnapshotRef:
+         """Save the files and return their snapshot reference."""
+         return LocalStageResultSnapshotRef(
+-            workspace=self.repository_root,
+-            store=self.store,
+-            commit=self.publish(files),
++            workspace=self.repository_root, store=self.store, commit=self.publish(files)
+         )
+ 
+     def resolved_files(
+-        self,
+-        files: Mapping[RepoRelPath, bytes],
++        self, files: Mapping[RepoRelPath, bytes]
+     ) -> tuple[ResolvedFileRef, ...]:
+         """Save the files and return a reference for each one."""
+         commit, identities = self._publish(files)
++        snapshot = LocalStageResultSnapshotRef(
++            workspace=self.repository_root, store=self.store, commit=commit
++        )
+         return tuple(
+-            ResolvedFileRef(
+-                sha256=identity.sha256,
+-                bytes=identity.bytes,
+-                stored_at=LocalFileRef(
+-                    workspace=self.repository_root,
+-                    store=self.store,
+-                    commit=commit,
+-                    path=identity.path,
+-                ),
+-            )
+-            for identity in identities
+-        )
+-
+-    def fetch(self, location: StorageModel) -> bytes:
+-        """Read and check the file at the recorded address."""
+-        return self.path(location).read_bytes()
+-
+-    def path(self, location: StorageModel) -> Path:
+-        """Find the file at its recorded local store path."""
+-        if not isinstance(location, LocalFileRef):
+-            raise TypeError("LocalArtifactStore can resolve only LocalFileRef")
+-
+-        if location.workspace != self.repository_root or location.store != self.store:
+-            raise LocalStoreError("local file belongs to a different store")
+-
+-        revision_root = (self.store_root / location.commit).resolve()
+-        target = (revision_root / location.path).resolve()
+-        if not target.is_relative_to(revision_root) or not target.is_file():
+-            raise LocalStoreError("local immutable file is missing")
+-        return target
+-
+-    def _local_snapshot(
+-        self,
+-        source: LocalStageResultSnapshotRef,
+-    ) -> SnapshotSources:
++            resolve_snapshot_file_ref(snapshot, member) for member in identities
++        )
++
++    def _local_snapshot(self, source: LocalStageResultSnapshotRef) -> SnapshotSources:
+         """Read the saved file list or register files from the older store layout."""
+         registered = self.registry.snapshot(source)
+         if registered is not None:
+             return registered
+-
+         if source.workspace != self.repository_root or source.store != self.store:
+             raise LocalStoreError("local snapshot belongs to a different store")
+-
+         directory = resolve_path(
+-            self.repository_root,
+-            f"{self.store}/{source.commit}",
+-            operation="write",
++            self.repository_root, f"{self.store}/{source.commit}", operation="write"
+         )
+         if not directory.is_dir():
+             raise LocalStoreError("local snapshot revision is missing")
+-
+         members = []
+         locations = {}
+         for path in sorted(directory.rglob("*")):
+@@ -346,7 +295,6 @@
+                 member = source_file(self.repository_root, member_path, path)
+                 members.append(member)
+                 locations[member_path] = (self._observe(path, custody="cache"),)
+-
+         try:
+             inventory = SnapshotInventory(
+                 source=source,
+@@ -356,23 +304,211 @@
+             raise LocalStoreError(
+                 "local snapshot inventory differs from its revision"
+             ) from error
+-
++        record = SnapshotSources(inventory=inventory, locations=locations)
++        return self._register_snapshot(record)
++
++    def _register_snapshot(self, record: SnapshotSources) -> SnapshotSources:
++        """Save the snapshot's file list and look up its known local copies."""
++        self.registry.register_snapshot(record)
++        registered = self.registry.snapshot(record.inventory.source)
++        if registered is None:
++            raise LocalStoreError("registered snapshot is unavailable")
++        return registered
++
++    def _snapshot_record(
++        self, source: StageResultSnapshotRef, *, cloud: _CloudSource | None = None
++    ) -> SnapshotSources:
++        """Get the complete snapshot file list from the registry or cloud storage."""
++        if isinstance(source, LocalStageResultSnapshotRef):
++            return self._local_snapshot(source)
++        registered = None if self.task_owned_cache else self.registry.snapshot(source)
++        if registered is not None:
++            return registered
++        service = self._cloud(source, cloud)
+         record = SnapshotSources(
+-            inventory=inventory,
+-            locations=locations,
+-        )
+-        self.registry.register_snapshot(record)
++            inventory=SnapshotInventory(
++                source=source, source_files=service.list_files(source)
++            )
++        )
++        if not self.task_owned_cache:
++            return self._register_snapshot(record)
+         return record
+ 
++    def _reference(
++        self, location: StorageModel, *, cloud: _CloudSource | None = None
++    ) -> ResolvedFileRef:
++        """Look up the file's recorded size and SHA-256 hash."""
++        if isinstance(location, GitFileRef):
++            raise TypeError("Git source retrieval remains with its Git reader")
++        source = TypeAdapter(StageResultSnapshotRef).validate_python(
++            location.model_dump(exclude={"path"})
++        )
++        for member in self._snapshot_record(source, cloud=cloud).inventory.source_files:
++            if member.path == location.path:
++                return resolve_snapshot_file_ref(source, member)
++        raise LocalStoreError("immutable file is outside the snapshot inventory")
++
++    def fetch(
++        self, location: StorageModel, *, cloud: _CloudSource | None = None
++    ) -> bytes:
++        """Read and check the file at the recorded address."""
++        return self.read(self._reference(location, cloud=cloud), cloud=cloud)
++
++    def path(self, location: StorageModel) -> Path:
++        """Find the file's current local path and check its bytes."""
++        return self.resolve(self._reference(location))
++
++    def resolve(
++        self, reference: ResolvedFileRef, *, cloud: _CloudSource | None = None
++    ) -> Path:
++        """Find and check a registered original or stored copy of the file."""
++        resolved = self._resolve(reference, as_bytes=False, cloud=cloud)
++        assert isinstance(resolved, Path)
++        return resolved
++
++    def read(
++        self, reference: ResolvedFileRef, *, cloud: _CloudSource | None = None
++    ) -> bytes:
++        """Read the file once and check its byte count and SHA-256."""
++        return self.read_resolved(reference, cloud=cloud)[0]
++
++    def read_resolved(
++        self, reference: ResolvedFileRef, *, cloud: _CloudSource | None = None
++    ) -> tuple[bytes, Path]:
++        """Read and check the file, returning its bytes and local path."""
++        resolved = self._resolve(reference, as_bytes=True, cloud=cloud)
++        assert isinstance(resolved, tuple)
++        return resolved
++
++    def cached_read(self, reference: ResolvedFileRef) -> tuple[bytes, Path] | None:
++        """Read cached bytes if their byte count and SHA-256 match the reference."""
++        raw = self.downloads.read(reference)
++        return None if raw is None else (raw, self.downloads.path(reference))
++
++    def cache_verified_bytes(self, reference: ResolvedFileRef, raw: bytes) -> Path:
++        """Store bytes that the caller has already checked against the reference."""
++        self.downloads.write(reference, raw)
++        return self.downloads.path(reference)
++
++    def _resolve(
++        self,
++        reference: ResolvedFileRef,
++        *,
++        as_bytes: bool,
++        cloud: _CloudSource | None,
++    ) -> tuple[bytes, Path] | Path:
++        """Check a registered local copy or restore a missing cloud file."""
++        location = reference.stored_at
++        if isinstance(location, GitFileRef):
++            raise TypeError("Git source retrieval remains with its Git reader")
++        source = TypeAdapter(StageResultSnapshotRef).validate_python(
++            location.model_dump(exclude={"path"})
++        )
++        record = self._snapshot_record(source, cloud=cloud)
++        member = SnapshotFileRef(
++            path=location.path, sha256=reference.sha256, bytes=reference.bytes
++        )
++        failure: VerificationError | None = None
++        if member not in record.inventory.source_files:
++            raise VerificationError(
++                "resolved file differs from its snapshot inventory"
++            )
++        aliases = sorted(
++            record.locations.get(member.path, ()),
++            key=lambda alias: alias.custody == "cache",
++        )
++        for alias in aliases:
++            if alias.retired:
++                continue
++            try:
++                path = resolve_path(
++                    self.repository_root, alias.path, operation="read"
++                )
++                status = path.stat()
++                if (status.st_dev, status.st_ino) != alias.observed_stat[:2]:
++                    continue
++                if as_bytes:
++                    return VerifiedObjectCache.read_path(reference, path), path
++                return VerifiedObjectCache.verify_path(reference, path)
++            except (FileNotFoundError, PathError):
++                continue
++            except VerificationError as error:
++                if alias.custody != "cache":
++                    raise
++                failure = error
++        cache = (
++            self._objects
++            if isinstance(source, LocalStageResultSnapshotRef)
++            else self.downloads
++        )
++        cached = cache.read(reference) if as_bytes else cache.verified_path(reference)
++        if cached is not None:
++            if not self.task_owned_cache:
++                self.registry.record_materialization(
++                    source, member, cache.path(reference), custody="cache"
++                )
++            if isinstance(cached, bytes):
++                return cached, cache.path(reference)
++            return cached
++        if isinstance(source, LocalStageResultSnapshotRef):
++            if failure is not None:
++                raise failure
++            raise LocalStoreError("registered local payload is unavailable")
++        service = self._cloud(location, cloud)
++        if isinstance(service.provider, HuggingFaceProvider):
++            service.provider.stream_files = True
++        temporary = cache.temporary_path(reference)
++        try:
++            restored = service.fetch_to_path(reference, temporary)
++            installed = cache.adopt_verified_path(reference, restored)
++        finally:
++            temporary.unlink(missing_ok=True)
++        if not self.task_owned_cache:
++            self.registry.record_materialization(
++                source, member, installed, custody="cache"
++            )
++        return (installed.read_bytes(), installed) if as_bytes else installed
++
++    def _cloud(
++        self,
++        location: StorageModel | CloudStageResultSnapshotRef,
++        cloud: _CloudSource | None = None,
++    ) -> ViperCloud:
++        """Create or reuse a cloud service after local lookup fails."""
++        if cloud is not None:
++            return cloud() if callable(cloud) else cloud
++        if isinstance(
++            location, (ViperCloudFileRef, ViperCloudStageResultSnapshotRef)
++        ):
++            return viper_cloud(self.repository_root)
++        if isinstance(
++            location, (GcsStageResultSnapshotRef, HuggingFaceStageResultSnapshotRef)
++        ):
++            return ViperCloud.for_snapshot(self.repository_root, location)
++        if isinstance(location, (GcsFileRef, HuggingFaceFileRef)):
++            return ViperCloud.for_reference(self.repository_root, location)
++        raise TypeError("reference is not cloud-backed")
++
++    def snapshot_files(
++        self,
++        snapshot: StageResultSnapshotRef,
++        *,
++        cloud: _CloudSource | None = None,
++    ) -> tuple[SnapshotFileRef, ...]:
++        """List every recorded file with its byte count and SHA-256."""
++        return self._snapshot_record(snapshot, cloud=cloud).inventory.source_files
++
+     def list_snapshot_files(
+         self,
+-        snapshot: LocalStageResultSnapshotRef,
++        snapshot: StageResultSnapshotRef,
++        *,
++        cloud: _CloudSource | None = None,
+     ) -> tuple[RepoRelPath, ...]:
+         """Return the complete recorded file list, including files absent locally."""
+         return tuple(
+-            member.path
+-            for member in self._local_snapshot(snapshot).inventory.source_files
+-        )
++            member.path for member in self.snapshot_files(snapshot, cloud=cloud)
++        )
++
+ 
+ 
+ def local_artifact_store(

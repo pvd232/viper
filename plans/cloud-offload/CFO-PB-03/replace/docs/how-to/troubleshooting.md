@@ -1,0 +1,77 @@
+# Troubleshoot VIPER
+
+Start with the first reported error. Later errors may result from the same missing file,
+invalid declaration, or failed stage.
+
+## Confirm the environment
+
+```bash
+source .venv/bin/activate
+python -c 'import sys; print(sys.executable)'
+command -v viper
+```
+
+Both executables should resolve beneath the repository's `.venv` when you are developing
+this checkout.
+
+## Plan compilation failed
+
+Check these in order:
+
+1. The workspace is a Git repository with a committed source state.
+2. Decorated functions, loaders, and custom config classes live in importable
+   Python files under the workspace root. Built-in config classes come from VIPER.
+3. Every local input path exists and remains inside the workspace.
+4. Every stage objective names a metric attached to that stage.
+5. Every downstream artifact handle comes from a stage in the selected variant.
+
+## Preflight rejects execution
+
+Preflight validates the frozen plan against the current host. A source digest mismatch
+means the available code differs from the selected source. Re-author the plan from the
+intended commit or restore the source it names.
+
+## A stage failed
+
+Use `viper.inspection.attempt_status(journal_path)` to inspect the latest attempt
+state. After fixing a transient runtime condition, call `execution.retry()` with
+the original frozen plan; see [retry a failed run](retry-restore-compare.md#retry-a-failed-run). If you change source code, config, or inputs, commit the changes and create
+a new plan. A retry checks the original source identity; incorporating a code fix
+requires a new plan.
+
+## Verification failed after the function returned
+
+Check the declared output names and paths first. A stage can return normally while
+omitting an output, writing outside its assigned path, or recording an undeclared
+metric. VIPER reports the run as successful only after verification confirms the
+required outputs and measurements.
+
+## A CLI consumer fails to parse output
+
+Place `--json` before the subcommand:
+
+```bash
+viper --json capabilities
+```
+
+JSON mode emits one typed success or failure document. Human mode is intended for
+terminal reading.
+
+## The run succeeded but journal capture failed
+
+The warning names the parser or encoder failure. The saved run and measurements
+remain authoritative. Check UTF-8 encoding, duplicate fields, measurement
+selectors, available model-download access, and the encoder timeout. Pre-download
+the pinned model when needed, then call `publish_run_journal` on the saved result.
+See [journal recovery](journals.md#recover-from-publication-failure).
+
+## Reclaim verification-cache space
+
+VIPER stores reusable file bytes under `.viper/store/objects/`. This shared
+store can also contain the only copy of a locally published file. Keep
+`.viper/store` intact: it contains published files, their inventories and the
+registry database.
+
+External Git checkouts live under `.viper/cache/git-checkouts/`. You can remove
+those checkouts while no VIPER process is using the workspace. A later execution
+retrieves the required commits again.

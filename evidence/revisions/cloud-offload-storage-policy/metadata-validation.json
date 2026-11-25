@@ -1,0 +1,59 @@
+{
+  "status": "proposed metadata validated",
+  "source_commit": "dc337cc403041d4b2cec1c69b08cfa8e59a0bbdd",
+  "protocol_modules": [
+    {
+      "path": "contract_protocol/package.py",
+      "git_blob_sha": "375ba2fc5d36f8799958e7e04dca3b2ad16f1290",
+      "sha256": "1a8f99a1342f14617d1ba8298de62c187141939c43ddabf23cb1d5eeb6089c78"
+    },
+    {
+      "path": "contract_protocol/workspace.py",
+      "git_blob_sha": "712012bcc34d3c8b8738c5e7ca520ea10d5e0b13",
+      "sha256": "33321d0140c98ef2d151194f0e49c4b327af437dd926ff7a3251f32fe31e215e"
+    },
+    {
+      "path": "contract_protocol/plan.py",
+      "git_blob_sha": "11a57d4a10e04797dc755eefb2864c1a37efa7e2",
+      "sha256": "7cbc9d9f1d865c470ee2b6c013c021b5e7b5d707552a59b225454fa268c778b2"
+    },
+    {
+      "path": "contract_protocol/document.py",
+      "git_blob_sha": "36fc8cb7a3ed7ed68ffed58d4fafb1383036e8bc",
+      "sha256": "c35a077530f50df8cad68552c280682da4bb978a17aff81ac791f0dfebd1678f"
+    },
+    {
+      "path": "contract_protocol/gate.py",
+      "git_blob_sha": "e167052e6b429437f1fde9c6174422bf5ef1e086",
+      "sha256": "93ab31ace33e251f0c4cc875bb18111031145e7297beb07290030303ba693770"
+    },
+    {
+      "path": "contract_protocol/lifecycle.py",
+      "git_blob_sha": "9cfbc7f7454fddd588908c8de1fe08e34ad7360b",
+      "sha256": "3f3611ce5c2bdf6c625a111500704287d6494055191c862102954a78b9333850"
+    }
+  ],
+  "original_raw_sha256": "8afcb8c192e696dd3198c2a4792ecce62161976b2487977f2ce37e69e97fbb81",
+  "original_package_sha256": "3231c49e4ef99cffcbce4461fdb49b56ec25b0017b0854527a3cd618056a9ada",
+  "candidate_package_sha256": "90147c68f5cb022e85322ddd1b0cb42f52319130f2e957290888306e1526c669",
+  "append_only": true,
+  "original_pair_block_preserved": true,
+  "original_pair_block_fingerprint": "59fd79db95cdabc8c6e3648e5b8f044678606910d8ccc787316121e83041737c",
+  "candidate_pair_block_fingerprint": "59fd79db95cdabc8c6e3648e5b8f044678606910d8ccc787316121e83041737c",
+  "affected_pair_block_ids": [
+    "CFO-PB-02",
+    "CFO-PB-03",
+    "CFO-PB-04",
+    "CFO-PB-05",
+    "CFO-PB-06",
+    "CFO-PB-07",
+    "CFO-PB-08",
+    "CFO-PB-09"
+  ],
+  "workspace": "schema and registered declaration graph loaded",
+  "formal_approval_recorded": false,
+  "lifecycle_receipt_published": false,
+  "application_code_applied": false,
+  "implementation_checks_run": false,
+  "interpretation": "The production plan's accepted_package field is the preserved original authored declaration supplied as a before image. No accepted implementation or historical completion is asserted."
+}

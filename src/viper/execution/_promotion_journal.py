@@ -15,6 +15,8 @@ from .._cloud import (
     GcsRepository,
     PublicationSource,
     RevisionManifest,
+    SnapshotCopy,
+    SnapshotInventory,
     canonical_json_bytes,
     manifest_revision,
     source_file,
@@ -37,27 +39,22 @@ from ._publication import replace_synchronized
 from .errors import RunPromotionError
 
 
-class SnapshotCopy(ProtocolModel):
-    """Describe an original snapshot and its expected destination copy."""
+def validate_exact_snapshot_copy(copy: SnapshotCopy) -> SnapshotCopy:
+    """Require a destination to preserve a validated original inventory."""
+    try:
+        original = SnapshotInventory(
+            source=copy.source,
+            source_files=tuple(sorted(copy.source_files, key=lambda file: file.path)),
+        )
+    except ValueError as error:
+        raise RunPromotionError("original snapshot inventory differs") from error
 
-    source: StageResultSnapshotRef | GitSource = Field(
-        description="Original snapshot address."
-    )
-    source_files: tuple[SnapshotFileRef, ...] = Field(
-        description="Original file paths, sizes, and hashes."
-    )
-    expected: RevisionManifest = Field(
-        description="Required destination files and their identities."
-    )
-    dependencies_sha256: SHA256 = Field(
-        description="Hash of the completed child mappings."
-    )
-    previous_head: str | None = Field(
-        description="Destination commit observed before copying."
-    )
-    published: CloudStageResultSnapshotRef | None = Field(
-        default=None, description="Verified destination snapshot, once available."
-    )
+    if copy.expected.files != original.source_files:
+        raise RunPromotionError(
+            "destination inventory differs from the original snapshot"
+        )
+
+    return copy
 
 
 class _Progress(ProtocolModel):

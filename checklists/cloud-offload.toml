@@ -1,0 +1,67 @@
+schema_version = 1
+checklist_id = "cloud-offload"
+title = "Cloud Offload"
+coordination_repository_id = "viper"
+checklist_path = "checklists/cloud-offload.md"
+contract_paths = ["contracts/cloud-offload.toml"]
+
+[[phases]]
+number = 1
+title = "Identity and durable inventory"
+requirement_ids = ["CFO-REQ-01","CFO-REQ-02"]
+
+[[phases]]
+number = 2
+title = "Resolution and retention"
+requirement_ids = ["CFO-REQ-03","CFO-REQ-04","CFO-REQ-05"]
+
+[[phases]]
+number = 3
+title = "Managed workflow and publication"
+requirement_ids = ["CFO-REQ-06","CFO-REQ-07"]
+
+[[phases]]
+number = 4
+title = "Cleanup, recovery and consolidation"
+requirement_ids = ["CFO-REQ-08","CFO-REQ-09","CFO-REQ-10"]
+
+[[repository_bindings]]
+repository_id = "viper"
+checkout = "/Users/machina/Developer/ChatGPT/viper-cloud-offload"
+
+[[repository_bindings.executables]]
+command = "python"
+path = "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python"
+
+[[repository_bindings.executables]]
+command = "ruff"
+path = "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/ruff"
+
+[[repository_bindings.executables]]
+command = "pyrefly"
+path = "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/pyrefly"
+
+[[repository_bindings.executables]]
+command = "git"
+path = "/usr/bin/git"
+
+[[repository_bindings]]
+repository_id = "jep"
+checkout = "/Users/machina/Developer/ChatGPT/JEP"
+
+[[repository_bindings.executables]]
+command = "python"
+path = "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python"
+
+[[repository_bindings.executables]]
+command = "ruff"
+path = "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/ruff"
+
+[[repository_bindings.executables]]
+command = "pyrefly"
+path = "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/pyrefly"
+
+[[repository_bindings.executables]]
+command = "git"
+path = "/usr/bin/git"
+

@@ -1,0 +1,20 @@
+--- a/docs/how-to/inputs.md
++++ b/docs/how-to/inputs.md
+@@ -201,12 +201,11 @@
+ before attempt-owned materialization retain their recorded destination so their
+ execution evidence remains verifiable.
+ 
+-The producer and consumer may use different local VIPER workspaces on the same
+-machine. A local file reference records the producer workspace's absolute path
+-and store directory, so the consumer opens the producer's `.viper/store`
+-rather than searching its own store. The producer workspace must remain at that
+-recorded path. Use Hugging Face or Viper Cloud storage when the consumer runs on
+-another machine or the producer workspace will move.
++A local file reference records the producer's workspace path and store directory.
++VIPER first checks whether the current workspace's registry knows that snapshot.
++Otherwise, it opens the producer's store at the recorded path. The reference
++alone cannot discover an unregistered copy on another machine. Use cloud
++storage when the consumer cannot reach either registered local copy.
+ 
+ The selected data role must agree with the stored artifact. Training accepts
+ `training` and `validation` inputs. Evaluation test data uses `eval` or
