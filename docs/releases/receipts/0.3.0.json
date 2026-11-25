@@ -1,0 +1,185 @@
+{
+  "version": "0.3.0",
+  "status": "published",
+  "source_commit": "96d83b86314969e166023c2a87f127f716454139",
+  "runtime_source_commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "runtime_unchanged_from_implementation": true,
+  "merge_commit": "a2ee323e69e26ff1c9a7a183033a3f4c8c158c1d",
+  "pull_request": "https://github.com/pvd232/viper/pull/24",
+  "tag": "v0.3.0",
+  "tag_object": "366086689263e85c819850cc76b48096429beab8",
+  "tag_signature_verified_locally": true,
+  "tag_signature_verified_by_github": true,
+  "ci_run": 45669294605,
+  "ci_url": "https://github.com/pvd232/viper/actions/runs/45669294605",
+  "ci_jobs_passed": 7,
+  "ci_fast": {
+    "passed": 805,
+    "skipped": 4,
+    "deselected": 239,
+    "subtests_passed": 11,
+    "seconds": 93.6
+  },
+  "ci_integration": {
+    "passed": 227,
+    "deselected": 821,
+    "subtests_passed": 28,
+    "warnings": 3,
+    "seconds": 1406.71
+  },
+  "release_workflow_run": 45678109071,
+  "release_workflow_url": "https://github.com/pvd232/viper/actions/runs/45678109071",
+  "release_workflow_conclusion": "success",
+  "ci_artifact": {
+    "id": 15050600020,
+    "name": "python-package-distributions",
+    "release_files_reused_without_rebuilding": true
+  },
+  "distributions": [
+    {
+      "filename": "viper_provenance-0.3.0-py3-none-any.whl",
+      "bytes": 373562,
+      "sha256": "c59aabc1aefdd3fd19b587e9b669bf779474155e192fe5d2ec286c42728c9b58",
+      "url": "https://files.pythonhosted.org/packages/c5/c5/bd462e21c1c8caf7f679998e0e9197ab8249c3472989da45d2b8cdd824b2/viper_provenance-0.3.0-py3-none-any.whl",
+      "uploaded_at": "2026-11-25T18:50:21.821287Z",
+      "downloaded_hash_verified": true,
+      "provenance_url": "https://pypi.org/integrity/viper-provenance/0.3.0/viper_provenance-0.3.0-py3-none-any.whl/provenance",
+      "publishers": [
+        {
+          "environment": "pypi",
+          "kind": "GitHub",
+          "repository": "pvd232/viper",
+          "workflow": "release.yml"
+        }
+      ]
+    },
+    {
+      "filename": "viper_provenance-0.3.0.tar.gz",
+      "bytes": 725757,
+      "sha256": "4ae0de9c93147ac7e94ff1e0b1839db84aa0003a0126c77a206d5e003281010a",
+      "url": "https://files.pythonhosted.org/packages/ae/91/68bc1d2983cd14c7f242a5388a14e8e29740e5e6af680d98e3eb645f83a7/viper_provenance-0.3.0.tar.gz",
+      "uploaded_at": "2026-11-25T18:50:23.214959Z",
+      "downloaded_hash_verified": true,
+      "provenance_url": "https://pypi.org/integrity/viper-provenance/0.3.0/viper_provenance-0.3.0.tar.gz/provenance",
+      "publishers": [
+        {
+          "environment": "pypi",
+          "kind": "GitHub",
+          "repository": "pvd232/viper",
+          "workflow": "release.yml"
+        }
+      ]
+    }
+  ],
+  "testpypi_downloaded_hashes_match_ci": true,
+  "pypi_downloaded_hashes_match_ci": true,
+  "runtime_files_match_source": 93,
+  "jep_runtime_packaged": false,
+  "jep_dependency_present": false,
+  "local_validation": {
+    "ruff": "passed",
+    "format": "passed",
+    "pyrefly_errors": 0,
+    "fast_passed": 805,
+    "cuda_skipped": 4,
+    "docs_release_preparation_passed": 48
+  },
+  "clean_installation": {
+    "python": "3.14.6",
+    "wheel_public_api_and_generated_project_passed": 15,
+    "wheel_seconds": 636.24,
+    "sdist_public_api_passed": 14,
+    "sdist_seconds": 7.89,
+    "sdist_cli_capabilities": "passed",
+    "sdist_documented_application_file_example": "passed",
+    "sdist_runtime_files_match_ci_wheel": 93,
+    "pip_check": "passed",
+    "twine_check": "passed"
+  },
+  "published_installation": {
+    "version": "0.3.0",
+    "installed_from": "PyPI",
+    "python": "3.14.6 (v3.14.6:c63aec69bd5, Jun 10 2026, 08:07:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+    "module": "/private/tmp/viper-030-release/clean-env/lib/python3.14/site-packages/viper",
+    "runtime_files_match_ci_wheel": 93,
+    "public_api_passed": 14,
+    "cli_capabilities": "passed",
+    "documented_application_example": "passed",
+    "pip_check": "passed",
+    "wheel_attestation": "cryptographically_verified",
+    "sdist_attestation": "cryptographically_verified",
+    "installer_url": "https://files.pythonhosted.org/packages/c5/c5/bd462e21c1c8caf7f679998e0e9197ab8249c3472989da45d2b8cdd824b2/viper_provenance-0.3.0-py3-none-any.whl"
+  },
+  "attestation_verification": {
+    "tool": "pypi-attestations verify pypi",
+    "repository": "https://github.com/pvd232/viper",
+    "wheel": "cryptographically_verified",
+    "sdist": "cryptographically_verified"
+  },
+  "readme": {
+    "local_render": "passed",
+    "local_html_sha256": "e68dfa74eaaaca46acea2f16ef1cca320fac0937db9c412039ff618a2077ce5b",
+    "published_page": {
+      "url": "https://pypi.org/project/viper-provenance/0.3.0/",
+      "method": "in-app browser accessibility inspection",
+      "checked_at": "2026-11-25T18:54:13.527088+00:00",
+      "package_heading": "viper-provenance 0.3.0",
+      "cloud_workflow_heading": "Keep artifacts in the cloud",
+      "offload_setting_present": true,
+      "cloud_guide_url": "https://github.com/pvd232/viper/blob/v0.3.0/docs/how-to/cloud-storage.md",
+      "full_provenance_displayed": true,
+      "direct_http_fetch": "Client Challenge; normal browser displayed the project page"
+    }
+  },
+  "gpu_acceptance": {
+    "version": "0.3.0",
+    "wheel_sha256": "c59aabc1aefdd3fd19b587e9b669bf779474155e192fe5d2ec286c42728c9b58",
+    "runtime_files_match_wheel": true,
+    "runtime_file_count": 93,
+    "module": "/tmp/viper-030-gpu/.venv/lib/python3.12/site-packages/viper",
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "torch": "2.9.1+cu129",
+    "cuda": "12.9",
+    "cudnn": 91002,
+    "device": "NVIDIA L4",
+    "gpu_count": 1,
+    "metadata_identity_verified": true,
+    "attached_credentials_refreshed": true,
+    "driver": "580.178.04",
+    "status": "passed",
+    "live_cuda_passed": 7,
+    "live_cuda_deselected": 3,
+    "live_cuda_seconds": 16.15,
+    "autocast_passed": 9,
+    "autocast_seconds": 2.97,
+    "temporary_instance_and_disk_removed": true,
+    "evidence": [
+      {
+        "path": "0.3.0-cuda-reproducible.json",
+        "sha256": "f1abed31d2bf40ddeefa3dd00abfbc35ff95ec548c89ec05c76c25b0424a2359"
+      },
+      {
+        "path": "0.3.0-cuda-relaxed.json",
+        "sha256": "8ff6c995a80d7f648644dcfd137644e727c8f9042a28e762ad4de85be1a27ee6"
+      },
+      {
+        "path": "0.3.0-cuda-custom.json",
+        "sha256": "b214ba2e7fc399239f1ba069908b7540c5ee54ac2c0e6738d3fe6b8b64e11423"
+      }
+    ],
+    "project": "mantra-477901",
+    "zone": "us-central1-b",
+    "instance": "viper-release-030-20261125",
+    "instance_id": "4630814538796275189",
+    "provisioning_model": "SPOT",
+    "max_runtime_seconds": 1200,
+    "image": "deeplearning-platform-release/pytorch-2-9-cu129-ubuntu-2404-nvidia-580-v20261029",
+    "environment_setup": "Installed the image Python 3.12 venv package before testing; the test environment reused its CUDA PyTorch installation."
+  },
+  "cloud_provider_roundtrip": "Not performed for this release. Provider behavior is covered by controlled CI tests; hardware acceptance exercised CUDA.",
+  "owner_size_exception": "../../../evidence/revisions/cloud-offload-size-override-20261125.json",
+  "postpublication_documentation": {
+    "passed": 39,
+    "seconds": 4.36
+  }
+}
