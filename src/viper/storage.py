@@ -36,6 +36,7 @@ from ._cloud import (
     validate_snapshot_copy,
 )
 from ._offload import (
+    PublicationError,
     PublicationSession,
     current_session,
     read_publication_copies,
@@ -992,6 +993,8 @@ def workflow(
     """Keep related work together and queue publication without waiting for uploads."""
     root = repository_root.resolve(strict=True)
     owner = session or current_session()
+    if targets is not None and owner is not None and targets != owner.targets:
+        raise PublicationError("nested workflow changes publication destinations")
     if targets is None:
         if owner is not None:
             targets = owner.targets

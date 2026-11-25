@@ -22,8 +22,8 @@ from viper._cloud import (
     SnapshotSources,
     manifest_revision,
 )
-from viper._offload import current_session, load_operation
-from viper._source import RunFetcher
+from viper._offload import PublicationError, current_session, load_operation
+from viper._source import RunFetcher, run_git
 from viper._storage_locks import PayloadLocks
 from viper.artifacts import (
     ArtifactPointer,
@@ -45,6 +45,7 @@ from viper.metrics import MetricVerificationReceipt
 from viper.outputs import OutputSpec
 from viper.references import (
     FileIdentity,
+    GitFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
@@ -458,3 +459,92 @@ def test_native_reuse_keeps_the_existing_original_without_another_payload(
             == original
         )
         assert original.read_bytes() == raw
+
+
+@pytest.mark.parametrize("adopt_first", [False, True])
+@pytest.mark.parametrize(
+    "producer_repository,repository",
+    [
+        ("https://github.com/example/project", "https://github.com/example/project"),
+        ("https://github.com/example/other", "https://github.com/example/project"),
+        ("https://github.com/example/other", "https://github.com/example/other"),
+    ],
+)
+def test_local_producer_keeps_its_original_git_source_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    adopt_first: bool,
+    producer_repository: str,
+    repository: str,
+) -> None:
+    """Read an unpublished producer commit without importing it into consumer Git."""
+    consumer_repository = "https://github.com/example/project"
+    forbidden = Mock(side_effect=AssertionError("Git remote must not be contacted"))
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", forbidden)
+    roots = (tmp_path / "producer", tmp_path / "consumer")
+    for index, (root, remote) in enumerate(
+        zip(roots, (producer_repository, consumer_repository), strict=True)
+    ):
+        root.mkdir()
+        _workspace(root)
+        (root / "source.py").write_bytes(f"value = {index}\n".encode())
+        run_git(root, "init", "--quiet")
+        run_git(root, "remote", "add", "origin", remote)
+        run_git(root, "add", ".")
+        run_git(
+            root,
+            "-c",
+            "user.name=Viper tests",
+            "-c",
+            "user.email=viper@example.com",
+            "commit",
+            "--quiet",
+            "-m",
+            "source",
+        )
+    producer, consumer = roots
+    commit = run_git(producer, "rev-parse", "HEAD").decode().strip()
+    location = GitFileRef(repository=repository, commit=commit, path="source.py")
+    with pytest.raises(VerificationError):
+        run_git(consumer, "show", f"{commit}:source.py")
+    original = LocalArtifactStore(producer)
+    record = original.resolved_files({"producer.yaml": b"producer record"})[0]
+    store = LocalArtifactStore(consumer)
+    if adopt_first:
+        store.adopt_verified_reference(record, original.resolve(record))
+    with RunFetcher(consumer, store, consumer_repository) as fetcher:
+        assert fetcher.read(record) == b"producer record"
+        if producer_repository != repository:
+            with pytest.raises(VerificationError, match="local Git evidence"):
+                fetcher(location)
+            forbidden.assert_not_called()
+            return
+        assert fetcher(location) == b"value = 0\n"
+        expected = ResolvedFileRef(
+            stored_at=location,
+            sha256=hashlib.sha256(b"value = 0\n").hexdigest(),
+            bytes=len(b"value = 0\n"),
+        )
+        assert fetcher.read(expected) == b"value = 0\n"
+        with pytest.raises(VerificationError, match="SHA-256 mismatch"):
+            fetcher.read(expected.model_copy(update={"sha256": "0" * 64}))
+        forbidden.assert_not_called()
+
+
+def test_nested_workflow_inherits_targets_and_rejects_explicit_changes(
+    tmp_path: Path,
+) -> None:
+    """An inner call inherits its owner unless it explicitly requests a mismatch."""
+    _workspace(tmp_path)
+    target = PublicationTarget(
+        repository=GcsRepository(bucket="test-bucket"),
+        destination=ViperCloudDestination(owner="owner", workspace="models"),
+    )
+    with workflow(tmp_path, targets=(target,)) as owner:
+        with workflow(tmp_path) as inherited:
+            assert inherited is owner
+        with workflow(tmp_path, targets=(target,)) as same:
+            assert same is owner
+        with pytest.raises(PublicationError, match="changes publication destinations"):
+            with workflow(tmp_path, targets=()):
+                pytest.fail("an explicit target mismatch was accepted")

@@ -12,17 +12,13 @@ import yaml
 from pydantic import TypeAdapter
 
 from .. import keys
-from .._config.validation import (
-    ConfigValidationError,
-    verify_config_type_bytes,
-)
 from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
-from ..artifact_loaders import ArtifactLoaderError, verify_artifact_loader_bytes
+from ..artifacts import ArtifactLoaderRef
 from ..benchmark import BenchmarkSpec
 from ..config import Config, ConfigTypeRef
 from ..evidence import StorageFetcher, VerificationError, VerifiedRunPlan
 from ..experiments import ExperimentSpec, VariantSpec
-from ..http import WorkspaceHttpImplementationSpec
+from ..http import HttpImplementationRef, WorkspaceHttpImplementationSpec
 from ..ids import InputName, StageId
 from ..inputs import (
     ExternalInputRef,
@@ -30,10 +26,11 @@ from ..inputs import (
     StoredInputRef,
     pointer_location_matches,
 )
-from ..metrics import is_recomputed_metric
+from ..metrics import MetricImplementationRef, is_recomputed_metric
 from ..references import (
     GitFileRef,
     ResolvedFileRef,
+    ResolvedGitFileRef,
     ResolvedRunSpecRef,
     StorageModel,
     storage_file,
@@ -50,9 +47,8 @@ from ..stages import (
     InternalSpec,
     ParameterizedSpec,
     Spec,
-    StageDefinitionError,
+    StageImplementationRef,
     TrainSpec,
-    verify_stage_implementation_bytes,
 )
 from . import storage
 from .paths import run_root, stage_spec_path
@@ -68,13 +64,31 @@ _DATA_ROLE_RANK: dict[DataRole, int] = {
 }
 
 
-def _source_file(run: RunSpec, path: RepoRelPath) -> GitFileRef:
-    """Address one workspace definition in the run's source commit."""
-    return GitFileRef(
-        repository=run.source.repository,
-        commit=run.source.commit,
-        path=path,
+def _read_source(
+    run: RunSpec,
+    source: ConfigTypeRef
+    | ArtifactLoaderRef
+    | HttpImplementationRef
+    | MetricImplementationRef
+    | StageImplementationRef,
+    fetcher: StorageFetcher | None,
+) -> bytes:
+    """Read the exact declared source through storage or a portable run bundle."""
+    reference = ResolvedGitFileRef(
+        stored_at=GitFileRef(
+            repository=run.source.repository,
+            commit=run.source.commit,
+            path=source.path,
+        ),
+        sha256=source.sha256,
+        bytes=source.bytes,
     )
+    bundle_reader = getattr(fetcher, "read_plan_source", None)
+    if bundle_reader is not None and getattr(fetcher, "read", None) is None:
+        return storage.verify_resolved_file_bytes(
+            reference, bundle_reader(reference.stored_at)
+        )
+    return storage.read_resolved_file(reference, fetcher=fetcher)
 
 
 def _config_type_source(
@@ -83,9 +97,8 @@ def _config_type_source(
     fetcher: StorageFetcher | None,
 ) -> bytes:
     """Read one workspace or VIPER config source through the active evidence path."""
-    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     if reference.owner == "workspace":
-        return retrieve(_source_file(run, reference.path))
+        return _read_source(run, reference, fetcher)
     bundle_reader = getattr(fetcher, "read_viper_source", None)
     if bundle_reader is not None:
         return bundle_reader(reference)
@@ -103,9 +116,8 @@ def _verify_config_type_reference(
     """Verify one config class against its frozen source bytes and symbol."""
     try:
         raw = _config_type_source(run, reference, fetcher)
-        verify_config_type_bytes(reference, raw)
         tree = ast.parse(raw, filename=reference.path)
-    except (KeyError, OSError, SyntaxError, ConfigValidationError) as exc:
+    except (KeyError, OSError, SyntaxError, VerificationError) as exc:
         raise VerificationError(f"{label} failed source verification") from exc
     if not any(
         isinstance(node, ast.ClassDef) and node.name == reference.symbol
@@ -127,14 +139,12 @@ def _verify_http_dependencies(
     if plan_reader is None:
         return
     http = spec.http
-    implementation_raw = plan_reader(_source_file(run, http.implementation.path))
-    if (
-        len(implementation_raw) != http.implementation.bytes
-        or hashlib.sha256(implementation_raw).hexdigest() != http.implementation.sha256
-    ):
+    try:
+        implementation_raw = _read_source(run, http.implementation, fetcher)
+    except VerificationError as exc:
         raise VerificationError(
             f"HTTP implementation {http.id!r} failed source verification"
-        )
+        ) from exc
     try:
         implementation_tree = ast.parse(
             implementation_raw,
@@ -348,12 +358,7 @@ def verify_experiment_and_variant(
 
     for metric in experiment.metrics:
         implementation = metric.implementation
-        metric_location = _source_file(run, implementation.path)
-        metric_raw = retrieve(metric_location)
-        if len(metric_raw) != implementation.bytes:
-            raise VerificationError("metric implementation byte count differs")
-        if hashlib.sha256(metric_raw).hexdigest() != implementation.sha256:
-            raise VerificationError("metric implementation SHA-256 differs")
+        metric_raw = _read_source(run, implementation, fetcher)
         try:
             metric_tree = ast.parse(metric_raw, filename=implementation.path)
         except SyntaxError as exc:
@@ -636,7 +641,6 @@ def verify_stage_plan(
     fetcher: StorageFetcher | None = None,
 ) -> dict[StageId, BaseSpec]:
     """Load and verify stage specs from the run-plan snapshot."""
-    retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
     loaded_stages: dict[StageId, BaseSpec] = {}
 
     for stage in run.stages:
@@ -652,7 +656,7 @@ def verify_stage_plan(
             bytes=stage.bytes,
             stored_at=location,
         )
-        raw = storage.verify_resolved_file_bytes(stage_reference, retrieve(location))
+        raw = storage.read_resolved_file(stage_reference, fetcher=fetcher)
 
         try:
             spec = SPEC_ADAPTER.validate_python(parse_yaml_bytes(raw))
@@ -664,11 +668,9 @@ def verify_stage_plan(
         plan_reader = getattr(fetcher, "read_plan_source", None)
         if plan_reader is not None:
             for artifact_name, artifact in spec.outputs.items():
-                loader = artifact.loader
-                loader_raw = plan_reader(_source_file(run, loader.path))
                 try:
-                    verify_artifact_loader_bytes(loader, loader_raw)
-                except ArtifactLoaderError as exc:
+                    _read_source(run, artifact.loader, fetcher)
+                except VerificationError as exc:
                     raise VerificationError(
                         f"loader of artifact {artifact_name!r} in stage "
                         f"{stage.stage_id!r} failed source verification"
@@ -679,15 +681,13 @@ def verify_stage_plan(
 
         if isinstance(spec, ParameterizedSpec):
             implementation = spec.implementation
-            implementation_location = _source_file(run, implementation.path)
             try:
-                implementation_raw = retrieve(implementation_location)
-                verify_stage_implementation_bytes(implementation, implementation_raw)
+                implementation_raw = _read_source(run, implementation, fetcher)
                 implementation_tree = ast.parse(
                     implementation_raw,
                     filename=implementation.path,
                 )
-            except (KeyError, OSError, SyntaxError, StageDefinitionError) as exc:
+            except (KeyError, OSError, SyntaxError, VerificationError) as exc:
                 raise VerificationError(
                     f"implementation of stage {stage.stage_id!r} "
                     "failed source verification"

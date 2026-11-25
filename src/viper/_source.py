@@ -37,6 +37,7 @@ from .references import (
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
+from .repository import read_source
 from .serialization import document_digest
 from .storage import (
     LocalArtifactStore,
@@ -86,6 +87,7 @@ class RunFetcher:
         if not self.cache_root.is_relative_to(self.repository_root):
             raise ValueError("file cache must be inside the workspace")
         self._external_git_files: dict[GitFileRef, bytes] = {}
+        self._local_git_roots: set[Path] = set()
         self._external_git_cache_bytes = 0
         self._external_git_checkout_root = self.cache_root / "git-checkouts"
         if self.cache_root != self.repository_root / ".viper/cache":
@@ -236,7 +238,9 @@ class RunFetcher:
             self._reader_hold(reference, location.workspace, location.store)
 
     def _record_path(self, reference: ResolvedFileRef, path: Path) -> None:
-        """Record the checked physical file in its owning store."""
+        """Record the checked physical file and its original source workspace."""
+        if isinstance(reference.stored_at, LocalFileRef):
+            self._local_git_roots.add(reference.stored_at.workspace)
         if current_session() is None:
             return
         if path.is_relative_to(self.store.repository_root):
@@ -244,30 +248,48 @@ class RunFetcher:
         elif isinstance(reference.stored_at, LocalFileRef):
             local_artifact_store(reference.stored_at).record_path(reference, path)
 
+    def _local_git_file(self, location: GitFileRef) -> bytes:
+        """Try this checkout and matching original producer checkouts."""
+        roots = (
+            [self.repository_root]
+            if str(location.repository) == self.source_repository
+            else []
+        )
+        roots.extend(sorted(self._local_git_roots - {self.repository_root}))
+        for root in roots:
+            try:
+                if root != self.repository_root and (
+                    read_source(root).repository != location.repository
+                ):
+                    continue
+                return run_git(root, "show", f"{location.commit}:{location.path}")
+            except (OSError, ValueError):
+                continue
+        raise VerificationError("local Git evidence could not be read")
+
     def __call__(self, location: StorageModel) -> bytes:
         """Read a file from the location recorded in its reference."""
         if isinstance(location, GitFileRef):
-            if str(location.repository) != self.source_repository:
-                try:
-                    return self._external_git_files[location]
-                except KeyError:
-                    checkout_identity = hashlib.sha256(
-                        f"{location.repository}\0{location.commit}".encode()
-                    ).hexdigest()
-                    checkout = self._external_git_checkout_root / checkout_identity
-                    raw = fetch_git_file_bytes(location, checkout=checkout)
-                    if (
-                        self._external_git_cache_bytes + len(raw)
-                        <= _MAX_EXTERNAL_GIT_CACHE_BYTES
-                    ):
-                        self._external_git_files[location] = raw
-                        self._external_git_cache_bytes += len(raw)
-                    return raw
-            return run_git(
-                self.repository_root,
-                "show",
-                f"{location.commit}:{location.path}",
-            )
+            remembered = self._external_git_files.get(location)
+            if remembered is not None:
+                return remembered
+            try:
+                return self._local_git_file(location)
+            except VerificationError:
+                if str(location.repository) == self.source_repository:
+                    raise
+            checkout_identity = hashlib.sha256(
+                f"{location.repository}\0{location.commit}".encode()
+            ).hexdigest()
+            checkout = self._external_git_checkout_root / checkout_identity
+            raw = fetch_git_file_bytes(location, checkout=checkout)
+            if (
+                self._external_git_cache_bytes + len(raw)
+                <= _MAX_EXTERNAL_GIT_CACHE_BYTES
+            ):
+                self._external_git_files[location] = raw
+                self._external_git_cache_bytes += len(raw)
+            return raw
         store = (
             self._local_store(location)
             if isinstance(location, LocalFileRef)

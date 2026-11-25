@@ -22,7 +22,6 @@ from ..artifact_loaders import (
     ArtifactValidationResult,
     execute_artifact_loader,
     materialized_loader_context,
-    verify_artifact_loader_bytes,
 )
 from ..artifacts import (
     ResolvedArtifact,
@@ -668,18 +667,19 @@ def load_verified_artifact(
             "artifact-loader execution requires an explicitly trusted source repository"
         )
 
-    retrieve = fetch_storage_bytes if fetcher is None else fetcher
     loader_reference = declaration.loader
-    loader_location = GitFileRef(
-        repository=run.source.repository,
-        commit=run.source.commit,
-        path=loader_reference.path,
+    resolved_loader = resolve_snapshot_file_ref(
+        run.source,
+        SnapshotFileRef(
+            path=loader_reference.path,
+            sha256=loader_reference.sha256,
+            bytes=loader_reference.bytes,
+        ),
     )
-    loader_raw = retrieve(loader_location)
     try:
-        verify_artifact_loader_bytes(loader_reference, loader_raw)
-    except ArtifactLoaderError as exc:
-        raise VerificationError(str(exc)) from exc
+        loader_raw = read_resolved_file(resolved_loader, fetcher=fetcher)
+    except VerificationError as exc:
+        raise VerificationError(f"artifact.loader: {exc}") from exc
 
     target_path = (
         declaration.path if materialization_path is None else materialization_path

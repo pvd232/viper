@@ -153,6 +153,7 @@ from viper.references import (
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
     ResolvedFileRef,
+    ResolvedGitFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageRef,
@@ -198,9 +199,12 @@ from viper.storage import (
     RunPromotionPolicy,
     TransferLimits,
     ViperCloudDestination,
+    import_publication_receipt,
     load_storage_settings,
+    publication_receipt,
     publication_status,
     snapshot_file,
+    workflow,
 )
 from viper.verification import verify_download_source_closure, verify_run_result
 from viper.workspace import (
@@ -3891,3 +3895,84 @@ def test_copy_worker_resumes_and_restores_a_model(
         server.server_close()
         thread.join(timeout=5)
     assert reads
+
+
+def test_fresh_workspace_verifies_producer_without_original_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Restore unchanged producer and source refs through verified publication."""
+    original = tmp_path / "original"
+    frozen = _freeze_retry_plan(original)
+    with pytest.raises(RunError):
+        execute_attempt(original, frozen.files[-1], plan=frozen.reference)
+    produced = execute_retry(original, frozen.files[-1])
+    source_raw = (original / "project/retry_pipeline.py").read_bytes()
+    source_reference = ResolvedGitFileRef(
+        stored_at=GitFileRef(
+            repository=frozen.run.source.repository,
+            commit=frozen.run.source.commit,
+            path="project/retry_pipeline.py",
+        ),
+        sha256=hashlib.sha256(source_raw).hexdigest(),
+        bytes=len(source_raw),
+    )
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    provider = InMemoryViperCloudProvider(fresh)
+    install_in_memory_cloud(monkeypatch, fresh, provider)
+    target = PublicationTarget(
+        repository=GcsRepository(bucket=provider.bucket, prefix=provider.prefix),
+        destination=ViperCloudDestination(owner="owner", workspace="models"),
+    )
+    with workflow(original, targets=(target,)) as owner:
+        execution_module.enroll(produced.reference, repository_root=original)
+    _drain_native_publication(monkeypatch, original, provider, owner.operation_path)
+    receipt = publication_receipt(owner.operation_path)
+    original_reference = produced.reference.model_dump(mode="json")
+    shutil.rmtree(original)
+    (fresh / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    run_git(fresh, "init", "--quiet")
+    run_git(fresh, "remote", "add", "origin", REPOSITORY)
+    run_git(fresh, "add", "viper.toml")
+    run_git(
+        fresh,
+        "-c",
+        "user.name=Viper tests",
+        "-c",
+        "user.email=viper@example.com",
+        "commit",
+        "--quiet",
+        "-m",
+        "fresh workspace",
+    )
+    absent = subprocess.run(
+        ("git", "-C", str(fresh), "cat-file", "-e", frozen.run.source.commit),
+        capture_output=True,
+    )
+    assert absent.returncode != 0
+    forbidden = Mock(side_effect=AssertionError("Git remote must not be contacted"))
+    monkeypatch.setattr("viper._source.fetch_git_file_bytes", forbidden)
+    monkeypatch.setattr(
+        ViperCloud,
+        "for_target",
+        classmethod(
+            lambda cls, root, selected: ViperCloud(
+                root, selected.repository, provider=provider
+            )
+        ),
+    )
+    with workflow(fresh, targets=(target,)):
+        import_publication_receipt(fresh, receipt, targets=(target,))
+        store = LocalArtifactStore(fresh)
+        store.resolve(source_reference).unlink()
+        downloads = len(provider.fetch_to_path_calls)
+        uploads = len(provider.upload_calls)
+        restored = execution_module.artifact_path(
+            fresh, produced.reference, frozen.run.estimator
+        )
+        assert restored.read_bytes() == b"features"
+        assert len(provider.fetch_to_path_calls) > downloads
+        assert len(provider.upload_calls) == uploads
+    forbidden.assert_not_called()
+    assert not original.exists()
+    assert produced.reference.model_dump(mode="json") == original_reference

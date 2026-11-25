@@ -64,14 +64,18 @@ class VerifiedObjectCache:
             return None
 
     def adopt_verified_path(self, reference: ResolvedFileRef, source: Path) -> Path:
-        """Move a downloaded file into the cache after the client has checked it."""
+        """Install checked bytes without replacing an existing valid shared file."""
         if source.stat().st_size != reference.bytes:
             raise VerificationError(
                 "retrieved file size differs from its resolved reference"
             )
         path = self._path(reference.sha256)
         path.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(source, path)
+        try:
+            os.link(source, path)
+        except FileExistsError:
+            if self.verified_path(reference) is None:
+                os.replace(source, path)
         return path
 
     def temporary_path(self, reference: ResolvedFileRef) -> Path:
@@ -89,7 +93,7 @@ class VerifiedObjectCache:
         return self._path(reference.sha256)
 
     def write(self, reference: ResolvedFileRef, raw: bytes) -> None:
-        """Save bytes the caller has checked, replacing the cache file in one rename."""
+        """Save checked bytes, reusing matching content already in the cache."""
         path = self._path(reference.sha256)
         path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(dir=path.parent)
@@ -98,7 +102,7 @@ class VerifiedObjectCache:
                 temporary_file.write(raw)
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
-            os.replace(temporary_name, path)
+            self.adopt_verified_path(reference, Path(temporary_name))
         finally:
             Path(temporary_name).unlink(missing_ok=True)
 

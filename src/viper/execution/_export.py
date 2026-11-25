@@ -110,6 +110,12 @@ class _RecordingFetcher:
         self.payloads[key] = (source, raw)
         return raw
 
+    def read(self, reference: ResolvedFileRef) -> bytes:
+        """Resolve and retain the exact referenced bytes for portable export."""
+        return self._retain_local(
+            reference.stored_at.model_dump(mode="json"), self.delegate.read(reference)
+        )
+
     def _retain_local(self, source: dict[str, Any], raw: bytes) -> bytes:
         """Retain one verified host payload under its stable logical identity."""
         self.payloads[_source_key(source)] = (source, raw)

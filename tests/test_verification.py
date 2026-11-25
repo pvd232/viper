@@ -728,7 +728,9 @@ class FileVerificationTests(unittest.TestCase):
         tampered = bytearray(DEFAULT_ARTIFACT_LOADER_SOURCE)
         tampered[-2] = ord(" ")
 
-        with self.assertRaisesRegex(VerificationError, "loader SHA-256 differs"):
+        with self.assertRaisesRegex(
+            VerificationError, "artifact.loader: SHA-256 mismatch"
+        ):
             load_verified_artifact(
                 run,
                 declaration,

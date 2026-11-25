@@ -179,6 +179,29 @@ def test_import_restores_unchanged_references_once(
     assert cloud.downloads == 2
 
 
+@pytest.mark.parametrize("payload", [b"", b"shared weights"])
+def test_import_verifies_duplicate_members_without_replacing_shared_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: bytes
+) -> None:
+    """Verify both remote members while retaining one stable shared cache file."""
+    copy, cloud = _copy(
+        tmp_path, {"first/output.bin": payload, "second/output.bin": payload}
+    )
+    _services(monkeypatch, cloud)
+
+    import_publication_copies(tmp_path, (copy,))
+
+    store = LocalArtifactStore(tmp_path)
+    paths = tuple(
+        store.resolve(resolve_snapshot_file_ref(copy.source, member))
+        for member in copy.source_files
+    )
+    assert cloud.downloads == 2
+    assert paths[0] == paths[1]
+    assert paths[0].read_bytes() == payload
+    assert store.registry.snapshot(copy.source) is not None
+
+
 def test_receipt_preserves_another_snapshot_inventory_for_shared_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
