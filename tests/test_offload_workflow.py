@@ -25,6 +25,7 @@ from viper._cloud import (
 from viper._offload import PublicationError, current_session, load_operation
 from viper._source import RunFetcher, run_git
 from viper._storage_locks import PayloadLocks
+from viper._verification.plan import verify_run_plan
 from viper.artifacts import (
     ArtifactPointer,
     ResolvedSingleFileArtifact,
@@ -50,12 +51,13 @@ from viper.references import (
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
     ResolvedRunRef,
+    ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
     storage_file,
 )
 from viper.runs import ResolvedRun, RunAttempt, RunSpec
-from viper.serialization import parse_yaml_bytes
+from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import InternalSpec, ResolvedInternalSpec, TrainSpec
 from viper.storage import (
     LocalArtifactStore,
@@ -548,3 +550,52 @@ def test_nested_workflow_inherits_targets_and_rejects_explicit_changes(
         with pytest.raises(PublicationError, match="changes publication destinations"):
             with workflow(tmp_path, targets=()):
                 pytest.fail("an explicit target mismatch was accepted")
+
+
+@pytest.mark.parametrize("cache_unrelated_bytes", [False, True])
+def test_plan_rejects_cached_source_from_a_different_git_file(
+    tmp_path: Path, cache_unrelated_bytes: bool
+) -> None:
+    """A matching cached SHA cannot override the committed source at its address."""
+    compiled, _ = _compiled_plan(tmp_path)
+    store = LocalArtifactStore(tmp_path)
+    original = compiled.run.stages[0]
+    spec = TrainSpec.model_validate(parse_yaml_bytes(compiled.files[original.spec]))
+    other = b"def fit(context):\n    return None\n"
+    changed_spec = spec.model_copy(
+        update={
+            "implementation": spec.implementation.model_copy(
+                update={
+                    "sha256": hashlib.sha256(other).hexdigest(),
+                    "bytes": len(other),
+                }
+            )
+        }
+    )
+    changed_raw = serialize_document(changed_spec)
+    changed_run = compiled.run.model_copy(
+        update={
+            "stages": (
+                original.model_copy(
+                    update={
+                        "sha256": hashlib.sha256(changed_raw).hexdigest(),
+                        "bytes": len(changed_raw),
+                    }
+                ),
+            )
+        }
+    )
+    files = dict(compiled.files)
+    files[original.spec] = changed_raw
+    files[compiled.run_path] = serialize_document(changed_run)
+    references = {ref.stored_at.path: ref for ref in store.resolved_files(files)}
+    terminal = ResolvedRun.model_construct(
+        spec=ResolvedRunSpecRef.model_validate(
+            references[compiled.run_path].model_dump()
+        )
+    )
+    if cache_unrelated_bytes:
+        store.resolved_files({"unrelated/source.py": other})
+    with RunFetcher(tmp_path, store, str(changed_run.source.repository)) as fetcher:
+        with pytest.raises(VerificationError, match="source verification"):
+            verify_run_plan(terminal, fetcher=fetcher)

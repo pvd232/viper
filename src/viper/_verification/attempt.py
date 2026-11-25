@@ -13,6 +13,7 @@ from typing import cast
 import yaml
 from pydantic import TypeAdapter
 
+from .._config.validation import ConfigValidationError, verify_config_type_bytes
 from .._schema import RepoRelPath, repo_file_paths_overlap
 from ..artifacts import ResolvedSingleFileArtifact
 from ..evidence import (
@@ -38,6 +39,7 @@ from ..journal import parse_journal_bytes
 from ..metrics import Measurement, is_recomputed_metric
 from ..references import (
     GcsFileRef,
+    GitFileRef,
     HuggingFaceFileRef,
     LocalFileRef,
     ResolvedFileRef,
@@ -89,7 +91,6 @@ from .paths import (
     run_root,
     stage_invocation_path,
 )
-from .plan import _config_type_source, _read_source
 from .runtime import verify_runtime_controls
 
 RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
@@ -580,16 +581,33 @@ def verify_download_retrieval(
 
     http = retrieval.http
     if isinstance(http.spec, WorkspaceHttpImplementationSpec):
+        retrieve = storage.fetch_storage_bytes if fetcher is None else fetcher
         implementation = http.spec.implementation
-        try:
-            _read_source(run, implementation, fetcher)
-        except VerificationError as exc:
+        implementation_raw = retrieve(
+            GitFileRef(
+                repository=run.source.repository,
+                commit=run.source.commit,
+                path=implementation.path,
+            )
+        )
+        if (
+            len(implementation_raw) != implementation.bytes
+            or hashlib.sha256(implementation_raw).hexdigest() != implementation.sha256
+        ):
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} implementation source differs"
-            ) from exc
+            )
+        config_reference = http.spec.config_type
+        config_raw = retrieve(
+            GitFileRef(
+                repository=run.source.repository,
+                commit=run.source.commit,
+                path=config_reference.path,
+            )
+        )
         try:
-            _config_type_source(run, http.spec.config_type, fetcher)
-        except VerificationError as exc:
+            verify_config_type_bytes(config_reference, config_raw)
+        except ConfigValidationError as exc:
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} HTTP config type differs"
             ) from exc

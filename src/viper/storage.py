@@ -35,6 +35,7 @@ from ._cloud import (
     source_file,
     validate_snapshot_copy,
 )
+from ._git_proof import GIT_PROOF_PREFIX, GitFileProof, proof_member_path
 from ._offload import (
     PublicationError,
     PublicationSession,
@@ -593,9 +594,27 @@ class LocalArtifactStore:
         assert isinstance(resolved, tuple)
         return resolved
 
+    def _check_git_reference(self, reference: ResolvedFileRef) -> None:
+        """Require a proven commit/path binding before reusing bytes by content hash."""
+        if not isinstance(reference.stored_at, GitFileRef):
+            return
+        proof = self.registry.git_file_proof(reference.stored_at)
+        if proof is None:
+            raise VerificationError(
+                "Git source has no verified commit and path binding"
+            )
+        if (proof.reference.sha256, proof.reference.bytes) != (
+            reference.sha256,
+            reference.bytes,
+        ):
+            raise VerificationError(
+                "Git source identity differs from its commit and path"
+            )
+
     def cached_read(self, reference: ResolvedFileRef) -> tuple[bytes, Path] | None:
         """Read cached bytes if their byte count and SHA-256 match the reference."""
         self.hold(reference)
+        self._check_git_reference(reference)
         raw = self.downloads.read(reference)
         if raw is None:
             return None
@@ -645,6 +664,7 @@ class LocalArtifactStore:
     ) -> tuple[bytes, Path] | Path:
         """Check local bytes or restore them from an already verified cloud copy."""
         self.hold(reference)
+        self._check_git_reference(reference)
         location = reference.stored_at
         git_source = isinstance(location, GitFileRef)
         source: StageResultSnapshotRef | GitSource
@@ -1009,7 +1029,38 @@ def workflow(
                     ),
                 )
     with session_scope(root, targets=targets, session=session) as selected:
+        if selected.before_close is None:
+            selected.before_close = lambda: _publish_git_sources(root, selected)
         yield selected
+
+
+def _publish_git_sources(root: Path, session: PublicationSession) -> None:
+    """Queue verified source files and Git metadata through the existing publisher."""
+    if not session.targets:
+        return
+    store = LocalArtifactStore(root, session.store, targets=session.targets)
+    groups: dict[GitSource, dict[RepoRelPath, PublicationSource]] = {}
+    for reference in session.used_files():
+        location = reference.stored_at
+        if not isinstance(location, GitFileRef):
+            continue
+        proof = store.registry.git_file_proof(location)
+        if proof is None or (proof.reference.sha256, proof.reference.bytes) != (
+            reference.sha256,
+            reference.bytes,
+        ):
+            continue
+        path = store._objects.verified_path(reference)
+        if path is None:
+            raise VerificationError(
+                "verified Git source disappeared before publication"
+            )
+        source = GitSource.model_validate(location.model_dump(exclude={"path"}))
+        files = groups.setdefault(source, {})
+        files[location.path] = path
+        files[proof_member_path(proof.reference)] = canonical_json_bytes(proof)
+    for files in groups.values():
+        store._publish(files, path_custody="cache")
 
 
 def publication_status(
@@ -1088,7 +1139,7 @@ def import_publication_copies(
         for member in copy.source_files
     )
     with _restore_holds(root, references):
-        store = LocalArtifactStore(root)
+        store = LocalArtifactStore(root, targets=targets)
         registry = store.registry
         for copy in normalized:
             published = copy.published
@@ -1112,6 +1163,7 @@ def import_publication_copies(
                     "publication target does not match cloud copy"
                 )
             if copy in registry.backings(copy.source):
+                _import_git_file_proofs(store, copy)
                 continue
             cloud = (
                 ViperCloud.for_target(root, matched)
@@ -1147,9 +1199,46 @@ def import_publication_copies(
             path = resolve_path(root, proof, operation="write")
             write_synchronized(path, canonical_json_bytes(copy))
             registry.register_backing(copy, proof)
+            _import_git_file_proofs(store, copy)
             for member in copy.source_files:
                 original = resolve_snapshot_file_ref(copy.source, member)
                 store.record_path(original, store._objects.path(original))
+
+
+def _import_git_file_proofs(store: LocalArtifactStore, copy: SnapshotCopy) -> None:
+    """Check Git metadata against imported code before recording its source address."""
+    assert copy.published is not None
+    for member in copy.source_files:
+        if not member.path.startswith(GIT_PROOF_PREFIX):
+            continue
+        key = "git:" + member.path.removeprefix(GIT_PROOF_PREFIX).removesuffix(".json")
+        proof = store.registry.git_file_proof_by_key(key)
+        known = (
+            proof is not None
+            and snapshot_file(member.path, canonical_json_bytes(proof)) == member
+        )
+        if not known:
+            metadata = store.resolve(resolve_snapshot_file_ref(copy.published, member))
+            proof = GitFileProof.model_validate_json(metadata.read_bytes())
+        assert proof is not None
+        if proof_member_path(proof.reference) != member.path:
+            raise VerificationError("Git proof metadata has the wrong source address")
+        code = next(
+            (
+                file
+                for file in copy.source_files
+                if (file.sha256, file.bytes)
+                == (proof.reference.sha256, proof.reference.bytes)
+            ),
+            None,
+        )
+        if code is None:
+            raise VerificationError(
+                "Git proof has no matching source file in its snapshot"
+            )
+        if not known:
+            path = store.resolve(resolve_snapshot_file_ref(copy.published, code))
+            store.registry.register_git_file(proof, path.read_bytes())
 
 
 def import_publication_receipt(

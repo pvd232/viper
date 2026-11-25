@@ -1,6 +1,7 @@
 """Tests for repository-local immutable output publication."""
 
 import hashlib
+import shutil
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BufferedReader
@@ -12,7 +13,7 @@ from pydantic import HttpUrl, ValidationError
 from viper import execution
 from viper._cloud import GcsRepository, ViperCloudProvider, manifest_revision
 from viper._schema import SHA256, RepoRelPath
-from viper._source import RunFetcher
+from viper._source import RunFetcher, run_git
 from viper._verification.storage import (
     read_resolved_file,
     read_snapshot_file,
@@ -44,7 +45,6 @@ from viper.references import (
     ResolvedRunRef,
     ResolvedRunSpecRef,
     SnapshotFileRef,
-    StorageModel,
 )
 from viper.restoration import ArtifactRestoreSelector
 from viper.runs import ResolvedAttemptRef, ResolvedRun
@@ -235,31 +235,73 @@ def test_terminal_reference_rejects_an_unverified_replacement(tmp_path: Path) ->
         persist_terminal_reference(terminal, succeeded)
 
 
+def _git_origin(
+    root: Path, files: Mapping[str, bytes], *, object_format: str = "sha1"
+) -> str:
+    """Create real commit and tree objects for a fake local Git transport."""
+    root.mkdir()
+    run_git(root, "init", "--quiet", f"--object-format={object_format}")
+    for relative, raw in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    run_git(root, "add", ".")
+    run_git(
+        root,
+        "-c",
+        "user.name=Viper tests",
+        "-c",
+        "user.email=viper@example.com",
+        "commit",
+        "--quiet",
+        "-m",
+        "source",
+    )
+    return run_git(root, "rev-parse", "HEAD").decode().strip()
+
+
+def _read_git_origin(origin: Path, location: GitFileRef, checkout: Path) -> bytes:
+    """Clone the local fixture when necessary, then read its exact pinned file."""
+    if not checkout.exists():
+        checkout.parent.mkdir(parents=True, exist_ok=True)
+        run_git(origin, "clone", "--quiet", str(origin), str(checkout))
+    return run_git(checkout, "show", f"{location.commit}:{location.path}")
+
+
 def test_run_fetcher_reuses_one_external_git_file_within_an_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Fetch each immutable external Git file once per RunFetcher."""
+    origin = tmp_path / "origin"
+    relative = "src/producer/loader.py"
+    commit = _git_origin(origin, {relative: b"source"})
     reference = GitFileRef(
         repository=HttpUrl("https://example.com/producer.git"),
-        commit="a" * 40,
-        path="src/producer/loader.py",
+        commit=commit,
+        path=relative,
     )
     fetched: list[GitFileRef] = []
 
     def fetch(location: GitFileRef, *, checkout: Path) -> bytes:
         fetched.append(location)
-        return b"source"
+        return _read_git_origin(origin, location, checkout)
 
     monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
-    fetcher = RunFetcher(
-        tmp_path,
-        LocalArtifactStore(tmp_path),
-        "https://example.com/consumer.git",
-    )
-
-    assert fetcher(reference) == b"source"
-    assert fetcher(reference) == b"source"
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    with RunFetcher(
+        consumer, LocalArtifactStore(consumer), CONSUMER_REPOSITORY
+    ) as fetcher:
+        assert fetcher(reference) == b"source"
+        with monkeypatch.context() as context:
+            context.setattr(
+                "viper._verified_cache.tempfile.mkstemp",
+                lambda *args, **kwargs: pytest.fail(
+                    "valid cached source was saved again"
+                ),
+            )
+            assert fetcher(reference) == b"source"
     assert fetched == [reference]
 
 
@@ -267,28 +309,34 @@ def test_run_fetcher_does_not_retain_an_external_git_file_over_its_budget(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Bound retained external Git bytes without rejecting retrieval."""
+    """Fetch again after eviction when the payload exceeded the in-memory budget."""
+    origin = tmp_path / "origin"
+    raw = b"checkpoint"
+    relative = "artifacts/model.bin"
+    commit = _git_origin(origin, {relative: raw})
     reference = GitFileRef(
         repository=HttpUrl("https://example.com/producer.git"),
-        commit="a" * 40,
-        path="artifacts/model.bin",
+        commit=commit,
+        path=relative,
     )
     fetched: list[GitFileRef] = []
 
     def fetch(location: GitFileRef, *, checkout: Path) -> bytes:
         fetched.append(location)
-        return b"checkpoint"
+        return _read_git_origin(origin, location, checkout)
 
     monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
     monkeypatch.setattr("viper._source._MAX_EXTERNAL_GIT_CACHE_BYTES", 5)
-    fetcher = RunFetcher(
-        tmp_path,
-        LocalArtifactStore(tmp_path),
-        "https://example.com/consumer.git",
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    store = LocalArtifactStore(consumer)
+    resolved = ResolvedFileRef(
+        stored_at=reference, sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw)
     )
-
-    assert fetcher(reference) == b"checkpoint"
-    assert fetcher(reference) == b"checkpoint"
+    with RunFetcher(consumer, store, CONSUMER_REPOSITORY) as fetcher:
+        assert fetcher(reference) == raw
+        store.resolve(resolved).unlink()
+        assert fetcher(reference) == raw
     assert fetched == [reference, reference]
 
 
@@ -296,41 +344,82 @@ def test_run_fetcher_reuses_one_checkout_for_files_from_the_same_commit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Fetch one external commit when verification reads several of its files."""
+    """Share a Git checkout, then reuse proved content in a new fetcher."""
+    origin = tmp_path / "origin"
+    paths = ("src/producer/loader.py", "src/producer/model.py")
+    files = {path: path.encode() for path in paths}
+    commit = _git_origin(origin, files)
     references = tuple(
         GitFileRef(
             repository=HttpUrl("https://example.com/producer.git"),
-            commit="a" * 40,
+            commit=commit,
             path=path,
         )
-        for path in ("src/producer/loader.py", "src/producer/model.py")
+        for path in paths
     )
     checkouts: list[Path] = []
 
     def fetch(location: GitFileRef, *, checkout: Path) -> bytes:
         checkouts.append(checkout)
-        return str(location.path).encode()
+        return _read_git_origin(origin, location, checkout)
 
     monkeypatch.setattr("viper._source.fetch_git_file_bytes", fetch)
-    fetcher = RunFetcher(
-        tmp_path,
-        LocalArtifactStore(tmp_path),
-        "https://example.com/consumer.git",
-    )
-
-    assert [fetcher(reference) for reference in references] == [
-        str(reference.path).encode() for reference in references
-    ]
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    with RunFetcher(
+        consumer, LocalArtifactStore(consumer), CONSUMER_REPOSITORY
+    ) as fetcher:
+        assert [fetcher(reference) for reference in references] == list(files.values())
+    assert len(checkouts) == 2
     assert checkouts[0] == checkouts[1]
-    second_fetcher = RunFetcher(
-        tmp_path,
-        LocalArtifactStore(tmp_path),
-        "https://example.com/consumer.git",
-    )
+    with RunFetcher(
+        consumer, LocalArtifactStore(consumer), CONSUMER_REPOSITORY
+    ) as second:
+        assert second(references[0]) == files[paths[0]]
+    assert len(checkouts) == 2
+    assert checkouts[0].is_relative_to(consumer / ".viper/cache/git-checkouts")
 
-    assert second_fetcher(references[0]) == str(references[0].path).encode()
-    assert checkouts[2] == checkouts[0]
-    assert checkouts[0].is_relative_to(tmp_path / ".viper/cache/git-checkouts")
+
+@pytest.mark.parametrize("object_format", ["sha1", "sha256"])
+@pytest.mark.parametrize("raw", [b"", b"NEW_CODE\n"])
+def test_run_fetcher_uses_only_proven_git_bytes_after_checkout_is_removed(
+    tmp_path: Path, object_format: str, raw: bytes
+) -> None:
+    """A durable Git proof preserves offline access without trusting another hash."""
+    root = tmp_path / "source"
+    relative = "src/nested module.py"
+    commit = _git_origin(
+        root, {"a.py": b"other", relative: raw}, object_format=object_format
+    )
+    location = GitFileRef(
+        repository="https://example.com/source.git", commit=commit, path=relative
+    )
+    reference = ResolvedFileRef(
+        stored_at=location, sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw)
+    )
+    store = LocalArtifactStore(root)
+    with RunFetcher(root, store, str(location.repository)) as fetcher:
+        assert fetcher.read(reference) == raw
+    shutil.rmtree(root / ".git")
+    unrelated = b"OLD_CODE\n"
+    stale = reference.model_copy(
+        update={
+            "sha256": hashlib.sha256(unrelated).hexdigest(),
+            "bytes": len(unrelated),
+        }
+    )
+    other = store.resolved_files({"unrelated/source.py": unrelated})[0]
+    with RunFetcher(root, store, str(location.repository)) as offline:
+        assert offline(location) == raw
+        assert offline.path(reference).read_bytes() == raw
+        with pytest.raises(VerificationError):
+            offline.read(stale)
+        with pytest.raises(VerificationError):
+            offline.path(stale)
+        with pytest.raises(VerificationError):
+            offline.remember_path(stale, store.resolve(other))
+        assert offline(location) == raw
+    assert store.registry.git_file_proof(location) is not None
 
 
 def test_run_fetcher_reuses_verified_bytes_across_executions(
@@ -467,8 +556,9 @@ def test_run_fetcher_checks_download_once_before_caching(
     reference = ResolvedFileRef(
         sha256=hashlib.sha256(original).hexdigest(),
         bytes=len(original),
-        stored_at=GitFileRef(
-            repository=HttpUrl("https://example.com/source.git"),
+        stored_at=HuggingFaceFileRef(
+            repository="example/evidence",
+            repo_type="model",
             commit="a" * 40,
             path="evidence.bin",
         ),
@@ -482,17 +572,12 @@ def test_run_fetcher_checks_download_once_before_caching(
 
     def count_hash(raw: bytes = b"", *, usedforsecurity: bool = True):
         """Count full byte hashes while computing the actual digest."""
-        hashed.append(raw)
+        if raw == payload:
+            hashed.append(raw)
         return sha256(raw, usedforsecurity=usedforsecurity)
 
-    def read_source(owner: RunFetcher, location: StorageModel) -> bytes:
-        """Return the selected download through the normal verification path."""
-        assert owner is fetcher
-        assert location == reference.stored_at
-        return payload
-
+    _install_remote_bytes(monkeypatch, payload, [], reference)
     monkeypatch.setattr(hashlib, "sha256", count_hash)
-    monkeypatch.setattr(RunFetcher, "__call__", read_source)
     read = fetcher.path if as_path else fetcher.read
 
     if payload != original:

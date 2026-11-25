@@ -22,6 +22,7 @@ from ._cloud import (
     canonical_json_bytes,
     validate_snapshot_copy,
 )
+from ._git_proof import GitFileProof, verify_git_file_proof
 from ._schema import SHA256, ProtocolModel, RepoRelPath
 from .artifacts import (
     ResolvedArtifact,
@@ -31,6 +32,7 @@ from .artifacts import (
 from .references import (
     FileIdentity,
     GcsFileRef,
+    GitFileRef,
     GitSource,
     HuggingFaceFileRef,
     ResolvedFileRef,
@@ -810,6 +812,81 @@ class StorageRegistry:
                 ),
             )
 
+    def register_git_file(self, proof: GitFileProof, raw: bytes) -> None:
+        """Retain Git address membership only after its objects and bytes verify."""
+        verify_git_file_proof(proof, raw)
+        reference = proof.reference
+        coordinate = document_digest(reference.stored_at)
+        key = f"git:{coordinate}"
+        relative = f"{self.store}/proofs/git/{coordinate}.json"
+        path = resolve_path(self.repository_root, relative, operation="write")
+        encoded = canonical_json_bytes(proof)
+        write_synchronized(path, encoded)
+        with self._transaction(write=True) as cnx:
+            previous = cnx.execute(
+                "SELECT sha256, bytes FROM verified_files WHERE key = ?", (key,)
+            ).fetchone()
+            if previous is not None and tuple(previous) != (
+                reference.sha256,
+                reference.bytes,
+            ):
+                raise StorageRegistryError(
+                    "Git address has conflicting file identities"
+                )
+            cnx.execute(
+                "INSERT OR IGNORE INTO payloads VALUES (?, ?)",
+                (reference.sha256, reference.bytes),
+            )
+            cnx.execute(
+                "INSERT OR IGNORE INTO verified_files VALUES (?, ?, ?, ?, ?)",
+                (
+                    key,
+                    reference.sha256,
+                    reference.bytes,
+                    relative,
+                    hashlib.sha256(encoded).hexdigest(),
+                ),
+            )
+
+    def git_file_proof(self, location: GitFileRef) -> GitFileProof | None:
+        """Read the immutable proof for this exact repository, commit and path."""
+        return self.git_file_proof_by_key(f"git:{document_digest(location)}")
+
+    def git_file_proof_by_key(self, key: str) -> GitFileProof | None:
+        """Read a saved Git proof using its portable metadata member's key."""
+        if not key.startswith("git:"):
+            raise ValueError("Git proof key must start with git:")
+        if not self.path.exists():
+            return None
+        with self._transaction() as cnx:
+            if (
+                cnx.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name = 'verified_files'"
+                ).fetchone()
+                is None
+            ):
+                return None
+            row = cnx.execute(
+                "SELECT * FROM verified_files WHERE key = ?",
+                (key,),
+            ).fetchone()
+        if row is None:
+            return None
+        path = resolve_path(self.repository_root, row["proof_path"], operation="read")
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != row["proof_sha256"]:
+            raise StorageRegistryError("saved Git file proof changed")
+        proof = GitFileProof.model_validate_json(raw)
+        if (
+            f"git:{document_digest(proof.reference.stored_at)}" != key
+            or proof.reference.sha256 != row["sha256"]
+            or proof.reference.bytes != row["bytes"]
+        ):
+            raise StorageRegistryError(
+                "saved Git proof has another address or identity"
+            )
+        return proof
+
     def file_backings(self, identity: FileIdentity) -> tuple[ResolvedFileRef, ...]:
         """Read unchanged proofs of individually verified cloud files."""
         if not self.path.exists():
@@ -824,7 +901,7 @@ class StorageRegistry:
                 return ()
             rows = cnx.execute(
                 "SELECT proof_path, proof_sha256 FROM verified_files "
-                "WHERE sha256 = ? AND bytes = ? ORDER BY key",
+                "WHERE sha256 = ? AND bytes = ? AND key NOT LIKE 'git:%' ORDER BY key",
                 (identity.sha256, identity.bytes),
             ).fetchall()
         result = []

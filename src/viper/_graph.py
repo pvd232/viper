@@ -9,7 +9,8 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, SerializeAsAny, TypeAdapter
 
-from ._cloud import GcsRepository, PublicationSource
+from ._cloud import GcsRepository, PublicationSource, canonical_json_bytes
+from ._git_proof import proof_member_path
 from ._offload import current_session
 from ._schema import ArtifactName, ProtocolModel
 from ._source import RunFetcher
@@ -35,6 +36,7 @@ from .references import (
     ResolvedBenchmarkResultRef,
     ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
+    ResolvedGitFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageRef,
@@ -480,7 +482,7 @@ def enroll_run(
     admitted: list[StageResultSnapshotRef] = []
     for snapshot in ordered:
         if isinstance(snapshot, GitSource):
-            files = {}
+            files: dict[str, PublicationSource] = {}
             for location, (size, digest) in reader.source_files.items():
                 if (
                     not isinstance(location, GitFileRef)
@@ -489,8 +491,14 @@ def enroll_run(
                     continue
                 if digest is None:
                     digest = hashlib.sha256(fetcher(location)).hexdigest()
-                file = ResolvedFileRef(stored_at=location, sha256=digest, bytes=size)
+                file = ResolvedGitFileRef(stored_at=location, sha256=digest, bytes=size)
                 files[location.path] = fetcher.path(file)
+                proof = store.registry.git_file_proof(location)
+                if proof is None or proof.reference != file:
+                    raise ValueError(
+                        "producer Git file has no matching membership proof"
+                    )
+                files[proof_member_path(file)] = canonical_json_bytes(proof)
             if files:
                 commit, _ = store._publish(files, path_custody="cache")
                 admitted.append(

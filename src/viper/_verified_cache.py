@@ -12,6 +12,28 @@ from .evidence import VerificationError
 from .references import ResolvedFileRef
 
 
+def verify_resolved_file_bytes(
+    reference: ResolvedFileRef,
+    raw: bytes,
+) -> bytes:
+    """Verify retrieved bytes against a resolved file reference."""
+    if not isinstance(raw, bytes):
+        raise TypeError("retrieved file content must be bytes")
+
+    if len(raw) != reference.bytes:
+        raise VerificationError(
+            f"byte-count mismatch: expected {reference.bytes}, received {len(raw)}"
+        )
+
+    actual_sha256 = hashlib.sha256(raw).hexdigest()
+    if actual_sha256 != reference.sha256:
+        raise VerificationError(
+            f"SHA-256 mismatch: expected {reference.sha256}, received {actual_sha256}"
+        )
+
+    return raw
+
+
 @dataclass(frozen=True)
 class VerifiedObjectCache:
     """Store files by SHA-256 and check their bytes before reuse."""
@@ -21,17 +43,7 @@ class VerifiedObjectCache:
     @staticmethod
     def read_path(reference: ResolvedFileRef, path: Path) -> bytes:
         """Read the file once and check its byte count and SHA-256."""
-        raw = path.read_bytes()
-        if len(raw) != reference.bytes:
-            raise VerificationError(
-                f"byte-count mismatch: expected {reference.bytes}, received {len(raw)}"
-            )
-        digest = hashlib.sha256(raw).hexdigest()
-        if digest != reference.sha256:
-            raise VerificationError(
-                f"SHA-256 mismatch: expected {reference.sha256}, received {digest}"
-            )
-        return raw
+        return verify_resolved_file_bytes(reference, path.read_bytes())
 
     @staticmethod
     def verify_path(reference: ResolvedFileRef, path: Path) -> Path:

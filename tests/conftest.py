@@ -8,6 +8,7 @@ import pytest
 from viper import _offload
 
 TIER_BY_MODULE = {
+    "test_git_proof": "contract",
     "test_offload_cleanup": "contract",
     "test_background_publication": "contract",
     "test_offload_workflow": "contract",
@@ -82,6 +83,7 @@ TIER_BY_MODULE = {
 }
 
 DOMAIN_BY_MODULE = {
+    "test_git_proof": "domain_storage",
     "test_offload_cleanup": "domain_storage",
     "test_background_publication": "domain_storage",
     "test_offload_workflow": "domain_execution",

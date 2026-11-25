@@ -12,11 +12,12 @@ from weakref import finalize
 
 import viper._subprocess as subprocess
 
+from ._git_proof import capture_git_file_proof, verify_git_file_proof
 from ._offload import current_session
 from ._schema import RepoRelPath
 from ._storage_locks import PayloadLocks, WorkflowReaders
-from ._verification.storage import fetch_git_file_bytes, verify_resolved_file_bytes
-from ._verified_cache import VerifiedObjectCache
+from ._verification.storage import fetch_git_file_bytes
+from ._verified_cache import VerifiedObjectCache, verify_resolved_file_bytes
 from .cloud import CloudReference, ViperCloud
 from .evidence import VerificationError, VerificationPolicy, VerifiedProducerRun
 from .huggingface import HuggingFaceProvider
@@ -88,6 +89,7 @@ class RunFetcher:
             raise ValueError("file cache must be inside the workspace")
         self._external_git_files: dict[GitFileRef, bytes] = {}
         self._local_git_roots: set[Path] = set()
+        self._git_objects: dict[tuple[Path, str, str], bytes] = {}
         self._external_git_cache_bytes = 0
         self._external_git_checkout_root = self.cache_root / "git-checkouts"
         if self.cache_root != self.repository_root / ".viper/cache":
@@ -248,7 +250,7 @@ class RunFetcher:
         elif isinstance(reference.stored_at, LocalFileRef):
             local_artifact_store(reference.stored_at).record_path(reference, path)
 
-    def _local_git_file(self, location: GitFileRef) -> bytes:
+    def _local_git_file(self, location: GitFileRef) -> tuple[Path, bytes]:
         """Try this checkout and matching original producer checkouts."""
         roots = (
             [self.repository_root]
@@ -262,34 +264,91 @@ class RunFetcher:
                     read_source(root).repository != location.repository
                 ):
                     continue
-                return run_git(root, "show", f"{location.commit}:{location.path}")
+                return root, run_git(root, "show", f"{location.commit}:{location.path}")
             except (OSError, ValueError):
                 continue
         raise VerificationError("local Git evidence could not be read")
 
+    def _actual_git_file(self, location: GitFileRef) -> tuple[Path, bytes]:
+        """Read Git itself before accepting an unproved file coordinate."""
+        try:
+            return self._local_git_file(location)
+        except VerificationError:
+            if str(location.repository) == self.source_repository:
+                raise
+        checkout_identity = hashlib.sha256(
+            f"{location.repository}\0{location.commit}".encode()
+        ).hexdigest()
+        checkout = self._external_git_checkout_root / checkout_identity
+        return checkout, fetch_git_file_bytes(location, checkout=checkout)
+
+    def _git_object(self, root: Path, kind: str, oid: str) -> bytes:
+        """Reuse the immutable commit and tree objects read during this execution."""
+        key = (root, kind, oid)
+        if key not in self._git_objects:
+            self._git_objects[key] = run_git(root, "cat-file", kind, oid)
+        return self._git_objects[key]
+
+    def _git_file(self, location: GitFileRef) -> tuple[bytes, Path]:
+        """Resolve only bytes proved to belong to this pinned Git address."""
+        try:
+            proof = self.store.registry.git_file_proof(location)
+            if proof is None:
+                root, raw = self._actual_git_file(location)
+                reference = ResolvedGitFileRef(
+                    stored_at=location,
+                    sha256=hashlib.sha256(raw).hexdigest(),
+                    bytes=len(raw),
+                )
+                proof = capture_git_file_proof(
+                    reference, lambda kind, oid: self._git_object(root, kind, oid)
+                )
+                self.store.registry.register_git_file(proof, raw)
+                self._hold(reference)
+                path = self.store.cache_verified_bytes(reference, raw)
+            else:
+                reference = proof.reference
+                self._hold(reference)
+                remembered = self._external_git_files.get(location)
+                cached = (
+                    self.store.cached_read(reference) if remembered is None else None
+                )
+                if remembered is not None:
+                    raw = remembered
+                    path = self.store.downloads.verified_path(reference)
+                    if path is None:
+                        path = self.store.cache_verified_bytes(reference, raw)
+                elif cached is not None:
+                    raw, path = cached
+                else:
+                    try:
+                        raw, path = self.store.read_resolved(reference)
+                    except LocalStoreError:
+                        _, raw = self._actual_git_file(location)
+                        verify_git_file_proof(proof, raw)
+                        path = self.store.cache_verified_bytes(reference, raw)
+                verify_git_file_proof(proof, raw)
+        except VerificationError:
+            raise
+        except (OSError, ValueError) as error:
+            raise VerificationError(
+                "Git file address or membership proof is invalid"
+            ) from error
+        if (
+            location not in self._external_git_files
+            and self._external_git_cache_bytes + len(raw)
+            <= _MAX_EXTERNAL_GIT_CACHE_BYTES
+        ):
+            self._external_git_files[location] = raw
+            self._external_git_cache_bytes += len(raw)
+        self._record_path(reference, path)
+        self._verified_paths[reference] = path
+        return raw, path
+
     def __call__(self, location: StorageModel) -> bytes:
         """Read a file from the location recorded in its reference."""
         if isinstance(location, GitFileRef):
-            remembered = self._external_git_files.get(location)
-            if remembered is not None:
-                return remembered
-            try:
-                return self._local_git_file(location)
-            except VerificationError:
-                if str(location.repository) == self.source_repository:
-                    raise
-            checkout_identity = hashlib.sha256(
-                f"{location.repository}\0{location.commit}".encode()
-            ).hexdigest()
-            checkout = self._external_git_checkout_root / checkout_identity
-            raw = fetch_git_file_bytes(location, checkout=checkout)
-            if (
-                self._external_git_cache_bytes + len(raw)
-                <= _MAX_EXTERNAL_GIT_CACHE_BYTES
-            ):
-                self._external_git_files[location] = raw
-                self._external_git_cache_bytes += len(raw)
-            return raw
+            return self._git_file(location)[0]
         store = (
             self._local_store(location)
             if isinstance(location, LocalFileRef)
@@ -304,53 +363,42 @@ class RunFetcher:
 
     def read(self, reference: ResolvedFileRef) -> bytes:
         """Read the file and check its byte count and SHA-256 on first use."""
+        if isinstance(reference.stored_at, GitFileRef):
+            raw, path = self._git_file(reference.stored_at)
+            raw = verify_resolved_file_bytes(reference, raw)
+            self._verified_paths[reference] = path
+            return raw
         self._hold(reference)
         remembered = self._verified_paths.get(reference)
         if remembered is not None:
             raw = remembered.read_bytes()
             self._record_path(reference, remembered)
             return raw
-        if isinstance(reference.stored_at, GitFileRef):
-            cached = self.store.cached_read(reference)
-            if cached is not None:
-                raw, path = cached
-            else:
-                try:
-                    original = self(reference.stored_at)
-                except VerificationError as source_error:
-                    try:
-                        raw, path = self.store.read_resolved(reference)
-                    except LocalStoreError as missing:
-                        raise source_error from missing
-                else:
-                    raw = verify_resolved_file_bytes(reference, original)
-                    path = self.store.cache_verified_bytes(reference, raw)
-        else:
-            store = (
-                self._local_store(reference.stored_at)
-                if isinstance(reference.stored_at, LocalFileRef)
-                else self.store
-            )
-            cloud = (
-                None
-                if isinstance(reference.stored_at, LocalFileRef)
-                else lambda: self._cloud_service(reference.stored_at)
-            )
-            raw, path = store.read_resolved(reference, cloud=cloud)
+        store = (
+            self._local_store(reference.stored_at)
+            if isinstance(reference.stored_at, LocalFileRef)
+            else self.store
+        )
+        cloud = (
+            None
+            if isinstance(reference.stored_at, LocalFileRef)
+            else lambda: self._cloud_service(reference.stored_at)
+        )
+        raw, path = store.read_resolved(reference, cloud=cloud)
         self._record_path(reference, path)
         self._verified_paths[reference] = path
         return raw
 
     def path(self, reference: ResolvedFileRef) -> Path:
         """Return a local path after checking the file on first use."""
+        if isinstance(reference.stored_at, GitFileRef):
+            self.read(reference)
+            return self._verified_paths[reference]
         self._hold(reference)
         remembered = self._verified_paths.get(reference)
         if remembered is not None:
             self._record_path(reference, remembered)
             return remembered
-        if isinstance(reference.stored_at, GitFileRef):
-            self.read(reference)
-            return self._verified_paths[reference]
         if isinstance(reference.stored_at, LocalFileRef):
             path = self._local_store(reference.stored_at).resolve(reference)
         else:
@@ -367,6 +415,9 @@ class RunFetcher:
         The caller must pass the published file or its unchanged upload source.
         Its bytes must still match the reference.
         """
+        if isinstance(reference.stored_at, GitFileRef):
+            self.read(reference)
+            return
         self._hold(reference)
         if path.stat().st_size != reference.bytes:
             raise VerificationError(

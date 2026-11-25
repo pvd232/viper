@@ -7,7 +7,7 @@ import hashlib
 import os
 import sys
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -226,6 +226,7 @@ class PublicationSession:
         self._closed = False
         self._successful = True
         self._started = False
+        self.before_close: Callable[[], None] | None = None
         self._readers: dict[tuple[Path, str], WorkflowReaders] = {}
         self._used: dict[str, ResolvedFileRef] = {}
         self._locations: dict[str, _Location] = {}
@@ -357,14 +358,27 @@ class PublicationSession:
         with self._mutex:
             self._successful = self._successful and succeeded
 
+    def used_files(self) -> tuple[ResolvedFileRef, ...]:
+        """Include files found by background recovery as well as foreground reads."""
+        with self._mutex:
+            used = {
+                document_digest(ref): ref
+                for ref in load_operation(self.operation_path).used
+            }
+            used.update(self._used)
+            return tuple(used[key] for key in sorted(used))
+
     def close(self, succeeded: bool = True) -> None:
         """Close collection and release readers without waiting for cloud work."""
         with self._mutex:
             if self._closed:
                 return
-            self._closed = True
             self._successful = self._successful and succeeded
             try:
+                if self.before_close is not None:
+                    with bind_session(self):
+                        self.before_close()
+                self._closed = True
                 with operation_lock(self.operation_path):
                     operation = load_operation(self.operation_path)
                     used = {
@@ -397,6 +411,7 @@ class PublicationSession:
                         )
                     save_operation(self.operation_path, operation)
             finally:
+                self._closed = True
                 for readers in self._readers.values():
                     readers.close()
                 os.close(self._owner)

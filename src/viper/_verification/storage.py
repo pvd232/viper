@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import hashlib
 import os
 import shutil
 import tempfile
@@ -17,11 +16,13 @@ import viper._subprocess as subprocess
 
 from .._schema import ArtifactName, DataRole, RepoRelPath
 from .._storage_registry import StorageRegistryError
+from .._verified_cache import verify_resolved_file_bytes
 from ..artifact_loaders import (
     ArtifactLoaderError,
     ArtifactValidationResult,
     execute_artifact_loader,
     materialized_loader_context,
+    verify_artifact_loader_bytes,
 )
 from ..artifacts import (
     ResolvedArtifact,
@@ -307,28 +308,6 @@ def list_snapshot_files(
         except (OSError, ValueError, RuntimeError) as exc:
             raise VerificationError("artifact.bundle: snapshot listing failed") from exc
     raise VerificationError("artifact.bundle: unsupported snapshot")
-
-
-def verify_resolved_file_bytes(
-    reference: ResolvedFileRef,
-    raw: bytes,
-) -> bytes:
-    """Verify retrieved bytes against a resolved file reference."""
-    if not isinstance(raw, bytes):
-        raise TypeError("retrieved file content must be bytes")
-
-    if len(raw) != reference.bytes:
-        raise VerificationError(
-            f"byte-count mismatch: expected {reference.bytes}, received {len(raw)}"
-        )
-
-    actual_sha256 = hashlib.sha256(raw).hexdigest()
-    if actual_sha256 != reference.sha256:
-        raise VerificationError(
-            f"SHA-256 mismatch: expected {reference.sha256}, received {actual_sha256}"
-        )
-
-    return raw
 
 
 def read_resolved_file(
@@ -667,19 +646,18 @@ def load_verified_artifact(
             "artifact-loader execution requires an explicitly trusted source repository"
         )
 
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
     loader_reference = declaration.loader
-    resolved_loader = resolve_snapshot_file_ref(
-        run.source,
-        SnapshotFileRef(
-            path=loader_reference.path,
-            sha256=loader_reference.sha256,
-            bytes=loader_reference.bytes,
-        ),
+    loader_location = GitFileRef(
+        repository=run.source.repository,
+        commit=run.source.commit,
+        path=loader_reference.path,
     )
+    loader_raw = retrieve(loader_location)
     try:
-        loader_raw = read_resolved_file(resolved_loader, fetcher=fetcher)
-    except VerificationError as exc:
-        raise VerificationError(f"artifact.loader: {exc}") from exc
+        verify_artifact_loader_bytes(loader_reference, loader_raw)
+    except ArtifactLoaderError as exc:
+        raise VerificationError(str(exc)) from exc
 
     target_path = (
         declaration.path if materialization_path is None else materialization_path

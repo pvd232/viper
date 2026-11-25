@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
+import sqlite3
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 
+from tests.test_storage import InMemoryViperCloudProvider
 from viper import _offload, _source
 from viper._cloud import (
     GcsRepository,
@@ -27,6 +31,7 @@ from viper._storage_locks import PayloadLocks
 from viper._storage_registry import StorageRegistryError
 from viper.cloud import PublicationReceipt, PublicationTarget, ViperCloud
 from viper.evidence import VerificationError
+from viper.execution._offload_worker import drain_once
 from viper.references import (
     CloudFileRef,
     CloudStageResultSnapshotRef,
@@ -49,6 +54,8 @@ from viper.storage import (
     StorageConfigurationError,
     import_publication_copies,
     import_publication_receipt,
+    publication_receipt,
+    publication_status,
     publish_resolved_files,
     snapshot_file,
     workflow,
@@ -261,10 +268,10 @@ def test_receipt_imports_individual_file_proofs_without_claiming_full_copy(
     assert cloud.downloads == 1
 
 
-def test_git_fallback_uses_shared_bytes_without_partial_git_inventory(
+def test_git_fallback_rejects_shared_bytes_without_membership_proof(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An unavailable Git origin falls back by exact hash to an auxiliary copy."""
+    """A cloud copy proves bytes, but cannot invent membership in a Git commit."""
     copy, cloud = _copy(tmp_path, {"backup/module.py": b"x = 1\n"})
     _services(monkeypatch, cloud)
     import_publication_copies(tmp_path, (copy,))
@@ -287,11 +294,12 @@ def test_git_fallback_uses_shared_bytes_without_partial_git_inventory(
 
     monkeypatch.setattr(_source, "run_git", missing_git)
     fetcher = RunFetcher(tmp_path, store, str(location.repository))
-    assert fetcher.read(reference) == b"x = 1\n"
+    with pytest.raises(VerificationError, match="Git"):
+        fetcher.read(reference)
     git_source = GitSource(repository=location.repository, commit=location.commit)
     assert store.registry.snapshot(git_source) is None
     assert reference.stored_at == location
-    assert cloud.downloads == 2
+    assert cloud.downloads == 1
 
 
 def test_available_git_is_checked_before_cloud_fallback(
@@ -740,3 +748,115 @@ def test_partial_foreign_adoption_preserves_access_to_remaining_original_members
     assert isinstance(weights.stored_at, LocalFileRef)
     assert isinstance(weights.stored_at, LocalFileRef)
     assert weights.stored_at.workspace == producer
+
+
+@pytest.mark.parametrize("raw", [b"", b"value = 1\n"])
+def test_workflow_publishes_git_proof_and_restores_after_source_eviction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: bytes
+) -> None:
+    """Normal queued publication carries source bytes and their pinned Git proof."""
+    original = tmp_path / "original"
+    original.mkdir()
+    (original / "viper.toml").write_text("[storage]\noffload = true\n")
+    relative = "src/module.py"
+    (original / "src").mkdir()
+    (original / relative).write_bytes(raw)
+    _source.run_git(original, "init", "--quiet")
+    _source.run_git(original, "add", ".")
+    _source.run_git(
+        original,
+        "-c",
+        "user.name=Viper tests",
+        "-c",
+        "user.email=viper@example.com",
+        "commit",
+        "--quiet",
+        "-m",
+        "source",
+    )
+    location = GitFileRef(
+        repository="https://example.com/source.git",
+        commit=_source.run_git(original, "rev-parse", "HEAD").decode().strip(),
+        path=relative,
+    )
+    reference = ResolvedFileRef(
+        stored_at=location, sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw)
+    )
+    unchanged = reference.model_dump(mode="json")
+    provider = InMemoryViperCloudProvider(original)
+    target = PublicationTarget(
+        repository=GcsRepository(bucket=provider.bucket, prefix=provider.prefix),
+        destination=ViperCloudDestination(owner="owner", workspace="models"),
+    )
+
+    def target_service(
+        cls: type[ViperCloud], root: Path, selected: PublicationTarget
+    ) -> ViperCloud:
+        return ViperCloud(root, selected.repository, provider=provider)
+
+    def reference_service(
+        cls: type[ViperCloud],
+        root: Path,
+        selected: CloudFileRef | CloudStageResultSnapshotRef,
+    ) -> ViperCloud:
+        return ViperCloud(root, ViperCloud._repository_for(selected), provider=provider)
+
+    monkeypatch.setattr(
+        _offload, "start_publication_worker", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(ViperCloud, "for_target", classmethod(target_service))
+    monkeypatch.setattr(ViperCloud, "for_reference", classmethod(reference_service))
+    monkeypatch.setattr(ViperCloud, "for_snapshot", classmethod(reference_service))
+    store = LocalArtifactStore(original)
+    with workflow(original, targets=(target,)) as owner:
+        with RunFetcher(original, store, str(location.repository)) as fetcher:
+            cached = fetcher.path(reference)
+            assert cached.read_bytes() == raw
+        assert not provider.upload_calls
+    assert cached.exists()
+    assert not provider.upload_calls
+    for _ in range(3):
+        drain_once(original)
+    assert publication_status(owner.operation_path).status == "complete"
+    assert not cached.exists()
+    assert store.registry.git_file_proof(location) is not None
+    receipt = publication_receipt(owner.operation_path)
+    assert len(receipt.copies) == 1
+    assert len(receipt.copies[0].source_files) == 2
+    shutil.rmtree(original)
+
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    (fresh / "viper.toml").write_text("[storage]\noffload = true\n")
+    forbidden = Mock(
+        side_effect=AssertionError("Git must not be needed after proof import")
+    )
+    monkeypatch.setattr(_source, "run_git", forbidden)
+    monkeypatch.setattr(_source, "fetch_git_file_bytes", forbidden)
+    import_publication_receipt(fresh, receipt, targets=(target,))
+    current = LocalArtifactStore(fresh, targets=(target,))
+    assert current.registry.git_file_proof(location) is not None
+    transfers = len(provider.fetch_to_path_calls)
+    with sqlite3.connect(current.registry.path) as connection:
+        connection.execute("DELETE FROM verified_files WHERE key LIKE 'git:%'")
+    assert current.registry.git_file_proof(location) is None
+    import_publication_copies(fresh, receipt.copies, targets=(target,))
+    assert current.registry.git_file_proof(location) is not None
+    assert len(provider.fetch_to_path_calls) == transfers
+    for copy in receipt.copies:
+        for member in copy.source_files:
+            current.resolve(resolve_snapshot_file_ref(copy.source, member)).unlink()
+    import_publication_copies(fresh, receipt.copies, targets=(target,))
+    assert len(provider.fetch_to_path_calls) == transfers
+    with RunFetcher(fresh, current, str(location.repository)) as restored:
+        assert restored(location) == raw
+        assert restored.path(reference).read_bytes() == raw
+    assert len(provider.fetch_to_path_calls) == transfers + 1
+    forbidden.assert_not_called()
+    assert (
+        current.registry.snapshot(
+            GitSource(repository=location.repository, commit=location.commit)
+        )
+        is None
+    )
+    assert reference.model_dump(mode="json") == unchanged

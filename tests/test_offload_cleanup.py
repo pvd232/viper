@@ -20,6 +20,7 @@ from viper._cloud import (
     SnapshotInventory,
     canonical_json_bytes,
 )
+from viper._git_proof import capture_git_file_proof
 from viper._offload import (
     Operation,
     PublicationJob,
@@ -30,6 +31,7 @@ from viper._offload import (
     save_operation,
     session_scope,
 )
+from viper._source import run_git
 from viper._storage_locks import PayloadLocks, WorkflowReaders
 from viper.artifacts import ResolvedSingleFileArtifact, StageArtifactRef
 from viper.cloud import PublicationReceipt, PublicationTarget, ViperCloud
@@ -40,6 +42,7 @@ from viper.execution._promotion_journal import (
 from viper.references import (
     GcsStageResultSnapshotRef,
     GitSource,
+    ResolvedGitFileRef,
     SnapshotFileRef,
     resolve_snapshot_file_ref,
 )
@@ -505,14 +508,33 @@ def test_verified_cloud_read_offloads_with_portable_file_proof(
     )
     source: GcsStageResultSnapshotRef | GitSource = cloud_source
     reference = remote
+    git_reference: ResolvedGitFileRef | None = None
     assert storage.registry.backings(cloud_source) == ()
     assert remote in storage.registry.file_backings(reference)
     if reference_kind == "git":
-        source = GitSource(repository="https://example.com/source.git", commit="f" * 40)
+        (root / "data").mkdir()
+        (root / "data/weights.bin").write_bytes(b"weights")
+        for args in (
+            ("init", "--quiet"),
+            ("config", "user.name", "Viper cleanup test"),
+            ("config", "user.email", "viper@example.test"),
+            ("add", "data/weights.bin"),
+            ("commit", "--quiet", "-m", "source fixture"),
+        ):
+            run_git(root, *args)
+        source = GitSource(
+            repository="https://example.com/source.git",
+            commit=run_git(root, "rev-parse", "HEAD").decode().strip(),
+        )
         member = SnapshotFileRef(
             path="data/weights.bin", sha256=remote.sha256, bytes=remote.bytes
         )
         reference = resolve_snapshot_file_ref(source, member)
+        git_reference = ResolvedGitFileRef.model_validate(reference.model_dump())
+        proof = capture_git_file_proof(
+            git_reference, lambda kind, oid: run_git(root, "cat-file", kind, oid)
+        )
+        storage.registry.register_git_file(proof, b"weights")
     record = storage.registry.snapshot(cloud_source)
     assert record is not None
     operation = Operation.model_validate(
@@ -545,6 +567,9 @@ def test_verified_cloud_read_offloads_with_portable_file_proof(
     assert cleanup_operation(root, operation.model_dump(mode="json"), ())
     assert not path.exists()
     assert (len(provider.upload_calls), len(provider.fetch_to_path_calls)) == transfers
+    if git_reference is not None:
+        assert storage.registry.git_file_proof(git_reference.stored_at) is not None
+        assert (root / "data/weights.bin").read_bytes() == b"weights"
 
 
 def test_checkpoint_hashing_does_not_block_a_new_reader(

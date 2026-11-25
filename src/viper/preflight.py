@@ -23,7 +23,7 @@ from ._verification.plan import (
     verify_experiment_and_variant,
     verify_run_plan_relationships,
 )
-from ._verification.storage import verify_resolved_file_bytes
+from ._verified_cache import verify_resolved_file_bytes
 from .artifacts import ArtifactPointer
 from .evidence import StorageFetcher, VerificationError, VerificationPolicy
 from .http import (

@@ -17,7 +17,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from .._schema import SHA256, RepoRelPath
 from .._source import RunFetcher
-from .._verification.storage import verify_resolved_file_bytes
+from .._verified_cache import verify_resolved_file_bytes
 from ..config import Config, ConfigTypeRef
 from ..evidence import VerificationError, VerificationPolicy
 from ..http import ExternalExecutableSpec, ResolvedExternalExecutable
