@@ -1,0 +1,4 @@
+project-includes = ["/Users/machina/Developer/ChatGPT/jep-native-offload/jep_pilot/viper_adapter.py", "/Users/machina/Developer/ChatGPT/jep-native-offload/csts_pilot/full_data_prompt_worker.py", "/Users/machina/Developer/ChatGPT/jep-native-offload/csts_pilot/full_data_prompt_uploads.py", "/Users/machina/Developer/ChatGPT/jep-native-offload/scripts/full_data_prompt_20261107/collect_epochs.py"]
+search-path = ["/Users/machina/Developer/ChatGPT/jep-native-offload", "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src"]
+python-version = "3.11"
+preset = "default"

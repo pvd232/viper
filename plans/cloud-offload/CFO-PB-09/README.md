@@ -1,27 +1,17 @@
 # CFO-PB-09
 
-**Status:** planned; implementation code and executable PairBlockPlan not yet frozen.
+**Requirements:** CFO-REQ-10
 
 **Depends on:** PB08
 
-Context: JEP currently owns duplicate queue and generation-upload orchestration. Once native Viper passes acceptance, replace these callers in the JEP repository rather than writing JEP changes in a Viper-owned PairBlock.
+**Status:** JEP adapter migration is committed at `e2285b8`; final commit `d44073e` pins Viper `df10a3e`. The final bounded suite and Pyrefly pass; full contract acceptance remains blocked by CFO-REQ-10.
 
-## Owned targets
+The bound checkout is /Users/machina/Developer/ChatGPT/jep-native-offload, branch codex/jep-native-offload, baseline c2f9716e398dd5442ca9d3579dfa788657a6cd00. [The retained change manifest](jep/proposal.json) records the actual touched source, tests and validation outputs. That historical report is separate from final commit `d44073e296a638944a83684e9635d9b7fffc104f`, which pins Viper `df10a3e2258a28d7eb276d5a35a5621c0384a694`. The changes are in [draft JEP PR 26](https://github.com/pvd232/JEP/pull/26), against the original `c2f9716` baseline.
 
-- csts_pilot/background_storage.py
-- csts_pilot/full_data_prompt_uploads.py
+The adapter uses native workflows, enrollment, publication copies and verified restoration while preserving the selected private cloud namespace and attached identity configuration. A generation acknowledgment follows verified native copies. Failed publication retains control sources and leaves the acknowledgment absent; scientific computation is not rerun by the publication-only adapter.
 
-## Contribution
+Meaningful cases are tests/test_viper_storage_adapter.py::test_generation_ack_follows_verified_native_copies and test_failed_copy_keeps_control_sources_without_ack, with additional restore/target/auth cases. The retained [final CPU log](../../../evidence/cloud-offload-implementation-20261125/validation/jep-tests.log) reports 47 passing cases plus 4 subtests in 2.80 seconds; [final Pyrefly](../../../evidence/cloud-offload-implementation-20261125/validation/jep-pyrefly.log) reports zero errors. The earlier 44-case log is historical. Final selected Viper integration completion remains separate. Transfer boundaries are controlled and no live cloud/campaign run is established.
 
-Freeze a real current JEP baseline and its environment before planning actions. Keep private GCS configuration and workload-identity behavior, use native stable references and publication-only retry/recovery, and remove displaced queue/retention orchestration after caller migration. Do not add provenance schemas or provision GPUs. Complete separate Viper/JEP and combined maintained-code reports; net reduction remains unproven until measured.
+The change manifest and actual JEP PR retain the migration; redundant proposal diff copies are retired in [the path/hash record](jep/retired-diffs.json). Their removal receives no code-reduction credit. [The final independently counted working tree](../../../evidence/cloud-offload-implementation-20261125/review-10/README.md) measures JEP runtime 36,917 to 36,827 (-90) and tests 11,130 to 11,271 (+141), total +51 maintained lines. Viper grows as well, so CFO-REQ-10 stays OPEN. These counts supersede the earlier proposal totals. The report records JEP source freeze `e2285b8` and current head `d44073e`; final bounded validation and dependency-pin evidence are linked above. The Viper source dependency is `df10a3e`.
 
-## Observing checks
-
-- tests/test_viper_storage_adapter.py
-
-Exact proposed test symbols are declared in contracts/cloud-offload.toml. They are not implemented or executed by this document.
-
-## Gate and stop condition
-
-Freeze complete source actions from the actual dependency commit, run Pyrefly before focused CPU/mock tests, require semantic documentation/schema checks, and finish with non-mutating Ruff formatting and lint. Native process changes also require the relevant integration checks. Stop on failed validation or missing real proof; no guessed success boolean or placeholder receipt can authorize deletion.
-
+Source changes and ordinary test logs are distinct from formal acceptance. No lifecycle receipt is created by this document.

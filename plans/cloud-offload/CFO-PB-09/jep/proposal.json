@@ -1,0 +1,447 @@
+{
+  "repository": "pvd232/JEP",
+  "baseline_branch": "feature/jep-viper-publication-adapter-20261120",
+  "baseline_commit": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
+  "worktree": "/Users/machina/Developer/ChatGPT/jep-native-offload",
+  "branch": "codex/jep-native-offload",
+  "status": "published_draft_review",
+  "pull_request": "https://github.com/pvd232/JEP/pull/26",
+  "implementation_commit": "d44073e296a638944a83684e9635d9b7fffc104f",
+  "viper_runtime_commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "count_evidence": "../../../../evidence/cloud-offload-implementation-20261125/review-10/counts.json",
+  "counts": {
+    "runtime": {
+      "before": 36917,
+      "after": 36827,
+      "net": -90,
+      "files_before": 122,
+      "files_after": 122
+    },
+    "tests": {
+      "before": 11130,
+      "after": 11271,
+      "net": 141,
+      "files_before": 58,
+      "files_after": 58
+    }
+  },
+  "counting": "Uses the final review-10 exact per-file maintained-source counts, including root Python files. Planning mirrors receive no reduction credit.",
+  "files": [
+    {
+      "path": "README.md",
+      "before_sha256": "c9f9c9024ca7cf7ffed78986299ee86f9579a2cc279b009d39b7a0a4fe24bf78",
+      "after_sha256": "081d67477a5631ff7b39636a949213cdcd1fbd466e0c433842ce2c8d1f2d6042",
+      "before_lines": 27,
+      "after_lines": 30
+    },
+    {
+      "path": "csts_pilot/annotation_format_publication.py",
+      "before_sha256": "a0ab29c364da0e59658f418ec4849b5142b9dc70941e7974ce3d844d0e7a8e9e",
+      "after_sha256": "d2890fa7646a3f42dbb903d812fa8f4c6e80e8cbad8bc9faa99a8ddf086444cf",
+      "before_lines": 126,
+      "after_lines": 128
+    },
+    {
+      "path": "csts_pilot/annotation_format_run.py",
+      "before_sha256": "302e47ae0a797e9f20aa4e94574e71427bcb938121ab2785f05bf8e63ab448b7",
+      "after_sha256": "602a1cd53ba910b269c51248e206132f4cef0204d8396c53333324f0fbda6a7b",
+      "before_lines": 434,
+      "after_lines": 438
+    },
+    {
+      "path": "csts_pilot/answer_input_run.py",
+      "before_sha256": "e66fe05eb1c13e9dfac719b2c50421815a1e1ff33c9934d83da74d63d5d78db5",
+      "after_sha256": "7c52108d27fabed2e0ea20b66111ff310cceb6fa186dbb021e77de2951b15457",
+      "before_lines": 168,
+      "after_lines": 167
+    },
+    {
+      "path": "csts_pilot/answer_projection_run.py",
+      "before_sha256": "1601f0a8bf8832748d3093e3e0f36aff2bd2105db425de48f2c3154aea861fe3",
+      "after_sha256": "5d03eaf6d874b263cbb2ddc66cc2fe7da4cd008428f3e611ec8affba745b1fac",
+      "before_lines": 371,
+      "after_lines": 376
+    },
+    {
+      "path": "csts_pilot/background_storage.py",
+      "before_sha256": "a90bb5c8a383d8a9f74aa4b1f931e59a3bd2ffbacbf43d23ad0eeef154ff0d81",
+      "after_sha256": null,
+      "before_lines": 163,
+      "after_lines": 0
+    },
+    {
+      "path": "csts_pilot/baseline_collect.py",
+      "before_sha256": "5e10800495abc11ca088b38c012739574d320c81247369fc9c01b95f189d12c1",
+      "after_sha256": "05771e051db42b40e8eab28953b5c6fb9a8c93b344e21f578c6c3c9b8c4b4514",
+      "before_lines": 120,
+      "after_lines": 127
+    },
+    {
+      "path": "csts_pilot/baseline_run.py",
+      "before_sha256": "a99696c2a81fef79b19bb43bb157f1541445c70c63dd654ba2b0554390ce9227",
+      "after_sha256": "9ab20f156b476adcacb1743eef1b0fc1b4b754839f0b27ccf6a2bb23c0be71d4",
+      "before_lines": 868,
+      "after_lines": 855
+    },
+    {
+      "path": "csts_pilot/complete_proposition_training.py",
+      "before_sha256": "d1ca5c6f9eac6331e724cee678f548db6949e3ab7d094bc9766e09a6fc284725",
+      "after_sha256": "1546b068bccf9214004cc4a5c424a452a5405a69543592e51af4d18716d3df4c",
+      "before_lines": 310,
+      "after_lines": 313
+    },
+    {
+      "path": "csts_pilot/condition_reference_run.py",
+      "before_sha256": "652455cbcadcafd10f36372161339a00fa65ba7711af6ea77b19c261f3cb739b",
+      "after_sha256": "b667f7c7239802541c0f134a77a0058939a2eca4c6ebad12c5fdad768e168f2f",
+      "before_lines": 391,
+      "after_lines": 380
+    },
+    {
+      "path": "csts_pilot/continuation_run.py",
+      "before_sha256": "14649a3dff2d2764dab3bf08f6a48cecd48970355286ea04d49905ea50ab2b6a",
+      "after_sha256": "8657d1737196b22293359d1703000d2ded303e8e649fd27b8c6f46fe56a03284",
+      "before_lines": 381,
+      "after_lines": 370
+    },
+    {
+      "path": "csts_pilot/convergence_evaluate.py",
+      "before_sha256": "f359ce9e60bbaf4f2aa00e7d9344cae14fb07672230e73aa0d5b70f7eed15a4d",
+      "after_sha256": "f562a467c04583156aa55fb1bcbec5f161c2668cd9a92fafa555cb8aa041a588",
+      "before_lines": 257,
+      "after_lines": 251
+    },
+    {
+      "path": "csts_pilot/convergence_publication.py",
+      "before_sha256": "956fe82ec65dc69140e02a882e1cab7b005bec1a5f5595d71647c978efbb2ab2",
+      "after_sha256": "7880e6907328da4a9bf7296b2fdb2edd70d43673c45642dbcbc8ad8e6a69f207",
+      "before_lines": 174,
+      "after_lines": 138
+    },
+    {
+      "path": "csts_pilot/convergence_run.py",
+      "before_sha256": "70b22143bbd4b74dd245f0d8e8be5ee1eda317042ce3ff54f41050632bc77f7c",
+      "after_sha256": "09876d4ce479d7d1a812f9b578ce7ca8f619ae23e182492189e64a0176255182",
+      "before_lines": 633,
+      "after_lines": 611
+    },
+    {
+      "path": "csts_pilot/evidence_attention_run.py",
+      "before_sha256": "178904501da47710602ceb43095fddc5146f21933078bba15d2ba7fbb359f7a8",
+      "after_sha256": "d4aeb4c1cf21078af1e706f6cfdc7656e60e391633947f821c595093f744ba0e",
+      "before_lines": 1226,
+      "after_lines": 1222
+    },
+    {
+      "path": "csts_pilot/evidence_run.py",
+      "before_sha256": "7d69e8b97d8d06017560028bb16d01db686de4cb2073e9b9ca88067c1d2e8a78",
+      "after_sha256": "db45335f14b77ce4f67f3baaad41666411a82e5477735587ee68ed80b48fea52",
+      "before_lines": 633,
+      "after_lines": 622
+    },
+    {
+      "path": "csts_pilot/extend_proposition_pretraining.py",
+      "before_sha256": "ec56e0a17f5e4c0644b30416000077a7aedc0b326506d035041588f732f4726f",
+      "after_sha256": "df0030eca7218e4043aa6e03aba35d27e5fe103b09d858c92875dacd993365a7",
+      "before_lines": 239,
+      "after_lines": 242
+    },
+    {
+      "path": "csts_pilot/finish_evaluation.py",
+      "before_sha256": "36eebc72736c081043cdc8652c767d3c3ce2196ab90516390691b52a68330cbd",
+      "after_sha256": "9e0a32766755971825d4a3588ec968f16387f6a5d92609e35f158a65c6b19b1c",
+      "before_lines": 183,
+      "after_lines": 186
+    },
+    {
+      "path": "csts_pilot/finish_study.py",
+      "before_sha256": "b8ff803cc7b545b531ed1c062aa2562a67df4fd57f107fdf3f0fe097b033a50e",
+      "after_sha256": "3cce764de207dbef6567549432a8572280f8ac9a5e86fe2b8d66ad6dc305e047",
+      "before_lines": 445,
+      "after_lines": 451
+    },
+    {
+      "path": "csts_pilot/full_data_prompt_integrity.py",
+      "before_sha256": "87d6ca02195467bdeb1244ca520a0b5c88b56c0e9d2e11e039bdcd40be1a9f71",
+      "after_sha256": "44f4acc807dc11926d2eefc0fec9d3e3486078c35b313fecf0c0a8bbc725fd54",
+      "before_lines": 124,
+      "after_lines": 132
+    },
+    {
+      "path": "csts_pilot/full_data_prompt_uploads.py",
+      "before_sha256": "05e99c7e3a21eb9d850c4a0c0c5c9b93085f5e3ed427805fc9dfed192cf6e4e6",
+      "after_sha256": "8a1abebc5e71e992d2f6e682f3e8b5f20bdb29db1a20a6abfcee21e9ca1d8a41",
+      "before_lines": 214,
+      "after_lines": 229
+    },
+    {
+      "path": "csts_pilot/full_data_prompt_worker.py",
+      "before_sha256": "6f689567a28bfd6d99e61871b1c7692b9e43a66126358e10b6587e86cc6d806d",
+      "after_sha256": "9952ddb524bcadc36b0d5b141e866b7670bc6c00384e01fffb5725f8c6621dfe",
+      "before_lines": 419,
+      "after_lines": 454
+    },
+    {
+      "path": "csts_pilot/full_proposition_control.py",
+      "before_sha256": "5951b34ea4d639f3b16f1633d9fb3c4a13c86eaf5bd6bc5ad013c9961e51da23",
+      "after_sha256": "a4be0ba269f4650ed863fa1a1fb7a9cec9893312d5a78b658840be317d999f11",
+      "before_lines": 235,
+      "after_lines": 235
+    },
+    {
+      "path": "csts_pilot/joint_run.py",
+      "before_sha256": "86fe24e7af222b190be9de9c5c04a6fbd7c51473ed97afe9a87e350193b49576",
+      "after_sha256": "31fe9d839f139f3c5327f5b8c0aaa91a61428f66a4333b63fd9a07abe92c5def",
+      "before_lines": 364,
+      "after_lines": 368
+    },
+    {
+      "path": "csts_pilot/llm_record.py",
+      "before_sha256": "1c846de55bb966bd8e6fbc517e7784c3bdb4b4e61893a52c3c86eedf1a91f802",
+      "after_sha256": "463e66d40285e99026474867a25b6ec7ef4048ebb71d1ab71d4ec670c32ba12d",
+      "before_lines": 84,
+      "after_lines": 87
+    },
+    {
+      "path": "csts_pilot/matched_baselines_run.py",
+      "before_sha256": "1e71195a4cc0c034a7bc592112534f5483be02b1af8590ac5ce1dfc47607c65c",
+      "after_sha256": "6f1f2aaf6923328d3dfd0ec658fef7d18d67bc2edf74dd3e7787aa4bd25f1585",
+      "before_lines": 1108,
+      "after_lines": 1104
+    },
+    {
+      "path": "csts_pilot/progress.py",
+      "before_sha256": "0d0a8785785122b145cbbb3d0c5e12c16a193bad55d03b1be7086f299ad1f4d7",
+      "after_sha256": "c6177c415f3e9fba87d4483672939c1593739e908bdc7db3dca0d8d216bab7a7",
+      "before_lines": 304,
+      "after_lines": 313
+    },
+    {
+      "path": "csts_pilot/proposition_archive.py",
+      "before_sha256": "40c930f9ca076a455165682e473ba9fd857d76b7ebc467b81c6f42c461ef6c62",
+      "after_sha256": "67796a485d09a24b9089ec4a6059fa33a8d26da488df90f7119c5249cce7ca09",
+      "before_lines": 445,
+      "after_lines": 442
+    },
+    {
+      "path": "csts_pilot/proposition_evidence_report.py",
+      "before_sha256": "9d02cb3820ef96bd23e01ab30018f64a46b8ce0cad557759329acbdadbd8f64e",
+      "after_sha256": "2837b9ee5194e9e559df19cbb15463bd7dd9958629b88e2d18a91238ae83157e",
+      "before_lines": 340,
+      "after_lines": 343
+    },
+    {
+      "path": "csts_pilot/proposition_evidence_run.py",
+      "before_sha256": "242fb45e272a3b9b96e8d86d2ce485310e04151f4559e0e0609b9c0e270b8511",
+      "after_sha256": "4d3f54b97605a1550517d85f1371fe4854f291465d6bac267d34dffd9902e85b",
+      "before_lines": 743,
+      "after_lines": 732
+    },
+    {
+      "path": "csts_pilot/proposition_run.py",
+      "before_sha256": "f12c9f92bf39e0b1321610b56121476ed2b16e0152a5b5cdfd62a9afe3cade93",
+      "after_sha256": "ebc686993659cf8fd8701bc9c1ac83ca54a9001ea73ed86727d22a9568d8942c",
+      "before_lines": 541,
+      "after_lines": 533
+    },
+    {
+      "path": "csts_pilot/proposition_sample.py",
+      "before_sha256": "cbb06e82daf9486b2a1ad90a8937ac338ee33a6b04c7f8d687d06ceb9d94ba88",
+      "after_sha256": "882e347f329b15682a0c41ad88525a86bac9ab557b09cc6b1e313ec4e15cea95",
+      "before_lines": 699,
+      "after_lines": 584
+    },
+    {
+      "path": "csts_pilot/proposition_subset.py",
+      "before_sha256": "1ceb5b34f694326b64854b468ff797d3b2b8f8894649a41ef6c3b395fd5c997d",
+      "after_sha256": "d609ae48f448a53bf5623ac0f6abcae1373b2d0ddb703693a28a41333ca7a261",
+      "before_lines": 608,
+      "after_lines": 600
+    },
+    {
+      "path": "csts_pilot/proposition_test.py",
+      "before_sha256": "d959ff6939ff5a2ce54d61cac70c9896a70d33e3544ad21b9dd29c82ac426c77",
+      "after_sha256": "0d4db2eb0839233eb30c900b9a31c1445898ddc04e5a894393938ab9f90f0316",
+      "before_lines": 554,
+      "after_lines": 549
+    },
+    {
+      "path": "csts_pilot/queue_followup.py",
+      "before_sha256": "2636f8f063e790dee41917faf08b8c4f5f89d78855d5195f2e808cae9f3c7262",
+      "after_sha256": "22d4675ee9bcb38397c060aedd9b28e8c5f06d4edd1b717672f7f964bd7ff13c",
+      "before_lines": 111,
+      "after_lines": 116
+    },
+    {
+      "path": "csts_pilot/qwen_evidence_run.py",
+      "before_sha256": "8892a195a76814849be670df04bb7613acc634b28fc620f9866a03d131999848",
+      "after_sha256": "b2dbc0b2bfd782510ed88849260e8e275801e1ac89fd644792c89891d98ff36d",
+      "before_lines": 545,
+      "after_lines": 534
+    },
+    {
+      "path": "csts_pilot/ratings_only_order_replay.py",
+      "before_sha256": "e49baff4b17baad060d492c9132ab1d5cf45f8c49deb5f3c99c41df9135a3653",
+      "after_sha256": "0e44d981e13d23499c7fe42aa3a3adbaf51dabead616a7f68eaa235a4a509729",
+      "before_lines": 327,
+      "after_lines": 331
+    },
+    {
+      "path": "csts_pilot/recover_storage.py",
+      "before_sha256": "90e881fcf0f8d0700f6f0bbd9e36d6a2ed59e2cd8d364be92ab4e92dae787ec4",
+      "after_sha256": "c314098638af1bdec1ed21ab5093de03e3fe30b285df71064e880805e30247c0",
+      "before_lines": 81,
+      "after_lines": 84
+    },
+    {
+      "path": "csts_pilot/run.py",
+      "before_sha256": "484bdb81623abc3fb8261fe21ef2b1969fd9377c8d363b697f03d0b79701c5e9",
+      "after_sha256": "9227db4f51016abb813aba1a3a40f3a8055fefd3af11c59b676dea00737f152a",
+      "before_lines": 266,
+      "after_lines": 268
+    },
+    {
+      "path": "gpu_runtime_requirements.txt",
+      "before_sha256": "bb7056565df711e1fd0c167dbe7db19f6c46d593d6578b79955a947bd359a54f",
+      "after_sha256": "c96ab1dcfe0d32e6c05958a9a4da768d680cc808b5eb8c8651b7b72ae679b9eb",
+      "before_lines": 79,
+      "after_lines": 79
+    },
+    {
+      "path": "jep_pilot/viper_adapter.py",
+      "before_sha256": "a40811994ff4aba76259aa896c0e8984cf703d5f9bafadf8f216e69a96e80019",
+      "after_sha256": "76ade9102880da0245192a547f92479cf4397dbaef96992237c7e783ebb2ecf8",
+      "before_lines": 356,
+      "after_lines": 408
+    },
+    {
+      "path": "llm_baseline_requirements.txt",
+      "before_sha256": "9f8e6dbe223f3a3413ad815601e026bc8d60f6d498b3b02bd8aca20a31b97720",
+      "after_sha256": "ce7378bda0d3995873581daf752deb8506e61a91335d6f5b8ca3c4d12ff0579e",
+      "before_lines": 3,
+      "after_lines": 3
+    },
+    {
+      "path": "pilot_requirements.txt",
+      "before_sha256": "c323f369653efde8f609143523a20d108f18aa4d498a3165eca96cb18da03918",
+      "after_sha256": "c7a62940a3424505e2909a86bdd74afc11368efe3686991458cccf9d99a7f640",
+      "before_lines": 3,
+      "after_lines": 3
+    },
+    {
+      "path": "plans/csts-tranche-2.md",
+      "before_sha256": "12196893381bd0e5a7056adc3bf1ea2e066c00462a792aa79655d49ec214e60a",
+      "after_sha256": "025fd7487a325eb9ffc8b006b6839f9357cbae8e4d0608b54b582c6c333bdb0d",
+      "before_lines": 99,
+      "after_lines": 99
+    },
+    {
+      "path": "plans/viper_adapter_20261120/INTEGRATION_CONTRACT.md",
+      "before_sha256": "cbcfe7f5e3623c3a9f401289cd3b410f6da31f1eb1061deb7f317bf2b9697b7b",
+      "after_sha256": "381e671301d6c32c0852471d653d4a2de691da31b9d8a28244737b967b2728b1",
+      "before_lines": 146,
+      "after_lines": 114
+    },
+    {
+      "path": "scripts/archive_proposition_indicative.py",
+      "before_sha256": "fde4b29fcc2f1dfdba24282ecd33db64e5b24dbb8f13c013fdeea21df3c399fb",
+      "after_sha256": "2770852b8286b741ce368d5ac60274ef439318c6881b6c95de39847b561fc1db",
+      "before_lines": 148,
+      "after_lines": 148
+    },
+    {
+      "path": "scripts/full_data_prompt_20261107/collect_epochs.py",
+      "before_sha256": "2efbf68920915dbc4847e4d18fed98fe2c67e972ec8bd09a008087c7ef686533",
+      "after_sha256": "a70efb1012fa611dc9b56a4d4c60e8469a53859b57ccc6e1be166b89526b360c",
+      "before_lines": 407,
+      "after_lines": 517
+    },
+    {
+      "path": "scripts/full_data_prompt_20261107/evaluate_selected.py",
+      "before_sha256": "29cbfa0c28ec076edff35b93868d8db0d8181fbb196b1f7e1c8dfeca07d81932",
+      "after_sha256": "3fba30e2fff38cab6f5ed591848ef0d3ffd1500ca833c1d5d59fc0624090db7e",
+      "before_lines": 133,
+      "after_lines": 147
+    },
+    {
+      "path": "scripts/full_data_prompt_20261107/restore_native_generation.py",
+      "before_sha256": null,
+      "after_sha256": "265604e1197bcc9856f4d71f5faeaf2909e22197f48753e97e353a8367d80485",
+      "before_lines": 0,
+      "after_lines": 49
+    },
+    {
+      "path": "scripts/tranche8_native.py",
+      "before_sha256": "4928c30aa81fbf253dbd7e9c4b538aef067cc9c5acf7f6782c5a26b57d618525",
+      "after_sha256": "4b0b7b1b44a07cf0219cdeaf23578c977b11166d0b99df199dd4127891b6c67f",
+      "before_lines": 525,
+      "after_lines": 528
+    },
+    {
+      "path": "scripts/tranche8_test_capture.py",
+      "before_sha256": "778c9c79c7ce6f163a739bdcbae243644d3c4748e1f35abec20ed55a7c1443bd",
+      "after_sha256": "9f62e34a1e8c1959f1dbe51832b556992fcd84050b31e49480b334dd4ec0a97f",
+      "before_lines": 482,
+      "after_lines": 483
+    },
+    {
+      "path": "tests/conftest.py",
+      "before_sha256": null,
+      "after_sha256": "615eb558066bf50fa86e195d2a531c405293d5c02871ecfc12860f76d46edee6",
+      "before_lines": 0,
+      "after_lines": 13
+    },
+    {
+      "path": "tests/test_csts_background_storage.py",
+      "before_sha256": "5bd1f41aa4048e782b3aa5f1bb7ac3e6b127e39b5a427840a497e3c865c56f8f",
+      "after_sha256": null,
+      "before_lines": 188,
+      "after_lines": 0
+    },
+    {
+      "path": "tests/test_csts_proposition_sample.py",
+      "before_sha256": "eb1981453a00125f8b7c9e753c91299a425df598573768a1077eeb346cdfbd31",
+      "after_sha256": "92d17a571ea9dd5e1f896f259c1e29645d9d643a5512f27c101e07a6fe4736c9",
+      "before_lines": 271,
+      "after_lines": 201
+    },
+    {
+      "path": "tests/test_full_data_worker_persistence.py",
+      "before_sha256": "a29bfbb7a1f078dc8bf4055036388a9454814453ec0ef661076fe0c42e0f154f",
+      "after_sha256": "f6a8b77de8f95fbaadb24263dca8075cfbe3870c3c6b4186a90da48bbd86d1b5",
+      "before_lines": 49,
+      "after_lines": 100
+    },
+    {
+      "path": "tests/test_jep_viper_adapter.py",
+      "before_sha256": "4c283dca5ca68130c9b5e99aa5ca61a77f682d43b917a6f72de2dc526b0f05ef",
+      "after_sha256": null,
+      "before_lines": 466,
+      "after_lines": 0
+    },
+    {
+      "path": "tests/test_spot_lifecycle.py",
+      "before_sha256": "5e701a33eebb1ad4b2c4d8e745df5aeab693a6f0398dba16dbe0f16f5499efd9",
+      "after_sha256": "8260d1b03edda71ae1630f5103c00d2e0b21cb30a58efac2a9a29d8bb94406c3",
+      "before_lines": 345,
+      "after_lines": 373
+    },
+    {
+      "path": "tests/test_viper_storage_adapter.py",
+      "before_sha256": null,
+      "after_sha256": "a758058aefa726a6e34116d75156157fffd1bf2658d96c983f5b24d67336ddb0",
+      "before_lines": 0,
+      "after_lines": 773
+    }
+  ],
+  "validation": {
+    "cpu": "47 passed, 4 subtests passed; no detached cloud workers",
+    "pyrefly": "0 errors in native adapter, worker, uploader and controller; 0 errors in two CPU report adapters",
+    "source_lint": "F401,F821,F811 passed for new adapter/tests; obsolete unused imports removed in touched source",
+    "live_campaign": "not run",
+    "cloud_roundtrip": "not run"
+  },
+  "remaining_legacy_api": "finish_evaluation retains explicit historical graph promotion for old frozen local runs; synchronous publish_one retains archived native.tar callers.",
+  "diff_owner": "https://github.com/pvd232/JEP/pull/26/files",
+  "retired_proposal_mirrors": "retired-diffs.json"
+}
