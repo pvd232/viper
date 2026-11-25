@@ -23,6 +23,12 @@ verified run evidence
       +-- query through the CLI or MCP
 ```
 
+## Install VIPER
+
+```bash
+python -m pip install 'viper-provenance==0.3.0'
+```
+
 ## Run the CPU quickstart
 
 VIPER requires Python 3.11 or newer. Clone the repository, create an isolated
@@ -250,6 +256,21 @@ settings requested by the plan and read from the workers.
 VIPER checks saved files against their recorded hashes when verifying or
 restoring a run. See [How VIPER works](docs/explanation/how-viper-works.md) for
 how the plan, execution, and result fit together.
+
+## Keep artifacts in the cloud
+
+Choose a cloud destination in your workspace configuration. Native experiment
+calls queue publication while later computation continues. Set
+`storage.offload = true` to permit automatic removal of managed local payloads
+after successful workflow completion and verified cloud publication. The default
+`false` retains local files while still publishing to the configured destination.
+
+Artifact references stay the same. VIPER serves available local bytes first and
+restores missing bytes from verified cloud backing when needed. Per-artifact
+preferences let you keep frequently reused data local. An outer workflow scope
+protects files across related training, inference, evaluation and diagnostics
+calls. See [the cloud storage guide](docs/how-to/cloud-storage.md) for the complete
+configuration, status and recovery workflow.
 
 ## Start your own workspace
 

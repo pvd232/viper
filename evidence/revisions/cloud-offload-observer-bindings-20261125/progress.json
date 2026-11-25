@@ -106,7 +106,7 @@
   },
   "reduction_acceptance": {
     "requirement": "CFO-REQ-10",
-    "state": "OPEN",
+    "state": "ACCEPTED_WITH_OWNER_OVERRIDE",
     "claim_unchanged": true,
     "net_reduction_met": false,
     "viper_and_combined_final_report": "evidence/cloud-offload-implementation-20261125/review-10/counts.json",
@@ -161,7 +161,9 @@
       }
     },
     "combined_runtime_and_tests_delta": 10763,
-    "counted_candidate_note": "Source-hashed recount covers Viper 51630a5 (identical runtime to df10a3e; README test comment only); JEP source freeze e2285b8 with current report head d44073e. Planning retirement, docs, evidence and dependency manifests excluded."
+    "counted_candidate_note": "Source-hashed recount covers Viper 51630a5 (identical runtime to df10a3e; README test comment only); JEP source freeze e2285b8 with current report head d44073e. Planning retirement, docs, evidence and dependency manifests excluded.",
+    "release_blocking": false,
+    "owner_override_record": "evidence/revisions/cloud-offload-size-override-20261125.json"
   },
   "pb06_checkpoint": "1b8ed60",
   "later_repair_commit": "c869ea6",

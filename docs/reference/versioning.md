@@ -17,8 +17,9 @@ parser and validation contract.
 Alpha releases use PEP 440 pre-release versions such as `0.1.0a1`. During the `0.x`
 series, each release note must identify every incompatible change.
 
-The [0.2.0 release notes](../releases/0.2.0.md) identify the current Python import
-and local-reference changes and their compatibility scope.
+The [0.3.0 release notes](../releases/0.3.0.md) describe background publication
+and its completion boundary. The [0.2.0 release notes](../releases/0.2.0.md)
+retain the earlier Python import and local-reference migration details.
 
 ## Execution and journal defaults
 

@@ -40,3 +40,24 @@ The final eight-line destination inventory reuse repair was separately approved
 by reviewer 04. All five existing manifest cases passed without changing their
 identity rejection assertions. The final maintained-code count is +10,763 lines,
 so reviewer 10's reduction finding remains open.
+
+## JEP design lessons checked for the 0.3.0 release
+
+The original JEP `csts_pilot/background_storage.py` at commit
+`c2f9716e398dd5442ca9d3579dfa788657a6cd00` persists an atomic, synchronized
+request before starting a detached worker. Its request hash and worker lock
+coordinate repeated admission; interrupted transfers retry publication without
+calling training. Viper retains these patterns in [_offload.py](../../src/viper/_offload.py)
+and [the existing offload worker](../../src/viper/execution/_offload_worker.py).
+
+The same JEP revision's `csts_pilot/full_data_prompt_uploads.py` verifies remote
+bytes, checks exact sealed membership and rechecks the local seal before writing
+a generation acknowledgment. The native adapter observes verified per-source
+copies while an outer workflow remains open; it keeps assignment, allocation
+and generation authorization in JEP. Viper owns publication and verification,
+not those campaign-specific decisions. JEP is not a dependency or packaged
+runtime module of the Viper distribution. The release archive inspection checks
+that boundary independently of the cross-repository line report.
+
+The user accepted the measured code-size increase on 2026-11-25; the original
+reviewer findings and counts above remain historical observations.

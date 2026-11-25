@@ -50,6 +50,9 @@ public interfaces and distinguishes contributor instructions.
 
 ## Release notes
 
+[0.3.0](releases/0.3.0.md) adds background publication of original outputs, shared
+local resolution and optional automatic offload with per-artifact preferences.
+
 [0.2.0](releases/0.2.0.md) adds complete graph publication, bounded verification
 reuse, and the autocast training repair. Local references and snapshot imports
 have incompatible changes described in the release notes.

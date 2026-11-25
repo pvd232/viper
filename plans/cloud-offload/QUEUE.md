@@ -1,5 +1,7 @@
 # Cloud Offload Implementation Status
 
+**Owner decision, 2026-11-25:** The user accepted the measured code-size increase and authorized the PyPI release. The net-reduction objective is waived as a release gate; the measured counts and historical verifier findings remain intact. [Approval record](../../evidence/revisions/cloud-offload-size-override-20261125.json).
+
 The user applied the initial blocks by hand, then authorized autonomous completion. The active source tree is now the implementation authority. Historical prepared files and review reports describe their own revisions only.
 
 | Blocks | Current work |
@@ -8,7 +10,7 @@ The user applied the initial blocks by hand, then authorized autonomous completi
 | PB04–PB05 | User-applied retention and captured-original publication at `1345473`, with later repair work retained in the candidate. |
 | PB06 | Native workflow/session, durable upload admission, detached worker, portable recovery and child-reader integration are implemented; the final fast gate and all selected integration cases pass. |
 | PB07 | Single-decision cleanup and its worker ordering, reader-retry and mixed-policy tests pass the final fast gate; all selected integration cases pass. |
-| PB08 | End-to-end validation and duplicate-owner retirement are recorded; code-reduction acceptance remains unmet. PB02–PB07 obsolete preparation mirrors have been retired separately from maintained runtime/test size. |
+| PB08 | End-to-end validation and duplicate-owner retirement are recorded; the measured code-size increase is accepted by the owner. PB02–PB07 obsolete preparation mirrors have been retired separately from maintained runtime/test size. |
 | PB09 | JEP native adapter is committed at `e2285b8`, with final dependency pin `d44073e`; 47 CPU cases plus 4 subtests and Pyrefly pass. Cross-repository reduction remains unmet. |
 
 Native integration is committed at `1b8ed60`, its recovery repair at `c869ea6`, cleanup at `95a2420`, consolidation at `59c381d`, Git source verification at `c83af457`, and its final inventory repair at `df10a3e`. The proof uses the existing registry and publisher and adds no public reference or receipt fields. [Viper PR 24](https://github.com/pvd232/viper/pull/24) and [JEP PR 26](https://github.com/pvd232/JEP/pull/26) are drafts. The Viper PR targets `main` at `f659faf`; the JEP PR targets `feature/jep-viper-publication-adapter-20261120` at `c2f9716`.
@@ -21,7 +23,7 @@ The retained [Viper fast-gate log](../../evidence/cloud-offload-implementation-2
 
 ## Acceptance still open
 
-CFO-REQ-10 requires maintained source/test reduction for Viper and JEP separately and combined. The source-hashed count snapshot records combined maintained source/test growth. The requirement and its acceptance conditions stay unchanged and OPEN. Removing obsolete planning mirrors cannot make this condition pass. [The retained count report](../../evidence/cloud-offload-implementation-20261125/review-10/README.md) records Viper runtime +5,076 and tests +5,636; JEP runtime -90 and tests +141; combined +10,763 maintained lines. Viper source is frozen at `df10a3e`; JEP counted source matches `e2285b8` and the report records current head `d44073e`. The earlier +9,937 snapshot is historical.
+CFO-REQ-10 requires maintained source/test reduction for Viper and JEP separately and combined. The source-hashed count snapshot records combined maintained source/test growth. The original numeric condition remains unmet; the owner exception accepts the size increase and removes it as a release blocker. Removing obsolete planning mirrors cannot make this condition pass. [The retained count report](../../evidence/cloud-offload-implementation-20261125/review-10/README.md) records Viper runtime +5,076 and tests +5,636; JEP runtime -90 and tests +141; combined +10,763 maintained lines. Viper source is frozen at `df10a3e`; JEP counted source matches `e2285b8` and the report records current head `d44073e`. The earlier +9,937 snapshot is historical.
 
 Existing standalone cloud-return and explicit complete-keep APIs retain their waits. Within the native workflow, upload and cleanup remain queued independently of scientific results. Pending sources and local data must remain available until verified publication or verified durable handoff.
 

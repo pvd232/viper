@@ -6,11 +6,11 @@ selecting a cloud destination. VIPER does not provision a machine or bucket.
 
 ## Choose a repository and destination
 
-VIPER installs the GCS client as a base dependency. From the checkout with its
-virtual environment active, install VIPER and authenticate:
+VIPER installs the GCS client as a base dependency. In your activated Python
+environment, install VIPER and authenticate:
 
 ```bash
-python -m pip install -e .
+python -m pip install --upgrade 'viper-provenance==0.3.0'
 gcloud auth application-default login
 ```
 
@@ -53,7 +53,8 @@ with a cloud repository configured.
 
 ## Execute with cloud publication
 
-After saving `viper.toml`, run the complete [CPU quickstart](../../examples/cpu_quickstart.py):
+After saving `viper.toml`, run your existing experiment as usual. From the VIPER
+repository, you can also run the complete [CPU quickstart](../../examples/cpu_quickstart.py):
 
 ```bash
 python -m examples.cpu_quickstart
@@ -102,6 +103,21 @@ results into failed results. Scope failure prevents automatic deletion. Pending 
 and their disk must remain available until verification completes; a queue record
 cannot preserve a disk that is destroyed.
 
+### Follow an artifact through the workflow
+
+| Point in the workflow | Local payload | Cloud publication |
+| --- | --- | --- |
+| Training finishes writing an output | The completed original is registered without a mandatory second payload copy. | The durable worker can begin uploading while later computation continues. |
+| Inference, evaluation or diagnostics still use it | Readers use the available local bytes. | Upload and verification continue independently. |
+| The whole driver succeeds | Current readers and keep preferences still protect required bytes. | Collection closes; required objects and final receipts must verify. |
+| Offload becomes eligible | The worker may delete the exact managed local copy. Inventory and references remain. | Verified backing supplies future restoration. |
+| A later workflow requests an absent payload | The resolver downloads, verifies and installs it in the store before returning a path. | The existing published artifact is reused. |
+
+The worker queues cleanup for reconsideration; it checks current policy and
+readers when removing a file. Finishing one training or read call does not by
+itself authorize deletion. Keep all related calls in the same outer workflow
+when their local files should remain available between calls.
+
 ### Local availability and retention
 
 Viper returns a verified resident original or shared store payload first. Only a
@@ -144,6 +160,42 @@ Applications requiring an attached GCP identity can pass explicit `PublicationTa
 records to the outer `workflow`. `google_project_id` and `gcp_service_account` select
 attached credentials without a key or ADC fallback; nested default scopes inherit those
 targets. Keep credential secrets outside records and configuration.
+
+## Publish files from an application
+
+An application can use the same workflow for completed files outside an
+experiment. The example assumes the configured cloud destination above and an
+existing `results/diagnostics.json` whose writer has finished and closed it:
+
+```python
+from pathlib import Path
+
+from viper.storage import (
+    load_storage_settings,
+    publication_status,
+    publish_resolved_files,
+    workflow,
+)
+
+root = Path.cwd()
+settings = load_storage_settings(root)
+with workflow(root) as storage_work:
+    references = publish_resolved_files(
+        root,
+        settings.destination,
+        {"results/diagnostics.json": root / "results/diagnostics.json"},
+    )
+
+print(references["results/diagnostics.json"].model_dump_json())
+print(publication_status(storage_work.operation_path).status)
+```
+
+This call enrolls the supplied completed files as managed outputs. With offload
+enabled, VIPER can remove them after the workflow and publication conditions
+pass. Keep the source available and unchanged until publication verifies.
+The returned references identify exact bytes; pending work is not a completed
+cloud reference. Applications use the native status and recovery operations
+instead of starting another uploader or maintaining another publication queue.
 
 ## Promote a completed local run without rerunning it
 

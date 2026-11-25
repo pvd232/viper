@@ -1,5 +1,7 @@
 # Cloud Offload
 
+**Owner decision, 2026-11-25:** The user accepted the measured code-size increase and authorized the PyPI release. The net-reduction objective is waived as a release gate; the measured counts and historical verifier findings remain intact. [Approval record](../evidence/revisions/cloud-offload-size-override-20261125.json).
+
 ## Claim
 
 Viper preserves exact artifact identity while reusing verified local bytes, queueing cloud publication and cleanup outside computation, and deleting only after the complete admitted workflow and current safety conditions permit it.
@@ -12,7 +14,7 @@ Native publication, resolution, recovery and cleanup are implemented. The final 
 
 The user applied PB01–PB05 foundations at checkpoints `7e7d981` and `1345473`, then authorized autonomous completion. Current implementation files in Git are authoritative. Obsolete PB02–PB07 source, test and diff mirrors have been retired; [their exact inventory](../evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json) preserves the boundary and raw hashes.
 
-**CFO-REQ-10 remains OPEN and unaccepted.** Maintained Viper source and tests have grown enough that the current combined Viper/JEP candidate does not meet the required net reduction. The claim is unchanged. Removing obsolete planning mirrors does not count as maintained source/test reduction. The [source-hashed count report](../evidence/cloud-offload-implementation-20261125/review-10/README.md) records +4,986 runtime lines and +5,777 test lines combined, or +10,763 maintained lines, against the original baselines. It counts the frozen Viper source at `df10a3e`; the earlier +9,937 snapshot is historical.
+**The original CFO-REQ-10 net-reduction condition is unmet; the owner has accepted this size tradeoff.** Maintained Viper source and tests have grown enough that the current combined Viper/JEP candidate does not meet the required net reduction. The claim is unchanged. Removing obsolete planning mirrors does not count as maintained source/test reduction. The [source-hashed count report](../evidence/cloud-offload-implementation-20261125/review-10/README.md) records +4,986 runtime lines and +5,777 test lines combined, or +10,763 maintained lines, against the original baselines. It counts the frozen Viper source at `df10a3e`; the earlier +9,937 snapshot is historical.
 
 Native integration is committed at `1b8ed60`, its recovery repair at `c869ea6`, cleanup at `95a2420`, consolidation at `59c381d`, Git source verification at `c83af457`, and its final inventory repair at `df10a3e`. JEP migration is committed at `e2285b8`; `d44073e` pins the final Viper commit. [Viper PR 24](https://github.com/pvd232/viper/pull/24) and [JEP PR 26](https://github.com/pvd232/JEP/pull/26) are drafts. The original baselines remain Viper `f659faf` and JEP `c2f9716`.
 
@@ -88,7 +90,7 @@ The [canonical verifier bindings](cloud-offload.toml) name actual tests. The [st
 
 The current production `ContractPackage` parser is unavailable in this checkout/environment. No parser clone, install, guessed canonical package digest or formal lifecycle record is created. Raw file hashes and exact before-images are retained. Historical plan bindings remain historical until a real protocol operation replaces them.
 
-The retained [final fast-gate log](../evidence/cloud-offload-implementation-20261125/validation/make-check.log) records Ruff success, 173 formatted files, zero Pyrefly errors, and 805 passing tests plus 11 subtests in 499.66 seconds, with 4 skips and 239 deselections. [The repaired fresh-workspace run](../evidence/cloud-offload-integration-20261125/git-fresh-producer.log) passes in 125.68 seconds. JEP `d44073e` has [47 passing CPU tests plus 4 subtests](../evidence/cloud-offload-implementation-20261125/validation/jep-tests.log) in 2.80 seconds and [zero Pyrefly errors](../evidence/cloud-offload-implementation-20261125/validation/jep-pyrefly.log). Ten independent initial reviews and subsequent source-repair rechecks are recorded separately; all 227 selected integration cases pass across retained bounded runs; all seven hosted Viper CI jobs passed at runtime commit `df10a3e`. Requirement 10 cannot close until a real separate-and-combined maintained source/test report demonstrates the promised reduction while preserving guarantees and meaningful checks.
+The retained [final fast-gate log](../evidence/cloud-offload-implementation-20261125/validation/make-check.log) records Ruff success, 173 formatted files, zero Pyrefly errors, and 805 passing tests plus 11 subtests in 499.66 seconds, with 4 skips and 239 deselections. [The repaired fresh-workspace run](../evidence/cloud-offload-integration-20261125/git-fresh-producer.log) passes in 125.68 seconds. JEP `d44073e` has [47 passing CPU tests plus 4 subtests](../evidence/cloud-offload-implementation-20261125/validation/jep-tests.log) in 2.80 seconds and [zero Pyrefly errors](../evidence/cloud-offload-implementation-20261125/validation/jep-pyrefly.log). Ten independent initial reviews and subsequent source-repair rechecks are recorded separately; all 227 selected integration cases pass across retained bounded runs; all seven hosted Viper CI jobs passed at runtime commit `df10a3e`. The measured increase remains recorded. The owner exception accepts this size tradeoff without claiming a passing net-reduction check.
 
 | Requirement | Owning blocks | Current implementation owner |
 | --- | --- | --- |
@@ -101,4 +103,4 @@ The retained [final fast-gate log](../evidence/cloud-offload-implementation-2026
 | CFO-REQ-07 | PB05, PB06 | Captured-original publication and durable background work. |
 | CFO-REQ-08 | PB07 | Same-worker cleanup after successful closure. |
 | CFO-REQ-09 | PB05, PB06, PB07 | Recovery, portable copies and honest completion. |
-| CFO-REQ-10 | PB08, PB09 | Shared Viper/JEP ownership and unmet net reduction. |
+| CFO-REQ-10 | PB08, PB09 | Shared storage ownership; measured size increase accepted by the owner. |

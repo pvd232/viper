@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-25
+
+- Publish completed original outputs through a durable background worker. Retry
+  publication without rerunning computation and preserve original references.
+- Resolve local originals, shared store payloads and verified cloud restoration
+  through one storage API. Keep complete inventory after payload eviction.
+- Add optional automatic offload, per-artifact keep/offload preferences and
+  workflow-wide reader protection. Cleanup follows verified publication and
+  successful workflow completion. See the [workflow and compatibility notes](docs/releases/0.3.0.md).
+
 ## 0.2.0 — 2026-10-21
 
 - Publish complete run graphs with restart recovery and bounded staging and

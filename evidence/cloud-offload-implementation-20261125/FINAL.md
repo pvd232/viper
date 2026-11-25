@@ -20,8 +20,8 @@ README program timeouts cover aggregate multi-run execution and independent veri
 
 ## Acceptance boundary
 
-CFO-REQ-10 remains open: maintained runtime grows by 4,986 lines and tests by 5,777, total 10,763 across both repositories. Retired planning copies receive no reduction credit. [Exact count evidence](review-10/README.md).
+The user accepted the measured size increase on 2026-11-25; [the owner exception](../revisions/cloud-offload-size-override-20261125.json) removes net reduction as a release gate. The physical count is unchanged: maintained runtime grows by 4,986 lines and tests by 5,777, total 10,763 across both repositories. Retired planning copies receive no reduction credit. [Exact count evidence](review-10/README.md).
 
-The PRs remain draft. No main-branch merge or package release is claimed. The production contract parser is unavailable; static TOML/AST binding checks are separate from formal protocol acceptance. Cloud transfers were controlled tests; no live cloud roundtrip, infrastructure change or annotation campaign was performed by this implementation task. All seven GitHub CI jobs passed at runtime commit `df10a3e`, including fast, integration, Python 3.11–3.13 compatibility, minimum-Pydantic and release-candidate validation; see [the CI snapshot](validation/github-ci.json).
+At the implementation handoff the PRs were drafts and no main-branch merge or package release had occurred. The owner has since authorized the 0.3.0 publication. The production contract parser is unavailable; static TOML/AST binding checks are separate from formal protocol acceptance. Cloud transfers were controlled tests; no live cloud roundtrip, infrastructure change or annotation campaign was performed by this implementation task. All seven GitHub CI jobs passed at runtime commit `df10a3e`, including fast, integration, Python 3.11–3.13 compatibility, minimum-Pydantic and release-candidate validation; see [the CI snapshot](validation/github-ci.json).
 
 All seven CI jobs also passed at published evidence head `33d9321`, including the final test-comment clarification. [Evidence-head CI snapshot](validation/github-ci-evidence-head.json).

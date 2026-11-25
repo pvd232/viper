@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "decision_date": "2026-11-25",
+  "requirement_id": "CFO-REQ-10",
+  "decision": "owner_approved_exception",
+  "release_blocking": false,
+  "owner_statement": "ok, well, I approve overriding this concern. can you update the viper documentation to account for this workflow and then push to PyPI?",
+  "scope": "Accept the measured implementation size increase. Keep the shared storage owners and existing identity, verification, recovery and reader-protection guarantees.",
+  "net_reduction_met": false,
+  "measured_lines": {
+    "viper_runtime_delta": 5076,
+    "jep_runtime_delta": -90,
+    "combined_runtime_delta": 4986,
+    "combined_test_delta": 5777,
+    "combined_runtime_and_tests_delta": 10763
+  },
+  "count_report": "evidence/cloud-offload-implementation-20261125/review-10/counts.json",
+  "formal_protocol_receipt": false,
+  "note": "This is the user's external approval of a size tradeoff, not a claim that a net-reduction verifier passed. JEP remains a separate consumer and is excluded from the Viper distribution."
+}

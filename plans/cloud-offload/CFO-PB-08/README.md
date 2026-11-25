@@ -1,10 +1,12 @@
 # CFO-PB-08
 
+**Owner decision, 2026-11-25:** The user accepted the measured code-size increase and authorized the PyPI release. The net-reduction objective is waived as a release gate; the measured counts and historical verifier findings remain intact. [Approval record](../../../evidence/revisions/cloud-offload-size-override-20261125.json).
+
 **Requirements:** CFO-REQ-03, CFO-REQ-06, CFO-REQ-09, CFO-REQ-10
 
 **Depends on:** PB07
 
-**Status:** Functional consolidation is committed at `59c381d`, with source-verification repairs through `df10a3e`; the final fast gate passes. The required maintained-code reduction is OPEN and unmet.
+**Status:** Functional consolidation is committed at `59c381d`, with source-verification repairs through `df10a3e`; the final fast gate passes. The original net-reduction target is unmet; the owner has accepted the measured size increase.
 
 Viper uses one inventory validator, ordinary resolver, registry retention authority and final deletion decision. Ordinary fetchers share the store rather than owning another persistent payload cache. Explicit promotion and bounded transfer staging remain supported.
 
@@ -24,4 +26,4 @@ Source changes and ordinary test logs are distinct from formal acceptance. No li
 | JEP | 36,917 | 36,827 | -90 | 11,130 | 11,271 | +141 |
 | Combined | 72,524 | 77,510 | +4,986 | 43,920 | 49,697 | +5,777 |
 
-The counted Viper scope matches `df10a3e`; JEP source matches its frozen `e2285b8` tree, with subsequent dependency/documentation commits excluded from Python counts. The earlier +9,937 total is historical. Combined maintained runtime and tests grew by 10,763 lines. CFO-REQ-10 remains OPEN and unaccepted. The 41,761 retired planning-mirror lines receive no credit against this requirement.
+The counted Viper scope matches `df10a3e`; JEP source matches its frozen `e2285b8` tree, with subsequent dependency/documentation commits excluded from Python counts. The earlier +9,937 total is historical. Combined maintained runtime and tests grew by 10,763 lines. The original numeric check is unmet; its size objective is waived by the owner. The 41,761 retired planning-mirror lines receive no credit against this requirement.
