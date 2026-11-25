@@ -8,7 +8,12 @@ from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
 
-from .._cloud import SnapshotCopy, ViperCloudRepository
+from .._cloud import (
+    SnapshotCopy,
+    SnapshotInventory,
+    SnapshotSources,
+    ViperCloudRepository,
+)
 from .._source import RunFetcher
 from ..cloud import ViperCloud
 from ..huggingface import HuggingFaceProvider
@@ -278,6 +283,13 @@ class GraphComparison:
                     raise RunPromotionError("destination snapshot differs")
             elif self.destination.snapshot_files(copy.published) != copy.expected.files:
                 raise RunPromotionError("destination snapshot differs")
+            self.destination.store.registry.register_snapshot(
+                SnapshotSources(
+                    inventory=SnapshotInventory(
+                        source=copy.published, source_files=copy.expected.files
+                    )
+                )
+            )
             if isinstance(copy.source, LocalStageResultSnapshotRef):
                 if set(self.source.list_snapshot_files(copy.source)) != {
                     file.path for file in copy.source_files

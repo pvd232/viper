@@ -3248,11 +3248,15 @@ def test_republication_preserves_files_and_follows_new_references(
     record = ResolvedRun.model_validate(
         parse_yaml_bytes(target.fetch(published.stored_at))
     )
-    verified = verify_run_result(
-        record,
-        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
-        fetcher=RunFetcher(case.root, LocalArtifactStore(case.root), REPOSITORY),
-    )
+    with httpx.Client(transport=httpx.MockTransport(api.response)) as client:
+        monkeypatch.setattr("viper.huggingface.get_session", lambda: client)
+        verified = verify_run_result(
+            record,
+            policy=VerificationPolicy(
+                trusted_source_repositories=frozenset({REPOSITORY})
+            ),
+            fetcher=RunFetcher(case.root, LocalArtifactStore(case.root), REPOSITORY),
+        )
     assert verified is not None
     assert before == case.cloud.provider.uploads
     assert promoter.promote_reference(case.selected) == published
@@ -3678,7 +3682,10 @@ def test_copy_worker_preserves_failure_diagnostics(
             assert "at least 1" in cause.stderr
             assert not (tmp_path / ".viper/promotion").exists()
         else:
-            assert "LocalStoreError: local immutable file is missing" in cause.stderr
+            assert (
+                "LocalStoreError: registered local payload is unavailable"
+                in cause.stderr
+            )
             assert "direct cause" in cause.stderr
             assert "source run graph is unavailable" in cause.stderr
 

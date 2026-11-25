@@ -15,6 +15,7 @@ import pytest
 
 from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
+from viper import api, execution
 from viper.artifacts import StageArtifactRef
 from viper.authoring import run_artifact
 from viper.journals import JournalSettings
@@ -22,7 +23,10 @@ from viper.metrics import MeasurementSink, MetricContext, MetricHandle
 from viper.references import LocalFileRef, ResolvedRunRef
 from viper.repository import RootError, read_source
 from viper.resume import load_resume_state
+from viper.runs import ResolvedRun, RunAttempt
+from viper.serialization import parse_yaml_bytes
 from viper.stages import StageContext
+from viper.storage import LocalArtifactStore, workflow
 
 pytest_plugins = ("tests.test_http_retrieval",)
 
@@ -36,6 +40,38 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         timeout=120,
+    )
+
+
+def _artifact(root: Path, run: Path, stage: str, name: str) -> Path:
+    """Resolve a declared file while the test holds its native workflow."""
+    return execution.artifact_path(
+        root,
+        execution.resolve_run_reference(root, run),
+        StageArtifactRef(stage_id=stage, artifact_name=name),
+    )
+
+
+def _successful_attempt(root: Path, run: Path) -> RunAttempt:
+    """Read the selected successful attempt through its immutable reference."""
+    store = LocalArtifactStore(root)
+    reference = execution.resolve_run_reference(root, run)
+    result = ResolvedRun.model_validate(parse_yaml_bytes(store.read(reference)))
+    for saved in result.attempts:
+        attempt = RunAttempt.model_validate(parse_yaml_bytes(store.read(saved)))
+        if attempt.attempt_id == result.successful_attempt_id:
+            return attempt
+    raise AssertionError("the run has no recorded successful attempt")
+
+
+def _lineage(root: Path, run: Path) -> api.LineageSuccess:
+    """Read the verified reuse graph for one saved run."""
+    return api.lineage(
+        api.LineageRequest(
+            root=root,
+            path=run,
+            trusted_source_repositories=frozenset({str(read_source(root).repository)}),
+        )
     )
 
 
@@ -101,163 +137,191 @@ def test_extended_examples_execute_complete_workflows(
     _run(root, "git", "commit", "--quiet", "-m", "example source")
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(Path.cwd() / "src")
+    # Complete programs include isolated execution, verification, and replay.
+    timeout_seconds: float = 600
+    if example == "journal_search.py":
+        timeout_seconds = 2 * JournalSettings().timeout_seconds + 120
     completed = subprocess.run(
         (sys.executable, "-m", f"examples.{Path(example).stem}"),
         cwd=root,
         env=environment,
         capture_output=True,
         text=True,
-        timeout=2 * JournalSettings().timeout_seconds + 120
-        if example == "journal_search.py"
-        else 240,
+        timeout=timeout_seconds,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    if example == "reuse.py":
-        assert "first: succeeded; reused stages: 0" in completed.stdout
-        assert "default: succeeded; reused stages: 1" in completed.stdout
-        assert "forced: succeeded; reused stages: 0" in completed.stdout
-        assert "All three model files have identical bytes." in completed.stdout
-    elif example == "knowledge_search.py":
-        assert "observations: 1" in completed.stdout
-        assert "similarity matches: 1" in completed.stdout
-        assert "The measured run remains indexed" in completed.stdout
-        with closing(sqlite3.connect(root / ".viper/catalog.sqlite3")) as connection:
-            assert connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+    with workflow(root):
+        if example == "reuse.py":
+            assert "first: succeeded; reused stages: 0" in completed.stdout
+            assert "default: succeeded; reused stages: 1" in completed.stdout
+            assert "forced: succeeded; reused stages: 0" in completed.stdout
+            assert "All three model files have identical bytes." in completed.stdout
+        elif example == "knowledge_search.py":
+            assert "observations: 1" in completed.stdout
+            assert "similarity matches: 1" in completed.stdout
+            assert "The measured run remains indexed" in completed.stdout
+            with closing(
+                sqlite3.connect(root / ".viper/catalog.sqlite3")
+            ) as connection:
+                assert (
+                    connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+                )
+                assert (
+                    connection.execute(
+                        "SELECT COUNT(*) FROM stage_reuse_keys"
+                    ).fetchone()[0]
+                    > 0
+                )
+        elif example == "journal_search.py":
+            assert "captured passages: 5" in completed.stdout
             assert (
-                connection.execute("SELECT COUNT(*) FROM stage_reuse_keys").fetchone()[
-                    0
+                "encoder revision: 97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+                in completed.stdout
+            )
+        elif example == "export_run.py":
+            assert "bundle:" in completed.stdout
+            assert "manifest:" in completed.stdout
+            assert len(list((root / "exports").glob("*/manifest.json"))) == 1
+        elif example == "variants.py":
+            assert completed.stdout.count(": succeeded ") == 4, completed.stdout
+            weights = [
+                json.loads(_artifact(root, path, "train", "model").read_text())[
+                    "weight"
                 ]
-                > 0
+                for path in root.glob(
+                    "experiments/training_rows/runs/*/*/resolved.yaml"
+                )
+            ]
+            assert len(weights) == 4
+            assert len(set(weights)) == 2
+        elif example == "evaluation.py":
+            assert "benchmark: passed " in completed.stdout
+            predictions = list(
+                root.glob(
+                    "experiments/held_out_evaluation/runs/baseline/*/resolved.yaml"
+                )
             )
-    elif example == "journal_search.py":
-        assert "captured passages: 5" in completed.stdout
-        assert (
-            "encoder revision: 97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
-            in completed.stdout
-        )
-    elif example == "export_run.py":
-        assert "bundle:" in completed.stdout
-        assert "manifest:" in completed.stdout
-        assert len(list((root / "exports").glob("*/manifest.json"))) == 1
-    elif example == "variants.py":
-        assert completed.stdout.count(": succeeded ") == 4, completed.stdout
-        weights = [
-            json.loads(path.read_text())["weight"]
-            for path in root.glob(
-                "experiments/training_rows/runs/*/*/artifacts/train/model/model.json"
+            assert len(predictions) == 1
+            pairs = json.loads(
+                _artifact(root, predictions[0], "eval", "predictions").read_text()
             )
-        ]
-        assert len(weights) == 4
-        assert len(set(weights)) == 2
-    elif example == "evaluation.py":
-        assert "benchmark: passed " in completed.stdout
-        predictions = list(
-            root.glob(
-                "experiments/held_out_evaluation/runs/baseline/*/artifacts/eval/predictions/predictions.json"
+            assert [pair[1] for pair in pairs] == [8.0, 12.0]
+            assert [pair[0] for pair in pairs] == pytest.approx([8.0, 12.0], abs=0.001)
+        elif example == "recovery.py":
+            assert "successful attempt: 2" in completed.stdout
+            assert "reused run: succeeded" in completed.stdout
+            runs = root.glob("experiments/recovery/runs/baseline/*/resolved.yaml")
+            assert any(
+                node.reuse_key_sha256 is not None
+                for path in runs
+                for node in _lineage(root, path).nodes
+                if node.kind == "stage"
             )
-        )
-        assert len(predictions) == 1
-        pairs = json.loads(predictions[0].read_text())
-        assert [pair[1] for pair in pairs] == [8.0, 12.0]
-        assert [pair[0] for pair in pairs] == pytest.approx([8.0, 12.0], abs=0.001)
-    elif example == "recovery.py":
-        assert "successful attempt: 2" in completed.stdout
-        assert "reused run: succeeded" in completed.stdout
-        stages = list(
-            (root / ".viper/store").glob(
-                "*/experiments/recovery/runs/baseline/*/stages/train/resolved.yaml"
+        elif example == "download_training.py":
+            assert "result: succeeded" in completed.stdout
+            assert ("/tiny.csv", None) in received
+            models = list(
+                root.glob("experiments/download_training/runs/baseline/*/resolved.yaml")
             )
-        )
-        assert any("kind: reused" in path.read_text() for path in stages)
-    elif example == "download_training.py":
-        assert "result: succeeded" in completed.stdout
-        assert ("/tiny.csv", None) in received
-        models = list(
-            root.glob(
-                "experiments/download_training/runs/baseline/*/artifacts/train/model/model.json"
+            assert len(models) == 1
+            assert json.loads(_artifact(root, models[0], "train", "model").read_text())[
+                "weight"
+            ] == pytest.approx(2, abs=1e-5)
+        elif example == "stages.py":
+            assert "result: succeeded" in completed.stdout
+            runs = list(
+                root.glob("experiments/stage_pipeline/runs/baseline/*/resolved.yaml")
             )
-        )
-        assert len(models) == 1
-        assert json.loads(models[0].read_text())["weight"] == pytest.approx(2, abs=1e-5)
-    elif example == "stages.py":
-        assert "result: succeeded" in completed.stdout
-        runs = list(root.glob("experiments/stage_pipeline/runs/baseline/*"))
-        assert len(runs) == 1
-        artifacts = runs[0] / "artifacts"
-        assert json.loads((artifacts / "embed/features/features.json").read_text()) == [
-            [1.0, 1.0],
-            [2.0, 4.0],
-            [3.0, 9.0],
-        ]
-        assert (artifacts / "report/report/rows.txt").read_text() == "rows: 3\n"
-        assert (
-            artifacts / "prepare/dataset/sorted.csv"
-        ).read_text() == "x,y\n1,2\n2,4\n3,6\n"
-        assert json.loads((artifacts / "train/model/model.json").read_text())[
-            "weight"
-        ] == pytest.approx(2, abs=1e-5)
-    else:
-        assert "verified measurements: 20" in completed.stdout
-        assert "indexed runs: 2" in completed.stdout
-        assert "successful runs: 2" in completed.stdout
-        assert "model artifacts: 2" in completed.stdout
-        assert "indexed measurements: 20" in completed.stdout
-        assert "selected run measurements: 20" in completed.stdout
-        assert "observations: 1" in completed.stdout
-        stages = list(
-            (root / ".viper/store").glob(
-                "*/experiments/cpu_quickstart/runs/baseline/*/stages/train/resolved.yaml"
+            assert len(runs) == 1
+            assert json.loads(
+                _artifact(root, runs[0], "embed", "features").read_text()
+            ) == [
+                [1.0, 1.0],
+                [2.0, 4.0],
+                [3.0, 9.0],
+            ]
+            assert (
+                _artifact(root, runs[0], "report", "report").read_text() == "rows: 3\n"
             )
-        )
-        assert len(stages) == 2
-        assert sum("kind: reused" in path.read_text() for path in stages) == 1
-        # The second run reuses the first stage; retain its 20 executed measurements.
-        with closing(sqlite3.connect(root / ".viper/catalog.sqlite3")) as connection:
-            assert connection.execute("SELECT count(*) FROM runs").fetchone() == (2,)
-            assert connection.execute(
-                "SELECT count(*) FROM measurements"
-            ).fetchone() == (20,)
-            reuse_count = connection.execute(
-                "SELECT count(*) FROM stage_reuse_keys"
-            ).fetchone()[0]
-            assert reuse_count > 0
-            assert connection.execute(
-                "SELECT count(*) FROM knowledge_records"
-            ).fetchone() == (1,)
-        restored = list((root / "restored").glob("*.json"))
-        assert len(restored) == 1
-        assert json.loads(restored[0].read_text())["weight"] == pytest.approx(
-            2, abs=1e-5
-        )
+            assert (
+                _artifact(root, runs[0], "prepare", "dataset")
+            ).read_text() == "x,y\n1,2\n2,4\n3,6\n"
+            assert json.loads(_artifact(root, runs[0], "train", "model").read_text())[
+                "weight"
+            ] == pytest.approx(2, abs=1e-5)
+        else:
+            assert "verified measurements: 20" in completed.stdout
+            assert "indexed runs: 2" in completed.stdout
+            assert "successful runs: 2" in completed.stdout
+            assert "model artifacts: 2" in completed.stdout
+            assert "indexed measurements: 20" in completed.stdout
+            assert "selected run measurements: 20" in completed.stdout
+            assert "observations: 1" in completed.stdout
+            runs = sorted(
+                root.glob("experiments/cpu_quickstart/runs/baseline/*/resolved.yaml")
+            )
+            nodes = [
+                node
+                for path in runs
+                for node in _lineage(root, path).nodes
+                if node.kind == "stage"
+            ]
+            assert len(nodes) == 2
+            assert sum(node.reuse_key_sha256 is not None for node in nodes) == 1
+            # Reuse preserves the first stage's 20 executed measurements.
+            with closing(
+                sqlite3.connect(root / ".viper/catalog.sqlite3")
+            ) as connection:
+                assert connection.execute("SELECT count(*) FROM runs").fetchone() == (
+                    2,
+                )
+                assert connection.execute(
+                    "SELECT count(*) FROM measurements"
+                ).fetchone() == (20,)
+                reuse_count = connection.execute(
+                    "SELECT count(*) FROM stage_reuse_keys"
+                ).fetchone()[0]
+                assert reuse_count > 0
+                assert connection.execute(
+                    "SELECT count(*) FROM knowledge_records"
+                ).fetchone() == (1,)
+            restored = list((root / "restored").glob("*.json"))
+            assert len(restored) == 1
+            assert json.loads(restored[0].read_text())["weight"] == pytest.approx(
+                2, abs=1e-5
+            )
 
-        # Each how-to block must run with only its displayed imports and paths.
-        blocks = python_blocks(Path("docs/how-to/retry-restore-compare.md").read_text())
-        runs = sorted(
-            root.glob("experiments/cpu_quickstart/runs/baseline/*/resolved.yaml")
-        )
-        assert len(runs) == 2
-        model = runs[0].parent / "artifacts/train/model/model.json"
-        expected_model = model.read_bytes()
-        model.unlink()
-        journals = list(
-            root.glob(
-                f".viper/store/*/experiments/cpu_quickstart/runs/baseline/"
-                f"{runs[0].parent.name}/attempts/1/journal.jsonl"
+            # Each how-to block must run with only its displayed imports and paths.
+            blocks = python_blocks(
+                Path("docs/how-to/retry-restore-compare.md").read_text()
             )
-        )
-        assert len(journals) == 1
-        for index in (1, 2, 3):
-            program = (
-                blocks[index]
-                .replace("<YOUR_RUN_ID>", runs[0].parent.name)
-                .replace("<FIRST_RUN_ID>", runs[0].parent.name)
-                .replace("<SECOND_RUN_ID>", runs[1].parent.name)
-                .replace("<JOURNAL_PATH>", str(journals[0]))
+            runs = sorted(
+                root.glob("experiments/cpu_quickstart/runs/baseline/*/resolved.yaml")
             )
-            observed = _run(root, sys.executable, "-c", program)
-            if index == 1:
-                assert "restored" in observed.stdout
-                assert model.read_bytes() == expected_model
+            assert len(runs) == 2
+            store = LocalArtifactStore(root)
+            reference = execution.artifact_reference(
+                root,
+                execution.resolve_run_reference(root, runs[0]),
+                StageArtifactRef(stage_id="train", artifact_name="model"),
+            )
+            expected_model = store.read(reference)
+            # The snippet exports to this declared path; it is not the managed source.
+            model = root / reference.stored_at.path
+            model.unlink(missing_ok=True)
+            journal = store.resolve(_successful_attempt(root, runs[0]).journal)
+            for index in (1, 2, 3):
+                program = (
+                    blocks[index]
+                    .replace("<YOUR_RUN_ID>", runs[0].parent.name)
+                    .replace("<FIRST_RUN_ID>", runs[0].parent.name)
+                    .replace("<SECOND_RUN_ID>", runs[1].parent.name)
+                    .replace("<JOURNAL_PATH>", str(journal))
+                )
+                observed = _run(root, sys.executable, "-c", program)
+                if index == 1:
+                    assert "restored" in observed.stdout
+                    assert model.read_bytes() == expected_model
 
 
 @pytest.mark.parametrize(
@@ -308,41 +372,43 @@ def test_cpu_quickstart_executes_and_verifies_one_run(
     )
     result_path = root / result_line.removeprefix("result: ")
     assert result_path.is_file()
-    measurements = [
-        json.loads(line)
-        for line in (
-            result_path.parent
-            / "attempts/1/measurements/train.mean_squared_error.jsonl"
+    with workflow(root):
+        attempt = _successful_attempt(root, result_path)
+        measurement_file = next(
+            reference
+            for reference in attempt.measurement_files
+            if reference.stored_at.path.endswith("/train.mean_squared_error.jsonl")
         )
-        .read_text()
-        .splitlines()
-    ]
-    assert [item["epoch"] for item in measurements] == list(range(1, 21))
-    assert [item["step"] for item in measurements] == list(range(1, 21))
-    # For x=(1,2,3), y=2x, each update scales the residual by 8/15.
-    expected_losses = [(56 / 3) * (8 / 15) ** (2 * epoch) for epoch in range(20)]
-    assert [item["value"] for item in measurements] == pytest.approx(
-        expected_losses, rel=1e-8, abs=1e-14
-    )
-    checkpoint = load_resume_state(
-        result_path.parent / "artifacts/train/resume_state/resume_state.pt"
-    )
-    assert checkpoint.optimizer_state["loss"] == measurements[-1]["value"]
-    repeated = subprocess.run(
-        (sys.executable, "examples/cpu_quickstart.py"),
-        cwd=root,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
-    assert "status: succeeded" in repeated.stdout
-    first_model = next(
-        line for line in completed.stdout.splitlines() if line.startswith("model: ")
-    )
-    assert first_model in repeated.stdout
-    assert len(tuple(root.glob("restored/*.json"))) == 2
+        measurements = [
+            json.loads(line)
+            for line in LocalArtifactStore(root).read(measurement_file).splitlines()
+        ]
+        assert [item["epoch"] for item in measurements] == list(range(1, 21))
+        assert [item["step"] for item in measurements] == list(range(1, 21))
+        # For x=(1,2,3), y=2x, each update scales the residual by 8/15.
+        expected_losses = [(56 / 3) * (8 / 15) ** (2 * epoch) for epoch in range(20)]
+        assert [item["value"] for item in measurements] == pytest.approx(
+            expected_losses, rel=1e-8, abs=1e-14
+        )
+        checkpoint = load_resume_state(
+            _artifact(root, result_path, "train", "resume_state")
+        )
+        assert checkpoint.optimizer_state["loss"] == measurements[-1]["value"]
+        repeated = subprocess.run(
+            (sys.executable, "examples/cpu_quickstart.py"),
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+        assert "status: succeeded" in repeated.stdout
+        first_model = next(
+            line for line in completed.stdout.splitlines() if line.startswith("model: ")
+        )
+        assert first_model in repeated.stdout
+        assert len(tuple(root.glob("restored/*.json"))) == 2
 
 
 def test_documented_config_stage_writes_the_selected_rows(tmp_path: Path) -> None:
@@ -484,6 +550,7 @@ import sys
 from pathlib import Path
 
 from viper._source import RunFetcher
+from viper.references import resolve_snapshot_file_ref
 from viper.runs import ResolvedRun, RunSpec
 from viper.serialization import parse_yaml_bytes
 from viper.storage import LocalArtifactStore
@@ -510,7 +577,7 @@ if completion.kind == "reused":
 assert completion.kind == "executed"
 reference = verified.attempts[-1].resolved_stages[0]
 model = stage.artifacts["model"].file
-model_path = root / reference.snapshot.store / reference.snapshot.commit / model.path
+model_path = store.resolve(resolve_snapshot_file_ref(reference.snapshot, model))
 print(json.dumps({
     "run_id": run.run_id,
     "policy": run.execution_policy.mode,
