@@ -1,0 +1,10 @@
+--- a/src/viper/execution/_attempt.py
++++ b/src/viper/execution/_attempt.py
+@@ -730,6 +730,7 @@
+                     metric_verification_paths,
+                     timeout_seconds,
+                     attempt_id,
++                    artifact_paths=None if process is None else process.output_paths,
+                 )
+             if process is not None:
+                 log_files[

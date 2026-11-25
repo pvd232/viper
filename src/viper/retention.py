@@ -10,6 +10,8 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from ._cloud import ViperCloudError
 from ._schema import ProtocolModel, RepoRelPath
+from ._storage_registry import RetentionPreference
+from .artifacts import StageArtifactRef
 from .cloud import ViperCloud
 from .execution.results import RunResult
 from .ids import RunId
@@ -22,10 +24,12 @@ from .references import (
     ResolvedFileRef,
     ResolvedRunRef,
     SnapshotFileRef,
+    StageResultSnapshotRef,
 )
 from .repository import PathError, resolve_path
 from .runs import ResolvedRun, RunAttempt
 from .serialization import parse_yaml_bytes
+from .storage import LocalArtifactStore
 from .workspace import RunWorkspaceLock, WorkspaceError
 
 
@@ -225,9 +229,29 @@ def evict_cloud_backed_run_files(
         attempt_workspace_bytes_released=attempt_workspace_bytes,
     )
 
+def set_artifact_retention(
+    repository_root: Path,
+    source: StageResultSnapshotRef,
+    selection: StageArtifactRef | RepoRelPath,
+    preference: RetentionPreference,
+    *,
+    store: RepoRelPath = ".viper/store",
+) -> None:
+    """Save an artifact preference and resolve all its files when keeping locally.
+
+    Keep is saved before resolving the files. Return after every file resolves
+    successfully. A failure leaves keep saved and raises the error. Inherit
+    and offload change the preference without retrieving or deleting files.
+    """
+    storage = LocalArtifactStore(repository_root, store)
+    storage.registry.set_retention(source, selection, preference)
+    if preference == "keep":
+        for reference in storage.registry.artifact_files(source, selection):
+            storage.resolve(reference)
 
 __all__ = [
     "RunFileEvictionError",
     "RunFileEviction",
     "evict_cloud_backed_run_files",
+    "set_artifact_retention",
 ]

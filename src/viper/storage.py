@@ -111,9 +111,6 @@ class StorageSettings(ProtocolModel):
         if uses_cloud and self.repository is None:
             raise ValueError("viper_cloud repository is required for cloud destination")
 
-        if self.offload and not uses_cloud:
-            raise ValueError("storage.offload requires a viper_cloud destination")
-
         return self
 
 

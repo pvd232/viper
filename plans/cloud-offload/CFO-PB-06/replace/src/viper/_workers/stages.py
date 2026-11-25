@@ -1,0 +1,470 @@
+"""Construct one typed stage context and invoke its frozen callable once."""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import sys
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from types import MappingProxyType, ModuleType
+from typing import cast
+
+import viper._subprocess as subprocess
+
+from .._config.validation import config_type_path, instantiate_config
+from ..config import MetricConfig
+from ..execution._stage import StageWorkerContext, StageWorkerResult
+from ..experiments import ExperimentSpec
+from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
+from ..metrics import (
+    MeasurementSink,
+    MetricContext,
+    MetricHandle,
+    bind_stage_metric,
+    is_recomputed_metric,
+)
+from ..runs import RunSpec
+from ..runtime import (
+    ProcessStartupReceipt,
+    apply_reproducibility,
+    autocast_context,
+    observe_execution,
+    observe_process_startup,
+    observe_python_env,
+)
+from ..serialization import (
+    document_digest,
+    load_stage_spec,
+    parse_yaml_bytes,
+    semantic_document_digest,
+)
+from ..stages import (
+    BaseSpec,
+    InternalSpec,
+    ParameterizedSpec,
+    StageContext,
+    StageContextBinding,
+    StageInvocationReceipt,
+    load_stage_callable,
+    stage_definition,
+)
+from ..workspace import captured_input_path, stored_input_path
+from .file_access import StageFileAccessObserver
+
+_MISSING_MODULE = object()
+
+
+@contextmanager
+def _activate_workspace_modules(function: object) -> Iterator[None]:
+    """Expose the exact workspace modules loaded with one stage callable."""
+    modules = getattr(function, "__viper_workspace_modules__", {})
+    if not isinstance(modules, Mapping) or not all(
+        isinstance(name, str) and isinstance(module, ModuleType)
+        for name, module in modules.items()
+    ):
+        raise ValueError("startup.callable: workspace module closure is invalid")
+    previous: dict[str, ModuleType | object] = {
+        name: sys.modules[name] if name in sys.modules else _MISSING_MODULE
+        for name in modules
+    }
+    try:
+        sys.modules.update(modules)
+        yield
+    finally:
+        for name, module in previous.items():
+            if module is _MISSING_MODULE:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = cast(ModuleType, module)
+
+
+def _frozen_python_sources(root: Path, commit: str) -> tuple[Path, ...]:
+    """Return tracked Python files whose working bytes match the source commit."""
+    subprocess.run(
+        ("git", "-C", str(root), "diff", "--quiet", commit, "--", "*.py"),
+        check=True,
+    )
+    completed = subprocess.run(
+        ("git", "-C", str(root), "ls-tree", "-r", "--name-only", "-z", commit),
+        check=True,
+        capture_output=True,
+    )
+    sources: list[Path] = []
+    for raw_path in completed.stdout.split(b"\0"):
+        if not raw_path:
+            continue
+        relative_path = Path(os.fsdecode(raw_path))
+        if relative_path.suffix != ".py":
+            continue
+        candidate = root / relative_path
+        if candidate.is_symlink():
+            continue
+        source = candidate.resolve()
+        if not source.is_relative_to(root) or not source.is_file():
+            raise ValueError(
+                "startup.source: frozen Python source is unavailable: "
+                f"{relative_path.as_posix()}"
+            )
+        sources.append(source)
+    return tuple(sources)
+
+
+def _workspace_paths(
+    root: Path,
+    paths: dict[str, str],
+) -> dict[str, Path]:
+    """Resolve logical context paths beneath the selected repository root."""
+    resolved: dict[str, Path] = {}
+    for name, relative_path in paths.items():
+        value = (root / relative_path).resolve()
+        if not value.is_relative_to(root):
+            raise ValueError("stage context path escapes the repository root")
+        resolved[name] = value
+    return resolved
+
+
+def _write_result(path: Path, result: StageWorkerResult) -> None:
+    """Write the complete child result as one UTF-8 JSON document."""
+    path.write_text(result.model_dump_json(), encoding="utf-8")
+
+
+def _planned_stage_context(
+    root: Path,
+    run: RunSpec,
+    stage_id: str,
+    attempt_id: int,
+) -> tuple[ParameterizedSpec, dict[str, str]]:
+    """Load the selected stage and derive its plan-owned logical input paths."""
+    loaded: dict[str, BaseSpec] = {}
+    selected: ParameterizedSpec | None = None
+    expected_inputs: dict[str, str] = {}
+    for reference in run.stages:
+        path = root / reference.spec
+        raw = path.read_bytes()
+        if len(raw) != reference.bytes or hashlib.sha256(raw).hexdigest() != (
+            reference.sha256
+        ):
+            raise ValueError("startup.plan: stage spec identity differs")
+        candidate = load_stage_spec(path)
+        if reference.stage_id == stage_id:
+            if not isinstance(candidate, ParameterizedSpec):
+                raise ValueError("startup.plan: selected stage is not parameterized")
+            selected = candidate
+            if isinstance(candidate, InternalSpec):
+                for name, input_reference in candidate.inputs.items():
+                    if isinstance(input_reference, StoredInputRef):
+                        expected_inputs[name] = str(
+                            stored_input_path(
+                                run_id=run.run_id,
+                                attempt_id=attempt_id,
+                                stage_id=reference.stage_id,
+                                input_name=name,
+                                declared_path=input_reference.path,
+                                materialization=input_reference.materialization,
+                            )
+                        )
+                    elif isinstance(input_reference, ExternalInputRef):
+                        expected_inputs[name] = str(
+                            captured_input_path(
+                                run_id=run.run_id,
+                                attempt_id=attempt_id,
+                                stage_id=reference.stage_id,
+                                input_name=name,
+                                source_path=input_reference.source.path,
+                            )
+                        )
+                    elif isinstance(input_reference, FutureInputRef):
+                        producer = loaded[input_reference.producer_stage_id]
+                        expected_inputs[name] = str(
+                            producer.outputs[input_reference.name].path
+                        )
+            break
+        loaded[reference.stage_id] = candidate
+    if selected is None:
+        raise ValueError("startup.plan: context stage ID is absent from RunSpec")
+    return selected, expected_inputs
+
+
+def _stage_metric_handles(
+    root: Path,
+    run: RunSpec,
+    stage: ParameterizedSpec,
+    binding: StageContextBinding,
+    input_paths: Mapping[str, Path] | None = None,
+    artifact_paths: Mapping[str, Path] | None = None,
+) -> dict[str, MetricHandle]:
+    """Bind every stage-recorded metric to frozen config and stage paths."""
+    if not stage.metric_ids:
+        return {}
+
+    experiment_path = root / f"experiments/{run.experiment_id}/spec.yaml"
+    experiment = ExperimentSpec.model_validate(
+        parse_yaml_bytes(experiment_path.read_bytes())
+    )
+    if experiment.experiment_id != run.experiment_id:
+        raise ValueError("startup.plan: experiment ID differs from RunSpec")
+    metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    inputs = MappingProxyType(
+        dict(input_paths)
+        if input_paths is not None
+        else _workspace_paths(root, binding.inputs)
+    )
+    outputs = MappingProxyType(
+        dict(artifact_paths)
+        if artifact_paths is not None
+        else _workspace_paths(root, binding.outputs)
+    )
+    handles: dict[str, MetricHandle] = {}
+    for metric_id in stage.metric_ids:
+        spec = metrics.get(metric_id)
+        if spec is None:
+            raise ValueError("startup.plan: stage selects an undeclared metric")
+        if is_recomputed_metric(spec):
+            continue
+        values = instantiate_config(
+            config_type_path(root, spec.config_type),
+            spec.config_type,
+            spec.config,
+            MetricConfig,
+        )
+        path = (
+            root
+            / f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+            / f"attempts/{binding.attempt_id}/measurements"
+            / f"{binding.stage_id}.{metric_id}.jsonl"
+        )
+        handles[metric_id] = bind_stage_metric(
+            root,
+            spec,
+            MeasurementSink(
+                path,
+                run_id=run.run_id,
+                attempt_id=binding.attempt_id,
+                stage_id=binding.stage_id,
+                metric_id=metric_id,
+            ),
+            MetricContext(
+                inputs=inputs, artifacts=outputs, config=cast(MetricConfig, values)
+            ),
+        )
+    return handles
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Apply controls, construct the typed context, and invoke one callable."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments:
+        raise ValueError("stage worker accepts its context through VIPER_CONTEXT_PATH")
+    context_path_value = os.environ.get("VIPER_CONTEXT_PATH")
+    if context_path_value is None:
+        raise ValueError("VIPER_CONTEXT_PATH is required")
+    worker_context = StageWorkerContext.model_validate_json(
+        Path(context_path_value).read_text(encoding="utf-8")
+    )
+    root = worker_context.repository_root.resolve()
+    run = RunSpec.model_validate(
+        parse_yaml_bytes(worker_context.run_spec_path.read_bytes())
+    )
+    stage = load_stage_spec(worker_context.stage_spec_path)
+    binding = worker_context.binding
+    started_at = datetime.now(UTC)
+    startup: ProcessStartupReceipt | None = None
+    initialization = None
+    execution_context = None
+    python_env = None
+    file_access = None
+    if not isinstance(stage, ParameterizedSpec):
+        raise ValueError("stage worker requires a parameterized stage")
+    try:
+        planned_stage, expected_inputs = _planned_stage_context(
+            root,
+            run,
+            binding.stage_id,
+            binding.attempt_id,
+        )
+        if stage != planned_stage:
+            raise ValueError("startup.plan: selected stage differs from RunSpec")
+        if (
+            worker_context.stage_spec_path.resolve()
+            != (
+                root
+                / next(
+                    reference.spec
+                    for reference in run.stages
+                    if reference.stage_id == binding.stage_id
+                )
+            ).resolve()
+        ):
+            raise ValueError("startup.plan: selected stage path differs")
+        if binding.run_id != run.run_id:
+            raise ValueError("startup.plan: context run ID differs from RunSpec")
+        if binding.config_type != stage.config_type:
+            raise ValueError("startup.context: config type differs")
+        if binding.config_digest != document_digest(stage.config):
+            raise ValueError("startup.context: config digest differs")
+        if binding.inputs != expected_inputs:
+            raise ValueError("startup.context: input paths differ")
+        expected_outputs = {
+            name: str(output.path) for name, output in stage.outputs.items()
+        }
+        if binding.outputs != expected_outputs:
+            raise ValueError("startup.context: output paths differ")
+        if binding.metric_ids != stage.metric_ids:
+            raise ValueError("startup.context: metric IDs differ")
+
+        effective_environment = stage.env or run.env
+        initialization = apply_reproducibility(run.seed, run.reproducibility)
+        generator_names = tuple(sorted(initialization.numpy_generators))
+        if generator_names != binding.numpy_generator_names:
+            raise ValueError("startup.context: NumPy generator names differ")
+        python_env = observe_python_env()
+        if python_env != effective_environment.python_env:
+            raise ValueError("startup.python: installed Python env differs")
+        execution_context = observe_execution(effective_environment)
+
+        config = instantiate_config(
+            config_type_path(root, stage.config_type),
+            stage.config_type,
+            stage.config,
+            type(stage.config),
+        )
+        function = load_stage_callable(
+            root / stage.implementation.path,
+            stage.implementation,
+            import_root=root,
+        )
+        definition = stage_definition(function)
+        if definition.kind != stage.kind:
+            raise ValueError("startup.callable: decorator kind differs")
+        if definition.config_type.__name__ != stage.config_type.symbol:
+            raise ValueError("startup.callable: decorator config class differs")
+        config_source = getattr(function, "__viper_config_source__", None)
+        if config_source is None or Path(config_source).resolve() != config_type_path(
+            root, stage.config_type
+        ):
+            raise ValueError("startup.callable: config type source differs")
+
+        input_paths = (
+            _workspace_paths(root, worker_context.physical_inputs)
+            if worker_context.physical_inputs is not None
+            else _workspace_paths(root, binding.inputs)
+        )
+        output_locations = worker_context.physical_outputs
+        if output_locations is None:
+            output_locations = binding.outputs
+        else:
+            expected_physical_outputs = {}
+            for name, output in stage.outputs.items():
+                expected_physical_outputs[name] = (
+                    f".viper/workspaces/{run.run_id}/attempt-{binding.attempt_id}/"
+                    f"stages/{binding.stage_id}/{name}/{output.relative_path}"
+                )
+            if output_locations != expected_physical_outputs:
+                raise ValueError("startup.plan: physical output paths differ")
+        output_paths = _workspace_paths(root, output_locations)
+        for output_path in output_paths.values():
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        context = StageContext(
+            run_id=binding.run_id,
+            attempt_id=binding.attempt_id,
+            stage_id=binding.stage_id,
+            config=config,
+            inputs=MappingProxyType(input_paths),
+            outputs=MappingProxyType(output_paths),
+            metrics=MappingProxyType(
+                _stage_metric_handles(
+                    root, run, stage, binding, input_paths, output_paths
+                )
+            ),
+            numpy_generators=MappingProxyType(initialization.numpy_generators),
+        )
+        runtime_temp_path = Path(os.environ["TMPDIR"]).resolve()
+        if not runtime_temp_path.is_relative_to(root):
+            raise ValueError("startup.runtime: temporary directory escapes repository")
+        with (
+            _activate_workspace_modules(function),
+            autocast_context(
+                run.reproducibility, backend=effective_environment.compute.kind
+            ),
+        ):
+            startup = observe_process_startup(
+                initialization, run.reproducibility, effective_environment.compute.kind
+            )
+            if stage.file_access == "declared":
+                measurement_paths = tuple(
+                    root / f"experiments/{run.experiment_id}/runs/{run.variant_id}/"
+                    f"{run.run_id}/attempts/{binding.attempt_id}/measurements/"
+                    f"{binding.stage_id}.{metric_id}.jsonl"
+                    for metric_id in binding.metric_ids
+                )
+                observer = StageFileAccessObserver(
+                    root,
+                    context.inputs,
+                    context.outputs,
+                    measurement_paths,
+                    _frozen_python_sources(root, run.source.commit),
+                    (runtime_temp_path,),
+                    logical_inputs=binding.inputs,
+                    logical_outputs=binding.outputs,
+                )
+                try:
+                    with observer:
+                        function(context)
+                finally:
+                    file_access = observer.receipt()
+            else:
+                function(context)
+    except Exception as exc:
+        completed_at = datetime.now(UTC)
+        invocation = StageInvocationReceipt(
+            implementation=stage.implementation,
+            context=binding,
+            context_digest=semantic_document_digest(binding),
+            started_at=started_at,
+            completed_at=completed_at,
+            outcome="failed",
+            file_access=file_access,
+        )
+        _write_result(
+            worker_context.result_path,
+            StageWorkerResult(
+                execution_context=execution_context,
+                python_env=python_env,
+                startup=startup,
+                invocation=invocation,
+                error=f"{type(exc).__name__}: {exc}",
+            ),
+        )
+        return 1
+
+    completed_at = datetime.now(UTC)
+    invocation = StageInvocationReceipt(
+        implementation=stage.implementation,
+        context=binding,
+        context_digest=semantic_document_digest(binding),
+        started_at=started_at,
+        completed_at=completed_at,
+        outcome="succeeded",
+        file_access=file_access,
+    )
+    assert initialization is not None
+    assert startup is not None
+    assert execution_context is not None
+    assert python_env is not None
+    _write_result(
+        worker_context.result_path,
+        StageWorkerResult(
+            execution_context=execution_context,
+            python_env=python_env,
+            startup=startup,
+            invocation=invocation,
+        ),
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

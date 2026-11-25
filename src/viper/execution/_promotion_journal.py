@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import os
 import tempfile
 from pathlib import Path
@@ -143,19 +144,21 @@ class PublicationJournal:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-
     def publish(
         self,
         source: StageResultSnapshotRef | GitSource,
         source_files: tuple[SnapshotFileRef, ...],
         sources: dict[str, PublicationSource],
         dependencies_sha256: SHA256,
+        *,
+        exact_bytes: bool = False,
     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
-        """Save intent, publish once, and verify the destination files."""
+        """Upload files with saved progress and verify them before returning."""
         if self._lock is None:
             raise RunPromotionError("publication journal is not locked")
         if not sources:
             raise RunPromotionError("cloud revision requires at least one file")
+
         original_files = tuple(sorted(source_files, key=lambda file: file.path))
         files = tuple(
             source_file(self.cloud.root, name, data)
@@ -167,8 +170,20 @@ class PublicationJournal:
             revision=manifest_revision(files),
             files=files,
         )
+        candidate = SnapshotCopy(
+            source=source,
+            source_files=original_files,
+            expected=expected,
+            dependencies_sha256=dependencies_sha256,
+            previous_head=None,
+        )
+        if exact_bytes:
+            validate_exact_snapshot_copy(candidate)
+
         key = document_digest(source)
         saved = self.progress.copies.get(key)
+        published: CloudStageResultSnapshotRef | None = None
+
         if saved is not None:
             if (
                 saved.source != source
@@ -177,20 +192,28 @@ class PublicationJournal:
                 or saved.dependencies_sha256 != dependencies_sha256
             ):
                 raise RunPromotionError("publication journal differs")
-            published = saved.published or self._recover(saved)
+
+            published = saved.published
+            if published is None:
+                if not exact_bytes:
+                    published = self._recover(saved)
+                elif isinstance(self.cloud.provider, HuggingFaceProvider):
+                    if saved.previous_head is None:
+                        raise RunPromotionError("publication journal differs")
+                    published = self.cloud.provider.find_publication(
+                        expected, saved.previous_head
+                    )
+                elif not isinstance(self.cloud.repository, GcsRepository):
+                    raise RunPromotionError("publication provider cannot resume")
         else:
             previous = None
             if isinstance(self.cloud.provider, HuggingFaceProvider):
                 previous = self.cloud.provider.publication_head()
-            saved = SnapshotCopy(
-                source=source,
-                source_files=original_files,
-                expected=expected,
-                dependencies_sha256=dependencies_sha256,
-                previous_head=previous,
-            )
+            saved = candidate.model_copy(update={"previous_head": previous})
             self.progress.copies[key] = saved
             self._save()
+
+        if published is None:
             try:
                 published = self.cloud.provider.publish_revision(
                     destination=self.destination,
@@ -202,11 +225,11 @@ class PublicationJournal:
                 raise RunPromotionError(
                     "remote publication outcome is unresolved"
                 ) from error
+
         self._verify(published, expected)
         self.progress.copies[key] = saved.model_copy(update={"published": published})
         self._save()
         return published, files
-
     def _recover(self, saved: SnapshotCopy) -> CloudStageResultSnapshotRef:
         """Find an earlier successful copy using its exact manifest."""
         provider = self.cloud.provider
@@ -228,10 +251,12 @@ class PublicationJournal:
                 )
         raise RunPromotionError("remote publication outcome is unresolved")
 
-    def _verify(
-        self, snapshot: CloudStageResultSnapshotRef, expected: RevisionManifest
+    def verify_destination(
+        self,
+        snapshot: CloudStageResultSnapshotRef,
+        expected: RevisionManifest,
     ) -> None:
-        """Read every destination file and check its saved size and hash."""
+        """Check the cloud location and recorded file list."""
         if ViperCloud._repository_for(snapshot) != self.cloud.repository:
             raise RunPromotionError("destination repository differs")
         if isinstance(snapshot, GcsStageResultSnapshotRef) and (
@@ -245,6 +270,14 @@ class PublicationJournal:
                 raise RunPromotionError("destination snapshot differs")
         elif self.cloud.list_files(snapshot) != expected.files:
             raise RunPromotionError("destination snapshot differs")
+
+    def _verify(
+        self,
+        snapshot: CloudStageResultSnapshotRef,
+        expected: RevisionManifest,
+    ) -> None:
+        """Download and verify every file in the cloud snapshot."""
+        self.verify_destination(snapshot, expected)
         if self.space is not None:
             self.space.check(
                 largest_file=max((file.bytes for file in expected.files), default=0)
@@ -262,3 +295,43 @@ class PublicationJournal:
                 if self.space is not None:
                     self.space.check()
                 target.unlink()
+
+def publish_captured_snapshot(
+    journal: PublicationJournal,
+    inventory: SnapshotInventory,
+    sources: dict[str, PublicationSource],
+) -> SnapshotCopy:
+    """Upload the original files, or reuse a previously verified upload.
+
+    This call waits for upload and verification.
+    """
+    if journal._lock is None:
+        raise RunPromotionError("publication journal is not locked")
+    key = document_digest(inventory.source)
+    dependencies = hashlib.sha256(b"[]").hexdigest()
+    saved = journal.progress.copies.get(key)
+
+    if saved is not None:
+        validate_exact_snapshot_copy(saved)
+        if (
+            saved.source != inventory.source
+            or saved.source_files != inventory.source_files
+            or saved.expected.owner != journal.destination.owner
+            or saved.expected.workspace != journal.destination.workspace
+            or saved.dependencies_sha256 != dependencies
+        ):
+            raise RunPromotionError(
+                "saved upload does not match the snapshot and destination"
+            )
+        if saved.published is not None:
+            journal.verify_destination(saved.published, saved.expected)
+            return saved
+
+    journal.publish(
+        inventory.source,
+        inventory.source_files,
+        sources,
+        dependencies,
+        exact_bytes=True,
+    )
+    return validate_exact_snapshot_copy(journal.progress.copies[key])

@@ -154,7 +154,7 @@ class PublicationJournal:
         *,
         exact_bytes: bool = False,
     ) -> tuple[CloudStageResultSnapshotRef, tuple[SnapshotFileRef, ...]]:
-        """Save intent, resume publication, and verify destination file bytes."""
+        """Upload files with saved progress and verify them before returning."""
         if self._lock is None:
             raise RunPromotionError("publication journal is not locked")
         if not sources:
@@ -227,7 +227,7 @@ class PublicationJournal:
         return published, files
 
     def _recover(self, saved: SnapshotCopy) -> CloudStageResultSnapshotRef:
-        """Find an earlier successful copy using its exact manifest."""
+        """Find the cloud location to check after an interrupted upload."""
         provider = self.cloud.provider
         if isinstance(provider, HuggingFaceProvider):
             if saved.previous_head is None:
@@ -298,7 +298,10 @@ def publish_captured_snapshot(
     inventory: SnapshotInventory,
     sources: dict[str, PublicationSource],
 ) -> SnapshotCopy:
-    """Publish originals or reuse a committed exact-byte cloud copy."""
+    """Upload the snapshot's files or reuse its verified cloud publication.
+
+    This call waits for upload and verification.
+    """
     if journal._lock is None:
         raise RunPromotionError("publication journal is not locked")
     key = document_digest(inventory.source)

@@ -1,0 +1,104 @@
+--- a/src/viper/execution/_stage.py
++++ b/src/viper/execution/_stage.py
+@@ -14,7 +14,7 @@
+ from pathlib import Path
+ from typing import Literal, cast
+ 
+-from pydantic import BaseModel, ConfigDict
++from pydantic import BaseModel, ConfigDict, Field
+ 
+ import viper._subprocess as subprocess
+ 
+@@ -98,6 +98,10 @@
+     binding: StageContextBinding
+     result_path: Path
+     physical_inputs: dict[str, RepoRelPath] | None = None
++    physical_outputs: dict[str, RepoRelPath] | None = Field(
++        default=None,
++        description="Attempt-owned paths to the files the stage writes.",
++    )
+ 
+ 
+ class StageWorkerResult(BaseModel):
+@@ -127,6 +131,7 @@
+     invocation: StageInvocationReceipt
+     stdout: bytes
+     stderr: bytes
++    output_paths: dict[ArtifactName, Path] | None = None
+ 
+ 
+ def _stop_process_group(
+@@ -241,13 +246,22 @@
+ def _resolved_output_paths(
+     repository_root: Path,
+     outputs: dict[ArtifactName, OutputSpec],
++    *,
++    output_root: Path | None = None,
+ ) -> dict[ArtifactName, Path]:
+     """Reject symlinks and detach immutable inodes before a worker writes outputs."""
+     resolved: dict[ArtifactName, Path] = {}
+     for name, declaration in outputs.items():
++        relative_path = declaration.path
++        if output_root is not None:
++            relative_path = (
++                (output_root / name / declaration.relative_path)
++                .relative_to(repository_root)
++                .as_posix()
++            )
+         try:
+             physical_path = resolve_path(
+-                repository_root, declaration.path, operation="write"
++                repository_root, relative_path, operation="write"
+             )
+         except PathError as error:
+             raise StageExecutionError(str(error)) from error
+@@ -401,9 +415,13 @@
+         attempt_id,
+         supplied_inputs,
+     )
++    attempt_root = (
++        root / ".viper/workspaces" / str(run.run_id) / f"attempt-{attempt_id}"
++    )
+     physical_output_paths = _resolved_output_paths(
+         root,
+         dict(stage_spec.outputs.items()),
++        output_root=attempt_root / "stages" / stage_reference.stage_id,
+     )
+     binding = StageContextBinding(
+         run_id=run.run_id,
+@@ -441,15 +459,7 @@
+     )
+     runtime_root = root / ".viper" / "runtime"
+     runtime_root.mkdir(parents=True, exist_ok=True)
+-    runtime_temp_path = (
+-        root
+-        / ".viper"
+-        / "workspaces"
+-        / str(run.run_id)
+-        / f"attempt-{attempt_id}"
+-        / "runtime"
+-        / str(stage_reference.stage_id)
+-    )
++    runtime_temp_path = attempt_root / "runtime" / stage_reference.stage_id
+     if runtime_temp_path.exists():
+         shutil.rmtree(runtime_temp_path)
+     runtime_temp_path.mkdir(parents=True)
+@@ -467,6 +477,10 @@
+             stage_spec_path=spec_path,
+             binding=binding,
+             result_path=result_path,
++            physical_outputs={
++                name: path.relative_to(root).as_posix()
++                for name, path in physical_output_paths.items()
++            },
+             physical_inputs=physical_inputs
+             if physical_inputs != logical_inputs
+             else None,
+@@ -566,6 +580,7 @@
+             _artifact_publication_sources(artifact, physical_output_paths[name])
+         )
+     return StageProcessResult(
++        output_paths=physical_output_paths,
+         command=command,
+         started_at=started_at,
+         completed_at=completed_at,

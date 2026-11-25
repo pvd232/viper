@@ -37,7 +37,7 @@
  from .repository import resolve_path
  from .serialization import document_digest, parse_yaml_bytes
  
-@@ -61,12 +74,66 @@
+@@ -61,12 +74,64 @@
  )
  
  
@@ -46,7 +46,6 @@
 +    CREATE TABLE IF NOT EXISTS artifact_versions (
 +        key TEXT PRIMARY KEY,
 +        snapshot_key TEXT NOT NULL,
-+        selection BLOB NOT NULL,
 +        preference TEXT NOT NULL DEFAULT 'inherit'
 +            CHECK (preference IN ('inherit', 'keep', 'offload')),
 +        UNIQUE (key, snapshot_key),
@@ -73,17 +72,16 @@
 +RetentionPreference = Literal["inherit", "keep", "offload"]
 +_ArtifactSelection = StageArtifactRef | RepoRelPath
 +_RETENTION_ADAPTER = TypeAdapter(RetentionPreference)
-+_SELECTION_ADAPTER = TypeAdapter(_ArtifactSelection)
 +
 +
 +class _ArtifactVersion(ProtocolModel):
-+    """Select an exact artifact or input file within its original snapshot."""
++    """Identify an artifact by its snapshot and selected output or input."""
 +
 +    source: StageResultSnapshotRef = Field(
-+        description="Original immutable snapshot containing the selected artifact."
++        description="Snapshot containing the artifact."
 +    )
 +    selection: _ArtifactSelection = Field(
-+        description="Existing producer selector or exact standalone input member path."
++        description="Stage and artifact name, or the path of one input file."
 +    )
 +
 +
@@ -91,7 +89,7 @@
 +    source: StageResultSnapshotRef,
 +    selection: _ArtifactSelection,
 +) -> SHA256:
-+    """Compute a registry key without changing the artifact reference."""
++    """Compute the key for an artifact within its snapshot."""
 +    return document_digest(_ArtifactVersion(source=source, selection=selection))
 +
 +
@@ -101,11 +99,11 @@
  
  class StorageRegistry:
 -    """Track snapshot contents and known local file paths in one database."""
-+    """Track snapshot contents, local file paths and artifact preferences in one database."""
++    """Track snapshot files, local copies and preferences in one database."""
  
      def __init__(
          self, repository_root: Path, store: RepoRelPath = ".viper/store"
-@@ -76,9 +143,7 @@
+@@ -76,9 +141,7 @@
          self.store = store
          self.store_root = resolve_path(self.repository_root, store, operation="write")
          self.path = resolve_path(
@@ -116,7 +114,7 @@
          )
  
      @contextmanager
-@@ -98,18 +163,14 @@
+@@ -98,18 +161,14 @@
              )
              if write:
                  path.parent.mkdir(parents=True, exist_ok=True)
@@ -136,7 +134,7 @@
              version = connection.execute("PRAGMA user_version").fetchone()[0]
              if version == 0 and write:
                  tables = connection.execute(
-@@ -122,7 +183,9 @@
+@@ -122,7 +181,9 @@
                  connection.execute("PRAGMA user_version = 1")
              elif version != 1:
                  raise StorageRegistryError("unsupported storage registry version")
@@ -147,7 +145,7 @@
              yield connection
              connection.commit()
          except (OSError, ValueError, TypeError, sqlite3.Error, YAMLError) as error:
-@@ -137,10 +200,7 @@
+@@ -137,10 +198,7 @@
          return LocalSource(
              path=row["path"],
              observed_stat=(
@@ -159,7 +157,7 @@
              ),
              custody=row["custody"],
              retired=bool(row["retired"]),
-@@ -148,22 +208,20 @@
+@@ -148,22 +206,20 @@
  
      @staticmethod
      def _inventory(
@@ -187,7 +185,7 @@
          indexed = connection.execute(
              "SELECT path, sha256, bytes FROM snapshot_members "
              "WHERE snapshot_key = ? ORDER BY path",
-@@ -177,8 +235,7 @@
+@@ -177,8 +233,7 @@
          return inventory
  
      def snapshot(
@@ -197,7 +195,7 @@
      ) -> SnapshotSources | None:
          """Return the full file list and known local paths, including missing files."""
          try:
-@@ -191,12 +248,10 @@
+@@ -191,12 +246,10 @@
                  return None
          except (OSError, ValueError) as error:
              raise StorageRegistryError("storage registry path is invalid") from error
@@ -210,7 +208,7 @@
              locations = {}
              for member in inventory.source_files:
                  rows = connection.execute(
-@@ -208,15 +263,10 @@
+@@ -208,15 +261,10 @@
                      locations[member.path] = tuple(self._location(row) for row in rows)
              return SnapshotSources(inventory=inventory, locations=locations)
  
@@ -227,7 +225,7 @@
          try:
              path = resolve_path(self.repository_root, location.path, operation="read")
              descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-@@ -228,12 +278,8 @@
+@@ -228,12 +276,8 @@
                  os.close(descriptor)
          except (OSError, ValueError) as error:
              raise StorageRegistryError("local source is unavailable") from error
@@ -241,7 +239,7 @@
          )
          if (
              not stat.S_ISREG(status.st_mode)
-@@ -254,7 +300,6 @@
+@@ -254,7 +298,6 @@
              "SELECT * FROM local_bindings WHERE path = ? AND retired = 0",
              (location.path,),
          ).fetchone()
@@ -249,7 +247,7 @@
          if row is not None:
              same_payload = (
                  row["sha256"] == member.sha256 and row["bytes"] == member.bytes
-@@ -280,16 +325,11 @@
+@@ -280,16 +323,11 @@
                  )
              ):
                  raise StorageRegistryError("local source already has another binding")
@@ -268,7 +266,7 @@
              ),
          )
  
-@@ -301,12 +341,10 @@
+@@ -301,12 +339,10 @@
              for location in record.locations.get(member.path, ())
          )
          key = document_digest(record.inventory.source)
@@ -281,7 +279,7 @@
              if previous is None:
                  connection.execute(
                      "INSERT INTO snapshots VALUES (?, ?)",
-@@ -321,7 +359,6 @@
+@@ -321,7 +357,6 @@
                          "INSERT INTO snapshot_members VALUES (?, ?, ?, ?)",
                          (key, member.path, member.sha256, member.bytes),
                      )
@@ -289,7 +287,7 @@
              for member, location in prepared:
                  self._bind(connection, member, location)
          return key
-@@ -344,15 +381,12 @@
+@@ -344,15 +379,12 @@
              LocalSource(
                  path=relative,
                  observed_stat=(
@@ -307,7 +305,7 @@
          with self._transaction(write=True) as connection:
              inventory = self._inventory(connection, source)
              if inventory is None or member not in inventory.source_files:
-@@ -372,3 +406,155 @@
+@@ -372,3 +404,150 @@
                  (expected.path, *expected.observed_stat, expected.custody),
              )
              return changed.rowcount == 1
@@ -332,47 +330,43 @@
 +        if isinstance(selection, str) and tuple(file.path for file in files) != (
 +            selection,
 +        ):
-+            raise StorageRegistryError("member selection requires exactly its own file")
++            raise StorageRegistryError(
++                "artifact must contain only the file at the selected path"
++            )
++        paths = tuple(sorted({file.path for file in files}))
 +        key = _artifact_key(source, selection)
 +        snapshot_key = document_digest(source)
-+        with self._transaction(write=True) as connection:
-+            inventory = self._inventory(connection, source)
++        with self._transaction(write=True) as cnx:
++            inventory = self._inventory(cnx, source)
 +            if inventory is None:
 +                raise StorageRegistryError("artifact snapshot is not registered")
-+            members = {
-+                file.path: (file.sha256, file.bytes)
-+                for file in inventory.source_files
-+            }
-+            if any(
-+                members.get(file.path) != (file.sha256, file.bytes)
-+                for file in files
-+            ):
++            if not set(files).issubset(inventory.source_files):
 +                raise StorageRegistryError("artifact differs from its snapshot")
-+            previous = connection.execute(
++            previous = cnx.execute(
 +                "SELECT key FROM artifact_versions WHERE key = ?",
 +                (key,),
 +            ).fetchone()
 +            if previous is not None:
-+                paths = tuple(
++                previous_paths = tuple(
 +                    row["path"]
-+                    for row in connection.execute(
++                    for row in cnx.execute(
 +                        "SELECT path FROM artifact_members "
 +                        "WHERE artifact_key = ? ORDER BY path",
 +                        (key,),
 +                    )
 +                )
-+                if paths != tuple(sorted({file.path for file in files})):
++                if previous_paths != paths:
 +                    raise StorageRegistryError("registered artifact changed")
 +                return key
-+            connection.execute(
++            cnx.execute(
 +                "INSERT INTO artifact_versions "
-+                "(key, snapshot_key, selection) VALUES (?, ?, ?)",
-+                (key, snapshot_key, _SELECTION_ADAPTER.dump_json(selection)),
++                "(key, snapshot_key) VALUES (?, ?)",
++                (key, snapshot_key),
 +            )
-+            connection.executemany(
++            cnx.executemany(
 +                "INSERT INTO artifact_members (artifact_key, snapshot_key, path) "
 +                "VALUES (?, ?, ?)",
-+                ((key, snapshot_key, path) for path in sorted({f.path for f in files})),
++                ((key, snapshot_key, path) for path in paths),
 +            )
 +        return key
 +
@@ -381,11 +375,11 @@
 +        source: StageResultSnapshotRef,
 +        selection: _ArtifactSelection,
 +    ) -> tuple[ResolvedFileRef, ...]:
-+        """Return the original references for every file in the registered artifact."""
++        """Return references for every file in the registered artifact."""
 +        key = _artifact_key(source, selection)
-+        with self._transaction() as connection:
-+            inventory = self._inventory(connection, source)
-+            rows = connection.execute(
++        with self._transaction() as cnx:
++            inventory = self._inventory(cnx, source)
++            rows = cnx.execute(
 +                "SELECT path FROM artifact_members "
 +                "WHERE artifact_key = ? ORDER BY path",
 +                (key,),
@@ -404,9 +398,9 @@
 +        source: StageResultSnapshotRef,
 +        selection: _ArtifactSelection,
 +    ) -> RetentionPreference:
-+        """Return the saved override, leaving inherit to use the current default."""
-+        with self._transaction() as connection:
-+            row = connection.execute(
++        """Read this artifact's saved preference."""
++        with self._transaction() as cnx:
++            row = cnx.execute(
 +                "SELECT preference FROM artifact_versions WHERE key = ?",
 +                (_artifact_key(source, selection),),
 +            ).fetchone()
@@ -420,10 +414,10 @@
 +        selection: _ArtifactSelection,
 +        preference: RetentionPreference,
 +    ) -> None:
-+        """Save the preference in the database cleanup checks before deletion."""
++        """Save this artifact's preference for future cleanup decisions."""
 +        preference = _RETENTION_ADAPTER.validate_python(preference)
-+        with self._transaction(write=True) as connection:
-+            changed = connection.execute(
++        with self._transaction(write=True) as cnx:
++            changed = cnx.execute(
 +                "UPDATE artifact_versions SET preference = ? WHERE key = ?",
 +                (preference, _artifact_key(source, selection)),
 +            )
@@ -437,13 +431,12 @@
 +        *,
 +        default_offload: bool,
 +    ) -> bool:
-+        """Check whether every artifact sharing these bytes currently allows offloading.
++        """Check whether every artifact sharing these bytes allows offloading.
 +
-+        Cleanup calls this inside its final write transaction. A queued result
-+        cannot authorize a later deletion. Cleanup must also check cloud copies,
-+        workflow success, file ownership and readers.
-+        Files outside named artifacts use the current global default. Reading
-+        a file does not create another permanent retention preference.
++        Call this in the database transaction that authorizes deletion.
++        Check current preferences again when queued cleanup runs. Other
++        deletion checks still apply, including cloud copies and readers.
++        Files outside registered artifacts follow the current global default.
 +        """
 +        rows = connection.execute(
 +            "SELECT DISTINCT artifact_versions.key, artifact_versions.preference "

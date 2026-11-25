@@ -14,15 +14,15 @@
       "operation": "replace",
       "source_path": "replace/src/viper/execution/_promotion_journal.py",
       "expected_before_sha256": "00608d99c23c5f1e86df230451e638e975775868ad9f5376170adae21290959a",
-      "proposed_sha256": "149129197dd09a482187a08970a335b56e0de1a54a577cd6d35dba7e80b851bc",
-      "lines": 327
+      "proposed_sha256": "17aafd90ecfde23f22d48ea1e145464c0fbe83688e9acce727ed05a8dfc78715",
+      "lines": 330
     },
     {
       "target_path": "src/viper/huggingface.py",
       "operation": "replace",
       "source_path": "replace/src/viper/huggingface.py",
       "expected_before_sha256": "acff039bd0e9ae8dd586ed748db7445a4a00911bf08f90624b6f6624ed574c32",
-      "proposed_sha256": "1c243480c88b6790b323d25fafffc33eb3f539f6c3c6edd949a6b1b23ee96f08",
+      "proposed_sha256": "bc26789220c7c69362674c042c463b598aa2fa0f45aec29fe97ad21405198908",
       "lines": 310
     },
     {

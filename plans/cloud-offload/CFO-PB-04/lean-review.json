@@ -1,0 +1,29 @@
+{
+  "scope": "PB04 proposed source only; active source remains for the user to edit.",
+  "reviewers": [
+    "patch_registry_locks_review",
+    "patch_storage_review",
+    "patch_fetcher_review",
+    "patch_docs_review",
+    "patch_integration_review"
+  ],
+  "removed": [
+    "Unused saved selection column",
+    "Unused selection serializer",
+    "Repeated retention Literal declaration in public setter"
+  ],
+  "preserved": [
+    "Artifact key calculation",
+    "Complete bundle membership",
+    "Current shared-content retention decision",
+    "Existing exports"
+  ],
+  "application_tests_run": false,
+  "gate_run": false,
+  "simplified": [
+    "Compare SnapshotFileRef objects directly against the existing inventory",
+    "Compute the sorted artifact file list once",
+    "Follow the user's cnx variable name"
+  ],
+  "hashable_members_source": "ProtocolModel is frozen; SnapshotFileRef contains only path, size and SHA-256."
+}

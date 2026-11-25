@@ -1,0 +1,67 @@
+{
+  "pair_block_id": "CFO-PB-06",
+  "component": "attempt-owned stage output paths",
+  "status": "draft_component_not_full_native_implementation",
+  "files": [
+    {
+      "operation": "replace",
+      "target_path": "src/viper/_workers/stages.py",
+      "source_path": "replace/src/viper/_workers/stages.py",
+      "expected_before_sha256": "6d277f9388b798e19bf794ccf1424ab9d07b3489f6e9e26cc66fc2554b7e31a9",
+      "proposed_sha256": "f73da5546e083c6caf65446b538974f97d8d937f3f04a082821159cbb370e37b",
+      "added_lines": 15,
+      "removed_lines": 1
+    },
+    {
+      "operation": "replace",
+      "target_path": "src/viper/_workers/file_access.py",
+      "source_path": "replace/src/viper/_workers/file_access.py",
+      "expected_before_sha256": "156b9a0f97a13690a1cd6ddaae605ba9b1f59109d76759926eb749806a0d4797",
+      "proposed_sha256": "51f3ea5daa51a2fd25c23b4c056386e14493df4b753785f44162549bedcaa2c5",
+      "added_lines": 31,
+      "removed_lines": 8
+    },
+    {
+      "operation": "replace",
+      "target_path": "src/viper/outputs.py",
+      "source_path": "replace/src/viper/outputs.py",
+      "expected_before_sha256": "f835c43f6c232b6421d4a736547d5411dc645fe22821521db557d802a3828176",
+      "proposed_sha256": "af5384b1d43f00d788ae5a11ae2073c120472494f15dedf193f3e669d41579a0",
+      "added_lines": 1,
+      "removed_lines": 1
+    },
+    {
+      "operation": "replace",
+      "target_path": "src/viper/execution/_stage.py",
+      "source_path": "replace/src/viper/execution/_stage.py",
+      "expected_before_sha256": "c68de69b2eba5db8215c0b607a95ef2956eec6666d199a15d7cc1b27d6efc492",
+      "proposed_sha256": "198113ce57c09fcd0ee3b6efe91b8bf816b5dad750e29581c8e060ae6c7bf4c7",
+      "added_lines": 26,
+      "removed_lines": 11
+    },
+    {
+      "operation": "replace",
+      "target_path": "src/viper/execution/_metric.py",
+      "source_path": "replace/src/viper/execution/_metric.py",
+      "expected_before_sha256": "f6e07fd01e744121f4f52187c68dcdf52f3e1c1ce24fc3cf01423ace44b359fb",
+      "proposed_sha256": "12fb8f1de384a7dabcad54cb05ae5f54c84f833291d112b97bdbd62830abd292",
+      "added_lines": 5,
+      "removed_lines": 1
+    },
+    {
+      "operation": "replace",
+      "target_path": "src/viper/execution/_attempt.py",
+      "source_path": "replace/src/viper/execution/_attempt.py",
+      "expected_before_sha256": "fa343bc6f9aefcd1556a4b2cf67ae981f6a730f9b1956e8da45dccbb11b18224",
+      "proposed_sha256": "3e86ba1708d1c48e4bbb76cd742d59bc1d5cc3ba32956e73af64ab248d0e1d82",
+      "added_lines": 1,
+      "removed_lines": 0
+    }
+  ],
+  "purpose": "Prevent later attempts from overwriting originals queued for upload; preserve logical output references.",
+  "application_tests_run": false,
+  "gate_run": false,
+  "active_source_edited": false,
+  "preserved": "Check access against physical paths, then record all corresponding logical paths, including shared inputs and bundle descendants. Frozen bindings and receipt schema stay unchanged.",
+  "compatibility": "StageContext.outputs now supplies attempt-owned physical paths; declared references stay unchanged. Existing path-value assertions need updating in the deferred PB06 tests."
+}

@@ -143,7 +143,12 @@ class HuggingFaceProvider(ViperCloudProvider):
         )
 
     def publication_head(self) -> str:
-        """Read the current commit before saving a publication intent."""
+        """Create the repository if needed and return its current commit."""
+        self.api.create_repo(
+            repo_id=self.repository,
+            repo_type=self._api_repo_type,
+            exist_ok=True,
+        )
         head = self.api.repo_info(self.repository, repo_type=self._api_repo_type).sha
         if head is None:
             raise ViperCloudError("destination commit is unavailable")

@@ -7,30 +7,30 @@
   "depends_on": [
     "CFO-PB-03"
   ],
-  "status": "authored_not_applied_gates_not_run",
+  "status": "guided_source_applied_tests_deferred",
   "files": [
     {
       "target_path": "src/viper/_storage_registry.py",
       "operation": "replace",
       "source_path": "replace/src/viper/_storage_registry.py",
       "expected_before_sha256": "c8201f9805ab80e020f4480dea5de23fec9437c6c0720fd587c54658e330bb76",
-      "proposed_sha256": "69c9c43deea3867fa91cec228e7e2613348a29ddc655143e23a20dbc65549f00",
-      "lines": 560
+      "proposed_sha256": "f0e2c0e617d073334c2b6967e744bcf84fd10c575ecf99356eff37de3cbf66f2",
+      "lines": 553
     },
     {
       "target_path": "src/viper/retention.py",
       "operation": "replace",
       "source_path": "replace/src/viper/retention.py",
       "expected_before_sha256": "9e918627628254790c485b333728702eea231268ce3f7fd6c44a487bcd7904f3",
-      "proposed_sha256": "c42c730000e25517b00a7185cfc68d26eaec435d0d997eeea896d44c764e8f32",
-      "lines": 260
+      "proposed_sha256": "cd23c7bdfb4c961c036aec38322e240f9b9bb5722f6f55c095094640d7bacf6b",
+      "lines": 258
     },
     {
       "target_path": "tests/test_artifact_retention.py",
       "operation": "add",
       "source_path": "add/tests/test_artifact_retention.py",
       "expected_before_sha256": null,
-      "proposed_sha256": "844223c256966e996b09f247dd322431f749017013cf0f9a1f734b228f79e5ca",
+      "proposed_sha256": "8c5dc74142e5d524fe8b9e88f7a266be6c8ebb86015ae3c966878086d98bcc81",
       "lines": 393
     },
     {

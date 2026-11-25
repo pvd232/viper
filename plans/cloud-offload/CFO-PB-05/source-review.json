@@ -1,0 +1,18 @@
+{
+  "scope": "PB04 live source and PB05 proposed publication code",
+  "reviewers": [
+    "patch_registry_locks_review",
+    "patch_fetcher_review",
+    "patch_storage_review",
+    "patch_docs_review",
+    "patch_integration_review"
+  ],
+  "findings": [
+    "Synchronize the clearer single-file error with its prepared assertion",
+    "Keep publication and recovery docstrings accurate"
+  ],
+  "application_tests_run": false,
+  "gate_run": false,
+  "active_source_edited": false,
+  "next": "PB05 journal publication and provider repository setup"
+}

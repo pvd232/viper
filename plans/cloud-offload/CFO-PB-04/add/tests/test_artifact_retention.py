@@ -265,7 +265,7 @@ def test_member_selector_rejects_a_whole_bundle(tmp_path: Path) -> None:
     registry = StorageRegistry(tmp_path)
     source, _, artifact = _bundle(registry)
 
-    with pytest.raises(StorageRegistryError, match="exactly its own file"):
+    with pytest.raises(StorageRegistryError, match="artifact must contain only"):
         registry.register_artifact(source, artifact.members[0].file.path, artifact)
 
 

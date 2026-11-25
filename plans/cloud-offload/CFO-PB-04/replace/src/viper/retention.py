@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import shutil
 from pathlib import Path
-from typing import Literal
 
 from pydantic import Field, TypeAdapter, ValidationError
 
 from ._cloud import ViperCloudError
 from ._schema import ProtocolModel, RepoRelPath
+from ._storage_registry import RetentionPreference
 from .artifacts import StageArtifactRef
 from .cloud import ViperCloud
 from .execution.results import RunResult
@@ -233,17 +233,15 @@ def set_artifact_retention(
     repository_root: Path,
     source: StageResultSnapshotRef,
     selection: StageArtifactRef | RepoRelPath,
-    preference: Literal["inherit", "keep", "offload"],
+    preference: RetentionPreference,
     *,
     store: RepoRelPath = ".viper/store",
 ) -> None:
-    """Save an artifact preference and finish any requested keep operation.
+    """Save an artifact preference and resolve all its files when keeping locally.
 
-    Select a registered producer artifact or captured input file. Use the
-    current workspace registry even if the original workspace is gone.
-    Keep is saved before downloading every missing artifact file. A failed
-    download leaves keep saved and raises the error. Inherit and offload
-    change the preference without downloading or deleting files.
+    Keep is saved before resolving the files. Return after every file resolves
+    successfully. A failure leaves keep saved and raises the error. Inherit
+    and offload change the preference without retrieving or deleting files.
     """
     storage = LocalArtifactStore(repository_root, store)
     storage.registry.set_retention(source, selection, preference)

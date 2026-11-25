@@ -143,7 +143,7 @@ class HuggingFaceProvider(ViperCloudProvider):
         )
 
     def publication_head(self) -> str:
-        """Ensure the repository exists before reading the publication boundary."""
+        """Create the repository if needed and return its current commit."""
         self.api.create_repo(
             repo_id=self.repository,
             repo_type=self._api_repo_type,
