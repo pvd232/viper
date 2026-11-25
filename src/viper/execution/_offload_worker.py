@@ -45,6 +45,7 @@ from ..references import (
     resolve_snapshot_file_ref,
 )
 from ..repository import resolve_path
+from ..retention import cleanup_operation
 from ..serialization import document_digest, parse_yaml_bytes, write_synchronized
 from ..storage import LocalArtifactStore
 from ._promotion_journal import PublicationJournal, publish_captured_snapshot
@@ -371,19 +372,56 @@ def _finalize(
     return operation
 
 
+def _cleanup_published(
+    path: Path, operation: Operation, seen: set[tuple[str, int, int]]
+) -> float | None:
+    """Retry reader holds; reconsider saved denials after policy or binding changes."""
+    if operation.cleanup_complete or not operation.science_succeeded:
+        return
+    registry_path = StorageRegistry(operation.repository_root, operation.store).path
+    marker = resolve_path(operation.repository_root, "viper.toml", operation="read")
+    state = (
+        operation.operation_id,
+        registry_path.stat().st_mtime_ns if registry_path.exists() else 0,
+        marker.stat().st_mtime_ns,
+    )
+    if state in seen:
+        return
+    receipt = PublicationReceipt.model_validate_json(
+        path.with_name("receipt.json").read_bytes()
+    )
+    complete = cleanup_operation(
+        operation.repository_root, operation.model_dump(mode="json"), receipt.copies
+    )
+    if complete is None:
+        return time.time() + 1
+    if not complete:
+        seen.add(state)
+        return None
+    with operation_lock(path):
+        current = load_operation(path).model_copy(update={"cleanup_complete": True})
+        save_operation(path, current)
+    return None
+
+
 def drain_once(
     root: Path,
     *,
     completed: dict[tuple[str, str], PublicationJob] | None = None,
+    cleanup_seen: set[tuple[str, int, int]] | None = None,
 ) -> float | None:
     """Process ready uploads across all workflows before sleeping for retries."""
     if completed is None:
         completed = {}
+    if cleanup_seen is None:
+        cleanup_seen = set()
+    cleanup_candidates: list[tuple[Path, Operation]] = []
     next_wake: float | None = None
     for path in sorted((root / ".viper/publications").glob("*/operation.json")):
         try:
             operation = load_operation(path)
             if operation.publication_complete:
+                cleanup_candidates.append((path, operation))
                 continue
             operation = _recover(path)
             registry = StorageRegistry(root, operation.store)
@@ -407,6 +445,8 @@ def drain_once(
             if operation.closed and all(job.status == "complete" for job in jobs):
                 copies = tuple(copy for job in jobs for copy in job.copies)
                 operation = _finalize(path, operation, copies)
+                if operation.publication_complete:
+                    cleanup_candidates.append((path, operation))
             deadlines = [job.ready_at for job in jobs if job.status == "pending"]
             if not operation.closed:
                 deadlines.append(time.time() + 1)
@@ -419,6 +459,13 @@ def drain_once(
             if deadlines:
                 due = max(time.time() + 0.1, min(deadlines))
                 next_wake = due if next_wake is None else min(due, next_wake)
+        except Exception:
+            traceback.print_exc()
+    for path, operation in cleanup_candidates:
+        try:
+            retry_at = _cleanup_published(path, operation, cleanup_seen)
+            if retry_at is not None:
+                next_wake = retry_at if next_wake is None else min(retry_at, next_wake)
         except Exception:
             traceback.print_exc()
     return next_wake
@@ -434,7 +481,12 @@ def drain(root: Path) -> None:
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         completed: dict[tuple[str, str], PublicationJob] = {}
-        while (next_wake := drain_once(root, completed=completed)) is not None:
+        cleanup_seen: set[tuple[str, int, int]] = set()
+        while (
+            next_wake := drain_once(
+                root, completed=completed, cleanup_seen=cleanup_seen
+            )
+        ) is not None:
             time.sleep(min(max(next_wake - time.time(), 0.1), 1.0))
     finally:
         os.close(descriptor)
