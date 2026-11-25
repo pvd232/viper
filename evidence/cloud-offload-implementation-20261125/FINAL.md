@@ -25,3 +25,18 @@ The user accepted the measured size increase on 2026-11-25; [the owner exception
 At the implementation handoff the PRs were drafts and no main-branch merge or package release had occurred. The owner has since authorized the 0.3.0 publication. The production contract parser is unavailable; static TOML/AST binding checks are separate from formal protocol acceptance. Cloud transfers were controlled tests; no live cloud roundtrip, infrastructure change or annotation campaign was performed by this implementation task. All seven GitHub CI jobs passed at runtime commit `df10a3e`, including fast, integration, Python 3.11–3.13 compatibility, minimum-Pydantic and release-candidate validation; see [the CI snapshot](validation/github-ci.json).
 
 All seven CI jobs also passed at published evidence head `33d9321`, including the final test-comment clarification. [Evidence-head CI snapshot](validation/github-ci-evidence-head.json).
+
+## Package publication
+
+Viper PR 24 is merged. [Viper 0.3.0](https://pypi.org/project/viper-provenance/0.3.0/)
+is published from signed tag `v0.3.0` at
+`96d83b86314969e166023c2a87f127f716454139`. Runtime files are unchanged from
+`df10a3e2258a28d7eb276d5a35a5621c0384a694`; JEP remains a separate repository
+and is not packaged or required by Viper.
+
+The [publication receipt](../../docs/releases/receipts/0.3.0.json) records the
+successful release workflow and exact file hashes, installation checks and
+verified publisher attestations. A temporary L4 worker passed seven live CUDA
+tests and nine autocast regressions against that CI wheel; its instance and
+boot disk were deleted. The existing JEP workers were not started or changed.
+The previously delivered MAO handoff remains recorded above.
