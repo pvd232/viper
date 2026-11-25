@@ -78,6 +78,6 @@
       "bytes": 13622
     }
   ],
-  "counts_report_sha256": "4c197b820dfa45c6c1aaf13abbf7415f1c7c43b6ff49a6d2aa2e4574b10a6701",
+  "counts_report_sha256": "951cf9f93eb6abbe0eec0b7011754815abb118c1074cb1c0dcace6f84ebbe35c",
   "validation_refresh": "Final fast gate, JEP bounded suite and all 227 selected integration cases pass; hosted CI still running. CFO-REQ-10 OPEN and no formal acceptance."
 }

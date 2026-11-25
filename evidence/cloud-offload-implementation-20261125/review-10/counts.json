@@ -40,7 +40,7 @@
     "src/viper/serialization.py": "fdc049a589549db09477895bc94b4ce15e6abb86fafc338d582184f669ae2756",
     "src/viper/storage.py": "311bfee4571cdb211ccf4c4286b294362450ad969ac2a0d67c754978348694bd"
   },
-  "created_at_utc": "2026-11-25T14:53:26.509349+00:00",
+  "created_at_utc": "2026-11-25T15:25:09.576340+00:00",
   "evidence_kind": "bounded_complexity_review_and_line_count",
   "method": {
     "baseline_files": "Immutable Git tree/blob contents reread at the exact recorded commits.",
@@ -61,21 +61,21 @@
   "previous_checkpoint_counts": {
     "combined_original_baselines": {
       "runtime": {
-        "after": 77126,
+        "after": 77510,
         "before": 72524,
-        "delta": 4602
+        "delta": 4986
       },
       "tests": {
-        "after": 49255,
+        "after": 49697,
         "before": 43920,
-        "delta": 5335
+        "delta": 5777
       }
     },
-    "created_at_utc": "2026-11-25T13:11:21.839020+00:00",
+    "created_at_utc": "2026-11-25T14:53:26.509349+00:00",
     "note": "Retained only as the earlier count checkpoint; not the current totals.",
     "source_and_tests_sha256": {
       "jep": "a28b3dd4f544c476b3429342eec384c8c87ba4b7592f01fc77882679736520f0",
-      "viper": "7ca23d537ef0befb9c053042b9bcb08c4054f0b44c9562f7b83b38a3b5958b25"
+      "viper": "cd1dfa03afafbd3ce6052e15757c0260f43ac45fc6ce917a2948d3913ce04291"
     }
   },
   "reduction_requirement": {
@@ -5591,10 +5591,10 @@
             "sha256": "81c5e921e553eb03fde9caf343c79449ed30e0898e3ed996b37af2af7de81bcb"
           },
           "tests/test_readme_workflow.py": {
-            "bytes": 31438,
+            "bytes": 31423,
             "category": "tests",
             "lines": 773,
-            "sha256": "934a25ae066b283c697b674a7e5327b9d957127ad3c3dca3b36524375cdcb749"
+            "sha256": "8c99fdb3bed4cd6475c9bf5aac0b6c0b4b5cd691d18f009ee30f78f6e7bd6df6"
           },
           "tests/test_release_tools.py": {
             "bytes": 3587,
@@ -5723,14 +5723,14 @@
             "sha256": "1183c3dfad929788755bfd1156b15a7682dd05e8bc6d31e53ea51ffa83777b31"
           }
         },
-        "head": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
-        "source_and_tests_sha256": "cd1dfa03afafbd3ce6052e15757c0260f43ac45fc6ce917a2948d3913ce04291",
+        "head": "51630a5b5d03e9964da2a8d1b66f91bd4a55b9e2",
+        "source_and_tests_sha256": "f52c05dc1be87b6a29e91296c12d0138ccb4858056bf5d17ae168697ca64b0de",
         "untracked_counted_paths": []
       },
       "declared_source_freeze": {
-        "commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+        "commit": "51630a5b5d03e9964da2a8d1b66f91bd4a55b9e2",
         "matches_current_counted_files": true,
-        "source_and_tests_sha256": "cd1dfa03afafbd3ce6052e15757c0260f43ac45fc6ce917a2948d3913ce04291"
+        "source_and_tests_sha256": "f52c05dc1be87b6a29e91296c12d0138ccb4858056bf5d17ae168697ca64b0de"
       },
       "line_deltas": {
         "original": {

@@ -111,7 +111,7 @@
     "net_reduction_met": false,
     "viper_and_combined_final_report": "evidence/cloud-offload-implementation-20261125/review-10/counts.json",
     "planning_mirror_retirement_counts_toward_runtime_test_reduction": false,
-    "report_raw_sha256": "4c197b820dfa45c6c1aaf13abbf7415f1c7c43b6ff49a6d2aa2e4574b10a6701",
+    "report_raw_sha256": "951cf9f93eb6abbe0eec0b7011754815abb118c1074cb1c0dcace6f84ebbe35c",
     "counts": {
       "jep": {
         "baseline_commit": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
@@ -132,7 +132,7 @@
       },
       "viper": {
         "baseline_commit": "f659faf7e7d0b721af736520c1b2b201d778c891",
-        "working_tree_head": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+        "working_tree_head": "51630a5b5d03e9964da2a8d1b66f91bd4a55b9e2",
         "before": {
           "runtime": 35607,
           "tests": 32790
@@ -145,7 +145,7 @@
           "runtime": 5076,
           "tests": 5636
         },
-        "source_and_tests_sha256": "cd1dfa03afafbd3ce6052e15757c0260f43ac45fc6ce917a2948d3913ce04291"
+        "source_and_tests_sha256": "f52c05dc1be87b6a29e91296c12d0138ccb4858056bf5d17ae168697ca64b0de"
       },
       "combined": {
         "runtime": {
@@ -161,7 +161,7 @@
       }
     },
     "combined_runtime_and_tests_delta": 10763,
-    "counted_candidate_note": "Source-hashed recount covers frozen Viper df10a3e; JEP source freeze e2285b8 with current report head d44073e. Planning retirement, docs, evidence and dependency manifests excluded."
+    "counted_candidate_note": "Source-hashed recount covers Viper 51630a5 (identical runtime to df10a3e; README test comment only); JEP source freeze e2285b8 with current report head d44073e. Planning retirement, docs, evidence and dependency manifests excluded."
   },
   "pb06_checkpoint": "1b8ed60",
   "later_repair_commit": "c869ea6",

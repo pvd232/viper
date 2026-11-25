@@ -4,7 +4,7 @@
 
 **Depends on:** PB06
 
-**Status:** Cleanup and its worker integration are committed at `95a2420` and pass the final fast gate at `df10a3e`. All selected integration cases pass; hosted PR checks are still running and no formal acceptance is recorded.
+**Status:** Cleanup and its worker integration are committed at `95a2420` and pass the final fast gate at `df10a3e`. All selected integration cases pass; all seven hosted Viper CI jobs passed at runtime commit `df10a3e`; no formal acceptance is recorded.
 
 [retention.cleanup_operation](../../../src/viper/retention.py) runs from the same detached publication worker. Successful whole-workflow closure requests reconsideration of exact observed copies. Removal rechecks all-target data/final proof, current subscribers, pending sources, readers, ownership and physical identity. Hashing and remote work stay outside the short final registry transaction.
 

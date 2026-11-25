@@ -2,7 +2,7 @@
 
 The [typed workspace](cloud-offload.toml) owns package registration, repository checkouts and requirement placement. The [contract](../contracts/cloud-offload.md) owns the guarantee. The [current work summary](../plans/cloud-offload/QUEUE.md) reports implementation and validation state.
 
-Native publication, resolution, recovery and cleanup are implemented. The final fast gate passes at `df10a3e`: Ruff checks and formatting, Pyrefly with zero errors, and 805 tests plus 11 subtests, with 4 skips. All 227 selected integration cases pass across retained bounded runs, including all 27 README cases; [the coverage record](../evidence/cloud-offload-integration-20261125/coverage.json) maps each selected case to retained evidence. Hosted PR checks are still running; no CI success is claimed. No formal acceptance or completion receipt is asserted.
+Native publication, resolution, recovery and cleanup are implemented. The final fast gate passes at `df10a3e`: Ruff checks and formatting, Pyrefly with zero errors, and 805 tests plus 11 subtests, with 4 skips. All 227 selected integration cases pass across retained bounded runs, including all 27 README cases; [the coverage record](../evidence/cloud-offload-integration-20261125/coverage.json) maps each selected case to retained evidence. All seven hosted Viper CI jobs passed at runtime commit `df10a3e`, including integration and Python 3.11–3.13 compatibility. No formal acceptance or completion receipt is asserted.
 
 | Phase | Requirements | Work |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Native publication, resolution, recovery and cleanup are implemented. The final 
 | 3 | CFO-REQ-06, CFO-REQ-07 | Native workflow lifetime and background publication. |
 | 4 | CFO-REQ-08, CFO-REQ-09, CFO-REQ-10 | Cleanup, recovery and cross-repository consolidation. |
 
-PB01–PB05 foundations were user-applied at checkpoints `7e7d981` and `1345473`. Later work is autonomous under the user's updated instruction. Source implementations and meaningful tests are active for the native publication/resolution path; PB07 cleanup and its worker observers are active. The final fast gate and all 227 selected integration cases pass. Hosted PR checks are still running.
+PB01–PB05 foundations were user-applied at checkpoints `7e7d981` and `1345473`. Later work is autonomous under the user's updated instruction. Source implementations and meaningful tests are active for the native publication/resolution path; PB07 cleanup and its worker observers are active. The final fast gate and all 227 selected integration cases pass. All seven hosted Viper CI jobs passed at runtime commit `df10a3e`.
 
 **CFO-REQ-10 is OPEN.** Current maintained Viper/JEP totals do not satisfy net reduction. Removing obsolete full-file planning mirrors is recorded separately and cannot satisfy that runtime/test condition.
 

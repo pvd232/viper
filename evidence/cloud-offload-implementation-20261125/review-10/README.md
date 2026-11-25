@@ -20,7 +20,7 @@ JEP `c2f9716e398dd5442ca9d3579dfa788657a6cd00`. The supplemental Viper baseline
 is `1345473`, resolved to its full commit in [counts.json](counts.json).
 
 Viper's counted scope matches the frozen commit
-`df10a3e2258a28d7eb276d5a35a5621c0384a694`.
+`51630a5b5d03e9964da2a8d1b66f91bd4a55b9e2`.
 JEP's counted scope matches source freeze
 `e2285b8bfa03bae1c8076f731c541f6a2504f049`; subsequent dependency
 and documentation pins do not change the counted Python files.
