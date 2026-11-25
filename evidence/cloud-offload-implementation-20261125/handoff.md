@@ -11,3 +11,7 @@ The final validation record covers 805 fast tests, 227 selected integration node
 The functional dependency is published. Complete the existing agent-supervision implementation, then start the user-authorized JEP annotation campaign under its existing execution contracts and ownership boundaries. Use the current public Viper API as the storage abstraction.
 
 CFO-REQ-10 remains open because source/test code grew by 10,763 lines. These draft publications do not assert formal contract acceptance. There was no live cloud/campaign execution in this implementation task.
+
+## Delivery
+
+MAO confirmed acceptance in [the requested native conversation](https://chatgpt.com/c/6b06a683-4848-83ea-9042-f41b1cdc4720) on 2026-11-25. The fresh followup receipt reports `running`, the exact target identity and `rejected_before_dispatch = false`. [The delivery record](handoff-delivery.json) retains the native identities and recovery history. Supervision and campaign completion remain separate from this delivery confirmation.
