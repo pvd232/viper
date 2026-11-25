@@ -161,9 +161,7 @@ def source_pin(operation: Operation, key: str) -> str:
     return f"{operation.operation_id}/{key}"
 
 
-def start_publication_worker(
-    root: Path, *, store: RepoRelPath = ".viper/store"
-) -> None:
+def start_publication_worker(root: Path) -> None:
     """Wake the detached drainer after durable work is saved.
 
     Launch failure leaves the saved request available to a later wake or restart.
@@ -185,8 +183,6 @@ def start_publication_worker(
                     "-m",
                     "viper.execution._offload_worker",
                     str(root),
-                    "--store",
-                    store,
                 ),
                 cwd=root,
                 env=environment,
@@ -213,10 +209,10 @@ class PublicationSession:
         self.root = root.resolve(strict=True)
         self.store = store
         self.targets = targets
-        self.identifier = self.operation_id = uuid4().hex
+        self.operation_id = uuid4().hex
         self.operation_path = resolve_path(
             self.root,
-            f".viper/publications/{self.identifier}/operation.json",
+            f".viper/publications/{self.operation_id}/operation.json",
             operation="write",
         )
         ensure_directory_synchronized(self.operation_path.parent)
@@ -241,7 +237,7 @@ class PublicationSession:
                 self.operation_path,
                 canonical_json_bytes(
                     Operation(
-                        operation_id=self.identifier,
+                        operation_id=self.operation_id,
                         repository_root=self.root,
                         store=store,
                         targets=targets,
@@ -322,7 +318,7 @@ class PublicationSession:
                     save_operation(self.operation_path, operation)
             if not self._started:
                 self._started = True
-                start_publication_worker(self.root, store=self.store)
+                start_publication_worker(self.root)
 
     def record_path(
         self,
@@ -405,7 +401,7 @@ class PublicationSession:
                     readers.close()
                 os.close(self._owner)
         if self.targets or self._has_backed_selections():
-            start_publication_worker(self.root, store=self.store)
+            start_publication_worker(self.root)
 
     def _has_backed_selections(self) -> bool:
         """Avoid starting a drainer when local-only work has nothing to offload."""
@@ -513,7 +509,7 @@ def _wake_if_idle(operation: Operation) -> None:
             return
     finally:
         os.close(descriptor)
-    start_publication_worker(operation.repository_root, store=operation.store)
+    start_publication_worker(operation.repository_root)
 
 
 def read_publication_status(
@@ -774,4 +770,4 @@ def retry_publication(path: Path) -> None:
                 update={"final_attempts": 0, "final_ready_at": 0.0, "error": None}
             ),
         )
-    start_publication_worker(operation.repository_root, store=operation.store)
+    start_publication_worker(operation.repository_root)

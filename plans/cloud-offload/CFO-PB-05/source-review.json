@@ -14,5 +14,13 @@
   "application_tests_run": false,
   "gate_run": false,
   "active_source_edited": false,
-  "next": "PB05 journal publication and provider repository setup"
+  "next": "PB05 journal publication and provider repository setup",
+  "status": "historical_preparation_mirrors_retired",
+  "current_executable_plan": false,
+  "retirement": {
+    "inventory": "evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json",
+    "tracked_history_boundary": "1b8ed60",
+    "source_of_truth": "Applied source/tests in the active Git worktree; later candidate commits are recorded by the integration owner.",
+    "historical_fields": "Original package, source-path and expected-before hashes below describe preparation history only."
+  }
 }

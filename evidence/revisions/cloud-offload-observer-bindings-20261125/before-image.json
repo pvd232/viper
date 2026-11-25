@@ -1,0 +1,55 @@
+{
+  "purpose": "Exact documents before observer binding reconciliation; not a protocol receipt.",
+  "files": [
+    {
+      "path": "contracts/cloud-offload.toml",
+      "sha256": "8d7533ea57ea0d7dbba8a9590b1525db94e3f124efd994041957d56816aab7c6",
+      "bytes": 27745
+    },
+    {
+      "path": "contracts/cloud-offload.md",
+      "sha256": "c4abf6443dc1f720540e5ac8588a44d22eb4a9e8c0c4bc5d2214474a928c4f1f",
+      "bytes": 20342
+    },
+    {
+      "path": "checklists/cloud-offload.md",
+      "sha256": "dbb1d53b671f5c9d9e1d4065acf9c2c6343287fea0b44ce05a244472935c1b99",
+      "bytes": 1693
+    },
+    {
+      "path": "plans/cloud-offload/README.md",
+      "sha256": "1c275172996337314d3253c0f79ddff897f952978843c5355e9a31f0a491f0da",
+      "bytes": 1662
+    },
+    {
+      "path": "plans/cloud-offload/QUEUE.md",
+      "sha256": "357530398306d68b971dd1e3c6a426c8b663f4ef0bc818187d077a49d622c17c",
+      "bytes": 5675
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-06/README.md",
+      "sha256": "de3aa6a6c765e12a718cadd37bd165da4eec1cce529b2c4353b53f01bea7fb40",
+      "bytes": 4124
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-07/README.md",
+      "sha256": "5c8d14ef59838e33cf1461c57d37782538eb73bfe5d062c79486ea2de4596dfe",
+      "bytes": 3271
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-08/README.md",
+      "sha256": "37b13bacff1864ae7e31bb34a6ab129a3bc7a4c1eb9443aafc5d15f46988a6c7",
+      "bytes": 1718
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-09/README.md",
+      "sha256": "96c8f33a102f2e9b9f84ebbb95e3f4295a61a29ba523cd3c526762e418f72f26",
+      "bytes": 1525
+    },
+    {
+      "path": "checklists/cloud-offload.toml",
+      "sha256": "e83cc288565887789194cfa5888fadfcf20a9e43a0da0324fbd9491a82d13b27",
+      "bytes": 1844
+    }
+  ]
+}

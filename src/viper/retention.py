@@ -527,7 +527,7 @@ def set_artifact_retention(
         for reference in storage.registry.artifact_files(source, selection):
             storage.resolve(reference)
     else:
-        start_publication_worker(storage.repository_root, store=store)
+        start_publication_worker(storage.repository_root)
 
 
 __all__ = [

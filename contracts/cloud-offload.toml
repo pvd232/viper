@@ -137,17 +137,18 @@ acceptance_conditions = [
 ]
 success_case = { repository_id = "viper", path = "tests/test_artifact_retention.py", symbol = "test_any_shared_artifact_keep_vetoes_offload" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_stale_cleanup_preserves_replacement_and_new_keep" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_new_keep_defeats_a_previously_queued_cleanup" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_a_replacement_with_identical_bytes_survives_stale_cleanup" },
 ]
 
 [[verifiers]]
 id = "CFO-VR-06"
 requirement_ids = ["CFO-REQ-06"]
 acceptance_conditions = ["Training, inference, evaluation and diagnostics reuse original references and enrolled input/restored copies through the shared resolver.", "A changed existing dataset becomes a new version; user-owned exports are neither deleted nor silently adopted. Native action ownership begins before authoring and covers nested workers and final verification."]
-success_case = { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_managed_dataset_resolves_after_offload" }
+success_case = { repository_id = "viper", path = "tests/test_run_execution.py", symbol = "test_future_input_materializes_verified_producer_snapshot" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_external_path_replacement_is_not_old_artifact" },
-  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_user_owned_export_is_not_removed" },
+  { repository_id = "viper", path = "tests/test_artifact_retention.py", symbol = "test_changed_input_is_a_new_version_with_an_independent_override" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_cleanup_preserves_a_registered_external_copy" },
 ]
 
 [[verifiers]]
@@ -157,32 +158,36 @@ acceptance_conditions = [
   "Captured original member paths upload through the existing provider and shared exact-inventory check; full cloud-byte verification precedes published acknowledgment.",
   "Changed bytes, missing or extra members reject before publication intent/provider I/O; failed remote SHA-256 verification does not produce published proof.",
 ]
-success_case = { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_direct_publication_preserves_original_bundle_and_verifies_before_return" }
+success_case = { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_worker_restores_remote_snapshot_members_and_keeps_their_cleanup_selection" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_direct_publication_rejects_changed_inventory_before_saving_intent" },
-  { repository_id = "viper", path = "tests/test_cloud_service.py", symbol = "test_direct_publication_does_not_acknowledge_failed_cloud_hash_check" },
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_captured_sources_are_checked_before_intent_or_provider_io" },
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_remote_hash_mismatch_leaves_captured_intent_unpublished" },
 ]
 
 [[verifiers]]
 id = "CFO-VR-08"
 requirement_ids = ["CFO-REQ-08"]
 acceptance_conditions = ["Outer workflow completion queues cleanup and returns while publication and deletion may remain pending. Background cleanup alone evaluates all-target final proof, current policy, admitted consumers, reader exclusion and exact owned binding.", "Failed computation, unresolved target, new keep, active reader or replacement file prevents removal. Deferred cleanup cannot head-of-line block ready publication and uses committed proof without repeating remote transfer or verification."]
-success_case = { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_successful_workflow_offloads_after_all_consumers" }
+success_case = { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_worker_runs_cleanup_after_verified_publication" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_failed_workflow_keeps_sources" },
-  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_pending_target_blocks_cleanup" },
-  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_stale_cleanup_preserves_replacement_and_new_keep" },
-  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_cleanup_wait_does_not_block_runner_or_ready_publication" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_failed_whole_workflow_preserves_even_verified_outputs" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_every_target_needs_final_and_data_proof" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_new_keep_defeats_a_previously_queued_cleanup" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_a_replacement_with_identical_bytes_survives_stale_cleanup" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_an_overlapping_reader_outlives_the_first_workflow" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_ready_uploads_precede_deferred_cleanup" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_worker_retries_after_last_reader_without_registry_changes" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_worker_memoizes_mixed_keep_and_rechecks_changed_preference" },
 ]
 
 [[verifiers]]
 id = "CFO-VR-09"
 requirement_ids = ["CFO-REQ-09"]
 acceptance_conditions = ["Restart reuses inventory, preferences and existing proof to restore unchanged original references into the current store. Deferred publication failure is observable independently of successful science.", "Existing verified-cloud-return APIs and explicit complete-bundle keep preserve their completion promises. Pending publication never masquerades as verified cloud success or mutates terminal run-record bytes; cleanup neither restarts publication nor changes its receipt."]
-success_case = { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_restart_restores_evicted_artifact_with_unchanged_reference" }
+success_case = { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_import_restores_unchanged_references_once" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_unverified_cloud_reference_is_not_returned" },
-  { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_cleanup_does_not_restart_completed_upload" },
+  { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_cloud_publication_outside_workflow_waits_for_completion" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_cleanup_releases_original_and_cache_without_reopening_cloud" },
 ]
 
 [[verifiers]]
@@ -192,21 +197,23 @@ acceptance_conditions = [
   "Native and migrated JEP lifecycle callers use the same owners; ordinary duplicate cache and source-journal paths are retired with their successors.",
   "Legacy eviction cannot bypass a keep/read hold. Retained before/after source-and-test reports show both repositories separately and net reduction combined without deleting required checks or documentation.",
 ]
-success_case = { repository_id = "viper", path = "tests/test_storage_lifecycle.py", symbol = "test_storage_lifecycle_uses_single_resolver_and_retention_authority" }
+success_case = { repository_id = "viper", path = "tests/test_shared_storage.py", symbol = "test_run_fetcher_uses_shared_store_across_executions" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_storage_lifecycle.py", symbol = "test_legacy_eviction_cannot_bypass_retention" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_new_keep_defeats_a_previously_queued_cleanup" },
+  { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_an_overlapping_reader_outlives_the_first_workflow" },
+  { repository_id = "viper", path = "tests/test_retention.py", symbol = "test_rejects_changed_local_artifact_before_removing_any_file" },
 ]
 
 [[verifiers]]
 id = "CFO-VR-11"
 requirement_ids = ["CFO-REQ-07"]
 acceptance_conditions = ["Durable admission precedes return and fails immediately if not committed. With retention enabled or disabled, native plan/pointer/stage/attempt/terminal/benchmark paths queue publication and permit progress during later computation without foreground provider calls.", "Failed worker launch after committed admission and interrupted publication retain durable work and originals, including between worker attempts; restart resumes publication only with stable identity despite source relocation or policy changes. Open collection with no current uploads is not complete."]
-success_case = { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_durable_queue_uploads_while_computation_continues" }
+success_case = { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_snapshot_copies_complete_while_the_workflow_remains_open" }
 rejection_cases = [
-  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_failed_spawn_keeps_durable_request" },
-  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_interrupted_upload_retries_without_computation" },
-  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_admission_commit_failure_is_not_reported_as_queued" },
-  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_publication_failure_keeps_scientific_success_and_sources" },
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_worker_starter_detaches_and_keeps_launch_failure_recoverable" },
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_detached_worker_finishes_after_the_producer_process_exits" },
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_a_failed_snapshot_does_not_block_ready_uploads_and_can_be_retried" },
+  { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_failed_durable_admission_does_not_accept_or_pin_the_snapshot" },
 ]
 
 [[verifiers]]
@@ -284,9 +291,10 @@ acceptance_conditions = [
   "JEP callers use the native Viper queue, resolver and retention interfaces while preserving existing private-cloud and workload-identity configuration.",
   "JEP-owned duplicate publication and retention orchestration is removed only after the shared native lifecycle passes publication-only retry and interrupted-upload recovery; no second provenance system or GPU provisioning is introduced.",
 ]
-success_case = { repository_id = "jep", path = "tests/test_viper_storage_adapter.py", symbol = "test_jep_adapter_uses_native_viper_lifecycle" }
+success_case = { repository_id = "jep", path = "tests/test_viper_storage_adapter.py", symbol = "test_generation_ack_follows_verified_native_copies" }
 rejection_cases = [
-  { repository_id = "jep", path = "tests/test_viper_storage_adapter.py", symbol = "test_jep_adapter_failure_does_not_rerun_computation" },
+  { repository_id = "jep", path = "tests/test_viper_storage_adapter.py", symbol = "test_failed_copy_keeps_control_sources_without_ack" },
+  { repository_id = "jep", path = "tests/test_viper_storage_adapter.py", symbol = "test_attached_target_keeps_private_namespace_and_rejects_rebinding" },
 ]
 
 [[pair_blocks]]
@@ -317,7 +325,7 @@ acceptance_conditions = [
   "An admitted producer/evaluation/benchmark sequence retains needed originals across gaps between child calls and protects queued inputs before their consumers start. Benchmarks still compute independent confirmation.",
   "Child completion cannot close the outer owner, returned batch failures cannot authorize cleanup, and separate undeclared library calls are not claimed to have inferred future consumers.",
 ]
-success_case = { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_admitted_sequence_retains_payload_through_benchmark" }
+success_case = { repository_id = "viper", path = "tests/test_background_publication.py", symbol = "test_nested_scopes_retain_readers_until_the_outer_workflow_finishes" }
 rejection_cases = [
   { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_child_completion_does_not_close_parent_workflow" },
   { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_failed_batch_does_not_authorize_cleanup" },

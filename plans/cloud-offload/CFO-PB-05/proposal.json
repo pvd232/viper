@@ -7,7 +7,7 @@
   "depends_on": [
     "CFO-PB-04"
   ],
-  "status": "authored_not_applied_gates_not_run",
+  "status": "historical_preparation_mirrors_retired",
   "files": [
     {
       "target_path": "src/viper/execution/_promotion_journal.py",
@@ -81,5 +81,12 @@
       "target_path": "tests/conftest.py"
     }
   ],
-  "limitation": "Synchronous physical publication belongs inside the future independent worker. This packet is not durable admission, final root closure or cleanup authorization."
+  "limitation": "Synchronous physical publication belongs inside the future independent worker. This packet is not durable admission, final root closure or cleanup authorization.",
+  "current_executable_plan": false,
+  "retirement": {
+    "inventory": "evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json",
+    "tracked_history_boundary": "1b8ed60",
+    "source_of_truth": "Applied source/tests in the active Git worktree; later candidate commits are recorded by the integration owner.",
+    "historical_fields": "Original package, source-path and expected-before hashes below describe preparation history only."
+  }
 }

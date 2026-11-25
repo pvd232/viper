@@ -1,40 +1,32 @@
-# Guided Cloud Offload Queue
+# Cloud Offload Implementation Status
 
-The user applies the implementation tranches and runs application checks. The user authorized Codex to correct this hand-applied patch and its documentation. This revision keeps the prepared successor files synchronized. No application gate has run and no PairBlock is accepted or complete.
+The user applied the initial blocks by hand, then authorized autonomous completion. The active source tree is now the implementation authority. Historical prepared files and review reports describe their own revisions only.
 
-| Tranche | PairBlocks | Contents | Preparation |
-| --- | --- | --- | --- |
-| A: identity and store | [PB01](CFO-PB-01/README.md), [PB02](CFO-PB-02/README.md), [PB03](CFO-PB-03/README.md) | Identity; durable inventory; original-first local resolution, shared streamed cache and reader primitives | Complete proposed files and generated diffs. User has typed foundation portions; remaining source edits need reconciliation. |
-| B: policy and publication | [PB04](CFO-PB-04/README.md), [PB05](CFO-PB-05/README.md) | Overrides/subscribers/complete keep; exact-original synchronous worker primitive and recovery | PB04 source entered and reviewed; tests deferred. PB05 complete proposed source, not yet entered or validated. |
-| C: native lifecycle | [PB06](CFO-PB-06/README.md), [PB07](CFO-PB-07/README.md) | Explicit outer lifetime, all-native durable admission, honest status, genuine backing lookup and queued live cleanup | Targets and observing checks only; full implementation remains planned. |
-| D: consolidation | [PB08](CFO-PB-08/README.md), [PB09](CFO-PB-09/README.md) | Viper end-to-end/removal; JEP driver migration and measured reduction | Targets/checks only. No future baseline or gate fabricated. |
+| Blocks | Current work |
+| --- | --- |
+| PB01–PB03 | User-applied identity, registry, shared resolver and reader foundations at `7e7d981`. |
+| PB04–PB05 | User-applied retention and captured-original publication at `1345473`, with later repair work retained in the candidate. |
+| PB06 | Native workflow/session, durable upload admission, detached worker, portable recovery and child-reader integration are implemented; broad repair validation is underway. |
+| PB07 | Single-decision cleanup and its worker ordering, reader-retry and mixed-policy tests are active; final validation is pending. |
+| PB08 | End-to-end evidence and duplicate-owner retirement are underway. PB02–PB07 obsolete preparation mirrors have been retired separately from maintained runtime/test size. |
+| PB09 | JEP native adapter is implemented in the bound `jep-native-offload` worktree; retained bounded validation passes. Cross-repository reduction remains unmet. |
 
-## Current handoff
+Native integration is committed at `1b8ed60`, its recovery repair at `c869ea6`, and cleanup at `95a2420`. Final broad and integration validation remain pending.
 
-PB01-PB03 foundation code is entered; the user committed the resolver checkpoint as 7e7d981. PB04's tables, artifact registration, preference methods, shared-file policy query and public setter are now entered and source-reviewed. The user remains the editor and test executor. Existing observing tests and application checks remain deferred; no block acceptance is inferred. Next source edits are PB05's original-file publication and interrupted-upload recovery, using the existing journal and provider.
+## Current validation boundary
 
-The current update reconciles Generator annotations, the publish_reuse variable-shadow fix, and complete post-write snapshot registration. Fresh fetchers must consult active registry bindings and use local originals/cache before lazy provider creation. Managed HF payload restoration uses streaming to avoid another persistent payload copy. Native original-Path admission and reader-owner wiring still belong to PB06; resolver tests alone do not establish them.
+The final broad Viper gate and independent repair rechecks are pending. Ten initial independent reviews are reported complete by the integration owner, with repairs still underway. No formal PairBlock acceptance or completion receipt is asserted. [The observer-binding amendment](../../evidence/revisions/cloud-offload-observer-bindings-20261125/README.md) records actual definitions rather than creating test aliases.
 
-Whole-file successors are cumulative. Each proposal's expected-before hash describes its preceding packet, not the partially edited live worktree. Review the bounded diff against the actual current file before applying a successor. Complete action files are the code authority; README diffs and proposal hashes are regenerated from those exact bytes.
+The JEP retained CPU log reports 44 passing cases and 4 subtests at its own candidate; its Pyrefly logs report no errors. Those controlled-boundary checks establish adapter behavior and do not establish a live cloud deployment or the entire Viper contract.
 
-## Approved lifecycle
+## Acceptance still open
 
-The registered top-level driver owns all admitted data/training/evaluation/diagnostics/benchmark actions. Children borrow its lifetime; known queued inputs and produced/accessed payloads stay protected between child calls. Undeclared future Python calls are not predicted. Explicit artifact keep remains available for independent later work.
+CFO-REQ-10 requires maintained source/test reduction for Viper and JEP separately and combined. The frozen count snapshot records total maintained source/test growth in both repositories. The requirement and its acceptance conditions stay unchanged and OPEN. Removing obsolete planning mirrors cannot make this condition pass. [The retained count report](../../evidence/cloud-offload-implementation-20261125/review-10/README.md) records Viper runtime +4,692 and tests +5,194; JEP runtime -90 and tests +141; combined +9,937 maintained lines. Counts describe the frozen working trees, including migrated JEP edits still outside its baseline commit.
 
-Finish writes, establish immutable identity and durably register/admit work before returning acceptance. Native publication is queued independently of the retention setting. Transfer, remote verification, final receipts and cleanup run in an independently surviving worker. Local verified originals are preferred; a cold read and existing verified-cloud/complete-keep APIs still wait for their promised result. Source bytes and their host survive pending publication.
+Existing standalone cloud-return and explicit complete-keep APIs retain their waits. Within the native workflow, upload and cleanup remain queued independently of scientific results. Pending sources and local data must remain available until verified publication or verified durable handoff.
 
-Outer success closes collection and queues cleanup without waiting for cloud. Worker-side cleanup rechecks current policy, admitted consumers/readers, exact owned binding and all-target final proof. Keep/busy/pending defers cleanup without blocking ready uploads. Later cleanup reuses committed proof without reupload or full remote reverification.
+## Retained results before the final broad gate
 
-## Freeze and validate honestly
-
-Only PB01 has the existing baseline-bound PairBlockPlan; its package digest is refreshed while its contribution stays unchanged. Future commits do not exist yet. PB02–PB05 proposal.json files are complete authored action descriptions, not executable successor plans. Freeze each from its actual predecessor before running the gate.
-
-Metadata/schema and non-executing source syntax checks are distinct from implementation checks. The user-deferred Pyrefly, tests, semantic documentation/schema gate and Ruff have not run. No approval, implementation acceptance, completion receipt, commit or push is created by authoring these files.
-
-## Remaining ordinary connectors
-
-PB06 must cover authoring before execution, pointer enrollment, every native evidence publication, real outer-owner forwarding, durable source protection, separate publication status, current-root exact backing lookup and independent worker recovery. PB07 must use actual closed-root success and all-target proof for one deletion decision, including legacy/recursive cleanup. No queue, native automatic release or cold original-local-reference fallback is claimed from PB01–PB05.
-
-PB09 owns JEP source edits in its repository binding. Verify that checkout's real baseline and publication modules before freezing its adapter block. Maintain source/test reduction reports for both repositories and combined; retain meaningful checks and semantic documentation.
-
-[Hand-applied patch review](patch-review.md) records the source corrections and documentation updates. Application tests and gates remain deferred.
+- The prior PB06 focused gate recorded 752 passing tests, 11 passing subtests and 4 skips. Later repair source still requires its final gate.
+- [The real fresh-workspace producer test](../../evidence/cloud-offload-integration-20261125/fresh-producer-10333.txt) passed in 200.24 seconds. It deletes the original producer directory, verifies the original Git commit is absent locally, forbids remote Git access, imports verified publication evidence and restores unchanged artifact references. Its cloud provider is controlled in-memory.
+- [The retirement inventory](../../evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json) lists 102 obsolete planning files removed from 16 trees. Their 41,761 lines are excluded from maintained runtime/test reduction. PB01 and all historical before-images remain unchanged.

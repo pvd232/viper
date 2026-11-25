@@ -1,0 +1,20 @@
+ruff check setup.py src/viper tests
+All checks passed!
+ruff format --check setup.py src/viper tests
+170 files already formatted
+pyrefly check --python-interpreter-path "$(python -c 'import sys; print(sys.executable)')"
+ INFO Checking project configured at `/Users/machina/Developer/ChatGPT/viper-cloud-offload/pyproject.toml`
+ INFO 0 errors (18 suppressed, 169 warnings not shown, use `--min-severity=warn` to see them)
+python -m pytest tests -q -m "unit or contract"
+........................................................................ [  9%]
+..................................s.s.s.s............................... [ 19%]
+........................................................................ [ 28%]
+........................................................................ [ 38%]
+........................................................................ [ 47%]
+........................................................................ [ 57%]
+................................................................... [ 66%]
+...................................................................... [ 75%]
+........................................................................ [ 84%]
+........................................................................ [ 94%]
+...........................................                          [100%]
+752 passed, 4 skipped, 238 deselected, 11 subtests passed in 401.42s (0:06:41)

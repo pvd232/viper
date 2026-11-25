@@ -25,5 +25,13 @@
     "Compute the sorted artifact file list once",
     "Follow the user's cnx variable name"
   ],
-  "hashable_members_source": "ProtocolModel is frozen; SnapshotFileRef contains only path, size and SHA-256."
+  "hashable_members_source": "ProtocolModel is frozen; SnapshotFileRef contains only path, size and SHA-256.",
+  "status": "historical_preparation_mirrors_retired",
+  "current_executable_plan": false,
+  "retirement": {
+    "inventory": "evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json",
+    "tracked_history_boundary": "1b8ed60",
+    "source_of_truth": "Applied source/tests in the active Git worktree; later candidate commits are recorded by the integration owner.",
+    "historical_fields": "Original package, source-path and expected-before hashes below describe preparation history only."
+  }
 }

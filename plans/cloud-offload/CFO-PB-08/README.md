@@ -1,35 +1,27 @@
 # CFO-PB-08
 
-**Status:** planned; implementation code and executable PairBlockPlan not yet frozen.
+**Requirements:** CFO-REQ-03, CFO-REQ-06, CFO-REQ-09, CFO-REQ-10
 
 **Depends on:** PB07
 
-Context: The final mechanism must replace displaced Viper ownership and pass the ordinary lifecycle; foundation unit checks cannot close end-to-end behavior or code-reduction obligations.
+**Status:** Functional consolidation is under review; the required maintained-code reduction is OPEN and unmet.
 
-## Owned targets
+Viper uses one inventory validator, ordinary resolver, registry retention authority and final deletion decision. Ordinary fetchers share the store rather than owning another persistent payload cache. Explicit promotion and bounded transfer staging remain supported.
 
-- src/viper/_source.py
-- src/viper/_verified_cache.py
-- src/viper/storage.py
-- src/viper/retention.py
-- docs/reference/api.md
-- docs/reference/configuration.md
-- docs/how-to/retry-restore-compare.md
+Obsolete cumulative source, test and diff mirrors PB02–PB07 have been retired after their changes landed. Their removal is housekeeping, counted separately from runtime/test reduction. Current source and meaningful checks remain in Git. Preserve historical declaration/review evidence with its exact revision boundary.
 
-## Contribution
+Functional observations include tests/test_shared_storage.py and the native workflow/recovery/cleanup suites. They cannot establish the separate net-reduction condition. The final report must show maintained Viper and JEP source/tests separately and combined. Current combined growth fails CFO-REQ-10, whose claim and acceptance conditions are unchanged.
 
-Validate produce/publish/reuse/retain-or-offload/restart/restore with unchanged refs, complete listings and bundles, conflicting subscribers, overlapping readers, failed uploads, stale cleanup and synchronous API guarantees. Remove ordinary duplicate-cache ownership only after all callers move. Retain bounded transfer staging and explicit legacy migration. Record Viper before/after maintained source+test totals and provide acceptance for the JEP migration.
+Source changes and ordinary test logs are distinct from formal acceptance. No lifecycle receipt is created by this document.
 
-## Observing checks
+## Frozen maintained-code count
 
-- tests/test_storage_lifecycle.py
-- tests/test_offload_recovery.py
-- tests/test_offload_workflow.py
-- tests/test_public_api.py
+[Review 10's source-hashed report](../../../evidence/cloud-offload-implementation-20261125/review-10/README.md) uses immutable original baselines and the frozen working trees. It excludes planning copies, documentation, evidence and dependency manifests.
 
-Exact proposed test symbols are declared in contracts/cloud-offload.toml. They are not implemented or executed by this document.
+| Repository | Runtime before | Runtime after | Change | Tests before | Tests after | Change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Viper | 35,607 | 40,299 | +4,692 | 32,790 | 37,984 | +5,194 |
+| JEP | 36,917 | 36,827 | -90 | 11,130 | 11,271 | +141 |
+| Combined | 72,524 | 77,126 | +4,602 | 43,920 | 49,255 | +5,335 |
 
-## Gate and stop condition
-
-Freeze complete source actions from the actual dependency commit, run Pyrefly before focused CPU/mock tests, require semantic documentation/schema checks, and finish with non-mutating Ruff formatting and lint. Native process changes also require the relevant integration checks. Stop on failed validation or missing real proof; no guessed success boolean or placeholder receipt can authorize deletion.
-
+Combined maintained runtime and tests grew by 9,937 lines. CFO-REQ-10 remains OPEN and unaccepted. The 41,761 retired planning-mirror lines receive no credit against this requirement.

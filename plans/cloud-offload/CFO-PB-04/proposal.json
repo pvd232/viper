@@ -7,7 +7,7 @@
   "depends_on": [
     "CFO-PB-03"
   ],
-  "status": "guided_source_applied_tests_deferred",
+  "status": "historical_preparation_mirrors_retired",
   "files": [
     {
       "target_path": "src/viper/_storage_registry.py",
@@ -88,5 +88,12 @@
       "target_path": "tests/conftest.py"
     }
   ],
-  "limitation": "Preferences and complete-bundle keep do not implement queued deletion. Legacy eviction is connected to one live worker decision in PB07."
+  "limitation": "Preferences and complete-bundle keep do not implement queued deletion. Legacy eviction is connected to one live worker decision in PB07.",
+  "current_executable_plan": false,
+  "retirement": {
+    "inventory": "evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json",
+    "tracked_history_boundary": "1b8ed60",
+    "source_of_truth": "Applied source/tests in the active Git worktree; later candidate commits are recorded by the integration owner.",
+    "historical_fields": "Original package, source-path and expected-before hashes below describe preparation history only."
+  }
 }

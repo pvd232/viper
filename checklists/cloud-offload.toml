@@ -47,7 +47,7 @@ path = "/usr/bin/git"
 
 [[repository_bindings]]
 repository_id = "jep"
-checkout = "/Users/machina/Developer/ChatGPT/JEP"
+checkout = "/Users/machina/Developer/ChatGPT/jep-native-offload"
 
 [[repository_bindings.executables]]
 command = "python"

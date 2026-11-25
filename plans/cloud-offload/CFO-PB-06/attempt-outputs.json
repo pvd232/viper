@@ -1,7 +1,7 @@
 {
   "pair_block_id": "CFO-PB-06",
   "component": "attempt-owned stage output paths",
-  "status": "draft_component_not_full_native_implementation",
+  "status": "historical_preparation_mirrors_retired",
   "files": [
     {
       "operation": "replace",
@@ -63,5 +63,12 @@
   "gate_run": false,
   "active_source_edited": false,
   "preserved": "Check access against physical paths, then record all corresponding logical paths, including shared inputs and bundle descendants. Frozen bindings and receipt schema stay unchanged.",
-  "compatibility": "StageContext.outputs now supplies attempt-owned physical paths; declared references stay unchanged. Existing path-value assertions need updating in the deferred PB06 tests."
+  "compatibility": "StageContext.outputs now supplies attempt-owned physical paths; declared references stay unchanged. Existing path-value assertions need updating in the deferred PB06 tests.",
+  "current_executable_plan": false,
+  "retirement": {
+    "inventory": "evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json",
+    "tracked_history_boundary": "1b8ed60",
+    "source_of_truth": "Applied source/tests in the active Git worktree; later candidate commits are recorded by the integration owner.",
+    "historical_fields": "Original package, source-path and expected-before hashes below describe preparation history only."
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "status": "guided_foundations_partially_applied_gates_not_run",
+  "status": "historical_preparation_mirrors_retired",
   "package_sha256": "6b65a7e92709df7131b2ffb3b9861df368ae5cef77c63f5b73f321e8ab27f847",
   "baseline_commit": "f659faf7e7d0b721af736520c1b2b201d778c891",
   "blocks": [
@@ -124,7 +124,7 @@
       "depends_on": [
         "CFO-PB-01"
       ],
-      "status": "guided_foundations_partially_applied_gates_not_run",
+      "status": "historical_preparation_mirrors_retired",
       "files": [
         {
           "target_path": "src/viper/_storage_registry.py",
@@ -241,7 +241,7 @@
       "depends_on": [
         "CFO-PB-02"
       ],
-      "status": "guided_foundations_partially_applied_gates_not_run",
+      "status": "historical_preparation_mirrors_retired",
       "files": [
         {
           "target_path": "src/viper/storage.py",
@@ -425,7 +425,7 @@
       "depends_on": [
         "CFO-PB-03"
       ],
-      "status": "guided_source_applied_tests_deferred",
+      "status": "historical_preparation_mirrors_retired",
       "files": [
         {
           "target_path": "src/viper/_storage_registry.py",
@@ -517,7 +517,7 @@
       "depends_on": [
         "CFO-PB-04"
       ],
-      "status": "authored_not_applied_gates_not_run",
+      "status": "historical_preparation_mirrors_retired",
       "files": [
         {
           "target_path": "src/viper/execution/_promotion_journal.py",
@@ -599,5 +599,12 @@
     "PB02": "production registry/listing/registration typed; tests and gate deferred",
     "PB03": "verified-cache and lock primitives typed; shared resolver wiring next",
     "assistant_active_source_changes": false
+  },
+  "current_executable_plan": false,
+  "retirement": {
+    "inventory": "evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json",
+    "tracked_history_boundary": "1b8ed60",
+    "source_of_truth": "Applied source/tests in the active Git worktree; later candidate commits are recorded by the integration owner.",
+    "historical_fields": "Original package, source-path and expected-before hashes below describe preparation history only."
   }
 }

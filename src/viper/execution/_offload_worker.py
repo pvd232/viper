@@ -496,7 +496,6 @@ def main() -> None:
     """Run a detached worker for one workspace's existing queue."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
-    parser.add_argument("--store", default=".viper/store")
     arguments = parser.parse_args()
     drain(arguments.root.resolve(strict=True))
 
