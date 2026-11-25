@@ -11,4 +11,4 @@ Use the active source tree and [current work summary](QUEUE.md) for this impleme
 
 PB01–PB05 contain the guided history. [PB06](CFO-PB-06/README.md) owns native admission and workflow integration. [PB07](CFO-PB-07/README.md) owns worker cleanup. [PB08](CFO-PB-08/README.md) owns Viper consolidation and acceptance evidence. [PB09](CFO-PB-09/README.md) owns JEP caller migration.
 
-Implementation, executed checks, independent review and formal acceptance are separate claims. Current broad validation and repair rechecks are underway. CFO-REQ-10 remains open because maintained source/test net reduction has not been met.
+Implementation, executed checks, independent review and formal acceptance are separate claims. The final Viper fast gate passes at `df10a3e`; all 227 selected integration cases pass across bounded runs, including all 27 README cases. Hosted PR checks are still running. Drafts [Viper PR 24](https://github.com/pvd232/viper/pull/24) and [JEP PR 26](https://github.com/pvd232/JEP/pull/26) are open. CFO-REQ-10 remains open because maintained source/test net reduction has not been met.

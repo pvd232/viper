@@ -1,0 +1,53 @@
+{
+  "recorded_utc": "2026-11-25T15:20:45.607504+00:00",
+  "runtime_revision_as_recorded": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "state": "complete",
+  "counts": {
+    "selected": 227,
+    "passed": 227,
+    "failed": 0,
+    "pending": 0,
+    "other_outcomes": 0,
+    "native_selected": 71,
+    "native_passed": 71,
+    "other_selected": 156,
+    "other_passed": 156
+  },
+  "selection_matches_successful_nodes_exactly": true,
+  "readme_27_matches_authored_manifest": true,
+  "historical_transcribed_prefixes": 8,
+  "files": {
+    "evidence/cloud-offload-integration-20261125/coverage.json": {
+      "sha256": "8d9ad50dc31ebfb5919381afa45ead286240bbe863689054258a116f8344945b",
+      "bytes": 87337
+    },
+    "evidence/cloud-offload-integration-20261125/audit-inputs.json": {
+      "sha256": "aac2ef21acd10dc4bd8067f3bb4ee8910ce712fc9f1dd8c908593d8a0ecc745c",
+      "bytes": 10566
+    },
+    "evidence/cloud-offload-integration-20261125/selected-nodeids.json": {
+      "sha256": "e0599a75a2758e678860abb57dc0f0c7005853e1979cc5179c450e7c0a189af1",
+      "bytes": 21937
+    },
+    "evidence/cloud-offload-integration-20261125/readme-final15.log": {
+      "sha256": "e618f62434e8c1c85f9a523915cc388a6b7b816da33a18dfcf5a552e218a89e3",
+      "bytes": 4437
+    },
+    "evidence/cloud-offload-integration-20261125/readme-final15.xml": {
+      "sha256": "fc35858335e89b11c347c488915911bce0dd174ab6d32c8b3def527d3033ad0c",
+      "bytes": 2304
+    },
+    "evidence/cloud-offload-integration-20261125/readme-startup/successful-nodes.json": {
+      "sha256": "c7dd50acd96e7457a0b5034fdb5c14793cc8c183920dbdbff0616b42c3e22f10",
+      "bytes": 6944
+    },
+    "evidence/cloud-offload-integration-20261125/readme-startup/remaining-execution-command.json": {
+      "sha256": "381d0a19909637e126c5cae62fe8aa1d12c208f8843e997241792ce5f57f54ec",
+      "bytes": 2241
+    },
+    "evidence/cloud-offload-implementation-20261125/validation/make-check.log": {
+      "sha256": "6adc965fd1299a85e5a7ff39824cff230f3a7da63a344b3d01b35b20eda77e4d",
+      "bytes": 1496
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "pid": 95487,
+  "group": "native",
+  "passed": [
+    "tests/test_run_execution.py::test_run_many_retains_one_result_per_plan",
+    "tests/test_run_execution.py::test_cloud_native_run_returns_and_persists_one_terminal_reference",
+    "tests/test_run_execution.py::test_cloud_run_exposes_declared_output_paths_to_stage_context",
+    "tests/test_run_execution.py::test_cloud_run_exposes_destination_independent_input_paths",
+    "tests/test_run_execution.py::test_cloud_snapshot_uses_declared_paths_after_context_path_parity",
+    "tests/test_run_execution.py::test_cloud_recomputed_metric_reads_declared_artifact_path",
+    "tests/test_run_execution.py::test_cloud_native_retry_replaces_the_verified_terminal_reference",
+    "tests/test_run_execution.py::test_promotion_document_reader_uses_fetcher",
+    "tests/test_run_execution.py::test_explicit_cloud_promotion_preserves_local_run_mode[False]",
+    "tests/test_run_execution.py::test_explicit_cloud_promotion_preserves_local_run_mode[True]"
+  ],
+  "failed": [
+    "tests/test_run_execution.py::test_cloud_promotion_rebinds_reuse_key_for_stored_pointer"
+  ],
+  "expected": 10,
+  "summary": "Observed tool result: 10 passed, 1 failed in 1285.58s. Cross-workspace Git source failure was repaired and later passed in run 3161.",
+  "evidence_kind": "conversation_tool_result_transcription",
+  "raw_buffer_retained": false,
+  "derivation": "Passed node IDs use the exact deterministic pytest -x selected prefix and the observed pass count. The original completed terminal session buffer expired; this file is not raw stdout."
+}

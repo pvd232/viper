@@ -1,0 +1,378 @@
+pid=20909 wall=1795613688.5609128 context=None
+Timeout (0:00:05)!
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/_ops.py", line ??? in _has_script_object_arg
+  <invalid frame>
+Timeout (0:00:05)!
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/repository.py", line 62 in _require_git_work_tree
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/repository.py", line 85 in resolve_root
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/authoring.py", line 1738 in freeze_run_plan
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 81 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/repository.py", line 97 in read_source
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_graph.py", line 547 in enroll_plan_inputs
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 93 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/preflight.py", line 404 in preflight_plan
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 380 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/preflight.py", line 404 in preflight_plan
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 380 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/preflight.py", line 404 in preflight_plan
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 380 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/preflight.py", line 404 in preflight_plan
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 380 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/preflight.py", line 404 in preflight_plan
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 380 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/preflight.py", line 404 in preflight_plan
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 380 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 55 in run_git
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 265 in _local_git_file
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 277 in __call__
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 430 in resolve_git_file
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 497 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 55 in run_git
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 265 in _local_git_file
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 277 in __call__
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_source.py", line 430 in resolve_git_file
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 497 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 391 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_subprocess.py", line 143 in run
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/worker.py", line 78 in execute_worker
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_config/validation.py", line 180 in validate_stage_config
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 391 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 504 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 504 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 504 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 504 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main
+Timeout (0:00:05)!
+Thread 0x0000000172d2b000 [ThreadPoolExecutor-0_1] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 504 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x0000000171d1f000 [ThreadPoolExecutor-0_0] (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_stage.py", line 504 in execute_stage_process
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_attempt.py", line 624 in execute_attempt
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_run.py", line 24 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 119 in _worker
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1024 in run
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 369 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 670 in wait
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 300 in wait
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/_batch.py", line 119 in run_many
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/execution/__init__.py", line 360 in run_many
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 87 in main
+  File "/private/tmp/viper-readme-trace-mbqz0tof/workspace/examples/variants.py", line 98 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main

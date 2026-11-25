@@ -8,13 +8,13 @@ The [canonical package](cloud-offload.toml) owns the unchanged requirements and 
 
 ## Current status
 
-Native publication, resolution, recovery and cleanup are implemented in the active candidate. Final broad validation and independent repair rechecks are still in progress. No formal acceptance or completion receipt is asserted.
+Native publication, resolution, recovery and cleanup are implemented. The final fast gate passes at `df10a3e`: Ruff checks and formatting, Pyrefly with zero errors, and 805 tests plus 11 subtests, with 4 skips. All 227 selected integration cases pass across retained bounded runs, including all 27 README cases; [the coverage record](../evidence/cloud-offload-integration-20261125/coverage.json) maps each selected case to retained evidence. Hosted PR checks are still running; no CI success is claimed. No formal acceptance or completion receipt is asserted.
 
 The user applied PB01–PB05 foundations at checkpoints `7e7d981` and `1345473`, then authorized autonomous completion. Current implementation files in Git are authoritative. Obsolete PB02–PB07 source, test and diff mirrors have been retired; [their exact inventory](../evidence/revisions/cloud-offload-observer-bindings-20261125/retired-mirrors.json) preserves the boundary and raw hashes.
 
-**CFO-REQ-10 remains OPEN and unaccepted.** Maintained Viper source and tests have grown enough that the current combined Viper/JEP candidate does not meet the required net reduction. The claim is unchanged. Removing obsolete planning mirrors does not count as maintained source/test reduction. The [final count snapshot](../evidence/cloud-offload-implementation-20261125/review-10/README.md) records +4,602 runtime lines and +5,335 test lines combined, or +9,937 maintained lines.
+**CFO-REQ-10 remains OPEN and unaccepted.** Maintained Viper source and tests have grown enough that the current combined Viper/JEP candidate does not meet the required net reduction. The claim is unchanged. Removing obsolete planning mirrors does not count as maintained source/test reduction. The [source-hashed count report](../evidence/cloud-offload-implementation-20261125/review-10/README.md) records +4,986 runtime lines and +5,777 test lines combined, or +10,763 maintained lines, against the original baselines. It counts the frozen Viper source at `df10a3e`; the earlier +9,937 snapshot is historical.
 
-Native integration is committed at `1b8ed60`, its recovery repair at `c869ea6`, and cleanup at `95a2420`. Final broad and integration validation remain pending.
+Native integration is committed at `1b8ed60`, its recovery repair at `c869ea6`, cleanup at `95a2420`, consolidation at `59c381d`, Git source verification at `c83af457`, and its final inventory repair at `df10a3e`. JEP migration is committed at `e2285b8`; `d44073e` pins the final Viper commit. [Viper PR 24](https://github.com/pvd232/viper/pull/24) and [JEP PR 26](https://github.com/pvd232/JEP/pull/26) are drafts. The original baselines remain Viper `f659faf` and JEP `c2f9716`.
 
 ## Storage policy and identity
 
@@ -22,14 +22,20 @@ Native integration is committed at `1b8ed60`, its recovery repair at `c869ea6`, 
 
 Original reference fields, file hashes, snapshot membership and scientific run records stay unchanged. The local registry stores the complete inventory and current file locations separately from resident bytes. A reference's `workspace` is its saved original address. The resolver consults the current workspace registry before trying that address, so a registered copy can remain usable after relocation. Retiring a location means Viper stops using that record. It grants no permission to delete an external file.
 
+A cached file with the expected SHA-256 and size does not by itself prove that the file belongs to a named Git commit and path. The private `GitFileProof` keeps the original `ResolvedGitFileRef`, the raw commit object, and each directory object along that path. Viper checks their Git object hashes through to the file object, then checks the payload size and SHA-256. Both 40-character SHA-1 and 64-character SHA-256 Git object IDs are supported. A stale plan cannot authorize different cached code by changing only its declared payload hash.
+
+The proof is additional verification metadata. It does not change public reference fields, scientific records, complete snapshot membership, or the publication receipt format. Existing published snapshots continue to use their original inventories.
+
 ## Implementation owners
 
 | Owner | Responsibility |
 | --- | --- |
 | [`SnapshotInventory` and shared validators](../src/viper/_cloud.py) | Check the complete original file list and exact copied identities. |
-| [`StorageRegistry`](../src/viper/_storage_registry.py) | Store inventories, current locations, artifact preferences, shared subscribers and source obligations. |
+| [`StorageRegistry`](../src/viper/_storage_registry.py) | Store inventories, current locations, artifact preferences, shared subscribers and source obligations; index immutable, hash-checked cloud and Git proofs. |
 | [`LocalArtifactStore`](../src/viper/storage.py) | Find a verified original, reuse the shared content cache, or restore genuinely missing bytes. |
-| [`RunFetcher`](../src/viper/_source.py) | Reuse checks during one execution while sharing ordinary storage across executions. |
+| [`RunFetcher`](../src/viper/_source.py) | Reuse checks during one execution while sharing ordinary storage across executions; require Git commit/path membership for cached source code. |
+| [`GitFileProof`](../src/viper/_git_proof.py) | Verify the pinned Git commit, directories and file bytes, independently of the original repository. |
+| [`verify_resolved_file_bytes`](../src/viper/_verified_cache.py) | Check the declared byte count and SHA-256 through one shared byte validator. Domain validators retain their own record checks. |
 | [`PublicationSession`, `Operation` and `PublicationJob`](../src/viper/_offload.py) | Own the admitted workflow, persist upload admission, retain pending sources and record collection closure. |
 | [`PayloadLocks` and `WorkflowReaders`](../src/viper/_storage_locks.py) | Protect files before access and through managed consumer lifetimes. |
 | [`PublicationJournal`](../src/viper/execution/_promotion_journal.py) and providers | Upload original paths, verify cloud bytes and retain retry/proof records. |
@@ -51,11 +57,18 @@ The resolver uses a valid local original first. A cold filesystem-path request w
 
 Successful outer closure records the real scientific outcome, closes collection and requests cleanup. Cleanup may remove an owned local copy only after all required data and final receipts verify at every admitted target, current subscribers permit offload, no readers or pending source obligations remain, and the observed physical file still matches. Failed science or unresolved publication retains its sources. Keep, busy readers and incomplete proof defer cleanup. Later cleanup reuses completed proof without uploading again. Legacy and recursive managed deletion must use this same decision.
 
+## Source restoration
+
+Before closing the admitted workflow, Viper groups used Git source files with their proofs and queues them as ordinary auxiliary local snapshots through the existing publisher. Explicit run enrollment uses the same transport. The proof's logical member path is `.viper/git-proofs/<address>.json`; it is a member of that auxiliary snapshot, not a new reference kind or a second publication queue.
+
+Receipt import verifies the ordinary copy, checks each proof against its source bytes, and saves the Git-address proof in the same registry. Reimporting a known copy can restore its missing proof index without downloading payloads again. Later source access can restore missing bytes from verified cloud backing and recheck membership without the original Git repository. A cloud copy with matching bytes but no Git membership proof cannot establish a Git address. Corrupt bytes from an available original Git source fail rather than being hidden by a cloud fallback.
+
 ## Persisted records
 
 | Record | Writer and purpose |
 | --- | --- |
-| `.viper/store/registry.sqlite3` | Registry-owned inventories, current locations, preferences, subscribers and source protection. |
+| `.viper/store/registry.sqlite3` | Registry-owned inventories, current locations, preferences, subscribers and source protection. Existing `verified_files` rows also index hash-checked Git proofs with `git:` keys; these are excluded from cloud-file backing lookup. |
+| `.viper/store/proofs/git/<address>.json` | Immutable Git membership metadata indexed by the registry. A proof is not a cloud backing or retention preference. |
 | `.viper/publications/<id>/operation.json` | Workflow admission, closure, scientific outcome and final publication coverage. |
 | `.viper/publications/<id>/jobs/<snapshot-key>.json` | Durable per-snapshot upload status and retry state. Current location and retention authority remain in the registry. |
 | Per-target publication journal | Expected bytes, interrupted transfer recovery and verified destination copies. |
@@ -67,13 +80,15 @@ The repository-derived success case `test_snapshot_copies_complete_while_the_wor
 
 The rejection case `test_captured_sources_are_checked_before_intent_or_provider_io` changes bytes or removes/adds a declared member. It requires `RunPromotionError` matching `inventory`, an empty saved-copy map, no intent file and no provider upload, seal or download calls. `test_remote_hash_mismatch_leaves_captured_intent_unpublished` separately checks that corrupted remote bytes preserve an unpublished intent and the original local source.
 
+The source-recovery case `test_workflow_publishes_git_proof_and_restores_after_source_eviction` uses the normal workflow queue, waits through worker drains, evicts source payloads, deletes the original repository, imports a receipt into a fresh workspace, and reads the same Git reference while all Git access is forbidden. It also checks that repeated import needs no extra downloads. The controlled provider is in-memory. `test_git_proof_verifies_offline_after_json_roundtrip` additionally checks both supported Git object formats. Rejection cases cover changed commit or directory objects, another path, unrelated bytes with a matching declared SHA, a stale compiled plan, and missing Git membership proof.
+
 ## Verification and remaining acceptance
 
 The [canonical verifier bindings](cloud-offload.toml) name actual tests. The [static binding audit](../evidence/revisions/cloud-offload-observer-bindings-20261125/binding-audit.json) resolves each declared name against an active test definition. This audit parses TOML and Python definitions. It is not an application test gate or a production protocol-loader result.
 
 The current production `ContractPackage` parser is unavailable in this checkout/environment. No parser clone, install, guessed canonical package digest or formal lifecycle record is created. Raw file hashes and exact before-images are retained. Historical plan bindings remain historical until a real protocol operation replaces them.
 
-Use the project environment and Pyrefly for the application gate. Focused and broad command results, ten independent reviews and their repair rechecks must be retained against the final candidate. Requirement 10 cannot close until a real separate-and-combined maintained source/test report demonstrates the promised reduction while preserving guarantees and meaningful checks.
+The retained [final fast-gate log](../evidence/cloud-offload-implementation-20261125/validation/make-check.log) records Ruff success, 173 formatted files, zero Pyrefly errors, and 805 passing tests plus 11 subtests in 499.66 seconds, with 4 skips and 239 deselections. [The repaired fresh-workspace run](../evidence/cloud-offload-integration-20261125/git-fresh-producer.log) passes in 125.68 seconds. JEP `d44073e` has [47 passing CPU tests plus 4 subtests](../evidence/cloud-offload-implementation-20261125/validation/jep-tests.log) in 2.80 seconds and [zero Pyrefly errors](../evidence/cloud-offload-implementation-20261125/validation/jep-pyrefly.log). Ten independent initial reviews and subsequent source-repair rechecks are recorded separately; all 227 selected integration cases pass across retained bounded runs; hosted PR checks are still running. Requirement 10 cannot close until a real separate-and-combined maintained source/test report demonstrates the promised reduction while preserving guarantees and meaningful checks.
 
 | Requirement | Owning blocks | Current implementation owner |
 | --- | --- | --- |

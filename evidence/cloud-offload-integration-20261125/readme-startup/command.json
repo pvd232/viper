@@ -1,0 +1,20 @@
+{
+  "command": [
+    "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python",
+    "-m",
+    "examples.variants"
+  ],
+  "root": "/tmp/viper-readme-trace-mbqz0tof/workspace",
+  "started_utc": "2026-11-25T13:34:48.471707+00:00",
+  "limit_seconds": 60,
+  "source_change": "scratch sitecustomize only",
+  "pid": 20909,
+  "diagnostic_limit_reached": true,
+  "owned_pids": [
+    20909,
+    21174,
+    21175
+  ],
+  "returncode": -15,
+  "elapsed_seconds": 60.326886750000995
+}

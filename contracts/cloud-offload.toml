@@ -19,6 +19,10 @@ success_case = { repository_id = "viper", path = "tests/test_offload.py", symbol
 rejection_cases = [
   { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_rejects_changed_payload" },
   { repository_id = "viper", path = "tests/test_offload.py", symbol = "test_offload_binding_rejects_changed_snapshot_membership" },
+  { repository_id = "viper", path = "tests/test_git_proof.py", symbol = "test_git_proof_rejects_unrelated_bytes_even_with_matching_declared_sha" },
+  { repository_id = "viper", path = "tests/test_git_proof.py", symbol = "test_git_proof_rejects_changed_metadata" },
+  { repository_id = "viper", path = "tests/test_git_proof.py", symbol = "test_git_proof_rejects_another_path" },
+  { repository_id = "viper", path = "tests/test_offload_workflow.py", symbol = "test_plan_rejects_cached_source_from_a_different_git_file" },
 ]
 
 [[pair_blocks]]
@@ -184,10 +188,12 @@ rejection_cases = [
 id = "CFO-VR-09"
 requirement_ids = ["CFO-REQ-09"]
 acceptance_conditions = ["Restart reuses inventory, preferences and existing proof to restore unchanged original references into the current store. Deferred publication failure is observable independently of successful science.", "Existing verified-cloud-return APIs and explicit complete-bundle keep preserve their completion promises. Pending publication never masquerades as verified cloud success or mutates terminal run-record bytes; cleanup neither restarts publication nor changes its receipt."]
-success_case = { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_import_restores_unchanged_references_once" }
+success_case = { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_workflow_publishes_git_proof_and_restores_after_source_eviction" }
 rejection_cases = [
   { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_cloud_publication_outside_workflow_waits_for_completion" },
   { repository_id = "viper", path = "tests/test_offload_cleanup.py", symbol = "test_cleanup_releases_original_and_cache_without_reopening_cloud" },
+  { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_git_fallback_rejects_shared_bytes_without_membership_proof" },
+  { repository_id = "viper", path = "tests/test_offload_recovery.py", symbol = "test_available_git_is_checked_before_cloud_fallback" },
 ]
 
 [[verifiers]]

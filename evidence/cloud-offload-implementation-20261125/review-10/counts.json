@@ -1,48 +1,50 @@
 {
   "architecture": {
-    "deletion_owner": "retention cleanup predicate, with registry policy and shared PayloadLocks/WorkflowReaders.",
-    "location_and_policy_authority": "StorageRegistry keeps inventory, local bindings, preferences, verified-backing indexes and pending-source protection.",
+    "deletion_owner": "retention predicate, current registry policy and shared PayloadLocks/WorkflowReaders.",
+    "git_membership_owner": "_git_proof.py checks commit/tree/blob membership independently of generic content identity. It uses existing registry and snapshot transport, without another queue or PublicationReceipt field.",
+    "location_and_policy_authority": "StorageRegistry owns inventory, local bindings, preferences, proof indexes and pending-source protection.",
     "ordinary_resolution_owner": "LocalArtifactStore; RunFetcher delegates persistent payload resolution.",
-    "proof_authority": "Immutable SnapshotCopy and individual-file proof records certify different verification scopes. Registry indexes retain their hashes and addresses.",
-    "publication_intent_authority": "Operation and PublicationJob persist workflow closure and publication progress; they do not store live retention decisions.",
-    "retired_duplicate_owner": "JEP csts_pilot/background_storage.py independent upload queue removed; native Viper worker owns publication/retries.",
-    "scope_note": "No additional competing authority was found in this bounded architecture review. Other reviewer findings and functional release validation are separate."
+    "proof_authority": "Immutable snapshot, individual-file and Git-membership proofs cover distinct facts. Registry records are hash-checked indexes.",
+    "publication_intent_authority": "Operation and PublicationJob own publication intent and collection closure, not current retention decisions.",
+    "retired_duplicate_owner": "JEP csts_pilot/background_storage.py independent publication queue removed; Viper owns publication and retry.",
+    "scope_note": "No additional competing authority found in this bounded review. Functional reviews and release validation are separate."
   },
   "combined_original_baselines": {
     "runtime": {
-      "after": 77126,
+      "after": 77510,
       "before": 72524,
-      "delta": 4602
+      "delta": 4986
     },
     "tests": {
-      "after": 49255,
+      "after": 49697,
       "before": 43920,
-      "delta": 5335
+      "delta": 5777
     }
   },
   "completed_small_reductions": [
-    "Ignored offload-worker --store CLI input and forwarding removed.",
-    "PublicationSession.identifier synonym removed; operation_id remains."
+    "Ignored worker --store input/forwarding removed.",
+    "PublicationSession.identifier synonym removed."
   ],
   "core_sha256": {
     "src/viper/_cloud.py": "73152a59a7fc7fdff2765282be54095b1ed2ca0fc3c5f75bee0a77478afdaec6",
-    "src/viper/_graph.py": "f2c11ff735cdb0b497b522dd7162f2b64de221b90c353c8c4d5c2cc9fd1c8882",
-    "src/viper/_offload.py": "c2334ce2567401813f4ea530d5b68f6cdd8ceab476c24969088d67fdbc269e6a",
-    "src/viper/_source.py": "8ba3adbdc65dedb0c146a1fb014b187d5cf2412a0ce9b595ce99b6f14c588842",
+    "src/viper/_git_proof.py": "2cc44a122a7cb54b6486251548018e76733950ccd0c5284939c033b738fbdc0e",
+    "src/viper/_graph.py": "21807f201a0b05d186d07c2668397ae8045f9169fc51e03b55a349cbe76a6a19",
+    "src/viper/_offload.py": "3da4a699783fd608d13f6f22fa5732313beb8ac2f46f9bcc0e9502eac5eac420",
+    "src/viper/_source.py": "177f0bcc4f6a7fd6540e9d73b1749f7e616caea1376a3cbe2a07666f3de8cefa",
     "src/viper/_storage_locks.py": "eb21e2560a49d33ab603685da1fb80abbf104a3ce2916423fd542360cd5b4339",
-    "src/viper/_storage_registry.py": "67ebcde043a020f62ac7f80755ef76b4ed22e63c483e4b45f43d698423af730f",
+    "src/viper/_storage_registry.py": "e0876bc3006565fe0394dea1ecb1eeae61cc36fe992dbb6053afd3ffe7595412",
     "src/viper/cloud.py": "d20ce0d863aaf30f9f67333604b1ebd626378b0adedd4f5937be0c43869aa12e",
     "src/viper/execution/_offload_worker.py": "a304c64f1d0ef85551fedf816e4a33020ae3f97673bb8a387de36ff34baaa59d",
     "src/viper/execution/_publication.py": "47ac074c7f2a702191ce388ff4d73ca5581f90bd76cb8b3f03a9de512ad63c4f",
     "src/viper/retention.py": "b3a3ee97582ce36e46dea1903442742cd16941c053ab16eedc7461f01346e840",
     "src/viper/serialization.py": "fdc049a589549db09477895bc94b4ce15e6abb86fafc338d582184f669ae2756",
-    "src/viper/storage.py": "dd4873846087cad9c191ff44073b7b4f0d868f288a834a82106a78851f35dfef"
+    "src/viper/storage.py": "311bfee4571cdb211ccf4c4286b294362450ad969ac2a0d67c754978348694bd"
   },
-  "created_at_utc": "2026-11-25T13:11:21.839020+00:00",
+  "created_at_utc": "2026-11-25T14:53:26.509349+00:00",
   "evidence_kind": "bounded_complexity_review_and_line_count",
   "method": {
-    "baseline_files": "Immutable Git tree/blob contents at the exact recorded commits.",
-    "current_files": "Existing cached and nonignored untracked Python paths, excluding deleted paths. No planning files are included.",
+    "baseline_files": "Immutable Git tree/blob contents reread at the exact recorded commits.",
+    "current_files": "Existing cached and nonignored untracked Python paths; deleted paths excluded.",
     "excluded": [
       "Planning mirrors and patches",
       "Documentation and evidence",
@@ -51,26 +53,46 @@
     ],
     "jep_runtime": "Root-level *.py and csts_pilot/**/*.py, jep_pilot/**/*.py, scripts/**/*.py",
     "line_count": "len(raw_bytes.splitlines())",
-    "no_credit": "Retired planning mirrors are not counted as runtime or test reduction.",
-    "tests": "tests/**/*.py in each repository, including helper/conftest modules.",
+    "no_credit": "Retired planning mirrors receive no runtime or test reduction credit.",
+    "tests": "tests/**/*.py, including helper/conftest modules.",
     "viper_runtime": "src/viper/**/*.py"
   },
   "not_a_completion_receipt": true,
+  "previous_checkpoint_counts": {
+    "combined_original_baselines": {
+      "runtime": {
+        "after": 77126,
+        "before": 72524,
+        "delta": 4602
+      },
+      "tests": {
+        "after": 49255,
+        "before": 43920,
+        "delta": 5335
+      }
+    },
+    "created_at_utc": "2026-11-25T13:11:21.839020+00:00",
+    "note": "Retained only as the earlier count checkpoint; not the current totals.",
+    "source_and_tests_sha256": {
+      "jep": "a28b3dd4f544c476b3429342eec384c8c87ba4b7592f01fc77882679736520f0",
+      "viper": "7ca23d537ef0befb9c053042b9bcb08c4054f0b44c9562f7b83b38a3b5958b25"
+    }
+  },
   "reduction_requirement": {
     "id": "CFO-REQ-10",
-    "reason": "Maintained runtime and test Python line totals both grew across the two repositories.",
+    "reason": "Maintained runtime and test Python line totals both grew across the repositories.",
     "satisfied": false
   },
   "remaining_nonblocking_consolidation": [
     {
-      "constraint": "Do not introduce another state manager or change the persisted authority to force line reduction.",
-      "observation": "Session.close and worker._sources still implement related merge logic separately. A core-owned merge helper could reduce JSON round-trips and keep deduplication together.",
+      "constraint": "Do not introduce another manager or authority to force line reduction.",
+      "observation": "Session.close and worker._sources retain related merge logic; a small shared core helper could avoid full JSON round-trips and keep deduplication together.",
       "owner": "Operation used/location projection"
     },
     {
-      "constraint": "Do not reverify remote payload bytes on ordinary later cleanup or weaken legacy synchronous completion.",
-      "observation": "Portable import and journal destination checks have similar provider-specific metadata checks. A shared ViperCloud owner could reduce drift while retaining different full-byte versus committed-proof guarantees.",
-      "owner": "Remote snapshot inventory verification"
+      "constraint": "Preserve fresh full-byte verification versus reuse of committed proof, legacy synchronous guarantees, and no remote reverification during later cleanup.",
+      "observation": "Portable import and journal destination checks retain similar provider metadata checks.",
+      "owner": "Remote snapshot metadata verification"
     }
   ],
   "repositories": {
@@ -1349,7 +1371,8 @@
               "lines": 116,
               "sha256": "f640ee6b646bcb6d93fda958707275b4501db1f718824c2d2a63ce0ec5f2c135"
             }
-          }
+          },
+          "source_and_tests_sha256": "dd8004239beec3edeb655570261f715700093f5d3453a284b109e564050e2119"
         }
       },
       "current": {
@@ -1363,57 +1386,7 @@
             "lines": 11271
           }
         },
-        "dirty_counted_paths": [
-          "csts_pilot/annotation_format_publication.py",
-          "csts_pilot/annotation_format_run.py",
-          "csts_pilot/answer_input_run.py",
-          "csts_pilot/answer_projection_run.py",
-          "csts_pilot/background_storage.py",
-          "csts_pilot/baseline_collect.py",
-          "csts_pilot/baseline_run.py",
-          "csts_pilot/complete_proposition_training.py",
-          "csts_pilot/condition_reference_run.py",
-          "csts_pilot/continuation_run.py",
-          "csts_pilot/convergence_evaluate.py",
-          "csts_pilot/convergence_publication.py",
-          "csts_pilot/convergence_run.py",
-          "csts_pilot/evidence_attention_run.py",
-          "csts_pilot/evidence_run.py",
-          "csts_pilot/extend_proposition_pretraining.py",
-          "csts_pilot/finish_evaluation.py",
-          "csts_pilot/finish_study.py",
-          "csts_pilot/full_data_prompt_integrity.py",
-          "csts_pilot/full_data_prompt_uploads.py",
-          "csts_pilot/full_data_prompt_worker.py",
-          "csts_pilot/full_proposition_control.py",
-          "csts_pilot/joint_run.py",
-          "csts_pilot/llm_record.py",
-          "csts_pilot/matched_baselines_run.py",
-          "csts_pilot/progress.py",
-          "csts_pilot/proposition_archive.py",
-          "csts_pilot/proposition_evidence_report.py",
-          "csts_pilot/proposition_evidence_run.py",
-          "csts_pilot/proposition_run.py",
-          "csts_pilot/proposition_sample.py",
-          "csts_pilot/proposition_subset.py",
-          "csts_pilot/proposition_test.py",
-          "csts_pilot/queue_followup.py",
-          "csts_pilot/qwen_evidence_run.py",
-          "csts_pilot/ratings_only_order_replay.py",
-          "csts_pilot/recover_storage.py",
-          "csts_pilot/run.py",
-          "jep_pilot/viper_adapter.py",
-          "scripts/archive_proposition_indicative.py",
-          "scripts/full_data_prompt_20261107/collect_epochs.py",
-          "scripts/full_data_prompt_20261107/evaluate_selected.py",
-          "scripts/tranche8_native.py",
-          "scripts/tranche8_test_capture.py",
-          "tests/test_csts_background_storage.py",
-          "tests/test_csts_proposition_sample.py",
-          "tests/test_full_data_worker_persistence.py",
-          "tests/test_jep_viper_adapter.py",
-          "tests/test_spot_lifecycle.py"
-        ],
+        "dirty_counted_paths": [],
         "files": {
           "csts_pilot/__init__.py": {
             "bytes": 69,
@@ -2496,7 +2469,13 @@
             "sha256": "a758058aefa726a6e34116d75156157fffd1bf2658d96c983f5b24d67336ddb0"
           }
         },
-        "head": "c2f9716e398dd5442ca9d3579dfa788657a6cd00",
+        "head": "d44073e296a638944a83684e9635d9b7fffc104f",
+        "source_and_tests_sha256": "a28b3dd4f544c476b3429342eec384c8c87ba4b7592f01fc77882679736520f0",
+        "untracked_counted_paths": []
+      },
+      "declared_source_freeze": {
+        "commit": "e2285b8bfa03bae1c8076f731c541f6a2504f049",
+        "matches_current_counted_files": true,
         "source_and_tests_sha256": "a28b3dd4f544c476b3429342eec384c8c87ba4b7592f01fc77882679736520f0"
       },
       "line_deltas": {
@@ -3592,7 +3571,8 @@
               "lines": 68,
               "sha256": "1183c3dfad929788755bfd1156b15a7682dd05e8bc6d31e53ea51ffa83777b31"
             }
-          }
+          },
+          "source_and_tests_sha256": "9eeffe5c91afe0349583d6648cfaa302bf8dffd4156439b71a1d5aad4badba08"
         },
         "user_pb05": {
           "commit": "1345473f872b5137a2ba0ffb3095e12f271f4d04",
@@ -4699,26 +4679,22 @@
               "lines": 68,
               "sha256": "1183c3dfad929788755bfd1156b15a7682dd05e8bc6d31e53ea51ffa83777b31"
             }
-          }
+          },
+          "source_and_tests_sha256": "3a57ab9b3a3c10c73ed1b06c74af0c00b439461ef51ab8323d162d2a55c9adc8"
         }
       },
       "current": {
         "counts": {
           "runtime": {
-            "files": 92,
-            "lines": 40299
+            "files": 93,
+            "lines": 40683
           },
           "tests": {
-            "files": 77,
-            "lines": 37984
+            "files": 78,
+            "lines": 38426
           }
         },
-        "dirty_counted_paths": [
-          "src/viper/_offload.py",
-          "src/viper/execution/_offload_worker.py",
-          "src/viper/retention.py",
-          "tests/test_readme_workflow.py"
-        ],
+        "dirty_counted_paths": [],
         "files": {
           "src/viper/__init__.py": {
             "bytes": 21,
@@ -4744,11 +4720,17 @@
             "lines": 230,
             "sha256": "aade840b3d927a36ec344275e36c4b0eb8499e9cb2cdc10a1eafcb7971253024"
           },
-          "src/viper/_graph.py": {
-            "bytes": 23173,
+          "src/viper/_git_proof.py": {
+            "bytes": 5448,
             "category": "runtime",
-            "lines": 568,
-            "sha256": "f2c11ff735cdb0b497b522dd7162f2b64de221b90c353c8c4d5c2cc9fd1c8882"
+            "lines": 131,
+            "sha256": "2cc44a122a7cb54b6486251548018e76733950ccd0c5284939c033b738fbdc0e"
+          },
+          "src/viper/_graph.py": {
+            "bytes": 23633,
+            "category": "runtime",
+            "lines": 576,
+            "sha256": "21807f201a0b05d186d07c2668397ae8045f9169fc51e03b55a349cbe76a6a19"
           },
           "src/viper/_journal_encoder.py": {
             "bytes": 3931,
@@ -4757,10 +4739,10 @@
             "sha256": "5ca48545fda7e8c1ee60acc5f7ef39cd0e764fa1575d42d53715ab1c911c5a49"
           },
           "src/viper/_offload.py": {
-            "bytes": 28964,
+            "bytes": 29624,
             "category": "runtime",
-            "lines": 773,
-            "sha256": "c2334ce2567401813f4ea530d5b68f6cdd8ceab476c24969088d67fdbc269e6a"
+            "lines": 788,
+            "sha256": "3da4a699783fd608d13f6f22fa5732313beb8ac2f46f9bcc0e9502eac5eac420"
           },
           "src/viper/_schema.py": {
             "bytes": 2840,
@@ -4769,10 +4751,10 @@
             "sha256": "fc053659fe80a40d2547f93e77701bec5300b468722a12ddff3d601d385b78d8"
           },
           "src/viper/_source.py": {
-            "bytes": 17344,
+            "bytes": 19719,
             "category": "runtime",
-            "lines": 435,
-            "sha256": "8ba3adbdc65dedb0c146a1fb014b187d5cf2412a0ce9b595ce99b6f14c588842"
+            "lines": 486,
+            "sha256": "177f0bcc4f6a7fd6540e9d73b1749f7e616caea1376a3cbe2a07666f3de8cefa"
           },
           "src/viper/_source_closure.py": {
             "bytes": 2423,
@@ -4787,10 +4769,10 @@
             "sha256": "eb21e2560a49d33ab603685da1fb80abbf104a3ce2916423fd542360cd5b4339"
           },
           "src/viper/_storage_registry.py": {
-            "bytes": 33318,
+            "bytes": 36602,
             "category": "runtime",
-            "lines": 860,
-            "sha256": "67ebcde043a020f62ac7f80755ef76b4ed22e63c483e4b45f43d698423af730f"
+            "lines": 937,
+            "sha256": "e0876bc3006565fe0394dea1ecb1eeae61cc36fe992dbb6053afd3ffe7595412"
           },
           "src/viper/_subprocess.py": {
             "bytes": 7074,
@@ -4805,10 +4787,10 @@
             "sha256": "e99ef00f35ea0589b7e12666b7769a39e3340d13ec6de173d951fb6cecd63ec2"
           },
           "src/viper/_verification/attempt.py": {
-            "bytes": 43396,
+            "bytes": 44060,
             "category": "runtime",
-            "lines": 1136,
-            "sha256": "a2c78b8d82ebd16ea1ad2bdaaf15d1690be2e3543ff7770de070dce91c556019"
+            "lines": 1154,
+            "sha256": "057a0b73a07d1c7746585a11141a77b3024ef6ea31f99fc89b0cb2ed4f775d27"
           },
           "src/viper/_verification/metrics.py": {
             "bytes": 19025,
@@ -4823,10 +4805,10 @@
             "sha256": "eca979a9ef65d283133ee6764c51de76529fcd2cc6c822f6314f79822c0dc28d"
           },
           "src/viper/_verification/plan.py": {
-            "bytes": 32160,
+            "bytes": 32432,
             "category": "runtime",
-            "lines": 861,
-            "sha256": "cd3a7212940cb029bb77e1178322ab0b3dff0f47534b405011e898f48b93a146"
+            "lines": 854,
+            "sha256": "9ac70c801628df242c89cc421da3d3f8e2115faa324862c9b6a7b30c92ed6ce7"
           },
           "src/viper/_verification/runtime.py": {
             "bytes": 1916,
@@ -4835,16 +4817,16 @@
             "sha256": "0e6e533b7e099123b68b31e780f7b77451fa9fac8f81bad8ae2037f21f94608e"
           },
           "src/viper/_verification/storage.py": {
-            "bytes": 26536,
+            "bytes": 25949,
             "category": "runtime",
-            "lines": 749,
-            "sha256": "3d87420c6bb4ff0df2f3674b8a4f889af05a84adde138f8d30b0ad2d9fdf5c24"
+            "lines": 727,
+            "sha256": "8b1be2a299ea34addbec4603737bc690cd38442c25282ff5845dc41a41d7385a"
           },
           "src/viper/_verified_cache.py": {
-            "bytes": 4580,
+            "bytes": 4865,
             "category": "runtime",
-            "lines": 114,
-            "sha256": "df78f3ff33032cf1f4fd3eccfaf8285ae9fc966afc3be1fa6c3f3c3a27536f2e"
+            "lines": 126,
+            "sha256": "fa800e5b9ba6f55699603bae344c71cd2732c93738bd9c13ced99d5fad2cde6b"
           },
           "src/viper/_workers/__init__.py": {
             "bytes": 0,
@@ -4973,10 +4955,10 @@
             "sha256": "53a0ab260f20da110a10d7b40ef36ece4c2148ac652a8239f6c29782b47fa22b"
           },
           "src/viper/execution/_export.py": {
-            "bytes": 20511,
+            "bytes": 20505,
             "category": "runtime",
             "lines": 556,
-            "sha256": "34bb52d576c0f2c55842dea950b91d6d278a1f1b8ee0a713517153db4fac7741"
+            "sha256": "3ca11d2e3b62415ea278b397f2398087b10c335782efad94cc6aaf323559e4d4"
           },
           "src/viper/execution/_materialization.py": {
             "bytes": 22257,
@@ -5009,10 +4991,10 @@
             "sha256": "3b3547a12625ba678a8be2af5a192e5bd98870262ef17d2988d2595d8a7964fc"
           },
           "src/viper/execution/_promotion_compare.py": {
-            "bytes": 15018,
+            "bytes": 15354,
             "category": "runtime",
-            "lines": 332,
-            "sha256": "fc5fba6c17c5c1d3342fe685c43bd57e61313d685c05c6dbd8b27691032b5b82"
+            "lines": 344,
+            "sha256": "b8b1ae8c557d6df6d60d74b8ce247a9ab757d6264275b6c67341b69f8f807b7a"
           },
           "src/viper/execution/_promotion_journal.py": {
             "bytes": 12413,
@@ -5171,10 +5153,10 @@
             "sha256": "af5384b1d43f00d788ae5a11ae2073c120472494f15dedf193f3e669d41579a0"
           },
           "src/viper/preflight.py": {
-            "bytes": 22024,
+            "bytes": 22018,
             "category": "runtime",
             "lines": 632,
-            "sha256": "68ad635e723d2bc4259120fd78137f62ed5cd9dce8023b3d3d15d7cf83309088"
+            "sha256": "abf5ddb4ad21cc2c0895b65780b271067d3664fad9cc48fddd126e8a321a6d8c"
           },
           "src/viper/randomness.py": {
             "bytes": 6810,
@@ -5243,10 +5225,10 @@
             "sha256": "bcc73fccccf696c4dd8c453c935a44d573431dc8e9478b1c2fea198eaf1a3505"
           },
           "src/viper/storage.py": {
-            "bytes": 57144,
+            "bytes": 61084,
             "category": "runtime",
-            "lines": 1440,
-            "sha256": "dd4873846087cad9c191ff44073b7b4f0d868f288a834a82106a78851f35dfef"
+            "lines": 1529,
+            "sha256": "311bfee4571cdb211ccf4c4286b294362450ad969ac2a0d67c754978348694bd"
           },
           "src/viper/test_impact.py": {
             "bytes": 2757,
@@ -5285,10 +5267,10 @@
             "sha256": "6a1886be3e9b7ace592c2da871a534b795354bc42209a173ad4cab1036395fbd"
           },
           "tests/conftest.py": {
-            "bytes": 7791,
+            "bytes": 7865,
             "category": "tests",
-            "lines": 193,
-            "sha256": "2910a184f6314ccb64aa050697a57735dee9f1d6155706304ab55afc8798ff22"
+            "lines": 195,
+            "sha256": "578c522acf46346cf418b6850de89a1f29c0a8cb610011d0b0aefeab65e62e98"
           },
           "tests/fixtures.py": {
             "bytes": 15206,
@@ -5458,6 +5440,12 @@
             "lines": 724,
             "sha256": "05b9d46bea9cf0c809d0862065d7c2bb9679a4f9e9c1e20262c6a67b3f710093"
           },
+          "tests/test_git_proof.py": {
+            "bytes": 6006,
+            "category": "tests",
+            "lines": 152,
+            "sha256": "e7f7db3c43eec60511bbfdeecbfa23ba15bb8b0bca880207b2105e70eb7c778c"
+          },
           "tests/test_http_retrieval.py": {
             "bytes": 26513,
             "category": "tests",
@@ -5525,22 +5513,22 @@
             "sha256": "f20bc4b0f42f75f5166fff63e2145e81f80a84faea28151d12889526c054911d"
           },
           "tests/test_offload_cleanup.py": {
-            "bytes": 29055,
+            "bytes": 30169,
             "category": "tests",
-            "lines": 771,
-            "sha256": "c2cbd10e99c2efb5411b80c9d2fb008dfb264c7ce26a0c479374d121aa73d754"
+            "lines": 796,
+            "sha256": "b323f79ebca99f8ed9d6cdb3b96f64865ca7b493bbd3f0ede1ca6d8942a31eb8"
           },
           "tests/test_offload_recovery.py": {
-            "bytes": 30074,
+            "bytes": 35100,
             "category": "tests",
-            "lines": 742,
-            "sha256": "c5970c815b80cf9f08e1921df3cd6bcf0ada7b21cbcb433cf5c4480bcf4fa753"
+            "lines": 862,
+            "sha256": "1e89e2b984a56f2c97374fba8d6fa7a42a1cd2ffbdb5ab9d4a6fbd494d98ee93"
           },
           "tests/test_offload_workflow.py": {
-            "bytes": 20991,
+            "bytes": 23000,
             "category": "tests",
-            "lines": 550,
-            "sha256": "734510fd1637247b2fc58677a65f852453354e8ac60592ca59aa5295a6b44acc"
+            "lines": 601,
+            "sha256": "cab2187e15ab803846a75eae8bddd85287c451e2fb344bf3e5e313b7f8cb7910"
           },
           "tests/test_output_contract.py": {
             "bytes": 6420,
@@ -5603,10 +5591,10 @@
             "sha256": "81c5e921e553eb03fde9caf343c79449ed30e0898e3ed996b37af2af7de81bcb"
           },
           "tests/test_readme_workflow.py": {
-            "bytes": 31305,
+            "bytes": 31438,
             "category": "tests",
-            "lines": 771,
-            "sha256": "96490e21fe3e635dd000e8abc4d7005fb37d9a627bd32d5f57943001f656db59"
+            "lines": 773,
+            "sha256": "934a25ae066b283c697b674a7e5327b9d957127ad3c3dca3b36524375cdcb749"
           },
           "tests/test_release_tools.py": {
             "bytes": 3587,
@@ -5627,10 +5615,10 @@
             "sha256": "9a4063460cee9c4fb1fb2020047c2ab787f7862aad3728e14ee6e4ef67c1eadd"
           },
           "tests/test_run_execution.py": {
-            "bytes": 151295,
+            "bytes": 151556,
             "category": "tests",
-            "lines": 3978,
-            "sha256": "631f5d76240b394cf6e635049268c44fe7ed4906f6bc0b6094ed8b77e83dcb5c"
+            "lines": 3985,
+            "sha256": "b243acf3e1867046b2dfa7beefcac63c4fe1597ce7b21320ff4cc781f493304e"
           },
           "tests/test_runtime.py": {
             "bytes": 3809,
@@ -5663,10 +5651,10 @@
             "sha256": "343f5c8f2b6b54de88e4f91d5a138b6bbad1014c4e0b0b740cf1f34d07f908f1"
           },
           "tests/test_storage.py": {
-            "bytes": 61339,
+            "bytes": 64945,
             "category": "tests",
-            "lines": 1759,
-            "sha256": "9a50696e4dcddeffcf982787d33fc91f4c4bd8a84f614ba3d2b5a9ae1a623eeb"
+            "lines": 1844,
+            "sha256": "096bc557a451d543ecc5fd2ce16595122442e780a70606389026993e53181845"
           },
           "tests/test_storage_inventory.py": {
             "bytes": 2935,
@@ -5705,10 +5693,10 @@
             "sha256": "bd35b0122693ccad39a82e2290453cccb789c8bc9b1b45278148e5ff787e78d5"
           },
           "tests/test_verification.py": {
-            "bytes": 98101,
+            "bytes": 98068,
             "category": "tests",
-            "lines": 2776,
-            "sha256": "9ad088204c8aebf2b2be8949f52a7ec154e8bf233efcead62aa8d433664751fc"
+            "lines": 2774,
+            "sha256": "5a5da060403386b033116e502af8017cf16ee57570aadb061e6eb60cda11aeb0"
           },
           "tests/test_verification_acceptance.py": {
             "bytes": 155060,
@@ -5735,17 +5723,23 @@
             "sha256": "1183c3dfad929788755bfd1156b15a7682dd05e8bc6d31e53ea51ffa83777b31"
           }
         },
-        "head": "95a242035e4ae51ed6f900350821d13f1354275d",
-        "source_and_tests_sha256": "7ca23d537ef0befb9c053042b9bcb08c4054f0b44c9562f7b83b38a3b5958b25"
+        "head": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+        "source_and_tests_sha256": "cd1dfa03afafbd3ce6052e15757c0260f43ac45fc6ce917a2948d3913ce04291",
+        "untracked_counted_paths": []
+      },
+      "declared_source_freeze": {
+        "commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+        "matches_current_counted_files": true,
+        "source_and_tests_sha256": "cd1dfa03afafbd3ce6052e15757c0260f43ac45fc6ce917a2948d3913ce04291"
       },
       "line_deltas": {
         "original": {
-          "runtime": 4692,
-          "tests": 5194
+          "runtime": 5076,
+          "tests": 5636
         },
         "user_pb05": {
-          "runtime": 3514,
-          "tests": 5082
+          "runtime": 3898,
+          "tests": 5524
         }
       }
     }

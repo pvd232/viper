@@ -684,7 +684,7 @@ def test_policy_example_verifies_after_exit(policy_workspace: Path, mode: str) -
         assert records[0]["model_sha256"] == records[1]["model_sha256"]
     if mode == "custom":
         assert records[-1]["controls"]["torch_intraop_threads"] == 2
-    # Corrupt the stored artifact, rather than the mutable workspace copy.
+    # Corrupt the managed payload returned by the resolver.
     Path(records[-1]["model_path"]).write_bytes(b"changed model\n")
     rejected = subprocess.run(
         (

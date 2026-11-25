@@ -1,0 +1,382 @@
+[Reading last 379 lines (total: 379 lines)]
+
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0 -- /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/machina/Developer/ChatGPT/viper-cloud-offload
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 42 items
+
+tests/test_run_execution.py::test_cloud_promotion_rebinds_reuse_key_for_stored_pointer PASSED [  2%]
+tests/test_run_execution.py::test_explicit_cloud_promotion_rejects_missing_source_bytes PASSED [  4%]
+tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store[False] PASSED [  7%]
+tests/test_run_execution.py::test_cloud_promotion_stages_verified_neighboring_store[True] PASSED [  9%]
+tests/test_run_execution.py::test_download_source_failure_prevents_consumer_process_start PASSED [ 11%]
+tests/test_run_execution.py::test_run_error_exposes_partial_attempt_result PASSED [ 14%]
+tests/test_run_execution.py::test_preflight_failure_exposes_no_completed_stage PASSED [ 16%]
+tests/test_run_execution.py::test_attempt_preflight_reuses_execution_fetcher PASSED [ 19%]
+tests/test_run_execution.py::test_retry_reuses_completed_stage_from_failed_attempt PASSED [ 21%]
+tests/test_run_execution.py::test_retry_rejects_tampered_prior_attempt_evidence PASSED [ 23%]
+tests/test_run_execution.py::test_retry_setup_failure_releases_run_lock PASSED [ 26%]
+tests/test_run_execution.py::test_retry_reuses_completed_stage_across_repeated_failures PASSED [ 28%]
+tests/test_run_execution.py::test_retry_finds_completed_stage_before_empty_failed_retry PASSED [ 30%]
+tests/test_run_execution.py::test_verified_reuse_skips_stage_process[automatic] PASSED [ 33%]
+tests/test_run_execution.py::test_verified_reuse_skips_stage_process[manual] PASSED [ 35%]
+tests/test_run_execution.py::test_verified_reuse_skips_stage_process[never] PASSED [ 38%]
+tests/test_run_execution.py::test_verified_reuse_skips_stage_process[seed_mismatch] PASSED [ 40%]
+tests/test_run_execution.py::test_verified_reuse_skips_stage_process[index_failure] PASSED [ 42%]
+tests/test_run_execution.py::test_verified_reuse_skips_stage_process[index_interrupt] PASSED [ 45%]
+tests/test_run_execution.py::test_promotion_discovers_mixed_cloud_ancestors PASSED [ 47%]
+tests/test_run_execution.py::test_promotion_rejects_missing_legacy_settings PASSED [ 50%]
+tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references FAILED [ 52%]
+
+=================================== FAILURES ===================================
+________ test_republication_preserves_files_and_follows_new_references _________
+
+response = <Response [404 Not Found]>, endpoint_name = None
+
+    def hf_raise_for_status(response: httpx.Response, endpoint_name: str | None = None) -> None:
+        """
+        Internal version of `response.raise_for_status()` that will refine a potential HTTPError.
+        Raised exception will be an instance of [`~errors.HfHubHTTPError`].
+    
+        This helper is meant to be the unique method to raise_for_status when making a call to the Hugging Face Hub.
+    
+        Args:
+            response (`Response`):
+                Response from the server.
+            endpoint_name (`str`, *optional*):
+                Name of the endpoint that has been called. If provided, the error message will be more complete.
+    
+        > [!WARNING]
+        > Raises when the request has failed:
+        >
+        >     - [`~utils.RepositoryNotFoundError`]
+        >         If the repository to download from cannot be found. This may be because it
+        >         doesn't exist, because `repo_type` is not set correctly, or because the repo
+        >         is `private` and you do not have access.
+        >     - [`~utils.GatedRepoError`]
+        >         If the repository exists but is gated and the user is not on the authorized
+        >         list.
+        >     - [`~utils.RevisionNotFoundError`]
+        >         If the repository exists but the revision couldn't be found.
+        >     - [`~utils.EntryNotFoundError`]
+        >         If the repository exists but the entry (e.g. the requested file) couldn't be
+        >         find.
+        >     - [`~utils.BadRequestError`]
+        >         If request failed with a HTTP 400 BadRequest error.
+        >     - [`~utils.HfHubHTTPError`]
+        >         If request failed for a reason not listed above.
+        """
+        try:
+            _warn_on_warning_headers(response)
+        except Exception:
+            # Never raise on warning parsing
+            logger.debug("Failed to parse warning headers", exc_info=True)
+    
+        try:
+>           response.raise_for_status()
+
+.venv/lib/python3.14/site-packages/huggingface_hub/utils/_http.py:836: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Response [404 Not Found]>
+
+    def raise_for_status(self) -> Response:
+        """
+        Raise the `HTTPStatusError` if one occurred.
+        """
+        request = self._request
+        if request is None:
+            raise RuntimeError(
+                "Cannot call `raise_for_status` as the request "
+                "instance has not been set on this response."
+            )
+    
+        if self.is_success:
+            return self
+    
+        if self.has_redirect_location:
+            message = (
+                "{error_type} '{0.status_code} {0.reason_phrase}' for url '{0.url}'\n"
+                "Redirect location: '{0.headers[location]}'\n"
+                "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/{0.status_code}"
+            )
+        else:
+            message = (
+                "{error_type} '{0.status_code} {0.reason_phrase}' for url '{0.url}'\n"
+                "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/{0.status_code}"
+            )
+    
+        status_class = self.status_code // 100
+        error_types = {
+            1: "Informational response",
+            3: "Redirect response",
+            4: "Client error",
+            5: "Server error",
+        }
+        error_type = error_types.get(status_class, "Invalid status code")
+        message = message.format(self, error_type=error_type)
+>       raise HTTPStatusError(message, request=request, response=self)
+E       httpx.HTTPStatusError: Client error '404 Not Found' for url 'https://huggingface.co/datasets/owner/additional/resolve/65d1096da49c9d38120918ef7ef9f796e41bf2be/experiments/retry/runs/baseline/01M89DAE2RWM9WDXNHGZ5NJB0C/attempts/1/resolved.yaml'
+E       For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
+
+.venv/lib/python3.14/site-packages/httpx/_models.py:829: HTTPStatusError
+
+The above exception was the direct cause of the following exception:
+
+promotion_graph = namespace(root=PosixPath('/private/var/folders/9l/fkn8y6_51_q96tgtwj39ps880000gn/T/pytest-of-machina/pytest-72/promoti...eee', path='experiments/retry/runs/baseline/01M89DAE2RWM9WDXNHGZ5NJB0C/attempts/2/resolved.yaml', repo_type='dataset'))
+tmp_path = PosixPath('/private/var/folders/9l/fkn8y6_51_q96tgtwj39ps880000gn/T/pytest-of-machina/pytest-72/test_republication_preserves_f0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x11274d320>
+
+        fetcher.read.assert_not_called()
+        cloud.publish.assert_not_called()
+    
+    
+    def test_republication_preserves_files_and_follows_new_references(
+        promotion_graph: SimpleNamespace,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify an HF publication after blocking the original cloud clients."""
+        case = promotion_graph
+        api = MemoryHub(tmp_path / "hub-cache")
+        provider = HuggingFaceProvider(
+            tmp_path, "owner/additional", "dataset", api=cast(Any, api)
+        )
+        monkeypatch.setattr(provider, "_download", api.download)
+        target = ViperCloud(
+            tmp_path,
+            HuggingFaceRepository(repository="owner/additional", repo_type="dataset"),
+            provider=provider,
+        )
+    
+        def choose_cloud(root, reference):
+            """Read from the repository named by each reference."""
+            if reference.kind == "huggingface":
+                return target if reference.repository == "owner/additional" else case.hf
+            return case.cloud
+    
+        monkeypatch.setattr(ViperCloud, "for_reference", choose_cloud)
+        monkeypatch.setattr(ViperCloud, "for_snapshot", choose_cloud)
+        promoter = RunGraphPromoter(
+            tmp_path,
+            target,
+            ViperCloudDestination(owner="machina", workspace="models"),
+            fetcher=RunFetcher(tmp_path, LocalArtifactStore(tmp_path), REPOSITORY),
+        )
+        inventory = PromotionInventory(roots=(case.selected,), required_files={})
+        promoter.discover_inventory(inventory)
+        before = case.cloud.provider.uploads.copy()
+        published = promoter.promote_reference(case.selected)
+        assert isinstance(published.stored_at, HuggingFaceFileRef)
+        for snapshot, locations in promoter.source_members.items():
+            copied = promoter.snapshots[snapshot]
+            for location in locations:
+                if location.path in promoter.documents.get(snapshot, {}):
+                    continue
+                raw = target.fetch(target.file_ref(copied, location.path))
+                size, digest = promoter.source_files[location]
+                assert len(raw) == size
+                assert hashlib.sha256(raw).hexdigest() == digest
+    
+        def destination_only(root, reference):
+            """Fail any attempted read from an original cloud repository."""
+            assert reference.kind == "huggingface"
+            assert reference.repository == "owner/additional"
+            reader_provider = HuggingFaceProvider(
+                root, "owner/additional", "dataset", api=cast(Any, api)
+            )
+            monkeypatch.setattr(reader_provider, "_download", api.download)
+            return ViperCloud(root, target.repository, provider=reader_provider)
+    
+        monkeypatch.setattr(ViperCloud, "for_reference", destination_only)
+>       monkeypatch.setattr(ViperCloud, "for_snapshot", destination_only)
+
+tests/test_run_execution.py:3247: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/viper/verification.py:1123: in verify_run_result
+    return _verify_run_result(
+src/viper/verification.py:2086: in _verify_run_result
+    attempts = verify_run_attempt_references(
+src/viper/_verification/storage.py:388: in verify_run_attempt_references
+    read_attempt_reference(reference, run, fetcher=fetcher)
+           ^^^^^
+src/viper/_verification/storage.py:389: in <genexpr>
+    for reference in resolved_run.attempts
+src/viper/_verification/storage.py:365: in read_attempt_reference
+    )
+      
+src/viper/_verification/storage.py:342: in read_resolved_file
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+               ^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/_source.py:333: in read
+    )
+      
+src/viper/storage.py:591: in read_resolved
+    """Read and check the file, returning its bytes and local path."""
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/storage.py:827: in _resolve
+    assert restore_error is not None
+    ^^^^^^^^^^^^^^^^^^^
+src/viper/storage.py:811: in _resolve
+    )
+      
+src/viper/storage.py:626: in _download
+    cloud.provider.stream_files = True
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/viper/cloud.py:324: in fetch_to_path
+    return service.provider.fetch_to_path(
+src/viper/huggingface.py:270: in fetch_to_path
+    hf_raise_for_status(response)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+response = <Response [404 Not Found]>, endpoint_name = None
+
+    def hf_raise_for_status(response: httpx.Response, endpoint_name: str | None = None) -> None:
+        """
+        Internal version of `response.raise_for_status()` that will refine a potential HTTPError.
+        Raised exception will be an instance of [`~errors.HfHubHTTPError`].
+    
+        This helper is meant to be the unique method to raise_for_status when making a call to the Hugging Face Hub.
+    
+        Args:
+            response (`Response`):
+                Response from the server.
+            endpoint_name (`str`, *optional*):
+                Name of the endpoint that has been called. If provided, the error message will be more complete.
+    
+        > [!WARNING]
+        > Raises when the request has failed:
+        >
+        >     - [`~utils.RepositoryNotFoundError`]
+        >         If the repository to download from cannot be found. This may be because it
+        >         doesn't exist, because `repo_type` is not set correctly, or because the repo
+        >         is `private` and you do not have access.
+        >     - [`~utils.GatedRepoError`]
+        >         If the repository exists but is gated and the user is not on the authorized
+        >         list.
+        >     - [`~utils.RevisionNotFoundError`]
+        >         If the repository exists but the revision couldn't be found.
+        >     - [`~utils.EntryNotFoundError`]
+        >         If the repository exists but the entry (e.g. the requested file) couldn't be
+        >         find.
+        >     - [`~utils.BadRequestError`]
+        >         If request failed with a HTTP 400 BadRequest error.
+        >     - [`~utils.HfHubHTTPError`]
+        >         If request failed for a reason not listed above.
+        """
+        try:
+            _warn_on_warning_headers(response)
+        except Exception:
+            # Never raise on warning parsing
+            logger.debug("Failed to parse warning headers", exc_info=True)
+    
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if response.status_code // 100 == 3:
+                return  # Do not raise on redirects to stay consistent with `requests`
+    
+            error_code = response.headers.get("X-Error-Code")
+            error_message = response.headers.get("X-Error-Message")
+    
+            # Parse repo info from request URL (used to enrich errors below)
+            request_url = (
+                str(response.request.url) if response.request is not None and response.request.url is not None else None
+            )
+            repo_type, repo_id = _parse_repo_info_from_url(request_url) if request_url else (None, None)
+    
+            if error_code == "RevisionNotFound":
+                message = f"{response.status_code} Client Error." + "\n\n" + f"Revision Not Found for url: {response.url}."
+                raise _format(RevisionNotFoundError, message, response, repo_type=repo_type, repo_id=repo_id) from e
+    
+            elif error_code == "EntryNotFound":
+                message = f"{response.status_code} Client Error." + "\n\n" + f"Entry Not Found for url: {response.url}."
+                raise _format(RemoteEntryNotFoundError, message, response, repo_type=repo_type, repo_id=repo_id) from e
+    
+            elif error_code == "GatedRepo":
+                message = (
+                    f"{response.status_code} Client Error." + "\n\n" + f"Cannot access gated repo for url {response.url}."
+                )
+                raise _format(GatedRepoError, message, response, repo_type=repo_type, repo_id=repo_id) from e
+    
+            elif error_message == "Access to this resource is disabled.":
+                message = (
+                    f"{response.status_code} Client Error."
+                    + "\n\n"
+                    + f"Cannot access repository for url {response.url}."
+                    + "\n"
+                    + "Access to this resource is disabled."
+                )
+                raise _format(DisabledRepoError, message, response) from e
+    
+            elif (
+                error_code == "RepoNotFound"
+                and request_url is not None
+                and BUCKET_API_REGEX.search(request_url) is not None
+            ):
+                message = (
+                    f"{response.status_code} Client Error."
+                    + "\n\n"
+                    + f"Bucket Not Found for url: {response.url}."
+                    + "\nPlease make sure you specified the correct bucket id (namespace/name)."
+                    + "\nIf the bucket is private, make sure you are authenticated and your token has the required permissions."
+                )
+                raise _format(
+                    BucketNotFoundError, message, response, bucket_id=_parse_bucket_id_from_url(request_url)
+                ) from e
+    
+            elif (
+                response.status_code == 404
+                and request_url is not None
+                and (job_id := _parse_job_id_from_url(request_url)) is not None
+            ):
+                message = (
+                    f"{response.status_code} Client Error."
+                    + "\n\n"
+                    + f"Job Not Found for url: {response.url}."
+                    + "\nPlease make sure you specified the correct job ID and namespace."
+                )
+                raise _format(JobNotFoundError, message, response, job_id=job_id) from e
+    
+            elif error_code == "RepoNotFound" or (
+                response.status_code == 401
+                and error_message != "Invalid credentials in Authorization header"
+                and request_url is not None
+                and REPO_API_REGEX.search(request_url) is not None
+            ):
+                # 401 is misleading as it is returned for:
+                #    - private and gated repos if user is not authenticated
+                #    - missing repos
+                # => for now, we process them as `RepoNotFound` anyway.
+                # See https://gist.github.com/Wauplin/46c27ad266b15998ce56a6603796f0b9
+                message = (
+                    f"{response.status_code} Client Error."
+                    + "\n\n"
+                    + f"Repository Not Found for url: {response.url}."
+                    + "\nPlease make sure you specified the correct `repo_id` and"
+                    " `repo_type`.\nIf you are trying to access a private or gated repo,"
+                    " make sure you are authenticated and your token has the required permissions."
+                    + "\nFor more details, see https://huggingface.co/docs/huggingface_hub/authentication"
+                )
+>               raise _format(RepositoryNotFoundError, message, response, repo_type=repo_type, repo_id=repo_id) from e
+E               huggingface_hub.errors.RepositoryNotFoundError: 404 Client Error. (Request ID: Root=1-6b06defb-32408c19509759bc6ce55d4e;b85504fb-7ce5-47d4-9abc-cb5ab9dd29d6)
+E               
+E               Repository Not Found for url: https://huggingface.co/datasets/owner/additional/resolve/65d1096da49c9d38120918ef7ef9f796e41bf2be/experiments/retry/runs/baseline/01M89DAE2RWM9WDXNHGZ5NJB0C/attempts/1/resolved.yaml.
+E               Please make sure you specified the correct `repo_id` and `repo_type`.
+E               If you are trying to access a private or gated repo, make sure you are authenticated and your token has the required permissions.
+E               For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+
+.venv/lib/python3.14/site-packages/huggingface_hub/utils/_http.py:923: RepositoryNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references - huggingface_hub.errors.RepositoryNotFoundError: 404 Client Error. (Request ID: Root=1-6b06defb-32408c19509759bc6ce55d4e;b85504fb-7ce5-47d4-9abc-cb5ab9dd29d6)
+
+Repository Not Found for url: https://huggingface.co/datasets/owner/additional/resolve/65d1096da49c9d38120918ef7ef9f796e41bf2be/experiments/retry/runs/baseline/01M89DAE2RWM9WDXNHGZ5NJB0C/attempts/1/resolved.yaml.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated and your token has the required permissions.
+For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+================== 1 failed, 21 passed in 2228.59s (0:37:08) ===================
+✅ Process completed with exit code 1 (runtime: 2238.68s)

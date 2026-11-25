@@ -1,0 +1,72 @@
+{
+  "kind": "exact-document-before-image",
+  "formal_protocol_receipt": false,
+  "runtime_commit": "df10a3e2258a28d7eb276d5a35a5621c0384a694",
+  "files": [
+    {
+      "path": "contracts/cloud-offload.toml",
+      "sha256": "6f1801f6989795404e4ff1d53e84a44e80aabd442a113e31a434a9d0e1adc0d9",
+      "bytes": 29033
+    },
+    {
+      "path": "contracts/cloud-offload.md",
+      "sha256": "89fd057dd1e6e0936ecdf31ce589d50d3d7640eb29b93c29a10e5624404c26a5",
+      "bytes": 10716
+    },
+    {
+      "path": "checklists/cloud-offload.md",
+      "sha256": "e554d7ef0c839623e6181500fa594729a05eab2b7cecf198896ac151ca4d7c4d",
+      "bytes": 2238
+    },
+    {
+      "path": "plans/cloud-offload/README.md",
+      "sha256": "f30ca388250dcad4c0ca000df1b0be9cf353865d629d97137bcd0ca67fbc22b1",
+      "bytes": 1363
+    },
+    {
+      "path": "plans/cloud-offload/QUEUE.md",
+      "sha256": "2802b428d5135f5a95e9791f64f69bdeab8d330d336cac2382ad971c815a0f55",
+      "bytes": 3940
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-06/README.md",
+      "sha256": "ca6ce7ae843ef4021a233a0d388ca483bbacfd1971a97e05f2879c6753bda2f3",
+      "bytes": 1562
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-07/README.md",
+      "sha256": "4e870ed67911ff482e81b80c3b082eb71cf58737fe53a08ef118e6a621bbb7dc",
+      "bytes": 1539
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-08/README.md",
+      "sha256": "f12ee898a5682e135bd1ba9f34dff3682fbe416aea1a4aa8d42f6e9b91d00046",
+      "bytes": 2092
+    },
+    {
+      "path": "plans/cloud-offload/CFO-PB-09/README.md",
+      "sha256": "7a2fe0a943b787ef59342c96a477590c0b34aa502bcdbc064308ab10ded356aa",
+      "bytes": 1995
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/README.md",
+      "sha256": "51f2a6c715cb766ee6ac509b4bc98eff03829a598cbde472132b1035b7f97efd",
+      "bytes": 2712
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/binding-amendment.json",
+      "sha256": "0fce6a00766aaa97e34e89ec0301ba8e1d0491d32932eb5f6404d768451929cf",
+      "bytes": 15561
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/binding-audit.json",
+      "sha256": "2a1d8164f9dae3d45010a261399e1c9f14f66c6a3f9448a9294f8f309f28a463",
+      "bytes": 33953
+    },
+    {
+      "path": "evidence/revisions/cloud-offload-observer-bindings-20261125/progress.json",
+      "sha256": "086c6ef135af8a4bd92e743102ec6aef4e0279766c0a43310cee78be37962fe0",
+      "bytes": 6243
+    }
+  ]
+}

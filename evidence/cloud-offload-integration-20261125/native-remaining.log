@@ -1,0 +1,45 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0 -- /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/machina/Developer/ChatGPT/viper-cloud-offload
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 21 items
+
+tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references PASSED [  4%]
+tests/test_run_execution.py::test_republication_obeys_resource_limits[False] PASSED [  9%]
+tests/test_run_execution.py::test_republication_obeys_resource_limits[True] PASSED [ 14%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[valid] PASSED [ 19%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[metadata] PASSED [ 23%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[ancestor] PASSED [ 28%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[missing] PASSED [ 33%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy] PASSED [ 38%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-changed-default] PASSED [ 42%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-missing-default] PASSED [ 47%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-extra] PASSED [ 52%]
+tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-config] PASSED [ 57%]
+tests/test_run_execution.py::test_republication_reads_manifest_once[none] FAILED [ 61%]
+
+=================================== FAILURES ===================================
+_________________ test_republication_reads_manifest_once[none] _________________
+tests/test_run_execution.py:3634: in test_republication_reads_manifest_once
+    assert read.call_count == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = <Mock id='4567818528'>.call_count
+- generated xml file: /Users/machina/Developer/ChatGPT/viper-cloud-offload/evidence/cloud-offload-integration-20261125/native-remaining.xml -
+============================= slowest 10 durations =============================
+140.87s setup    tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references
+2.96s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[ancestor]
+2.49s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy]
+2.44s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-extra]
+2.41s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-missing-default]
+2.37s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-changed-default]
+2.35s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[legacy-config]
+2.29s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[valid]
+1.96s call     tests/test_run_execution.py::test_republication_preserves_files_and_follows_new_references
+1.92s call     tests/test_run_execution.py::test_republication_compares_source_and_destination[metadata]
+=========================== short test summary info ============================
+FAILED tests/test_run_execution.py::test_republication_reads_manifest_once[none] - AssertionError: assert 2 == 1
+ +  where 2 = <Mock id='4567818528'>.call_count
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+=================== 1 failed, 12 passed in 167.66s (0:02:47) ===================

@@ -1,0 +1,69 @@
+"""Capture one bounded toy-example trace without editing repository sources."""
+from pathlib import Path
+import datetime
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+source = Path('/private/var/folders/9l/fkn8y6_51_q96tgtwj39ps880000gn/T/pytest-of-machina/pytest-94/test_extended_examples_execute0/workspace')
+repository = Path('/Users/machina/Developer/ChatGPT/viper-cloud-offload')
+folder = Path(tempfile.mkdtemp(prefix='viper-readme-trace-', dir='/tmp'))
+root = folder / 'workspace'
+root.mkdir()
+for name in ('.git', 'examples'):
+    shutil.copytree(source / name, root / name)
+for name in ('pyproject.toml', 'viper.toml'):
+    shutil.copyfile(source / name, root / name)
+hooks = folder / 'hooks'
+hooks.mkdir()
+logs = folder / 'stacks'
+logs.mkdir()
+(hooks / 'sitecustomize.py').write_text(
+    'import faulthandler, os, time\n'
+    f'_trace = open({str(logs)!r} + "/" + str(os.getpid()) + ".log", "w")\n'
+    '_trace.write("pid=" + str(os.getpid()) + " wall=" + str(time.time()) + " context=" + str(os.environ.get("VIPER_CONTEXT_PATH")) + "\\n")\n'
+    '_trace.flush()\n'
+    'faulthandler.enable(file=_trace, all_threads=True)\n'
+    'faulthandler.dump_traceback_later(5, repeat=True, file=_trace)\n'
+)
+command = [sys.executable, '-m', 'examples.variants']
+environment = os.environ.copy()
+environment['PYTHONPATH'] = os.pathsep.join((str(hooks), str(repository / 'src')))
+started = time.monotonic()
+record = {'command': command, 'root': str(root), 'started_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'limit_seconds': 60, 'source_change': 'scratch sitecustomize only'}
+print(str(folder), flush=True)
+with (folder / 'stdout.txt').open('wb') as stdout, (folder / 'stderr.txt').open('wb') as stderr:
+    process = subprocess.Popen(command, cwd=root, env=environment, stdout=stdout, stderr=stderr)
+    record['pid'] = process.pid
+    (folder / 'command.json').write_text(json.dumps(record, indent=2))
+    try:
+        record['returncode'] = process.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        rows = subprocess.check_output(['ps', '-axo', 'pid=,ppid='], text=True).splitlines()
+        pairs = [tuple(map(int, row.split())) for row in rows]
+        owned = {process.pid}
+        while True:
+            children = {pid for pid, parent in pairs if parent in owned}
+            if children.issubset(owned):
+                break
+            owned.update(children)
+        record['diagnostic_limit_reached'] = True
+        record['owned_pids'] = sorted(owned)
+        for pid in [process.pid] + sorted(owned - {process.pid}, reverse=True):
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        try:
+            record['returncode'] = process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            record['returncode'] = process.wait(timeout=5)
+record['elapsed_seconds'] = time.monotonic() - started
+(folder / 'command.json').write_text(json.dumps(record, indent=2))
+print(json.dumps(record, indent=2), flush=True)

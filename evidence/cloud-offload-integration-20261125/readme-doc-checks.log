@@ -1,0 +1,8 @@
+...........                                                              [100%]
+=============================== warnings summary ===============================
+tests/test_readme_workflow.py::test_documented_checkpoint_round_trip
+  /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torchdata/stateful_dataloader/stateful_dataloader.py:379: UserWarning: 'set_vital' is deprecated, please do not call
+    torch.set_vital("Dataloader", "enabled", "True")  # type: ignore[attr-defined]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+11 passed, 16 deselected, 1 warning in 14.95s

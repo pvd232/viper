@@ -1,0 +1,31 @@
+{
+  "pid": 96836,
+  "group": "integration_other",
+  "passed": [
+    "tests/test_execution_signals.py::test_signal_closes_attempt_with_active_stage_evidence[sigint-cancelled]",
+    "tests/test_execution_signals.py::test_signal_closes_attempt_with_active_stage_evidence[sigterm-preempted]",
+    "tests/test_execution_signals.py::test_python_adapter_and_cli_share_verification_boundary",
+    "tests/test_execution_signals.py::test_preflight_rejects_unsupported_cuda_requests[unavailable-cuda]",
+    "tests/test_execution_signals.py::test_preflight_rejects_unsupported_cuda_requests[multi-gpu]",
+    "tests/test_export.py::test_export_traversal_reads_benchmark_pointers_before_root_attempt",
+    "tests/test_export.py::test_export_run_verifies_offline",
+    "tests/test_export.py::test_export_verifier_rejects_missing_or_changed_file",
+    "tests/test_export.py::test_export_verifier_consumes_every_manifest_payload",
+    "tests/test_export.py::test_export_verifier_wraps_missing_manifest",
+    "tests/test_export.py::test_export_retains_distinct_executable_versions",
+    "tests/test_mcp_transport.py::test_documented_mcp_client_uses_the_live_stdio_server",
+    "tests/test_mcp_transport.py::test_stdio_discovery_and_calls_use_the_server_workspace[read]",
+    "tests/test_mcp_transport.py::test_stdio_discovery_and_calls_use_the_server_workspace[execute]",
+    "tests/test_mcp_transport.py::test_mcp_rejects_symlink_escape_and_disallowed_tools",
+    "tests/test_mcp_transport.py::test_mcp_prompts_require_task_specific_inputs",
+    "tests/test_mcp_transport.py::test_stdio_semantic_search_ranks_paraphrases_from_pinned_journal_vectors"
+  ],
+  "failed": [
+    "tests/test_mcp_transport.py::test_stdio_executes_a_saved_training_plan[False-False]"
+  ],
+  "expected": 17,
+  "summary": "Observed tool result: 17 passed, 1 failed in 1094.47s. MCP model check still assumed canonical physical payload path; later run 2338 passed all three repaired variants.",
+  "evidence_kind": "conversation_tool_result_transcription",
+  "raw_buffer_retained": false,
+  "derivation": "Passed node IDs use the exact deterministic pytest -x selected prefix and the observed pass count. The original completed terminal session buffer expired; this file is not raw stdout."
+}

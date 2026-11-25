@@ -1,0 +1,57 @@
+pid=36974 wall=1795617499.026597 context=None
+Timeout (0:00:10)!
+Thread 0x00000001f8882180 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py", line 506 in add_fns_to_class
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py", line 1215 in _process_class
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py", line 1440 in wrap
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py", line 1450 in dataclass
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/_dynamo/symbolic_convert.py", line 303 in <module>
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap_external>", line 759 in exec_module
+  File "<frozen importlib._bootstrap>", line 938 in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1342 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/_dynamo/convert_frame.py", line 63 in <module>
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap_external>", line 759 in exec_module
+  File "<frozen importlib._bootstrap>", line 938 in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1342 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/_dynamo/aot_compile.py", line 22 in <module>
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap_external>", line 759 in exec_module
+  File "<frozen importlib._bootstrap>", line 938 in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1342 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1434 in _handle_fromlist
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/_dynamo/__init__.py", line 13 in <module>
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap_external>", line 759 in exec_module
+  File "<frozen importlib._bootstrap>", line 938 in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1342 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1314 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/_inductor/standalone_compile.py", line 18 in <module>
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap_external>", line 759 in exec_module
+  File "<frozen importlib._bootstrap>", line 938 in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1342 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/_inductor/__init__.py", line 12 in <module>
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap_external>", line 759 in exec_module
+  File "<frozen importlib._bootstrap>", line 938 in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1342 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "<frozen importlib._bootstrap>", line 491 in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1314 in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1371 in _find_and_load
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/lib/python3.14/site-packages/torch/__init__.py", line 1921 in use_deterministic_algorithms
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/runtime.py", line 887 in apply_reproducibility
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_workers/metrics.py", line 101 in main
+  File "/Users/machina/Developer/ChatGPT/viper-cloud-offload/src/viper/_workers/metrics.py", line 176 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 203 in _run_module_as_main

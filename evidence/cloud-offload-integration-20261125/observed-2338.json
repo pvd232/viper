@@ -1,0 +1,27 @@
+{
+  "pid": 2338,
+  "group": "integration_other",
+  "passed": [
+    "tests/test_mcp_transport.py::test_stdio_executes_a_saved_training_plan[False-False]",
+    "tests/test_mcp_transport.py::test_stdio_executes_a_saved_training_plan[True-False]",
+    "tests/test_mcp_transport.py::test_stdio_executes_a_saved_training_plan[False-True]",
+    "tests/test_metric_provenance.py::test_recomputed_metric_requires_one_verification_receipt",
+    "tests/test_metric_provenance.py::test_metric_receipt_rejects_a_different_recomputed_value",
+    "tests/test_metric_provenance.py::test_metric_receipt_rejects_worker_ownership_tampering",
+    "tests/test_metric_provenance.py::test_metric_config_reaches_live_and_recomputed_execution",
+    "tests/test_metric_provenance.py::test_metric_dependencies_reuse_snapshot_references",
+    "tests/test_metric_provenance.py::test_metric_dependency_rejects_republished_payload",
+    "tests/test_metric_provenance.py::test_metric_dependency_hashing_streams_files",
+    "tests/test_metric_provenance.py::test_metric_dependency_hashing_rejects_invalid_paths[missing]",
+    "tests/test_metric_provenance.py::test_metric_dependency_hashing_rejects_invalid_paths[empty]",
+    "tests/test_metric_provenance.py::test_metric_dependency_hashing_rejects_invalid_paths[symlink]"
+  ],
+  "failed": [
+    "tests/test_readme_workflow.py::test_extended_examples_execute_complete_workflows[variants.py]"
+  ],
+  "expected": 13,
+  "summary": "Observed tool result: 13 passed, 1 failed in 735.76s. README variants subprocess exceeded 240s under overlapping heavy suites. Docs owner now validates its repaired 27-node module in an idle window.",
+  "evidence_kind": "conversation_tool_result_transcription",
+  "raw_buffer_retained": false,
+  "derivation": "Passed node IDs use the exact deterministic pytest -x selected prefix and the observed pass count. The original completed terminal session buffer expired; this file is not raw stdout."
+}

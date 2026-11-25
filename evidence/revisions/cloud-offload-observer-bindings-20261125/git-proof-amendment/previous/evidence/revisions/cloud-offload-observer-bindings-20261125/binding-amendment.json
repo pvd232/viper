@@ -1,0 +1,448 @@
+{
+  "kind": "observer-binding-amendment-evidence",
+  "formal_protocol_receipt": false,
+  "reason": "Replace planned observer names with existing meaningful implementation tests and correct the active JEP checkout.",
+  "requirement_claims_unchanged": true,
+  "acceptance_conditions_unchanged": true,
+  "pair_block_dependencies_unchanged": true,
+  "before_raw_toml_sha256": "8d7533ea57ea0d7dbba8a9590b1525db94e3f124efd994041957d56816aab7c6",
+  "after_raw_toml_sha256": "6f1801f6989795404e4ff1d53e84a44e80aabd442a113e31a434a9d0e1adc0d9",
+  "canonical_package_sha256": null,
+  "canonical_parser_status": "Unavailable; no parser install/clone or substitute package digest.",
+  "changes": [
+    {
+      "verifier": "CFO-VR-05",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_artifact_retention.py",
+          "symbol": "test_any_shared_artifact_keep_vetoes_offload"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_stale_cleanup_preserves_replacement_and_new_keep"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_artifact_retention.py",
+          "symbol": "test_any_shared_artifact_keep_vetoes_offload"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_new_keep_defeats_a_previously_queued_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_a_replacement_with_identical_bytes_survives_stale_cleanup"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-06",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload_workflow.py",
+          "symbol": "test_managed_dataset_resolves_after_offload"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_external_path_replacement_is_not_old_artifact"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_user_owned_export_is_not_removed"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_run_execution.py",
+          "symbol": "test_future_input_materializes_verified_producer_snapshot"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_artifact_retention.py",
+            "symbol": "test_changed_input_is_a_new_version_with_an_independent_override"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_cleanup_preserves_a_registered_external_copy"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-07",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_cloud_service.py",
+          "symbol": "test_direct_publication_preserves_original_bundle_and_verifies_before_return"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_direct_publication_rejects_changed_inventory_before_saving_intent"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_cloud_service.py",
+            "symbol": "test_direct_publication_does_not_acknowledge_failed_cloud_hash_check"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_worker_restores_remote_snapshot_members_and_keeps_their_cleanup_selection"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_captured_sources_are_checked_before_intent_or_provider_io"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_remote_hash_mismatch_leaves_captured_intent_unpublished"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-08",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload_workflow.py",
+          "symbol": "test_successful_workflow_offloads_after_all_consumers"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_failed_workflow_keeps_sources"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_pending_target_blocks_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_stale_cleanup_preserves_replacement_and_new_keep"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_cleanup_wait_does_not_block_runner_or_ready_publication"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload_cleanup.py",
+          "symbol": "test_worker_runs_cleanup_after_verified_publication"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_failed_whole_workflow_preserves_even_verified_outputs"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_every_target_needs_final_and_data_proof"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_new_keep_defeats_a_previously_queued_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_a_replacement_with_identical_bytes_survives_stale_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_an_overlapping_reader_outlives_the_first_workflow"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_ready_uploads_precede_deferred_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_worker_retries_after_last_reader_without_registry_changes"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_worker_memoizes_mixed_keep_and_rechecks_changed_preference"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-09",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload_recovery.py",
+          "symbol": "test_restart_restores_evicted_artifact_with_unchanged_reference"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_recovery.py",
+            "symbol": "test_unverified_cloud_reference_is_not_returned"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_recovery.py",
+            "symbol": "test_cleanup_does_not_restart_completed_upload"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload_recovery.py",
+          "symbol": "test_import_restores_unchanged_references_once"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_recovery.py",
+            "symbol": "test_cloud_publication_outside_workflow_waits_for_completion"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_cleanup_releases_original_and_cache_without_reopening_cloud"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-10",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_storage_lifecycle.py",
+          "symbol": "test_storage_lifecycle_uses_single_resolver_and_retention_authority"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_storage_lifecycle.py",
+            "symbol": "test_legacy_eviction_cannot_bypass_retention"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_shared_storage.py",
+          "symbol": "test_run_fetcher_uses_shared_store_across_executions"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_new_keep_defeats_a_previously_queued_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_cleanup.py",
+            "symbol": "test_an_overlapping_reader_outlives_the_first_workflow"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_retention.py",
+            "symbol": "test_rejects_changed_local_artifact_before_removing_any_file"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-11",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_durable_queue_uploads_while_computation_continues"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_failed_spawn_keeps_durable_request"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_interrupted_upload_retries_without_computation"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_admission_commit_failure_is_not_reported_as_queued"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_publication_failure_keeps_scientific_success_and_sources"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_snapshot_copies_complete_while_the_workflow_remains_open"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_worker_starter_detaches_and_keeps_launch_failure_recoverable"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_detached_worker_finishes_after_the_producer_process_exits"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_a_failed_snapshot_does_not_block_ready_uploads_and_can_be_retried"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_background_publication.py",
+            "symbol": "test_failed_durable_admission_does_not_accept_or_pin_the_snapshot"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-13",
+      "before": {
+        "success_case": {
+          "repository_id": "jep",
+          "path": "tests/test_viper_storage_adapter.py",
+          "symbol": "test_jep_adapter_uses_native_viper_lifecycle"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "jep",
+            "path": "tests/test_viper_storage_adapter.py",
+            "symbol": "test_jep_adapter_failure_does_not_rerun_computation"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "jep",
+          "path": "tests/test_viper_storage_adapter.py",
+          "symbol": "test_generation_ack_follows_verified_native_copies"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "jep",
+            "path": "tests/test_viper_storage_adapter.py",
+            "symbol": "test_failed_copy_keeps_control_sources_without_ack"
+          },
+          {
+            "repository_id": "jep",
+            "path": "tests/test_viper_storage_adapter.py",
+            "symbol": "test_attached_target_keeps_private_namespace_and_rejects_rebinding"
+          }
+        ]
+      }
+    },
+    {
+      "verifier": "CFO-VR-15",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload_workflow.py",
+          "symbol": "test_admitted_sequence_retains_payload_through_benchmark"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_child_completion_does_not_close_parent_workflow"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_failed_batch_does_not_authorize_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_queued_input_is_held_before_its_consumer_starts"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_background_publication.py",
+          "symbol": "test_nested_scopes_retain_readers_until_the_outer_workflow_finishes"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_child_completion_does_not_close_parent_workflow"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_failed_batch_does_not_authorize_cleanup"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_queued_input_is_held_before_its_consumer_starts"
+          }
+        ]
+      }
+    }
+  ],
+  "acceptance_open": [
+    "CFO-REQ-10"
+  ],
+  "formal_acceptance_recorded": false,
+  "unmet_condition": "Combined maintained Viper and JEP runtime/test line reduction."
+}

@@ -1,0 +1,13 @@
+{
+  "pid": 96232,
+  "group": "integration_other",
+  "passed": [],
+  "failed": [
+    "tests/test_execution_signals.py::test_signal_closes_attempt_with_active_stage_evidence[sigint-cancelled]"
+  ],
+  "expected": 0,
+  "summary": "Observed tool result: first signal case failed at its 30s startup wait; the actual process marker appeared afterward. Startup allowance changed to 60s; interruption deadlines remained unchanged.",
+  "evidence_kind": "conversation_tool_result_transcription",
+  "raw_buffer_retained": false,
+  "derivation": "Passed node IDs use the exact deterministic pytest -x selected prefix and the observed pass count. The original completed terminal session buffer expired; this file is not raw stdout."
+}

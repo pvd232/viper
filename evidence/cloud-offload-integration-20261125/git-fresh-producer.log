@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0 -- /Users/machina/Developer/ChatGPT/viper-cloud-offload/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/machina/Developer/ChatGPT/viper-cloud-offload
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collecting ... collected 1 item
+
+tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git PASSED [100%]
+
+============================= slowest 5 durations ==============================
+124.05s call     tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git
+0.04s setup    tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git
+0.00s teardown tests/test_run_execution.py::test_fresh_workspace_verifies_producer_without_original_git
+======================== 1 passed in 125.68s (0:02:05) =========================

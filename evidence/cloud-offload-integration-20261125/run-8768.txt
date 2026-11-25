@@ -1,0 +1,7 @@
+[Reading last 4 lines (total: 4 lines)]
+
+1 file reformatted
+.................................................................... [ 85%]
+............                                                             [100%]
+80 passed, 4 subtests passed in 127.59s (0:02:07)
+✅ Process completed with exit code 0 (runtime: 145.23s)

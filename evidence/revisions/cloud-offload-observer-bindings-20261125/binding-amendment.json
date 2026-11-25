@@ -1,15 +1,76 @@
 {
   "kind": "observer-binding-amendment-evidence",
   "formal_protocol_receipt": false,
-  "reason": "Replace planned observer names with existing meaningful implementation tests and correct the active JEP checkout.",
+  "reason": "Bind actual meaningful implementation observers, correct active JEP checkout, and cover final Git commit/path authenticity through existing identity/recovery requirements.",
   "requirement_claims_unchanged": true,
   "acceptance_conditions_unchanged": true,
   "pair_block_dependencies_unchanged": true,
   "before_raw_toml_sha256": "8d7533ea57ea0d7dbba8a9590b1525db94e3f124efd994041957d56816aab7c6",
-  "after_raw_toml_sha256": "6f1801f6989795404e4ff1d53e84a44e80aabd442a113e31a434a9d0e1adc0d9",
+  "after_raw_toml_sha256": "151ec17015d8ad0b2226c7ab82bfa9eeb3e0752ea421cfbb1c8ccfd3486b7363",
   "canonical_package_sha256": null,
   "canonical_parser_status": "Unavailable; no parser install/clone or substitute package digest.",
   "changes": [
+    {
+      "verifier": "CFO-VR-01",
+      "before": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload.py",
+          "symbol": "test_offload_binding_preserves_original_snapshot_identity"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload.py",
+            "symbol": "test_offload_binding_rejects_changed_payload"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload.py",
+            "symbol": "test_offload_binding_rejects_changed_snapshot_membership"
+          }
+        ]
+      },
+      "after": {
+        "success_case": {
+          "repository_id": "viper",
+          "path": "tests/test_offload.py",
+          "symbol": "test_offload_binding_preserves_original_snapshot_identity"
+        },
+        "rejection_cases": [
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload.py",
+            "symbol": "test_offload_binding_rejects_changed_payload"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload.py",
+            "symbol": "test_offload_binding_rejects_changed_snapshot_membership"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_git_proof.py",
+            "symbol": "test_git_proof_rejects_unrelated_bytes_even_with_matching_declared_sha"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_git_proof.py",
+            "symbol": "test_git_proof_rejects_changed_metadata"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_git_proof.py",
+            "symbol": "test_git_proof_rejects_another_path"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_workflow.py",
+            "symbol": "test_plan_rejects_cached_source_from_a_different_git_file"
+          }
+        ]
+      }
+    },
     {
       "verifier": "CFO-VR-05",
       "before": {
@@ -234,7 +295,7 @@
         "success_case": {
           "repository_id": "viper",
           "path": "tests/test_offload_recovery.py",
-          "symbol": "test_import_restores_unchanged_references_once"
+          "symbol": "test_workflow_publishes_git_proof_and_restores_after_source_eviction"
         },
         "rejection_cases": [
           {
@@ -246,6 +307,16 @@
             "repository_id": "viper",
             "path": "tests/test_offload_cleanup.py",
             "symbol": "test_cleanup_releases_original_and_cache_without_reopening_cloud"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_recovery.py",
+            "symbol": "test_git_fallback_rejects_shared_bytes_without_membership_proof"
+          },
+          {
+            "repository_id": "viper",
+            "path": "tests/test_offload_recovery.py",
+            "symbol": "test_available_git_is_checked_before_cloud_fallback"
           }
         ]
       }
@@ -444,5 +515,6 @@
     "CFO-REQ-10"
   ],
   "formal_acceptance_recorded": false,
-  "unmet_condition": "Combined maintained Viper and JEP runtime/test line reduction."
+  "unmet_condition": "Combined maintained Viper and JEP runtime/test line reduction.",
+  "followup_before_image": "git-proof-amendment/before-image.json"
 }

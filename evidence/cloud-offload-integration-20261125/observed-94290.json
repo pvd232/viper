@@ -1,0 +1,13 @@
+{
+  "pid": 94290,
+  "group": "native",
+  "passed": [
+    "tests/test_run_execution.py::test_two_stage_local_run_writes_and_verifies_terminal_result"
+  ],
+  "failed": [],
+  "expected": 1,
+  "summary": "Observed tool result: 1 passed in 256.46s; tool process runtime 266.40s.",
+  "evidence_kind": "conversation_tool_result_transcription",
+  "raw_buffer_retained": false,
+  "derivation": "Passed node IDs use the exact deterministic pytest -x selected prefix and the observed pass count. The original completed terminal session buffer expired; this file is not raw stdout."
+}
